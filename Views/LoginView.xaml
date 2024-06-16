@@ -3,10 +3,10 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:local="clr-namespace:WPFApp.Views"
         xmlns:viewModel="clr-namespace:WPFApp.ViewModels"
         xmlns:customControls="clr-namespace:WPFApp.CustomControls"
         mc:Ignorable="d"
+        Icon="/Logo.ico"
         Title="LoginView" Height="550" Width="800"
         WindowStyle="None"
         ResizeMode="NoResize"
@@ -19,14 +19,6 @@
         <viewModel:LoginViewModel/>
     </Window.DataContext>
 
-    <Window.Resources>
-        <BooleanToVisibilityConverter x:Key="BooleanToVisibilty"/>
-    </Window.Resources>
-
-    <Window.Visibility>
-        <Binding Path="IsViewVisible" Mode="TwoWay" Converter="{StaticResource BooleanToVisibilty}"/>
-    </Window.Visibility>
-
     <Border CornerRadius="12">
         <Border.Background>
             <ImageBrush ImageSource="/Images/back-image.jpg"
@@ -35,7 +27,9 @@
 
         <Border CornerRadius="10"                    
             BorderThickness="2"
-            Opacity="0.90">
+            Opacity="0.90"
+            KeyDown="Grid_KeyDown" 
+        >
 
             <Border.BorderBrush>
                 <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
@@ -249,7 +243,7 @@
                                TextWrapping="Wrap"/>
 
                     <Button x:Name="btnLogin"  
-                            Command="{Binding LoginCommand}"
+                            Command="{Binding LoginCommand}" CommandParameter="{Binding RelativeSource={RelativeSource AncestorType=Window}}"
                             BorderThickness="0"
                             Content="LOG IN"
                             Foreground="White"

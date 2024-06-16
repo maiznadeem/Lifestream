@@ -1,15 +1,14 @@
 ﻿using FontAwesome.Sharp;
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
+using System.IO;
+using System.Windows.Media.Imaging;
 using System.Threading;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
 using WPFApp.Models;
 using WPFApp.Repositories;
-using WPFApp.ViewModels;
+using System.Reflection;
+using WPFApp.Views;
 
 namespace WPFApp.ViewModels
 {
@@ -81,6 +80,7 @@ namespace WPFApp.ViewModels
         }
 
         //--> Commands
+        public ICommand LogoutCommand { get; }
         public ICommand ShowHomeViewCommand { get; }
         public ICommand ShowDonorViewCommand { get; }
         public ICommand ShowPatientViewCommand { get; }
@@ -100,7 +100,11 @@ namespace WPFApp.ViewModels
             userRepository = new UserRepository();
             CurrentUserAccount = new UserAccountModel();
 
+            var user = userRepository.GetByUsername(Thread.CurrentPrincipal.Identity.Name);
+
             //Initialize commands
+            LogoutCommand = new ViewModelCommand(ExecuteLogoutCommand);
+
             ShowHomeViewCommand = new ViewModelCommand(ExecuteShowHomeViewCommand);
             ShowDonorViewCommand = new ViewModelCommand(ExecuteShowDonorViewCommand);
             ShowPatientViewCommand = new ViewModelCommand(ExecuteShowPatientViewCommand);
@@ -111,14 +115,32 @@ namespace WPFApp.ViewModels
             ShowRequestViewCommand = new ViewModelCommand(ExecuteShowRequestViewCommand);
             ShowReceiptViewCommand = new ViewModelCommand(ExecuteShowReceiptViewCommand);
             ShowStockViewCommand = new ViewModelCommand(ExecuteShowStockViewCommand);
-            ShowStaffViewCommand = new ViewModelCommand(ExecuteShowStaffViewCommand);
-            ShowStaffsInfoViewCommand = new ViewModelCommand(ExecuteShowStaffsInfoViewCommand);
+            if (user.Designation == "Admin")
+            {
+                ShowStaffViewCommand = new ViewModelCommand(ExecuteShowStaffViewCommand);
+                ShowStaffsInfoViewCommand = new ViewModelCommand(ExecuteShowStaffsInfoViewCommand);
+            }
+            else 
+            {
+                ShowStaffViewCommand = new ViewModelCommand(ExecuteShowAccessDeniedViewCommand);
+                ShowStaffsInfoViewCommand = new ViewModelCommand(ExecuteShowAccessDeniedViewCommand);
+            }
             ShowProfileViewCommand = new ViewModelCommand(ExecuteShowProfileViewCommand);
 
             //Default view
             ExecuteShowHomeViewCommand(null);
 
             LoadCurrentUserData();
+        }
+        private void ExecuteLogoutCommand(object obj)
+        {
+            var loginView = new LoginView();
+            loginView.Show();
+            if (Application.Current.MainWindow != null)
+            {
+                Application.Current.MainWindow.Close();
+            }
+            Application.Current.MainWindow = loginView;
         }
 
         private void ExecuteShowHomeViewCommand(object obj)
@@ -199,14 +221,60 @@ namespace WPFApp.ViewModels
             Caption = "Your Profile";
             Icon = IconChar.User;
         }
+        private void ExecuteShowAccessDeniedViewCommand(object obj)
+        {
+            CurrentChildView = new AccessDeniedViewModel();
+            Caption = "No Access";
+            Icon = IconChar.Xmark;
+        }
         private void LoadCurrentUserData()
         {
             var user = userRepository.GetByUsername(Thread.CurrentPrincipal.Identity.Name);
             if (user != null)
             {
-                CurrentUserAccount.Username = user.Username;
-                CurrentUserAccount.DisplayName = $"Welcome {user.Username}";
-                CurrentUserAccount.ProfilePicture = null;
+                CurrentUserAccount.Username = user.UserName;
+                CurrentUserAccount.DisplayName = $"Welcome {user.StaffName}";
+
+                if (user.Photo != null)
+                {
+                    try
+                    {
+                        // Convert the byte array to a BitmapImage
+                        var imageSource = new BitmapImage();
+                        using (var stream = new MemoryStream(user.Photo))
+                        {
+                            imageSource.BeginInit();
+                            imageSource.StreamSource = stream;
+                            imageSource.CacheOption = BitmapCacheOption.OnLoad;
+                            imageSource.EndInit();
+                        }
+
+                        CurrentUserAccount.ProfilePicture = imageSource;
+                    }
+                    catch (Exception ex)
+                    {
+                        // Handle the exception (e.g., log or display an error message)
+                        Console.WriteLine($"Error loading profile picture: {ex.Message}");
+                    }
+                }
+                else
+                {
+                    var assembly = Assembly.GetExecutingAssembly();
+                    var resourcePath = "WPFApp.Images.myprofile.jpg";
+                    using (var stream = assembly.GetManifestResourceStream(resourcePath))
+                    {
+                        if (stream != null)
+                        {
+                            var defaultImage = new BitmapImage();
+                            defaultImage.BeginInit();
+                            defaultImage.StreamSource = stream;
+                            defaultImage.CacheOption = BitmapCacheOption.OnLoad;
+                            defaultImage.EndInit();
+                            defaultImage.Freeze(); // Freeze the image for better performance
+                            CurrentUserAccount.ProfilePicture = defaultImage;
+                        }
+                    }
+                }
             }
             else
             {
@@ -214,5 +282,7 @@ namespace WPFApp.ViewModels
                 //Hide child views.
             }
         }
+
+
     }
 }

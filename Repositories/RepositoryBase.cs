@@ -7,14 +7,16 @@ using System.Data.SqlClient;
 
 namespace WPFApp.Repositories
 {
-    public abstract class RepositoryBase
+    public class RepositoryBase
     {
         private readonly string _connectionString;
+        
         public RepositoryBase()
         {
-            _connectionString = "Server=(local); Database=BloodBank; Integrated Security=true";
+            _connectionString = Environment.GetEnvironmentVariable("AZURE_CONNECTION_STRING");
         }
-        protected SqlConnection GetConnection()
+        
+        public SqlConnection GetConnection()
         {
             return new SqlConnection(_connectionString);
         }

@@ -16,17 +16,20 @@ namespace WPFApp
     {
         protected void ApplicationStart(object sender, StartupEventArgs e)
         {
-            var loginView = new LoginView();
-            loginView.Show();
-            loginView.IsVisibleChanged += (s, ev) =>
-            {
-                if (loginView.IsVisible == false && loginView.IsLoaded)
-                {
-                    var mainView = new MainView();
-                    mainView.Show();
-                    loginView.Close();
-                }
-            };
+
         }
+
+        private LoginView loginView;
+
+        protected override void OnStartup(StartupEventArgs e)
+        {
+            base.OnStartup(e);
+
+            // Create the LoginView and subscribe to its visibility changed event
+            loginView = new LoginView();
+            Application.Current.MainWindow = loginView;
+            loginView.Show();
+        }
+        
     }
 }
