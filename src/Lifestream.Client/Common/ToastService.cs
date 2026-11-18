@@ -16,7 +16,12 @@ public interface IToastService
     ObservableCollection<ToastItem> Toasts { get; }
 
     /// <summary>Shows a toast. Name the affected record in <paramref name="message"/>; add an action such as View or Undo if one makes sense.</summary>
-    ToastItem Show(ToastKind kind, string message, string? actionLabel = null, Func<Task>? action = null);
+    /// <param name="kind">Success, info, warning or error.</param>
+    /// <param name="message">The text; names the affected record.</param>
+    /// <param name="actionLabel">The action button's label, such as View or Undo.</param>
+    /// <param name="action">Runs when the action button is pressed.</param>
+    /// <param name="lifetime">How long the toast stays, kept within 6 to 10 seconds. Null: 10 seconds for a toast with an Undo action, otherwise 8.</param>
+    ToastItem Show(ToastKind kind, string message, string? actionLabel = null, Func<Task>? action = null, TimeSpan? lifetime = null);
 }
 
 public static class ToastServiceExtensions
@@ -29,7 +34,7 @@ public static class ToastServiceExtensions
     }
 }
 
-/// <summary>One toast. It dismisses itself after <see cref="ToastService.Lifetime"/>; hovering or focusing it pauses the countdown.</summary>
+/// <summary>One toast. It dismisses itself after its lifetime (6 to 10 seconds, see <see cref="ToastService"/>); hovering or focusing it pauses the countdown.</summary>
 public sealed partial class ToastItem : ObservableObject, IDisposable
 {
     private readonly ToastService _owner;
@@ -148,16 +153,24 @@ public sealed class ToastService : IToastService
         Clock = clock ?? TimeProvider.System;
     }
 
-    /// <summary>How long a toast stays: inside the 6 to 10 second window the design asks for.</summary>
+    /// <summary>How long an ordinary toast stays: inside the 6 to 10 second window the design asks for.</summary>
     public static TimeSpan Lifetime { get; } = TimeSpan.FromSeconds(8);
+
+    /// <summary>A toast with an Undo action stays longer, so there is time to read it and decide (FEAT-06).</summary>
+    public static TimeSpan UndoLifetime { get; } = TimeSpan.FromSeconds(10);
+
+    public static TimeSpan MinLifetime { get; } = TimeSpan.FromSeconds(6);
+
+    public static TimeSpan MaxLifetime { get; } = TimeSpan.FromSeconds(10);
 
     public ObservableCollection<ToastItem> Toasts { get; } = [];
 
     internal TimeProvider Clock { get; }
 
-    public ToastItem Show(ToastKind kind, string message, string? actionLabel = null, Func<Task>? action = null)
+    public ToastItem Show(ToastKind kind, string message, string? actionLabel = null, Func<Task>? action = null, TimeSpan? lifetime = null)
     {
-        var toast = new ToastItem(this, kind, message, actionLabel, action, Lifetime);
+        var wanted = lifetime ?? (action is not null && string.Equals(actionLabel, "Undo", StringComparison.OrdinalIgnoreCase) ? UndoLifetime : Lifetime);
+        var toast = new ToastItem(this, kind, message, actionLabel, action, wanted < MinLifetime ? MinLifetime : wanted > MaxLifetime ? MaxLifetime : wanted);
         Post(() => Toasts.Add(toast));
         return toast;
     }
