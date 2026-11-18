@@ -104,6 +104,12 @@ public sealed class StaffService(LifestreamDbContext db, TimeProvider time)
 
 public static class StaffEndpoints
 {
+    /// <summary>
+    /// Held (for the rest of the transaction) by every change that can remove an administrator: delete, and a role change. Without
+    /// it two admins deleting or demoting each other at the same moment each see "another admin exists" and both succeed.
+    /// </summary>
+    private const string AdminsLock = "staff-admins";
+
     private static readonly SortMap<Staff> Sorts = new SortMap<Staff>(s => s.Id, "name")
         .Add("name", s => s.DisplayName).Add("username", s => s.Username);
 
@@ -289,6 +295,12 @@ public static class StaffEndpoints
 
         var staff = await db.RunAsync(async token =>
         {
+            if (r.Role.HasValue)
+            {
+                // A role change can remove an administrator: serialise it with every other change that can (see AdminsLock).
+                await db.LockAsync(AdminsLock, token);
+            }
+
             var entity = await db.Staff.FirstOrDefaultAsync(s => s.Id == id && !s.IsDemo, token) ?? throw ApiException.NotFound("The staff member");
             if (entity.IsProtected && entity.Id != user.TokenStaffId)
             {
@@ -357,6 +369,7 @@ public static class StaffEndpoints
     {
         await db.RunAsync(async token =>
         {
+            await db.LockAsync(AdminsLock, token);
             var entity = await db.Staff.FirstOrDefaultAsync(s => s.Id == id && !s.IsDemo, token) ?? throw ApiException.NotFound("The staff member");
             if (entity.Id == user.TokenStaffId)
             {
