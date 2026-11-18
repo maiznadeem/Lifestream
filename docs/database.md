@@ -17,6 +17,12 @@ erDiagram
     Receipt ||--o{ BloodBag : "issue consumes"
     Staff ||--o| StaffPhoto : has
     Staff ||--o{ RefreshToken : owns
+    Donor {
+        int Id PK
+        varchar BloodType
+        date LastDonated "set when a donation is recorded"
+        bool MedicalHold "a hold makes the donor ineligible"
+    }
     Staff {
         int Id PK
         varchar Username UK "case-insensitive"
@@ -98,6 +104,10 @@ erDiagram
   with `acceptAllChangesOnSuccess: false` first, so the audit row carries the real generated id, and the change tracker is
   accepted only after both writes succeeded (a failed attempt puts temporary ids back, so a retry inserts a new row instead
   of a duplicate). Bulk system work (generators, the demo reset) turns auditing off with `AuditEnabled = false`.
+  The appointments that a donor's blood-type change rewrites (`Appointment.DonorBloodType`) are audited too: one `Update` audit
+  row per rewritten appointment, written in the same transaction as the donor's change, and appointments the context tracks are
+  brought up to date (new blood type and new row version) so editing one next is not a concurrency error; a failed save undoes
+  that refresh. `BulkUpdateAsync` on `Donor.BloodType` does the same for the donors it changes.
 - **Bulk changes bypass auditing.** `ExecuteUpdate`/`ExecuteDelete` (and raw SQL) skip the change tracker, so EF cannot audit
   them. For the six audited tables use `LifestreamDbContext.BulkDeleteAsync(query)` / `BulkUpdateAsync(query, setters)`: they
   select the ids, change exactly those rows and write one audit row per id in one serializable transaction (or the caller's).
@@ -107,34 +117,61 @@ erDiagram
   `DateTime` whose `Kind` is `Local` or `Unspecified` throws an `ArgumentException` ("must have Kind=Utc"), and values read
   back have `Kind=Utc`. The same applies to a `DateTime` used as a query parameter. Timestamps the server owns
   (`PlacedAtUtc`, `CreatedAtUtc`, `OccurredAtUtc`) default to `SYSUTCDATETIME()`; the client never supplies them.
+  `ServerClockAndRangeTests` proves it through the API: a client whose clock is five hours ahead (the `Date` header, other
+  time headers and made-up `placedAtUtc`/`createdAtUtc`/`collectedAtUtc` body fields) gets rows whose stamps are within seconds
+  of the database server's UTC clock.
+- **Date ranges are half-open** (DB-13): `>= start of the From day` and `< start of the day after the To day`, so a record at
+  23:59:59.999 on the To date is in and one at 00:00 the next day is out (`Lists.DayRange`; the dashboard does the same in the
+  caller's offset). Proven through the API for receipts, requests, appointments and the dashboard series.
 - **Password hash check.** `CK_Staff_PasswordHash` accepts only text shaped like an Identity v3 hash as far as T-SQL can tell:
   base64 alphabet, padding only at the end, length a multiple of 4 and between 84 and 256, and the exact header (version
   byte 1, PRF HMAC-SHA512, iteration count under 2^24, salt length 16). It cannot decode base64 (no functions or XML methods
   in a CHECK), so the iteration floor and randomness stay with `PasswordHashing.IsValidHash`, which the tests apply to every
   Staff row of a seeded database.
-- **List queries and indexes (DB-05).** Every filter and sort the `*Query` records allow is served by an index; the plan
-  tests (`ListQueryPlanTests`) run the whole matrix (each filter alone and with each sort, page 1 and page 261, plus the
-  total count) at 100x and fail on any scan of a table over 5,000 rows. Rules the API follows to stay inside it:
-  - Sorts are `ORDER BY <indexed key>, Id` (the nonclustered indexes end in the clustered key `Id`, so key + id is the
-    keyset order). Supported sorts: donors `name`, `lastDonated`; patients `name`; appointments `slot`, `placed`; requests
-    `placed`, `requiredBy`; receipts `date`; staff `name`, `username` (each ascending or descending). Any other sort value is
-    a 400, not a slow query.
-  - Name search is a **prefix** match on the indexed, case- and accent-insensitive name column
-    (`SearchQueries.NameStartsWith`, `DonorNameStartsWith`, `PatientNameStartsWith`, `PartyNameStartsWith`); contains-search is
-    not offered. Never use `string.StartsWith(variable)`: EF turns it into `LEFT(col, LEN(@p)) = @p`, which is not seekable.
-  - Appointment search by donor name and request search by patient name are two steps: the ids of the matching donors or
-    patients (`SearchQueries.DonorIdsByNamePrefixAsync` / `PatientIdsByNamePrefixAsync`, a seek on the name index), then the
-    rows whose `DonorId`/`PatientId` is in that list (a seek per id on a covering index). In one statement with a join the
-    optimizer scans the appointment or request table instead.
+- **List queries and indexes (DB-05).** The API answers every list with **one SQL command** (the page and the total together,
+  API-22). `ApiPlanMatrixTests` drives the real endpoints (WebApplicationFactory over a 100x database on a real SQL Server),
+  records the SQL and parameters each request sends (an EF command interceptor), replays each statement under
+  `SET STATISTICS XML ON` and fails on a Table Scan or Clustered Index Scan of any table over 5,000 rows, and on a second
+  database call. The matrix uses common values (requests `Fulfilled`, appointments `Completed`, blood type `OPos`), one- and
+  two-letter searches, every documented sort, page 1 and a deep page, plus lookups, stock, dashboard and eligibility; it also
+  checks that every filter property of every `*Query` record appears in it. `LIFESTREAM_PLAN_CAPTURE=<file>` writes each
+  request's operators, rows, executions and SQL. How the queries are built:
+  - Sorts are `ORDER BY <indexed key>, Id`. Supported sorts: donors `name`, `lastDonated`; patients `name`; appointments
+    `slot`, `placed`; requests `placed`, `requiredBy`; receipts `date`; staff `name`, `username` (each ascending or
+    descending). Any other sort value is a 400, not a slow query.
+  - **Covering indexes.** Each index a list is sorted or filtered by ends in the sort column (after the equality filters) and
+    INCLUDEs the columns the list shows, so a page is read in order from one index and stops after 50 rows (appointments:
+    status, donor blood type, slot or placed; requests: status, blood type, placed or requiredBy; receipts: kind, blood type,
+    date; donors and patients: name, blood type + name, last donated). A wide covering index is as wide as the table itself, so
+    each of these tables also has a **single-column foreign-key index** (`Appointment.DonorId`, `Request.PatientId`, the three
+    `Receipt` keys): it is the narrowest index and is what `COUNT(*)` and joins read, rather than the clustered index.
+  - **The total is a one-row cross join** (`Lists.Total`: `GROUP BY` a constant), not a scalar subquery in the page's select
+    list, which SQL Server may work out again for every row. The patient list joins the page back to `Patient` before it counts
+    each patient's pending requests, so the count is worked out for 50 rows and not for every row the `OFFSET` skips.
+  - **Name search** is a **prefix** match on the indexed, case- and accent-insensitive name or phone column (contains-search
+    is not offered; `string.StartsWith(variable)` is not seekable and is never used). Appointments and requests filter on
+    `DonorId IN (donor ids matching name or phone)` (and `OR Id = n` for a numeric term). Receipts search through
+    `SearchQueries.ReceiptsMatching`: id, staff name, donor (donor, appointment, receipt) and patient (patient, request,
+    receipt) chains joined by `UNION`, each ending in a foreign-key index that also carries date, kind and blood type, so the
+    matches are filtered by kind, blood type and date, counted and ordered without reading the receipt table; only the 50
+    receipts of the page are then fetched by id.
+  - **Search queries are compiled for their term.** The same SQL text serves a term that matches 3 donors and one that matches
+    1,200, and the plan that suits one scans for the other (the first term compiled decides for all later ones). List queries
+    that carry a search are tagged and `SearchPlanInterceptor` appends `OPTION (RECOMPILE)` to them.
   - "Appointments of donors with blood type X" uses `Appointment.DonorBloodType`, a copy of the donor's blood type kept by
-    `LifestreamDbContext` (set when an appointment is added, rewritten in the same transaction when the donor's blood type
-    changes; only with `AuditEnabled`, so generators set it themselves). It makes the filter one index seek instead of a join.
-  - Receipt search by donor or patient name uses two seek paths joined by `UNION` (name, then appointment/request, then
-    receipt), because one `OR` across both would scan.
-  - Deep pages (`Skip` in the thousands) read only the narrow sort index and fetch the 50 rows by id
-    (`ListPaging.PageById`), instead of scanning the table for the columns the page needs.
+    `LifestreamDbContext` (set when an appointment is added; rewritten in the same transaction when the donor's blood type
+    changes, with an audit row per rewritten appointment; see Audit). A `BulkUpdateAsync` of `Donor.BloodType` keeps it in
+    sync in the same way.
+  - The old `ListQueryPlanTests`/`ListPaging` plan tests (a two-step ids-then-rows stand-in) are kept as extra checks of the
+    data module's helpers; the API does not use `ListPaging`, because two steps would be two database calls.
+- **Medical hold (API-11).** `Donor.MedicalHold` (bit, default 0) is part of eligibility: age 18-60, at least 90 days since the
+  last donation, and no hold. `Eligibility.Evaluate(dateOfBirth, lastDonation, today, medicalHold)` is computed on the server
+  for `GET donors/{id}/eligibility` and for booking and rescheduling an appointment (judged on the slot's day). A donor who is
+  not eligible can be given a slot only with an override reason, stored on the appointment. Rescheduling takes the reason the
+  appointment already carries, because `RescheduleAppointmentRequest` has no field for a new one.
 - **No logic in the database.** Donation (receipt, bags, completing the appointment, `Donor.LastDonated`) and issue (oldest
-  unexpired bags first) are API code inside transactions.
+  unexpired bags first) are API code inside transactions. `TransactionTests` makes the database fail at a named step of a donation or an issue (a command interceptor in the
+  API host) and checks that no receipt, bag, audit row or status change remains.
 - **Ids after a demo reset are not restarted** (`DBCC CHECKIDENT` and `IDENTITY_INSERT` need `ALTER`, which the API identity
   does not have). Compare content, not ids.
 
@@ -149,6 +186,8 @@ All data comes from code, never from a backup.
   seeded account has a known password; the demo login issues a token without one.
 - `ScaleDataGenerator.Generate(100)`: exactly 100 times the above (27,000 receipts, 30,000 appointments, 15,000 requests),
   for performance tests. `ScaleDatabaseFixture` in the tests loads it into a throwaway database.
+  `Generate(1)` is the 1x demo set; `DemoSizeDatabaseFixture` loads it. `PerformanceSmokeTests` (100x) and
+  `PerformanceAtDemoSizeTests` (1x) run the same timings; results are in `docs/perf/api-results.md`.
 - `DemoReset.RunIfDueAsync` / `ForceAsync` rebuild every table from the generator, keeping protected staff (the owner admin).
 
 ## Add a migration
