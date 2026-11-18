@@ -154,6 +154,8 @@
   <sys:Double x:Key="Motion.Shimmer.Milliseconds">1200</sys:Double>
   <sys:Double x:Key="Motion.SpinnerTurn.Milliseconds">900</sys:Double>
 
+  <!-- Insets and radii used by the views: the name says which sides (H = left and right, V = top and bottom, L T R B = one side) -->
+
   <!-- Sizes -->
   <sys:Double x:Key="Height.Compact">32</sys:Double>
   <sys:Double x:Key="Height.Control">40</sys:Double>

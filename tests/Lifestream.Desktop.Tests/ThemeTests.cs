@@ -340,11 +340,12 @@ public sealed partial class ThemeTests
     private static partial Regex FontFamilyLiteral();
 
     [Fact]
-    public void Typography_FamilyIsSegoeUiVariable_WithSegoeUiFallback()
+    public void Typography_FamilyIsTheBundledInter_NoSystemFontIsNamed()
     {
         var text = File.ReadAllText(Path.Combine(DesktopDir, "Theme", "Typography.xaml"));
 
-        Assert.Contains("Segoe UI Variable Text, Segoe UI", text, StringComparison.Ordinal);
+        Assert.Contains("Fonts/#Inter Variable Text</FontFamily>", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Segoe UI Variable", text, StringComparison.Ordinal);
     }
 
     // Motion
