@@ -20,6 +20,7 @@ BeforeAll {
     $script:Release = Load 'release.yml'
     $script:Scan = Load 'secret-scan.yml'
     $script:Ci = Load 'ci.yml'
+    $script:SyncFw = Load 'sync-sql-firewall.yml'
 }
 
 Describe 'INFRA-13 deploy-api.yml: keyless, after build and tests, separate from the PR build' {
@@ -71,32 +72,33 @@ Describe 'OWN-03 / INFRA-12 deploy-api.yml: only the newest 3 image versions rem
         $script:Deploy.Yaml.env.IMAGE | Should -Be 'ghcr.io/maiznadeem/lifestream-api'
     }
 
-    It 'prunes with actions/delete-package-versions@v5, container packages, keeping 3 versions' {
-        $i = StepIndex $script:Deploy.Yaml.jobs.deploy { param($s) (Uses $s) -eq 'actions/delete-package-versions@v5' }
+    It 'prunes with tools/prune-image-versions.ps1 (guards and tests live in the script), keeping 3 versions of lifestream-api' {
+        $i = StepIndex $script:Deploy.Yaml.jobs.deploy { param($s) (Run $s) -match 'tools/prune-image-versions\.ps1' }
         $i | Should -BeGreaterThan -1
-        $with = $script:Steps[$i].with
-        $with.'package-type' | Should -Be 'container'
-        $with.'package-name' | Should -Be 'lifestream-api'
-        [int]$with.'min-versions-to-keep' | Should -Be 3
+        $run = Run $script:Steps[$i]
+        $run | Should -Match '-Package lifestream-api'
+        $run | Should -Match '-Keep 3'
+        $run | Should -Match '-DeployedTag \$env:GITHUB_SHA'
+        $script:Deploy.Text | Should -Not -Match 'delete-package-versions'
     }
 
     It 'prunes only after the health check and the app update, so the deployed image is the newest and is never deleted' {
         $update = StepIndex $script:Deploy.Yaml.jobs.deploy { param($s) (Run $s) -match 'az containerapp update' }
         $health = StepIndex $script:Deploy.Yaml.jobs.deploy { param($s) (Run $s) -match '/healthz' }
-        $prune = StepIndex $script:Deploy.Yaml.jobs.deploy { param($s) (Uses $s) -like 'actions/delete-package-versions@*' }
+        $prune = StepIndex $script:Deploy.Yaml.jobs.deploy { param($s) (Run $s) -match 'tools/prune-image-versions\.ps1' }
         $update | Should -BeGreaterThan -1
         $health | Should -BeGreaterThan $update
         $prune | Should -BeGreaterThan $health
     }
 
-    It 'afterwards requires at most 3 remaining versions, the deployed tag among them, and docker manifest inspect to pass' {
-        $prune = StepIndex $script:Deploy.Yaml.jobs.deploy { param($s) (Uses $s) -like 'actions/delete-package-versions@*' }
-        $verify = StepIndex $script:Deploy.Yaml.jobs.deploy { param($s) (Run $s) -match 'docker manifest inspect' }
+    It 'afterwards runs tools/verify-image-versions.ps1 (count, deployed tag and docker manifest inspect are decided in the script)' {
+        $prune = StepIndex $script:Deploy.Yaml.jobs.deploy { param($s) (Run $s) -match 'tools/prune-image-versions\.ps1' }
+        $verify = StepIndex $script:Deploy.Yaml.jobs.deploy { param($s) (Run $s) -match 'tools/verify-image-versions\.ps1' }
         $verify | Should -BeGreaterThan $prune
         $run = Run $script:Steps[$verify]
-        $run | Should -Match '-gt 3'
-        $run | Should -Match 'grep -q "\$GITHUB_SHA"'
-        $run | Should -Match 'docker manifest inspect "\$IMAGE:\$GITHUB_SHA"'
+        $run | Should -Match '-Max 3'
+        $run | Should -Match '-DeployedTag \$env:GITHUB_SHA'
+        $run | Should -Match '-Image \$env:IMAGE'
         $script:Deploy.Yaml.jobs.deploy.permissions.packages | Should -Be 'write'
     }
 
@@ -123,6 +125,66 @@ Describe 'deploy-api.yml order: scan before push, migrate before app update' {
         $update | Should -BeGreaterThan $migrate
         $run = Run $steps[$migrate]
         foreach ($outcome in 'MIGRATION SUCCEEDED', 'MIGRATION FAILED', 'NO SIGNAL', 'WATCHER BROKEN', 'TIMEOUT') { $run | Should -Match $outcome }
+    }
+}
+
+Describe 'INFRA-04 firewall sync is wired in, after the app update, from the deploy and a weekly workflow' {
+    It 'deploy-api.yml runs infra/sync-sql-firewall.ps1 after the container app update, with the explicit subscription' {
+        $steps = @($script:Deploy.Yaml.jobs.deploy.steps)
+        $update = StepIndex $script:Deploy.Yaml.jobs.deploy { param($s) (Run $s) -match 'az containerapp update' }
+        $sync = StepIndex $script:Deploy.Yaml.jobs.deploy { param($s) (Run $s) -match 'infra/sync-sql-firewall\.ps1' }
+        $sync | Should -BeGreaterThan $update
+        $run = Run $steps[$sync]
+        $run | Should -Match '-SubscriptionId \$env:AZURE_SUBSCRIPTION_ID'
+        $run | Should -Match '-Environment \$env:CONTAINER_ENVIRONMENT'
+        $script:Deploy.Yaml.env.CONTAINER_ENVIRONMENT | Should -Be 'lifestream-env'
+    }
+
+    It 'sync-sql-firewall.yml runs weekly and on demand, signs in with OIDC, and never touches the database' {
+        $y = $script:SyncFw.Yaml
+        $y.on.Keys | Should -Contain 'schedule'
+        $y.on.Keys | Should -Contain 'workflow_dispatch'
+        @($y.on.schedule)[0].cron | Should -Match '^\d+ \d+ \* \* \d$'
+        $y.jobs.sync.permissions.'id-token' | Should -Be 'write'
+        $y.on.Keys | Should -Not -Contain 'pull_request'
+        $script:SyncFw.Text | Should -Match 'infra/sync-sql-firewall\.ps1'
+        $script:SyncFw.Text | Should -Not -Match '(?i)sqlcmd|bootstrap-sql|Invoke-Sqlcmd|client-secret|AZURE_CREDENTIALS'
+        $found = [regex]::Matches($script:SyncFw.Text, 'secrets\.(\w+)') | ForEach-Object { $_.Groups[1].Value }
+        @($found) | Should -BeNullOrEmpty
+    }
+}
+
+Describe 'workflow robustness: the guarded steps cannot be neutered by || true or continue-on-error' {
+    # The decisions are tested as scripts (SqlFirewall, ImageVersions, ScanArtifacts tests). What these tests protect is the call
+    # site: a step that runs a guard must run it alone, and must be allowed to fail the job.
+    It '<_> runs its guard script without ||, ; chaining, set +e or continue-on-error' -ForEach @(
+        @{ File = 'Deploy'; Pattern = 'tools/scan-image\.sh|tools/prune-image-versions|tools/verify-image-versions|infra/sync-sql-firewall' }
+        @{ File = 'Scan'; Pattern = 'tools/scan-image\.sh|tools/scan-artifacts\.ps1' }
+        @{ File = 'Release'; Pattern = 'tools/scan-artifacts\.ps1' }
+        @{ File = 'SyncFw'; Pattern = 'infra/sync-sql-firewall' }
+    ) {
+        $wf = (Get-Variable -Scope Script -Name $File).Value
+        $guarded = @()
+        foreach ($job in $wf.Yaml.jobs.Values) { foreach ($step in @($job.steps)) { if ((Run $step) -match $Pattern) { $guarded += $step } } }
+        $guarded.Count | Should -BeGreaterThan 0
+        foreach ($step in $guarded) {
+            $step.ContainsKey('continue-on-error') | Should -BeFalse -Because ($step.name)
+            (Run $step) | Should -Not -Match '\|\|\s*(true|:|exit 0)' -Because ($step.name)
+            (Run $step) | Should -Not -Match 'set \+e' -Because ($step.name)
+            (Run $step) | Should -Not -Match '(?m);\s*(true|exit 0)\s*$' -Because ($step.name)
+        }
+        foreach ($job in $wf.Yaml.jobs.Values) { if ($job.ContainsKey('continue-on-error')) { $job.'continue-on-error' | Should -Not -Be $true } }
+    }
+
+    It 'every az command in the workflows passes --subscription (az extension add and az bicep need none)' {
+        foreach ($wf in $script:Deploy, $script:SyncFw, $script:Release, $script:Scan) {
+            foreach ($job in $wf.Yaml.jobs.Values) {
+                foreach ($step in @($job.steps)) {
+                    $run = (Run $step) -replace '\\r?\n', ' '
+                    foreach ($m in [regex]::Matches($run, '(?m)\baz\s+(?!extension|bicep|login)[^\r\n]*')) { $m.Value | Should -Match '--subscription' -Because $m.Value }
+                }
+            }
+        }
     }
 }
 

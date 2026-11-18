@@ -143,15 +143,17 @@ Describe 'scan-artifacts.ps1' {
         (Invoke-Scan $d).ExitCode | Should -Be 1
     }
 
-    It 'does not flag keywords without a value, placeholders or format strings' {
+    It 'does not flag keywords without a value, or complete placeholders and format strings' {
         $d = New-Folder 'benign'
         $lines = @(
             ('connection string keys: ' + $script:PwKey + ';' + $script:UidKey + ';'),
             ('"' + $script:PwKey + '"'),
             ($script:PwKey + '{0}'),
+            ($script:PwKey + '{0};User ID={1}'),
             ($script:PwKey + '${DB_PASSWORD}'),
-            ($script:PwKey + '$password;TrustServerCertificate=true'),
+            ($script:PwKey + '$(DbPassword);'),
             ($script:PwKey + '%PASSWORD%'),
+            ($script:PwKey + '<your password here>'),
             'Authentication=Active Directory Managed Identity;Server=tcp:x.database.windows.net'
         )
         Set-Content -Encoding ascii (Join-Path $d 'doc.txt') $lines
@@ -182,6 +184,81 @@ Describe 'scan-artifacts.ps1' {
         $d = New-Folder 'latin1-value'
         Write-Utf16 (Join-Path $d 'x.bin') ($script:PwKey + 'caf' + [char]0xE9 + '-' + $script:Secret)
         (Invoke-Scan $d).ExitCode | Should -Be 1
+    }
+
+    # INFRA-01 verifier counterexamples (run/agents/v-03-infra-probes/scan/cases2 and cases). Each is built from fragments and
+    # the old scanner exited 0 on every one of them because it skipped any value that starts with { $ % < * .
+    Context 'INFRA-01 verifier counterexamples: values that start with a placeholder character are still credentials' {
+        BeforeAll {
+            $script:Host1 = 'lifestream-server.database.' + 'windows.net'
+            $script:V = 'Hunter' + '2xyz'
+            $script:Cases = [ordered]@{
+                'azure-user-sa-password-dollar'   = "Server=tcp:$($script:Host1),1433;Database=BloodBank;User=sa;" + $script:PwKey + '$' + $script:V + ';Encrypt=True'
+                'azure-user-sa-password-star'     = "Server=tcp:$($script:Host1),1433;Database=BloodBank;User=sa;" + $script:PwKey + '*' + $script:V
+                'azure-userid-dollar-pw-dollar'   = "Server=tcp:$($script:Host1);" + $script:UidKey + '$sa;' + $script:PwKey + '$' + $script:V
+                'onprem-plain-user-sa'            = 'Data Source=10.0.0.5;Initial Catalog=BloodBank;User=sa;' + $script:PwKey + $script:V + ';'
+                'onprem-password-star'            = 'Data Source=10.0.0.5;Initial Catalog=BloodBank;User=sa;' + $script:PwKey + '*' + $script:V + ';'
+                'password-brace-open'             = $script:PwKey + '{' + $script:V
+                'password-percent'                = $script:PwKey + '%' + $script:V
+                'password-angle-open'             = $script:PwKey + '<' + $script:V
+                'password-dollar-alone'           = $script:PwKey + '$' + $script:V
+                'mssql-sa-password-env'           = 'MSSQL_SA_' + 'PASSWORD=' + $script:V
+                'dbpassword-key'                  = 'Db' + $script:PwKey + $script:V
+                'docker-env-line'                 = '-e "MSSQL_SA_' + 'PASS' + 'WORD' + '=' + $script:V + '"'
+            }
+        }
+
+        It 'flags <_> as UTF-8' -ForEach @('azure-user-sa-password-dollar', 'azure-user-sa-password-star', 'azure-userid-dollar-pw-dollar', 'onprem-plain-user-sa',
+                                          'onprem-password-star', 'password-brace-open', 'password-percent', 'password-angle-open', 'password-dollar-alone',
+                                          'mssql-sa-password-env', 'dbpassword-key', 'docker-env-line') {
+            $d = New-Folder ('cx8-' + $_)
+            Set-Content -Encoding ascii (Join-Path $d 'appsettings.json') ('{"ConnectionStrings":{"L":"' + $script:Cases[$_] + '"}}')
+            $r = Invoke-Scan $d
+            $r.ExitCode | Should -Be 1 -Because $r.Output
+            $r.Output | Should -Not -Match ([regex]::Escape($script:V))
+        }
+
+        It 'flags <_> as UTF-16LE inside a binary' -ForEach @('azure-user-sa-password-dollar', 'azure-user-sa-password-star', 'azure-userid-dollar-pw-dollar', 'onprem-plain-user-sa',
+                                                              'password-brace-open', 'password-percent', 'password-dollar-alone', 'mssql-sa-password-env', 'dbpassword-key') {
+            $d = New-Folder ('cx16-' + $_)
+            $pad = [byte[]]::new(64)
+            [IO.File]::WriteAllBytes((Join-Path $d 'App.dll'), $pad + [Text.Encoding]::Unicode.GetBytes($script:Cases[$_] + ';') + $pad)
+            $r = Invoke-Scan $d
+            $r.ExitCode | Should -Be 1 -Because $r.Output
+            $r.Output | Should -Match 'UTF-16LE'
+        }
+
+        It 'flags a UTF-16LE value that starts with a placeholder character at an odd byte offset' {
+            $d = New-Folder 'cx16-odd'
+            [IO.File]::WriteAllBytes((Join-Path $d 'odd.bin'), [byte[]](0x41) + [Text.Encoding]::Unicode.GetBytes($script:PwKey + '$' + $script:V + ';'))
+            (Invoke-Scan $d).ExitCode | Should -Be 1
+        }
+    }
+
+    # Lines copied from the stock mcr.microsoft.com/dotnet/aspnet:11.0 linux/amd64 filesystem, which the old scanner flagged 25 times
+    # (run/agents/v-03-infra-probes/scan/imagefs-report.json). Programming or help text, not credentials.
+    Context 'INFRA-01 stock aspnet:11.0 image files are not credentials' {
+        It 'does not flag <Name>' -ForEach @(
+            @{ Name = 'coreutils .ftl help text (en-style)'; Text = "id-help-" + "pass" + "word = Display the id as a " + "pass" + "word file entry`n" }
+            @{ Name = 'coreutils .ftl help text (fr-FR)';    Text = "id-help-" + "pass" + "word = Affiche l'id comme une entr" + [char]0xE9 + "e de fichier de mots de passe.`n" }
+            @{ Name = 'perl-base Cwd.pm assignments';        Text = "    my `$p" + "wd = ``cmd /c cd``;`n    `$p" + "wd =~ s:\\:/:g ;`n        chomp(`$p" + "wd = ``command /c cd``);`n    `$new" + "p" + "wd = Win32::GetFullPathName(`$newdir);`n" }
+            @{ Name = 'c_rehash perl variable';              Text = "    `$p" + "wd=Cwd::getcwd();`n    `$p" + "wd=``p" + "wd``;`n" }
+            @{ Name = 'perl Config_heavy';                   Text = "i_p" + "wd='define'`n" }
+            @{ Name = 'openssl.cnf challenge text';          Text = "# input_" + "pass" + "word = secret`nchallenge" + "Pass" + "word`t`t= A challenge " + "pass" + "word`n" }
+            @{ Name = 'debconf perl call';                   Text = "`$rv = `$this->{ds}->bind(`$this->{binddn}, " + "pass" + "word => `$this->{bind" + "pass" + "wd});`n" }
+        ) {
+            $d = New-Folder ('stock-' + [guid]::NewGuid().ToString('N'))
+            Set-Content -Encoding utf8 (Join-Path $d 'stock.txt') $Text
+            $r = Invoke-Scan $d
+            $r.ExitCode | Should -Be 0 -Because $r.Output
+        }
+
+        It 'does not flag the coreutils binary string table (ASCII, many help strings back to back)' {
+            $d = New-Folder 'stock-bin'
+            $text = "id-help-" + "pass" + "word = Display the id as a " + "pass" + "word file entry" + [char]0 + "id-help-zero = Delimit entries with NUL" + [char]0
+            [IO.File]::WriteAllBytes((Join-Path $d 'coreutils'), [Text.Encoding]::ASCII.GetBytes($text))
+            (Invoke-Scan $d).ExitCode | Should -Be 0
+        }
     }
 
     It 'scans a single file path as well as a folder, and several paths at once' {

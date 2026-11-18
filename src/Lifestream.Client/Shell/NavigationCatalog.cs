@@ -34,12 +34,12 @@ public static class NavigationCatalog
     // Segoe Fluent Icons code points.
     public static IReadOnlyList<Destination> Default { get; } =
     [
-        new("Dashboard", "Overview", "", typeof(Placeholders.DashboardPlaceholderViewModel)),
-        new("Donors", "Donations", "", typeof(Placeholders.DonorsPlaceholderViewModel)),
+        new("Dashboard", "Overview", "", typeof(Features.Dashboard.DashboardViewModel)),
+        new("Donors", "Donations", "", typeof(Features.Donors.DonorsViewModel)),
         new("Appointments", "Donations", "", typeof(Placeholders.AppointmentsPlaceholderViewModel)),
-        new("Patients", "Transfusions", "", typeof(Placeholders.PatientsPlaceholderViewModel)),
+        new("Patients", "Transfusions", "", typeof(Features.Patients.PatientsViewModel)),
         new("Requests", "Transfusions", "", typeof(Placeholders.RequestsPlaceholderViewModel)),
-        new("Stock", "Inventory", "", typeof(Placeholders.StockPlaceholderViewModel)),
+        new("Stock", "Inventory", "", typeof(Features.Stock.StockViewModel)),
         new("Receipts", "Inventory", "", typeof(Placeholders.ReceiptsPlaceholderViewModel)),
         new("Staff", "Administration", "", typeof(Placeholders.StaffPlaceholderViewModel), Audience.AdminOrDemo),
     ];
