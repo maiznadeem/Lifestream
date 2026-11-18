@@ -75,7 +75,7 @@ public static class ProfileEndpoints
     }
 
     /// <summary>Needs the current password (a wrong one counts toward the lockout), a new one of at least 12 characters; ends every other session.</summary>
-    private static async Task<NoContent> ChangePasswordAsync(HttpRequest http, LifestreamDbContext db, CurrentUser user, AuthService auth, TimeProvider time, CancellationToken ct)
+    private static async Task<NoContent> ChangePasswordAsync(HttpRequest http, LifestreamDbContext db, CurrentUser user, AuthService auth, CancellationToken ct)
     {
         var r = await http.ReadBodyAsync<ChangePasswordRequest>(ct);
         var check = new Check();
@@ -93,19 +93,15 @@ public static class ProfileEndpoints
         check.ThrowIfInvalid();
 
         var id = user.TokenStaffId;
-        var current = await db.Staff.AsNoTracking().Where(s => s.Id == id).Select(s => new { s.PasswordHash, s.LockoutEndUtc }).FirstOrDefaultAsync(ct)
+        var current = await db.Staff.AsNoTracking().Where(s => s.Id == id).Select(s => new { s.PasswordHash }).FirstOrDefaultAsync(ct)
             ?? throw ApiException.NotFound("The profile");
 
-        // A locked account is refused before any password is checked, so a stolen access token cannot be used to guess the password.
-        var now = time.GetUtcNow().UtcDateTime;
-        if (current.LockoutEndUtc is { } until && until > now)
-        {
-            throw new ApiException(StatusCodes.Status429TooManyRequests, ProblemCodes.LockedOut, "Too many failed attempts. Try again later.", retryAfter: until - now);
-        }
-
+        // The guess is counted, and the lock checked, before the password is: a locked account is refused (429) without any check,
+        // so a stolen access token cannot be used to guess the password, however many requests arrive at once.
+        var attempt = await auth.ReserveAttemptAsync(id, ct);
         if (!PasswordHashing.Verify(current.PasswordHash, r.CurrentPassword))
         {
-            if (await auth.RegisterFailureAsync(id, ct))
+            if (attempt.LockedNow)
             {
                 // The lock started: sign the caller out everywhere.
                 await auth.RevokeAllForAsync(id, null, ct);

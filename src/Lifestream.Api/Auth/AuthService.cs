@@ -1,5 +1,5 @@
+using Lifestream.Api.Common;
 using Lifestream.Api.Infrastructure;
-using Lifestream.Contracts;
 using Lifestream.Contracts.Auth;
 using Lifestream.Data;
 using Lifestream.Data.Entities;
@@ -19,8 +19,11 @@ public sealed class AuthService(
     IOptions<AuthSettings> authSettings,
     IOptions<JwtSettings> jwtSettings,
     IOptions<DemoSettings> demoSettings,
-    IMemoryCache cache)
+    IMemoryCache cache,
+    UnknownLoginTracker unknown)
 {
+    private const int ConcurrencyRetries = 5;
+
     // Verified against when the user does not exist, so an unknown name costs the same time as a wrong password.
     private static readonly Lazy<string> DummyHash = new(() => PasswordHashing.Hash("not-a-real-account"));
 
@@ -31,83 +34,127 @@ public sealed class AuthService(
     public static ApiException InvalidCredentials() =>
         new(StatusCodes.Status401Unauthorized, ExtraProblemCodes.InvalidCredentials, "The username or password is not correct.");
 
+    /// <summary>
+    /// The order matters: the guess is counted (and the lock checked) in ONE atomic step BEFORE the password is checked, so however
+    /// many requests arrive at once, only the first few (the configured maximum) are ever verified. A name with no staff row (and the
+    /// demo account, which has no password login) goes through the same counting in memory, so the two cases are indistinguishable.
+    /// </summary>
     public async Task<TokenResponse> LoginAsync(LoginRequest request, CancellationToken ct)
     {
         var username = request.Username.Trim();
-        var user = await db.Staff
+        var user = await db.Staff.AsNoTracking()
             .Where(s => s.Username == username)
-            .Select(s => new { s.Id, s.DisplayName, s.PasswordHash, s.Role, s.IsDemo, s.LockoutEndUtc, s.FailedLoginCount })
+            .Select(s => new { s.Id, s.DisplayName, s.PasswordHash, s.Role, s.IsDemo, s.LockoutEndUtc })
             .FirstOrDefaultAsync(ct);
 
-        if (user is { LockoutEndUtc: { } until } && until > Now)
+        if (user is null or { IsDemo: true })
         {
-            throw new ApiException(StatusCodes.Status429TooManyRequests, ProblemCodes.LockedOut, "Too many failed attempts. Try again later.", retryAfter: until - Now);
-        }
-
-        var ok = PasswordHashing.Verify(user?.PasswordHash ?? DummyHash.Value, request.Password) && user is { IsDemo: false };
-        if (!ok || user is null)
-        {
-            if (user is { IsDemo: false })
+            if (unknown.Reserve(username, Auth.MaxFailedAttempts, Auth.LockoutMinutes) is { } wait)
             {
-                await RegisterFailureAsync(user.Id, ct);
+                throw LoginProblems.Locked(wait);
             }
 
+            PasswordHashing.Verify(DummyHash.Value, request.Password);
             throw InvalidCredentials();
         }
 
-        if (user.FailedLoginCount != 0 || user.LockoutEndUtc is not null)
+        // Fast path for an account that is already locked: no hash is checked and nothing is written.
+        if (user.LockoutEndUtc is { } until && until > Now)
         {
-            await UpdateStaffAsync(user.Id, s =>
-            {
-                s.FailedLoginCount = 0;
-                s.LockoutEndUtc = null;
-            }, ct);
+            throw LoginProblems.Locked(until - Now);
         }
 
+        await ReserveAttemptAsync(user.Id, ct);
+        if (!PasswordHashing.Verify(user.PasswordHash, request.Password))
+        {
+            throw InvalidCredentials();
+        }
+
+        await ClearFailuresAsync(user.Id, ct);
         return await IssueAsync(user.Id, user.DisplayName, user.Role, isDemo: false, ct);
     }
 
-    /// <summary>Counts a wrong password (login or change-password). The lock starts after the configured number and counting restarts.</summary>
-    /// <summary>Returns true when this failure started the lockout.</summary>
-    public async Task<bool> RegisterFailureAsync(int staffId, CancellationToken ct)
+    /// <summary>
+    /// Counts one password guess for a real account, atomically (an application lock per account serialises the check of the lock
+    /// and the increment; the write is audited like every other staff write). Throws 429 when the account is locked. The lock starts
+    /// with the guess that reaches the limit, and counting restarts. A write that cannot be made is an error, never a dropped count.
+    /// </summary>
+    public async Task<AttemptReservation> ReserveAttemptAsync(int staffId, CancellationToken ct)
     {
-        var lockedNow = false;
-        await UpdateStaffAsync(staffId, s =>
+        for (var attempt = 1; ; attempt++)
         {
-            lockedNow = false;
-            s.FailedLoginCount++;
-            if (s.FailedLoginCount >= Auth.MaxFailedAttempts)
-            {
-                s.LockoutEndUtc = Now.AddMinutes(Auth.LockoutMinutes);
-                s.FailedLoginCount = 0;
-                lockedNow = true;
-            }
-        }, ct);
-        return lockedNow;
-    }
-
-    /// <summary>Changes a staff row through the tracked entity (so it is audited like every other staff write); a clash with a concurrent change reloads and tries again.</summary>
-    private async Task UpdateStaffAsync(int staffId, Action<Staff> change, CancellationToken ct)
-    {
-        for (var attempt = 0; attempt < 3; attempt++)
-        {
-            db.ChangeTracker.Clear();
-            var staff = await db.Staff.FirstOrDefaultAsync(s => s.Id == staffId, ct);
-            if (staff is null)
-            {
-                return;
-            }
-
-            change(staff);
             try
             {
-                await db.SaveChangesAsync(ct);
-                db.ChangeTracker.Clear();
+                return await db.RunAsync(async token =>
+                {
+                    await db.LockAsync($"login:{staffId}", token);
+                    var staff = await AttachCountersAsync(staffId, token) ?? throw InvalidCredentials();
+                    var now = Now;
+                    if (staff.LockoutEndUtc is { } until && until > now)
+                    {
+                        throw LoginProblems.Locked(until - now);
+                    }
+
+                    staff.FailedLoginCount++;
+                    var lockedNow = staff.FailedLoginCount >= Auth.MaxFailedAttempts;
+                    if (lockedNow)
+                    {
+                        staff.LockoutEndUtc = now.AddMinutes(Auth.LockoutMinutes);
+                        staff.FailedLoginCount = 0;
+                    }
+
+                    await db.SaveChangesAsync(token);
+                    return new AttemptReservation(lockedNow);
+                }, ct);
+            }
+            catch (DbUpdateConcurrencyException) when (attempt < ConcurrencyRetries)
+            {
+                // Another writer changed the row between the read and the write: count again from the fresh row.
+            }
+        }
+    }
+
+    /// <summary>
+    /// Loads only the counters and the row version (never the password hash) into a stub that EF tracks, so the save writes just the
+    /// changed counter columns, checks the row version and is audited like any other staff update.
+    /// </summary>
+    private async Task<Staff?> AttachCountersAsync(int staffId, CancellationToken token)
+    {
+        var row = await db.Staff.AsNoTracking().Where(s => s.Id == staffId).Select(s => new { s.FailedLoginCount, s.LockoutEndUtc, s.RowVersion }).FirstOrDefaultAsync(token);
+        if (row is null)
+        {
+            return null;
+        }
+
+        var staff = new Staff { Id = staffId, FailedLoginCount = row.FailedLoginCount, LockoutEndUtc = row.LockoutEndUtc, RowVersion = row.RowVersion };
+        db.Staff.Attach(staff);
+        return staff;
+    }
+
+    /// <summary>A right password ends the run of failures (and any lock the guess itself started).</summary>
+    public async Task ClearFailuresAsync(int staffId, CancellationToken ct)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                await db.RunAsync(async token =>
+                {
+                    await db.LockAsync($"login:{staffId}", token);
+                    var staff = await AttachCountersAsync(staffId, token);
+                    if (staff is not null && (staff.FailedLoginCount != 0 || staff.LockoutEndUtc is not null))
+                    {
+                        staff.FailedLoginCount = 0;
+                        staff.LockoutEndUtc = null;
+                        await db.SaveChangesAsync(token);
+                    }
+
+                    return true;
+                }, ct);
                 return;
             }
-            catch (DbUpdateConcurrencyException)
+            catch (DbUpdateConcurrencyException) when (attempt < ConcurrencyRetries)
             {
-                // Another request changed the row first: read it again and apply the change to the fresh values.
             }
         }
     }

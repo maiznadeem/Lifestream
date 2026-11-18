@@ -101,6 +101,7 @@ public static class ApiSetup
 
         services.AddSingleton<TokenService>();
         services.AddSingleton<DemoDirectory>();
+        services.AddSingleton<UnknownLoginTracker>();
         services.AddScoped<CurrentUser>();
         services.AddScoped<AuthService>();
         services.AddScoped<StaffService>();

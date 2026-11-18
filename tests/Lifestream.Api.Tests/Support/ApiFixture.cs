@@ -252,6 +252,11 @@ public class ApiFixture : IAsyncLifetime
     {
     }
 
+    /// <summary>Extra services for one test class (for example an interceptor that makes a write fail).</summary>
+    protected virtual void ConfigureTestServices(IServiceCollection services)
+    {
+    }
+
     public TokenService Tokens => Factory.Services.GetRequiredService<TokenService>();
 
     public async ValueTask InitializeAsync()
@@ -277,6 +282,7 @@ public class ApiFixture : IAsyncLifetime
                 }
 
                 services.AddSingleton<Microsoft.AspNetCore.Hosting.IStartupFilter, RemoteAddressFilter>();
+                ConfigureTestServices(services);
             });
         });
         _ = Factory.Server;

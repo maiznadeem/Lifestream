@@ -376,7 +376,7 @@ public sealed class ForwardedHeaderTests(LowLimitApiFixture fx) : IClassFixture<
         {
             using var request = new HttpRequestMessage(HttpMethod.Post, ApiRoutes.Path(ApiRoutes.AuthLogin))
             {
-                Content = JsonContent.Create(new Lifestream.Contracts.Auth.LoginRequest("nobody", "wrong-password-1"), options: ApiFixture.Json),
+                Content = JsonContent.Create(new Lifestream.Contracts.Auth.LoginRequest("nobody-" + i, "wrong-password-1"), options: ApiFixture.Json),
             };
             request.Headers.Add("X-Test-Remote", "10.40.1.9");
             request.Headers.Add("X-Forwarded-For", $"198.18.0.{i + 1}");
