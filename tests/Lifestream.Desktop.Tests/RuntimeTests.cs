@@ -317,10 +317,11 @@ public sealed class RuntimeTests
     public void Chrome_IsImplementedOnce_AndEveryWindowReusesIt()
     {
         var windows = typeof(App).Assembly.GetTypes().Where(t => typeof(Window).IsAssignableFrom(t) && !t.IsAbstract && t.Namespace?.StartsWith("Lifestream.Desktop", StringComparison.Ordinal) == true).ToList();
-        var notChrome = windows.Where(t => !typeof(ChromeWindow).IsAssignableFrom(t) && t.Name != "SpikeWindow").Select(t => t.Name).ToList();
+        var notChrome = windows.Where(t => !typeof(ChromeWindow).IsAssignableFrom(t)).Select(t => t.Name).ToList();
 
         Assert.NotEmpty(windows);
         Assert.Empty(notChrome);
+        Assert.Empty(typeof(App).Assembly.GetTypes().Where(t => t.Name.Contains("Spike", StringComparison.Ordinal)).Select(t => t.FullName)); // no spike code ships
         foreach (var file in Directory.EnumerateFiles(Lifestream.Client.Tests.RepoPaths.Find("src/Lifestream.Desktop"), "*.xaml", SearchOption.AllDirectories).Where(f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)))
         {
             var text = File.ReadAllText(file);
@@ -378,10 +379,10 @@ public sealed class RuntimeTests
     {
         var desktop = Lifestream.Client.Tests.RepoPaths.Find("src/Lifestream.Desktop");
         var viewFiles = Directory.EnumerateFiles(desktop, "*View.xaml.cs", SearchOption.AllDirectories).Where(f => !f.EndsWith("RecordPicker.xaml.cs", StringComparison.Ordinal)).ToList();
-        var xamlViews = Directory.EnumerateFiles(desktop, "*View.xaml", SearchOption.AllDirectories).Where(f => !f.EndsWith("RecordPicker.xaml", StringComparison.Ordinal) && !f.EndsWith("ToastView.xaml", StringComparison.Ordinal) && !f.EndsWith("SpikeView.xaml", StringComparison.Ordinal)).ToList();
+        var xamlViews = Directory.EnumerateFiles(desktop, "*View.xaml", SearchOption.AllDirectories).Where(f => !f.EndsWith("RecordPicker.xaml", StringComparison.Ordinal) && !f.EndsWith("ToastView.xaml", StringComparison.Ordinal)).ToList();
 
         Assert.NotEmpty(viewFiles);
-        foreach (var file in viewFiles.Where(f => !f.EndsWith("SpikeView.xaml.cs", StringComparison.Ordinal)))
+        foreach (var file in viewFiles)
         {
             Assert.DoesNotContain("DataContext =", File.ReadAllText(file), StringComparison.Ordinal);
         }
