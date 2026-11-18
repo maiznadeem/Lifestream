@@ -1,4 +1,3 @@
-using System.IO;
 using Wpf.Ui.Controls;
 
 namespace Lifestream.Desktop.Tests;

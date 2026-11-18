@@ -1,7 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!-- View models, services and the API client. No WPF, EF Core or SqlClient reference is allowed here. -->
   <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
     <ProjectReference Include="..\Lifestream.Contracts\Lifestream.Contracts.csproj" />
     <ProjectReference Include="..\Lifestream.Domain\Lifestream.Domain.csproj" />
+    <InternalsVisibleTo Include="Lifestream.Client.Tests" />
+    <InternalsVisibleTo Include="Lifestream.Desktop.Tests" />
   </ItemGroup>
 </Project>

@@ -1,4 +1,3 @@
-using System.IO;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media;
