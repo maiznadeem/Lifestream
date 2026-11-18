@@ -186,7 +186,8 @@ public static class ApiSetup
         // Liveness only: never opens a database connection (the startup probe and the client warm-up call it).
         app.MapGet(ApiRoutes.Healthz, () => Results.Ok(new { status = "healthy" }));
 
-        // Readiness: the only health route that touches the database; "waking" and "resting" are distinct, visible states.
+        // Readiness: the only health route that touches the database; "waking" and "resting" are distinct, visible states. Not ready is
+        // an error like any other: RFC 7807 problem details with a code and the correlation id, plus the state as a "database" member.
         app.MapGet(ApiRoutes.Readyz, async (IDatabaseProbe probe, CancellationToken ct) =>
         {
             try
@@ -196,11 +197,21 @@ public static class ApiSetup
             }
             catch (Exception exception) when (DatabaseErrors.IsResting(exception))
             {
-                return Results.Json(new ReadinessResponse(DatabaseStates.Resting), statusCode: StatusCodes.Status503ServiceUnavailable);
+                return new ProblemResult(
+                    StatusCodes.Status503ServiceUnavailable,
+                    ProblemCodes.DatabaseResting,
+                    DatabaseProblems.RestingTitle,
+                    DatabaseProblems.RestingRetryAfter(),
+                    new Dictionary<string, object?> { ["database"] = DatabaseStates.Resting });
             }
             catch (Exception exception) when (DatabaseErrors.IsWaking(exception) || exception is SqlException)
             {
-                return Results.Json(new ReadinessResponse(DatabaseStates.Waking), statusCode: StatusCodes.Status503ServiceUnavailable);
+                return new ProblemResult(
+                    StatusCodes.Status503ServiceUnavailable,
+                    ProblemCodes.DatabaseWaking,
+                    DatabaseProblems.WakingTitle,
+                    DatabaseProblems.WakingRetryAfter,
+                    new Dictionary<string, object?> { ["database"] = DatabaseStates.Waking });
             }
         });
 
