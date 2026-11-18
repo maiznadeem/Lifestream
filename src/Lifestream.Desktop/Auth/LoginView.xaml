@@ -15,6 +15,19 @@
         <TextBlock Style="{DynamicResource Text.Title}" Text="Lifestream" Margin="0,16,0,0" AutomationProperties.HeadingLevel="Level1" />
         <TextBlock Style="{DynamicResource Text.Body}" Foreground="{DynamicResource Brush.TextSecondary}" Text="Sign in to manage donors, requests and stock." Margin="0,4,0,32" />
 
+        <!-- Update ready: the feed is checked when the app starts, so this shows before anyone signs in (SHELL-44). -->
+        <Border x:Name="UpdateBanner" Margin="0,0,0,16" Padding="12,8" Background="{DynamicResource Brush.SurfaceRaised}" BorderBrush="{DynamicResource Brush.StatusInfo}" BorderThickness="1"
+                CornerRadius="{DynamicResource Radius.Control}" Visibility="{Binding UpdatePrompt, Converter={StaticResource HasText}}" AutomationProperties.LiveSetting="Polite">
+          <StackPanel>
+            <StackPanel Orientation="Horizontal">
+              <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE895;" Foreground="{DynamicResource Brush.StatusInfo}" VerticalAlignment="Top" Margin="0,2,10,0" />
+              <TextBlock Style="{DynamicResource Text.Body}" Text="{Binding UpdatePrompt}" MaxWidth="290" AutomationProperties.Name="Update ready" />
+            </StackPanel>
+            <Button Style="{DynamicResource Button.Secondary}" Content="Restart and update" Command="{Binding ApplyUpdateCommand}" HorizontalAlignment="Left" Margin="0,8,0,0" MinHeight="32"
+                    controls:ButtonAssist.IsBusy="{Binding ApplyUpdateCommand.IsRunning}" controls:ButtonAssist.BusyText="Updating..." />
+          </StackPanel>
+        </Border>
+
         <!-- Notice (for example "Your session expired") -->
         <Border Margin="0,0,0,16" Padding="12,8" Background="{DynamicResource Brush.SurfaceRaised}" BorderBrush="{DynamicResource Brush.StatusInfo}" BorderThickness="1"
                 CornerRadius="{DynamicResource Radius.Control}" Visibility="{Binding Notice, Converter={StaticResource HasText}}" AutomationProperties.LiveSetting="Polite">
