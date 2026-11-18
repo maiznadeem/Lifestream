@@ -19,6 +19,22 @@ public sealed class ArchitectureTests
     }
 
     [Fact]
+    public void ClientSource_NeverBlocksOnATask()
+    {
+        var root = Path.GetDirectoryName(RepoPaths.Find("src/Lifestream.Client/Lifestream.Client.csproj"))!;
+        var blocking = new Regex(@"\.GetAwaiter\(\)\s*\.GetResult\(\)|\.Wait\(|\.WaitAll\(|\.WaitAny\(|\.Result(?!\w)", RegexOptions.None, TimeSpan.FromSeconds(5));
+
+        var offenders = Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories)
+            .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+            .SelectMany(f => File.ReadAllLines(f).Select((line, i) => (File: Path.GetFileName(f), Line: i + 1, Text: line.Trim())))
+            .Where(l => !l.Text.StartsWith("//", StringComparison.Ordinal) && !l.Text.StartsWith("///", StringComparison.Ordinal) && blocking.IsMatch(l.Text))
+            .Select(l => $"{l.File}:{l.Line}: {l.Text}")
+            .ToList();
+
+        Assert.Empty(offenders); // sync-over-async on the UI thread deadlocks (SHELL-09, SHELL-17)
+    }
+
+    [Fact]
     public void ClientProject_HasNoPackageOrProjectReference_ToDataAccess()
     {
         var project = string.Concat(

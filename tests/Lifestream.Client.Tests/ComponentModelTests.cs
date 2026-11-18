@@ -64,7 +64,7 @@ public sealed class ComponentModelTests
     public void Toast_NamesTheRecord_AutoDismissesBetween6And10Seconds()
     {
         var clock = new ManualTimeProvider();
-        var toasts = new ToastService(clock);
+        var toasts = new ToastService(new InlineUiDispatcher(), clock);
 
         var toast = toasts.ShowForRecord(ToastKind.Success, "Donor", "Ayşe Öztürk", "saved");
         Assert.Equal("Donor 'Ayşe Öztürk' saved.", toast.Message);
@@ -82,7 +82,7 @@ public sealed class ComponentModelTests
     public void Toast_PausesOnHoverOrFocus_AndResumesWithTheRemainingTime()
     {
         var clock = new ManualTimeProvider();
-        var toasts = new ToastService(clock);
+        var toasts = new ToastService(new InlineUiDispatcher(), clock);
         var toast = toasts.Show(ToastKind.Info, "Hello");
 
         clock.Advance(TimeSpan.FromSeconds(5));
@@ -102,7 +102,7 @@ public sealed class ComponentModelTests
     public async Task Toast_ActionRunsOnce_AndDismisses()
     {
         var clock = new ManualTimeProvider();
-        var toasts = new ToastService(clock);
+        var toasts = new ToastService(new InlineUiDispatcher(), clock);
         var undone = 0;
         var toast = toasts.Show(ToastKind.Success, "Donor 'X' deleted.", "Undo", () =>
         {
@@ -121,7 +121,7 @@ public sealed class ComponentModelTests
     [Fact]
     public void Toast_WithoutAnAction_HasNoActionLabel()
     {
-        var toast = new ToastService(new ManualTimeProvider()).Show(ToastKind.Info, "x", "View", null);
+        var toast = new ToastService(new InlineUiDispatcher(), new ManualTimeProvider()).Show(ToastKind.Info, "x", "View", null);
 
         Assert.False(toast.HasAction);
     }

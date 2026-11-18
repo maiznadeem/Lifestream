@@ -20,7 +20,7 @@ internal sealed class DonorConfiguration : IEntityTypeConfiguration<Donor>
         b.Property(x => x.Address).HasMaxLength(200);
         b.Property(x => x.RowVersion).IsRowVersion();
         b.HasIndex(x => x.Name);
-        b.HasIndex(x => x.BloodType);
+        b.HasIndex(x => new { x.BloodType, x.Name });
         b.HasIndex(x => x.Gender);
         b.HasIndex(x => x.LastDonated);
     }
@@ -39,7 +39,7 @@ internal sealed class PatientConfiguration : IEntityTypeConfiguration<Patient>
         b.Property(x => x.Address).HasMaxLength(200);
         b.Property(x => x.RowVersion).IsRowVersion();
         b.HasIndex(x => x.Name);
-        b.HasIndex(x => x.BloodType);
+        b.HasIndex(x => new { x.BloodType, x.Name });
         b.HasIndex(x => x.Gender);
     }
 }
@@ -47,11 +47,24 @@ internal sealed class PatientConfiguration : IEntityTypeConfiguration<Patient>
 internal sealed class StaffConfiguration : IEntityTypeConfiguration<Staff>
 {
     /// <summary>
-    /// ASP.NET Core Identity v3 hashes are base64 and start with the bytes 01 00 00 00 02 (format marker, then PRF
-    /// HMAC-SHA512), which is always "AQAAAAI". Compared with a binary collation so case matters. Plain text cannot pass.
+    /// The most of an ASP.NET Core Identity v3 hash that a T-SQL CHECK can verify (no function may be created, and XML methods
+    /// are not allowed in a CHECK, so the base64 text is inspected with LIKE under a binary collation, where case matters):
+    /// <list type="bullet">
+    /// <item>base64 alphabet only (<c>A-Za-z0-9+/</c>), padding <c>=</c> only at the end and at most two;</item>
+    /// <item>a length that is a multiple of 4, at least 84 characters (13 header bytes + 16 salt bytes + 32 subkey bytes, 61
+    /// bytes decoded) and at most 256;</item>
+    /// <item>the exact header: byte 0 = 0x01 (v3), bytes 1-4 = 2 (PRF HMAC-SHA512), byte 5 = 0 (so under 2^24 iterations),
+    /// bytes 9-12 = 16 (salt length). Base64 characters 1-8 are therefore <c>AQAAAAIA</c> and 13-17 are <c>AAAAE</c>.</item>
+    /// </list>
+    /// What it cannot check: the iteration count floor (the application's <c>PasswordHashing.IsValidHash</c> does) and that
+    /// the salt and subkey are random. Plain text, and plain text behind a valid-looking prefix, cannot pass.
     /// </summary>
     public const string HashCheck =
-        "LEN([PasswordHash]) BETWEEN 80 AND 256 AND [PasswordHash] LIKE 'AQAAAAI%' COLLATE Latin1_General_100_BIN2";
+        "LEN([PasswordHash]) BETWEEN 84 AND 256 AND LEN([PasswordHash]) % 4 = 0 " +
+        "AND [PasswordHash] NOT LIKE '%[^A-Za-z0-9+/=]%' COLLATE Latin1_General_100_BIN2 " +
+        "AND [PasswordHash] NOT LIKE '%=%[^=]%' COLLATE Latin1_General_100_BIN2 " +
+        "AND [PasswordHash] NOT LIKE '%===%' COLLATE Latin1_General_100_BIN2 " +
+        "AND [PasswordHash] LIKE 'AQAAAAIA____AAAAE%' COLLATE Latin1_General_100_BIN2";
 
     public void Configure(EntityTypeBuilder<Staff> b)
     {

@@ -54,30 +54,40 @@ public sealed class LifestreamApiClient(HttpClient http, ISessionService session
     public Task<ApiResult<TokenResponse>> DemoLoginAsync(CancellationToken ct = default) =>
         SendAsync<TokenResponse>(HttpMethod.Post, ApiRoutes.Path(ApiRoutes.AuthDemo), null, authorize: false, ct: ct);
 
+    /// <summary>How long a logout may take before it is abandoned (SHELL-17).</summary>
+    public TimeSpan LogoutTimeout { get; init; } = TimeSpan.FromSeconds(5);
+
     /// <summary>
-    /// Revokes the refresh token on the server. It is sent without an access token (so a 401 can never start a refresh) and the
-    /// refresh token is read from the session when the request is built, not earlier. With no refresh token there is nothing to revoke.
+    /// Revokes <paramref name="refreshToken"/> on the server. The caller passes the token it took from the session before clearing it,
+    /// so this works after sign-out. It is sent without an access token (a 401 can never start a refresh), in one attempt with no
+    /// cold-start retries, and gives up after <see cref="LogoutTimeout"/> (SHELL-17).
     /// </summary>
-    public async Task<ApiResult> LogoutAsync(CancellationToken ct = default)
+    public async Task<ApiResult> LogoutAsync(string refreshToken, CancellationToken ct = default)
     {
-        if (session.RefreshToken is null)
+        ArgumentNullException.ThrowIfNull(refreshToken);
+        using var limit = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        limit.CancelAfter(LogoutTimeout);
+        try
         {
-            return ApiResult.Success;
-        }
+            var outcome = await ExecuteAsync(
+                HttpMethod.Post,
+                ApiRoutes.Path(ApiRoutes.AuthLogout),
+                () => JsonContent.Create(new RefreshRequest(refreshToken), options: Json),
+                authorize: false,
+                limit.Token,
+                retry: false).ConfigureAwait(false);
+            using var response = outcome.Response;
+            if (response is null)
+            {
+                return ApiResult.Fail(outcome.Problem!);
+            }
 
-        var outcome = await ExecuteAsync(
-            HttpMethod.Post,
-            ApiRoutes.Path(ApiRoutes.AuthLogout),
-            () => JsonContent.Create(new RefreshRequest(session.RefreshToken ?? string.Empty), options: Json),
-            authorize: false,
-            ct).ConfigureAwait(false);
-        using var response = outcome.Response;
-        if (response is null)
+            return response.IsSuccessStatusCode ? ApiResult.Success : ApiResult.Fail(await ReadProblemAsync(response, limit.Token).ConfigureAwait(false));
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
-            return ApiResult.Fail(outcome.Problem!);
+            return ApiResult.Fail(new ApiProblem(0, ClientProblemCodes.Unreachable, "The server did not answer the sign-out in time."));
         }
-
-        return response.IsSuccessStatusCode ? ApiResult.Success : ApiResult.Fail(await ReadProblemAsync(response, ct).ConfigureAwait(false));
     }
 
     // Donors
@@ -364,25 +374,46 @@ public sealed class LifestreamApiClient(HttpClient http, ISessionService session
 
     private readonly record struct Outcome(HttpResponseMessage? Response, ApiProblem? Problem);
 
-    /// <summary>Sends once (plus one transparent token refresh on a 401). Writes carry one Idempotency-Key for all retries.</summary>
-    private async Task<Outcome> ExecuteAsync(HttpMethod method, string url, Func<HttpContent>? content, bool authorize, CancellationToken ct)
+    private static ApiProblem SessionExpiredProblem() => new(401, ClientProblemCodes.SessionExpired, "Your session has expired. Sign in again.");
+
+    /// <summary>
+    /// Sends once (plus one transparent token refresh on a 401). Writes carry one Idempotency-Key for all retries.
+    /// An authorised call belongs to the session it began in (SHELL-16): it is cancelled when that session ends, and it is never
+    /// sent again, nor given a refreshed token, once the session has changed (sign-out, or another user signing in).
+    /// </summary>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Each request is disposed by its using declaration; the analyzer cannot follow the loop with its continue and early returns.")]
+    private async Task<Outcome> ExecuteAsync(HttpMethod method, string url, Func<HttpContent>? content, bool authorize, CancellationToken ct, bool retry = true)
     {
         var idempotencyKey = method == HttpMethod.Post ? Guid.NewGuid().ToString("N") : null;
         var refreshed = false;
+        var begun = session.Snapshot();
+        using var sessionScoped = authorize ? CancellationTokenSource.CreateLinkedTokenSource(ct, begun.Scope) : null;
+        var linked = sessionScoped?.Token ?? ct;
         while (true)
         {
+            string? token = null;
+            if (authorize)
+            {
+                var current = session.Snapshot();
+                if (current.Generation != begun.Generation)
+                {
+                    // Signed out, or a different user signed in, since this call began: never send it with the new session's token.
+                    return new Outcome(null, SessionExpiredProblem());
+                }
+
+                token = current.AccessToken;
+            }
+
             using var request = NewRequest(method, url);
             request.Content = content?.Invoke();
+            if (!retry)
+            {
+                request.Options.Set(WakeAwareHandler.NoRetry, true);
+            }
+
             if (idempotencyKey is not null)
             {
                 request.Headers.TryAddWithoutValidation(ApiHeaders.IdempotencyKey, idempotencyKey);
-            }
-
-            var token = authorize ? session.AccessToken : null;
-            if (authorize && refreshed && token is null)
-            {
-                // The session was cleared while the token was being refreshed: do not send an anonymous call in its place.
-                return new Outcome(null, new ApiProblem(401, ClientProblemCodes.SessionExpired, "Your session has expired. Sign in again."));
             }
 
             if (token is not null)
@@ -393,7 +424,7 @@ public sealed class LifestreamApiClient(HttpClient http, ISessionService session
             HttpResponseMessage response;
             try
             {
-                response = await http.SendAsync(request, HttpCompletionOption.ResponseContentRead, ct).ConfigureAwait(false);
+                response = await http.SendAsync(request, HttpCompletionOption.ResponseContentRead, linked).ConfigureAwait(false);
             }
             catch (HttpRequestException)
             {
@@ -401,39 +432,53 @@ public sealed class LifestreamApiClient(HttpClient http, ISessionService session
             }
             catch (OperationCanceledException) when (!ct.IsCancellationRequested)
             {
-                return new Outcome(null, new ApiProblem(0, ClientProblemCodes.Unreachable, "The server did not respond in time."));
+                return SessionEnded(begun)
+                    ? new Outcome(null, SessionExpiredProblem())
+                    : new Outcome(null, new ApiProblem(0, ClientProblemCodes.Unreachable, "The server did not respond in time."));
             }
 
             if (response.StatusCode == HttpStatusCode.Unauthorized && token is not null && !refreshed)
             {
                 refreshed = true;
                 response.Dispose();
-                if (await TryRefreshAsync(token, ct).ConfigureAwait(false))
+                var refreshedOk = false;
+                try
+                {
+                    refreshedOk = await TryRefreshAsync(token, begun.Generation, linked).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (!ct.IsCancellationRequested && SessionEnded(begun))
+                {
+                    // Signed out while waiting for, or running, the refresh: the call is over.
+                }
+
+                if (refreshedOk)
                 {
                     continue;
                 }
 
-                return new Outcome(null, new ApiProblem(401, ClientProblemCodes.SessionExpired, "Your session has expired. Sign in again."));
+                return new Outcome(null, SessionExpiredProblem());
             }
 
             return new Outcome(response, null);
         }
     }
 
-    private async Task<bool> TryRefreshAsync(string failedToken, CancellationToken ct)
+    private bool SessionEnded(SessionSnapshot begun) => session.Generation != begun.Generation;
+
+    private async Task<bool> TryRefreshAsync(string failedToken, long generation, CancellationToken ct)
     {
         await _refreshGate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
             var snapshot = session.Snapshot();
-            if (snapshot.AccessToken is null)
+            if (snapshot.AccessToken is null || snapshot.Generation != generation)
             {
-                return false; // signed out meanwhile: nothing to refresh and nothing to report
+                return false; // signed out, or another user signed in, meanwhile: nothing to refresh, and never with that user's tokens
             }
 
             if (snapshot.AccessToken != failedToken)
             {
-                return true; // another call already refreshed
+                return true; // another call of this same session already refreshed
             }
 
             if (snapshot.RefreshToken is not { } refresh)

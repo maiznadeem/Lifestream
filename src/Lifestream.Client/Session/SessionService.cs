@@ -28,7 +28,7 @@ public interface ISessionService
     /// </summary>
     long Generation { get; }
 
-    /// <summary>Reads the tokens and the generation together, so they describe the same session.</summary>
+    /// <summary>Reads the tokens, the generation and the cancellation scope together, so they describe the same session.</summary>
     SessionSnapshot Snapshot();
 
     /// <summary>Stores refreshed tokens only if the session is still in the expected generation (compare and swap).</summary>
@@ -43,16 +43,20 @@ public interface ISessionService
     bool IsInRole(Role role);
 }
 
-/// <summary>The tokens and generation of the session at one moment.</summary>
-public readonly record struct SessionSnapshot(string? AccessToken, string? RefreshToken, long Generation);
+/// <summary>
+/// The tokens, generation and cancellation scope of the session at one moment. <see cref="Scope"/> is cancelled when this
+/// session ends (sign-out, or another user signing in), so work started under it can be abandoned.
+/// </summary>
+public readonly record struct SessionSnapshot(string? AccessToken, string? RefreshToken, long Generation, CancellationToken Scope = default);
 
-public sealed class SessionService : ISessionService
+public sealed class SessionService : ISessionService, IDisposable
 {
     private readonly Lock _gate = new();
     private SessionUser? _user;
     private string? _access;
     private string? _refresh;
     private long _generation;
+    private CancellationTokenSource _scope = new();
 
     public event EventHandler? Changed;
 
@@ -71,14 +75,18 @@ public sealed class SessionService : ISessionService
     public void Establish(TokenResponse tokens)
     {
         ArgumentNullException.ThrowIfNull(tokens);
+        CancellationTokenSource ended;
         lock (_gate)
         {
             _user = tokens.User;
             _access = tokens.AccessToken;
             _refresh = tokens.RefreshToken;
             _generation++;
+            ended = _scope;
+            _scope = new CancellationTokenSource();
         }
 
+        ended.Cancel(); // anything still running for the previous session stops; it was not issued for this user
         Changed?.Invoke(this, EventArgs.Empty);
     }
 
@@ -86,7 +94,7 @@ public sealed class SessionService : ISessionService
     {
         lock (_gate)
         {
-            return new SessionSnapshot(_access, _refresh, _generation);
+            return new SessionSnapshot(_access, _refresh, _generation, _scope.Token);
         }
     }
 
@@ -109,14 +117,18 @@ public sealed class SessionService : ISessionService
 
     public void Clear()
     {
+        CancellationTokenSource ended;
         lock (_gate)
         {
             _user = null;
             _access = null;
             _refresh = null;
             _generation++;
+            ended = _scope;
+            _scope = new CancellationTokenSource();
         }
 
+        ended.Cancel(); // sign-out cancels every in-flight call of the session that ended (SHELL-16)
         Changed?.Invoke(this, EventArgs.Empty);
     }
 
@@ -129,4 +141,6 @@ public sealed class SessionService : ISessionService
     }
 
     public bool IsInRole(Role role) => User?.Role == role;
+
+    public void Dispose() => _scope.Dispose();
 }

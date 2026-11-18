@@ -26,17 +26,17 @@ public sealed class SignOutSecurityTests
         return (new LifestreamApiClient(http, session), session, handler);
     }
 
-    // 1. Logout: refresh token only, no access token, never a refresh
+    // 1. Logout: the given refresh token only, no access token, never a refresh
 
     [Fact]
-    public async Task ApiClient_Logout_SendsTheCurrentRefreshToken_WithoutAnAccessToken_AndNeverRefreshes()
+    public async Task ApiClient_Logout_SendsTheGivenRefreshToken_WithoutAnAccessToken_AndNeverRefreshes()
     {
         var (api, session, handler) = Build((_, _) => ScriptedHandler.Problem(HttpStatusCode.Unauthorized, "unauthorized"));
         session.Establish(Tokens("access-A", "refresh-A"));
 
-        var first = await api.LogoutAsync();
-        session.Establish(Tokens("access-B", "refresh-B")); // the session moved on: logout must send what is current
-        await api.LogoutAsync();
+        var first = await api.LogoutAsync("refresh-A");
+        session.Clear(); // the session is gone, and logout still works with the token the caller took beforehand
+        await api.LogoutAsync("refresh-B");
 
         Assert.False(first.IsOk); // the 401 is reported, not retried
         Assert.Equal(2, handler.Requests.Count); // two logouts, and no refresh call between or after them
@@ -48,19 +48,6 @@ public sealed class SignOutSecurityTests
         Assert.Contains("refresh-A", handler.Requests[0].Body, StringComparison.Ordinal);
         Assert.Contains("refresh-B", handler.Requests[1].Body, StringComparison.Ordinal);
         Assert.DoesNotContain(handler.Requests, r => r.Uri.Contains("auth/refresh", StringComparison.Ordinal));
-    }
-
-    [Fact]
-    public async Task ApiClient_Logout_WithNoRefreshToken_SendsNothing()
-    {
-        var (api, session, handler) = Build((_, _) => ScriptedHandler.Json(HttpStatusCode.OK, "{}"));
-        session.Establish(Tokens("a", "r"));
-        session.Clear();
-
-        var result = await api.LogoutAsync();
-
-        Assert.True(result.IsOk);
-        Assert.Empty(handler.Requests);
     }
 
     // 2. A refresh that finishes after sign-out must not bring the session back

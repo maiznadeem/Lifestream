@@ -30,9 +30,17 @@ public sealed record WakePolicy
 /// </summary>
 public sealed class WakeAwareHandler(WakePolicy policy, ServerStatus status, HttpMessageHandler inner) : DelegatingHandler(inner)
 {
+    /// <summary>Set on a request that must be tried exactly once, such as sign-out (SHELL-17): no waking state, no backoff, no retries.</summary>
+    public static readonly HttpRequestOptionsKey<bool> NoRetry = new("Lifestream.NoRetry");
+
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The token sources and requests are disposed by their using declarations; the analyzer cannot follow the retry loop.")]
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
+        if (request.Options.TryGetValue(NoRetry, out var once) && once)
+        {
+            return await base.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        }
+
         var clock = policy.Clock;
         var started = clock.GetTimestamp();
         byte[]? body = request.Content is null ? null : await request.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);

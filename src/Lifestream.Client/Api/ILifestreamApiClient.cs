@@ -40,7 +40,11 @@ public interface ILifestreamApiClient
 
     Task<ApiResult<TokenResponse>> DemoLoginAsync(CancellationToken ct = default);
 
-    Task<ApiResult> LogoutAsync(CancellationToken ct = default);
+    /// <summary>
+    /// Revokes the given refresh token on the server: one attempt, no cold-start retries, a 5 s timeout. The caller takes the token
+    /// from the session before clearing it, so sign-out never waits on this (SHELL-17).
+    /// </summary>
+    Task<ApiResult> LogoutAsync(string refreshToken, CancellationToken ct = default);
 
     // Donors
     Task<ApiResult<PagedResult<DonorListItem>>> GetDonorsAsync(DonorQuery query, CancellationToken ct = default);
