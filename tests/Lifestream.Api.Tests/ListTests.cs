@@ -82,9 +82,14 @@ public sealed class ListTests(Scale10ApiFixture fx) : IClassFixture<Scale10ApiFi
     [Theory]
     [InlineData(ApiRoutes.Donors, "name")]
     [InlineData(ApiRoutes.Patients, "name")]
-    [InlineData(ApiRoutes.Appointments, "donorName")]
-    [InlineData(ApiRoutes.Requests, "patientName")]
+    [InlineData(ApiRoutes.Appointments, "slot")]
+    [InlineData(ApiRoutes.Appointments, "placed")]
+    [InlineData(ApiRoutes.Requests, "placed")]
+    [InlineData(ApiRoutes.Requests, "requiredBy")]
+    [InlineData(ApiRoutes.Receipts, "date")]
+    [InlineData(ApiRoutes.Donors, "lastDonated")]
     [InlineData(ApiRoutes.Staff, "name")]
+    [InlineData(ApiRoutes.Staff, "username")]
     public async Task Lists_SortOnTheServer_AscendingAndDescending(string route, string key)
     {
         await EnsureManyStaffAsync();

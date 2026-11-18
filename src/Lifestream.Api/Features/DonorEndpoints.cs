@@ -15,7 +15,7 @@ namespace Lifestream.Api.Features;
 public static class DonorEndpoints
 {
     private static readonly SortMap<Donor> Sorts = new SortMap<Donor>(d => d.Id, "name")
-        .Add("name", d => d.Name).Add("id", d => d.Id).Add("bloodType", d => d.BloodType).Add("dateOfBirth", d => d.DateOfBirth).Add("lastDonated", d => d.LastDonated!);
+        .Add("name", d => d.Name).Add("lastDonated", d => d.LastDonated!);
 
     public static void Map(RouteGroupBuilder api)
     {

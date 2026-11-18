@@ -104,7 +104,7 @@ public sealed class StaffService(LifestreamDbContext db, TimeProvider time)
 public static class StaffEndpoints
 {
     private static readonly SortMap<Staff> Sorts = new SortMap<Staff>(s => s.Id, "name")
-        .Add("name", s => s.DisplayName).Add("id", s => s.Id).Add("username", s => s.Username).Add("designation", s => s.Designation).Add("role", s => s.Role);
+        .Add("name", s => s.DisplayName).Add("username", s => s.Username);
 
     public static void Map(RouteGroupBuilder api)
     {

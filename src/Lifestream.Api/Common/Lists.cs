@@ -31,9 +31,8 @@ public static class Lists
         return new PagedResult<T>([.. rows.Select(r => r.Item)], total, page, size);
     }
 
-    /// <summary>Escapes LIKE wildcards and returns a prefix pattern ("term%") for use with the escape character '\'.</summary>
-    public static string PrefixPattern(string term) =>
-        term.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("%", "\\%", StringComparison.Ordinal).Replace("_", "\\_", StringComparison.Ordinal).Replace("[", "\\[", StringComparison.Ordinal) + "%";
+    /// <summary>The prefix pattern ("term%", wildcards escaped) from the data module, so every name search seeks the name index.</summary>
+    public static string PrefixPattern(string term) => Lifestream.Data.Queries.SearchQueries.PrefixPattern(term);
 
     public static string? CleanSearch(string? search)
     {

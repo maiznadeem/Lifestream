@@ -17,7 +17,7 @@ namespace Lifestream.Api.Features;
 public static class AppointmentEndpoints
 {
     private static readonly SortMap<Appointment> Sorts = new SortMap<Appointment>(a => a.Id, "slot", defaultDescending: true)
-        .Add("slot", a => a.SlotStartUtc).Add("id", a => a.Id).Add("donorName", a => a.Donor!.Name).Add("status", a => a.Status).Add("placed", a => a.PlacedAtUtc);
+        .Add("slot", a => a.SlotStartUtc).Add("placed", a => a.PlacedAtUtc);
 
     public static void Map(RouteGroupBuilder api)
     {
@@ -47,7 +47,7 @@ public static class AppointmentEndpoints
 
         if (q.BloodType is { } type)
         {
-            filtered = filtered.Where(a => a.Donor!.BloodType == type);
+            filtered = filtered.Where(a => a.DonorBloodType == type);
         }
 
         var (start, end) = Lists.DayRange(q.FromUtc, q.ToUtc);

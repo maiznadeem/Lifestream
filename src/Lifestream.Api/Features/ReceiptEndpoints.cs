@@ -4,6 +4,7 @@ using Lifestream.Contracts;
 using Lifestream.Contracts.Receipts;
 using Lifestream.Data;
 using Lifestream.Data.Entities;
+using Lifestream.Data.Queries;
 using Lifestream.Domain;
 using Microsoft.EntityFrameworkCore;
 
@@ -11,8 +12,8 @@ namespace Lifestream.Api.Features;
 
 public static class ReceiptEndpoints
 {
-    private static readonly SortMap<Receipt> Sorts = new SortMap<Receipt>(r => r.Id, "created", defaultDescending: true)
-        .Add("created", r => r.CreatedAtUtc).Add("id", r => r.Id).Add("units", r => r.Units).Add("bloodType", r => r.BloodType);
+    private static readonly SortMap<Receipt> Sorts = new SortMap<Receipt>(r => r.Id, "date", defaultDescending: true)
+        .Add("date", r => r.CreatedAtUtc);
 
     public static void Map(RouteGroupBuilder api)
     {
@@ -47,12 +48,13 @@ public static class ReceiptEndpoints
 
         if (Lists.CleanSearch(q.Search) is { } term)
         {
-            var like = Lists.PrefixPattern(term);
             var id = int.TryParse(term, out var parsed) ? parsed : -1;
-            filtered = filtered.Where(r => r.Id == id
-                || EF.Functions.Like(r.Staff!.DisplayName, like, "\\")
-                || (r.Appointment != null && EF.Functions.Like(r.Appointment.Donor!.Name, like, "\\"))
-                || (r.Request != null && EF.Functions.Like(r.Request.Patient!.Name, like, "\\")));
+            // Receipt ids from three seek paths joined by UNION (an OR across them would scan): the id, the staff member's name, and
+            // the party's name (donor of a donation, patient of an issue; see SearchQueries.PartyNameStartsWith).
+            var byParty = db.Receipts.PartyNameStartsWith(db, term).Select(r => r.Id);
+            var byStaff = db.Receipts.Where(r => db.Staff.NameStartsWith(term).Select(s => s.Id).Contains(r.StaffId)).Select(r => r.Id);
+            var matching = byParty.Union(byStaff).Union(db.Receipts.Where(r => r.Id == id).Select(r => r.Id));
+            filtered = filtered.Where(r => matching.Contains(r.Id));
         }
 
         var rows = await Sorts.Apply(filtered, q.Sort).Skip((page - 1) * size).Take(size)

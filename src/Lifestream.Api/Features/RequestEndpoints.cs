@@ -17,8 +17,7 @@ namespace Lifestream.Api.Features;
 public static class RequestEndpoints
 {
     private static readonly SortMap<Request> Sorts = new SortMap<Request>(r => r.Id, "placed", defaultDescending: true)
-        .Add("placed", r => r.PlacedAtUtc).Add("id", r => r.Id).Add("patientName", r => r.Patient!.Name).Add("status", r => r.Status)
-        .Add("requiredBy", r => r.RequiredBy).Add("units", r => r.Units).Add("bloodType", r => r.BloodType);
+        .Add("placed", r => r.PlacedAtUtc).Add("requiredBy", r => r.RequiredBy);
 
     public static void Map(RouteGroupBuilder api)
     {

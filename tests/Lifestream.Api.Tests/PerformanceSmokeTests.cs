@@ -91,6 +91,10 @@ public sealed class PerformanceSmokeTests(ScaleApiFixture fx) : IClassFixture<Sc
             ("GET receipts kind=Donation, date range", ApiRoutes.Receipts, $"?kind=Donation&fromUtc={from}&toUtc={to}"),
             ("GET receipts search=a", ApiRoutes.Receipts, "?search=a"),
             ("GET receipts page 100", ApiRoutes.Receipts, "?page=100"),
+            ("GET receipts page 500 (deep)", ApiRoutes.Receipts, "?page=500"),
+            ("GET appointments page 500 (deep)", ApiRoutes.Appointments, "?page=500"),
+            ("GET requests page 250 (deep)", ApiRoutes.Requests, "?page=250"),
+            ("GET appointments donor blood type", ApiRoutes.Appointments, "?bloodType=OPos"),
             ("GET staff pageSize=200", ApiRoutes.Staff, "?pageSize=200"),
             ("GET stock", ApiRoutes.Stock, ""),
         };
