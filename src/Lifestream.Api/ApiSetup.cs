@@ -144,6 +144,12 @@ public static class ApiSetup
 
                             identity.AddClaim(new System.Security.Claims.Claim(Claims.Role, state.Role.ToString()));
                         }
+
+                        // Whether an administrator-set password still has to be replaced is also the database's call, on every request.
+                        if (state.MustChangePassword && principal.Identity is System.Security.Claims.ClaimsIdentity mustChange)
+                        {
+                            mustChange.AddClaim(new System.Security.Claims.Claim(Claims.MustChangePassword, "1"));
+                        }
                     },
                 };
             });
@@ -168,6 +174,7 @@ public static class ApiSetup
         app.UseMiddleware<BodyLimitMiddleware>();
         app.UseAuthentication();
         app.UseAuthorization();
+        app.UseMiddleware<PasswordChangeRequiredMiddleware>();
         app.UseMiddleware<IdentityMiddleware>();
         app.UseMiddleware<DemoWriteCapMiddleware>();
         app.UseMiddleware<IdempotencyMiddleware>();

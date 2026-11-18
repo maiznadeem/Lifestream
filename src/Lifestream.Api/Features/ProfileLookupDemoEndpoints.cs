@@ -115,6 +115,7 @@ public static class ProfileEndpoints
         {
             var entity = await db.Staff.FirstOrDefaultAsync(s => s.Id == id, token) ?? throw ApiException.NotFound("The profile");
             entity.PasswordHash = hash;
+            entity.MustChangePassword = false;
             entity.FailedLoginCount = 0;
             entity.LockoutEndUtc = null;
             await db.SaveChangesAsync(token);

@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using Lifestream.Api.Auth;
 using Lifestream.Api.Common;
 using Lifestream.Api.Infrastructure;
@@ -38,9 +37,6 @@ public sealed class StaffService(LifestreamDbContext db, TimeProvider time)
             check.Fail(field, $"must be at most {MaxPasswordLength} characters");
         }
     }
-
-    /// <summary>A random temporary password (no look-alike characters). Only ever returned once, to the admin who asked for the reset.</summary>
-    public static string NewTemporaryPassword() => new(RandomNumberGenerator.GetItems<char>("ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789".AsSpan(), 16));
 
     public async Task SavePhotoAsync(int staffId, ProcessedPhoto photo, CancellationToken ct)
     {
@@ -390,11 +386,17 @@ public static class StaffEndpoints
         return TypedResults.NoContent();
     }
 
-    /// <summary>Sets a new random temporary password, ends the person's sessions, clears any lock. The stored value is a hash; the temporary text is returned once.</summary>
-    private static async Task<ResetPasswordResponse> ResetPasswordAsync(int id, LifestreamDbContext db, CurrentUser user, AuthService auth, CancellationToken ct)
+    /// <summary>
+    /// Sets the temporary password the administrator typed (at least 12 characters), stores only its hash, marks the account as
+    /// having to change it, ends the person's sessions and clears any lock. No password is ever returned: 204.
+    /// </summary>
+    private static async Task<NoContent> ResetPasswordAsync(int id, HttpRequest http, LifestreamDbContext db, CurrentUser user, AuthService auth, CancellationToken ct)
     {
-        var temporary = StaffService.NewTemporaryPassword();
-        var hash = PasswordHashing.Hash(temporary);
+        var request = await http.ReadBodyAsync<ResetPasswordRequest>(ct);
+        var check = new Check();
+        StaffService.CheckNewPassword(check, "temporaryPassword", request.TemporaryPassword);
+        check.ThrowIfInvalid();
+        var hash = PasswordHashing.Hash(request.TemporaryPassword);
         await db.RunAsync(async token =>
         {
             var entity = await db.Staff.FirstOrDefaultAsync(s => s.Id == id && !s.IsDemo, token) ?? throw ApiException.NotFound("The staff member");
@@ -404,12 +406,13 @@ public static class StaffEndpoints
             }
 
             entity.PasswordHash = hash;
+            entity.MustChangePassword = true;
             entity.FailedLoginCount = 0;
             entity.LockoutEndUtc = null;
             await db.SaveChangesAsync(token);
             return true;
         }, ct);
         await auth.RevokeAllForAsync(id, null, ct);
-        return new ResetPasswordResponse(temporary);
+        return TypedResults.NoContent();
     }
 }

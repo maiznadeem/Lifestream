@@ -146,7 +146,7 @@ public sealed class StaffProfileTests(ApiFixture fx) : IClassFixture<ApiFixture>
         using var p1 = await patch.Problem(404, ProblemCodes.NotFound);
         using var delete = await admin.Client.DeleteApi(ApiRoutes.StaffById, 987654);
         using var p2 = await delete.Problem(404, ProblemCodes.NotFound);
-        using var reset = await admin.Client.PostApi(ApiRoutes.StaffResetPassword, id: 987654);
+        using var reset = await admin.Client.PostApi(ApiRoutes.StaffResetPassword, new ResetPasswordRequest("a-temporary-password-1"), 987654);
         using var p3 = await reset.Problem(404, ProblemCodes.NotFound);
     }
 
@@ -199,32 +199,28 @@ public sealed class StaffProfileTests(ApiFixture fx) : IClassFixture<ApiFixture>
     // ---- admin reset password (API-34) ----
 
     [Fact]
-    public async Task ResetPassword_SetsANewTemporaryValue_StoredAsHash_EndsSessions_ClearsLock()
+    public async Task ResetPassword_SetsTheTypedTemporaryValue_StoredAsHash_EndsSessions_ClearsLock_ReturnsNoPassword()
     {
+        const string temporary = "typed-temporary-pass-1";
         var admin = await fx.AddStaffAsync(Role.Admin);
         var worker = await fx.AddStaffAsync(Role.Staff);
         await fx.Db.ExecuteAsync($"UPDATE Staff SET LockoutEndUtc = DATEADD(hour, 1, SYSUTCDATETIME()), FailedLoginCount = 3 WHERE Id = {worker.Id}", Ct);
         var oldHash = await fx.Db.ScalarAsync<string>($"SELECT PasswordHash FROM Staff WHERE Id = {worker.Id}", Ct);
 
-        using var response = await admin.Client.PostApi(ApiRoutes.StaffResetPassword, id: worker.Id);
-        var text = await response.Content.ReadAsStringAsync(Ct);
-        var reset = JsonSerializer.Deserialize<ResetPasswordResponse>(text, ApiFixture.Json)!;
-        Assert.Equal(16, reset.TemporaryPassword.Length);
+        using var response = await admin.Client.PostApi(ApiRoutes.StaffResetPassword, new ResetPasswordRequest(temporary), worker.Id);
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.Empty(await response.Content.ReadAsStringAsync(Ct));
         var newHash = await fx.Db.ScalarAsync<string>($"SELECT PasswordHash FROM Staff WHERE Id = {worker.Id}", Ct);
         Assert.NotEqual(oldHash, newHash);
-        Assert.DoesNotContain(newHash, text, StringComparison.Ordinal);
-        Assert.DoesNotContain(oldHash, text, StringComparison.Ordinal);
-        Assert.NotEqual(reset.TemporaryPassword, newHash);
-        Assert.True(PasswordHashing.Verify(newHash, reset.TemporaryPassword));
+        Assert.NotEqual(temporary, newHash);
+        Assert.True(PasswordHashing.Verify(newHash, temporary));
         Assert.False(PasswordHashing.Verify(newHash, ApiFixture.Password));
+        Assert.Equal(1, await fx.Db.ScalarAsync<int>($"SELECT COUNT(*) FROM Staff WHERE Id = {worker.Id} AND MustChangePassword = 1 AND FailedLoginCount = 0 AND LockoutEndUtc IS NULL", Ct));
 
-        using var anonymous = fx.NewClient();
-        Assert.Equal(HttpStatusCode.OK, (await anonymous.PostApi(ApiRoutes.AuthLogin, new LoginRequest(worker.Username, reset.TemporaryPassword))).StatusCode);
+        // The person's sessions ended, and the temporary password signs in (the lock was cleared).
         Assert.Equal(HttpStatusCode.Unauthorized, (await worker.Client.GetApi(ApiRoutes.Me)).StatusCode);
-
-        // Two resets never give the same value.
-        var second = await (await admin.Client.PostApi(ApiRoutes.StaffResetPassword, id: worker.Id)).Read<ResetPasswordResponse>();
-        Assert.NotEqual(reset.TemporaryPassword, second.TemporaryPassword);
+        using var anonymous = fx.NewClient();
+        Assert.Equal(HttpStatusCode.OK, (await anonymous.PostApi(ApiRoutes.AuthLogin, new LoginRequest(worker.Username, temporary))).StatusCode);
     }
 
     [Fact]
@@ -232,7 +228,7 @@ public sealed class StaffProfileTests(ApiFixture fx) : IClassFixture<ApiFixture>
     {
         var admin = await fx.AddStaffAsync(Role.Admin);
         var owner = await fx.AddStaffAsync(Role.Admin, change: s => s.IsProtected = true);
-        using var response = await admin.Client.PostApi(ApiRoutes.StaffResetPassword, id: owner.Id);
+        using var response = await admin.Client.PostApi(ApiRoutes.StaffResetPassword, new ResetPasswordRequest("a-temporary-password-1"), owner.Id);
         using var problem = await response.Problem(403, "forbidden");
         using var edit = await admin.Client.PatchRaw(ApiRoutes.StaffById, owner.Id, Json(new { rowVersion = "AAAAAAAAAAE=", displayName = "x" }));
         using var p2 = await edit.Problem(403, "forbidden");

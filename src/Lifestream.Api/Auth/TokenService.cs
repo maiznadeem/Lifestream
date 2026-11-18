@@ -18,6 +18,9 @@ public static class Claims
     public const string Demo = "demo";
     public const string Family = "sid";
     public const string Use = "use";
+
+    /// <summary>Present ("1") while the person must change an administrator-set password; added from the database on every request, never read from the token.</summary>
+    public const string MustChangePassword = "mcp";
 }
 
 /// <summary>Issues and validates the short-lived access token and the stateless demo refresh token.</summary>
@@ -115,8 +118,8 @@ public sealed class TokenService
 
     private static string Base64Url(byte[] bytes) => Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
 
-    public static SessionUser Session(int staffId, string displayName, Role role, bool isDemo) =>
-        new(staffId, displayName, role, isDemo, CanManageStaff: role == Role.Admin && !isDemo);
+    public static SessionUser Session(int staffId, string displayName, Role role, bool isDemo, bool mustChangePassword = false) =>
+        new(staffId, displayName, role, isDemo, CanManageStaff: role == Role.Admin && !isDemo) { MustChangePassword = mustChangePassword };
 }
 
 /// <summary>The caller, read from the validated token. Staff ids always come from here, never from a request body.</summary>
@@ -128,6 +131,7 @@ public sealed class CurrentUser(IHttpContextAccessor accessor, DemoDirectory dem
     public bool IsDemo => Principal.HasClaim(Claims.Demo, "1");
     public bool IsAdmin => Principal.HasClaim(Claims.Role, nameof(Role.Admin)) && !IsDemo;
     public Role Role => IsAdmin ? Role.Admin : Role.Staff;
+    public bool MustChangePassword => Principal.HasClaim(Claims.MustChangePassword, "1");
     public string DisplayName => Principal.FindFirst(Claims.Name)?.Value ?? "";
 
     public Guid? Family => Guid.TryParseExact(Principal.FindFirst(Claims.Family)?.Value, "N", out var f) ? f : null;

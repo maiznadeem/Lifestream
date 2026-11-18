@@ -52,4 +52,8 @@ public sealed record UpdateStaffRequest(
     Optional<int?> Salary = default,
     Optional<string?> Phone = default);
 
-public sealed record ResetPasswordResponse(string TemporaryPassword);
+/// <summary>
+/// Body of POST staff/{id}/reset-password: the administrator chooses the temporary password (at least 12 characters). The API never
+/// generates or returns a password; the person must replace the temporary one at their next sign-in.
+/// </summary>
+public sealed record ResetPasswordRequest(string TemporaryPassword);

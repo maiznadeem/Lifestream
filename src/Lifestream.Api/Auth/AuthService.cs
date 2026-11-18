@@ -44,7 +44,7 @@ public sealed class AuthService(
         var username = request.Username.Trim();
         var user = await db.Staff.AsNoTracking()
             .Where(s => s.Username == username)
-            .Select(s => new { s.Id, s.DisplayName, s.PasswordHash, s.Role, s.IsDemo, s.LockoutEndUtc })
+            .Select(s => new { s.Id, s.DisplayName, s.PasswordHash, s.Role, s.IsDemo, s.LockoutEndUtc, s.MustChangePassword })
             .FirstOrDefaultAsync(ct);
 
         if (user is null or { IsDemo: true })
@@ -71,7 +71,7 @@ public sealed class AuthService(
         }
 
         await ClearFailuresAsync(user.Id, ct);
-        return await IssueAsync(user.Id, user.DisplayName, user.Role, isDemo: false, ct);
+        return await IssueAsync(user.Id, user.DisplayName, user.Role, isDemo: false, user.MustChangePassword, ct);
     }
 
     /// <summary>
@@ -212,8 +212,8 @@ public sealed class AuthService(
             throw Unauthorized();
         }
 
-        var user = await db.Staff.Where(s => s.Id == stored.StaffId).Select(s => new { s.DisplayName, s.Role, s.IsDemo }).FirstOrDefaultAsync(ct) ?? throw Unauthorized();
-        return await IssueAsync(stored.StaffId, user.DisplayName, user.Role, user.IsDemo, ct, stored.FamilyId);
+        var user = await db.Staff.Where(s => s.Id == stored.StaffId).Select(s => new { s.DisplayName, s.Role, s.IsDemo, s.MustChangePassword }).FirstOrDefaultAsync(ct) ?? throw Unauthorized();
+        return await IssueAsync(stored.StaffId, user.DisplayName, user.Role, user.IsDemo, user.MustChangePassword, ct, stored.FamilyId);
     }
 
     /// <summary>Ends the whole session (every refresh token of the family) from its refresh token. Unknown tokens are ignored; demo tokens are stateless.</summary>
@@ -254,7 +254,7 @@ public sealed class AuthService(
         RevocationCache.Clear(cache);
     }
 
-    private async Task<TokenResponse> IssueAsync(int staffId, string displayName, Role role, bool isDemo, CancellationToken ct, Guid? family = null)
+    private async Task<TokenResponse> IssueAsync(int staffId, string displayName, Role role, bool isDemo, bool mustChangePassword, CancellationToken ct, Guid? family = null)
     {
         var fam = family ?? Guid.NewGuid();
         var now = Now;
@@ -269,14 +269,14 @@ public sealed class AuthService(
         });
         await db.SaveChangesAsync(ct);
         var (access, expires) = tokens.CreateAccess(staffId, displayName, role, isDemo, fam);
-        return new TokenResponse(access, secret, expires, TokenService.Session(staffId, displayName, role, isDemo));
+        return new TokenResponse(access, secret, expires, TokenService.Session(staffId, displayName, role, isDemo, mustChangePassword));
     }
 
     private static ApiException Unauthorized() => new(StatusCodes.Status401Unauthorized, ExtraProblemCodes.Unauthorized, "The session has ended. Sign in again.");
 }
 
 /// <summary>What the database says about a session right now.</summary>
-public sealed record SessionState(bool Active, Role Role);
+public sealed record SessionState(bool Active, Role Role, bool MustChangePassword = false);
 
 /// <summary>
 /// Short-lived memory of "this session is still active and this is the person's role", so an access token check does not hit the
@@ -304,11 +304,11 @@ public static class RevocationCache
         }
 
         var now = time.GetUtcNow().UtcDateTime;
-        var role = await db.RefreshTokens
+        var session = await db.RefreshTokens
             .Where(t => t.FamilyId == family && t.RevokedAtUtc == null && t.ExpiresAtUtc > now)
-            .Select(t => (Role?)t.Staff!.Role)
+            .Select(t => new { t.Staff!.Role, t.Staff.MustChangePassword })
             .FirstOrDefaultAsync(ct);
-        var state = new SessionState(role is not null, role ?? Role.Staff);
+        var state = new SessionState(session is not null, session?.Role ?? Role.Staff, session?.MustChangePassword ?? false);
         cache.Set(key, state, TimeSpan.FromSeconds(20));
         return state;
     }
