@@ -124,7 +124,7 @@ public sealed class WpfWindowHost : IWindowHost
         if (main is not null)
         {
             _switching = true;
-            main.Close();
+            main.CloseWithoutPrompt();
             _switching = false;
         }
     }

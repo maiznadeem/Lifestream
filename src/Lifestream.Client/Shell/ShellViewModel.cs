@@ -69,7 +69,8 @@ public sealed partial class ShellViewModel : ViewModelBase
             .. allowed.GroupBy(d => d.Group).Select(g => new NavGroup(g.Key, [.. g.Select(d => new NavItem(d))])),
         ];
 
-        NavigateCommand = new AsyncRelayCommand((parameter, _) => parameter is NavItem item ? OpenAsync(item.Destination) : Task.CompletedTask);
+        // Concurrent on purpose: the sidebar stays usable while a screen loads, and the newer click supersedes the older one (SHELL-07).
+        NavigateCommand = new AsyncRelayCommand((parameter, _) => parameter is NavItem item ? OpenAsync(item.Destination) : Task.CompletedTask, allowConcurrent: true);
         ProfileCommand = new AsyncRelayCommand(_ => NavigateToTypeAsync(NavigationCatalog.ProfileViewModelType, "profile"));
         ChangePasswordCommand = new AsyncRelayCommand(_ => NavigateToTypeAsync(NavigationCatalog.ProfileViewModelType, "change-password"));
         SignOutCommand = new AsyncRelayCommand(_ => _flow.SignOutAsync());
@@ -149,6 +150,12 @@ public sealed partial class ShellViewModel : ViewModelBase
 
     public string? UpdatePrompt => Updates.IsUpdateReady ? Updates.Message : null;
 
+    /// <summary>True when the page on screen has unsaved changes.</summary>
+    public bool HasUnsavedChanges => Navigation.HasUnsavedChanges;
+
+    /// <summary>Called when the main window is about to close: false means the user chose to stay (SHELL-24).</summary>
+    public Task<bool> ConfirmCloseAsync() => Navigation.ConfirmDiscardAsync();
+
     /// <summary>Opens the first destination and checks for an update in the background.</summary>
     public async Task StartAsync()
     {
@@ -162,35 +169,24 @@ public sealed partial class ShellViewModel : ViewModelBase
         ArgumentNullException.ThrowIfNull(destination);
         if (!destination.IsAllowedFor(_session.User))
         {
-            var navigated = await Navigation.NavigateTo<AccessDeniedViewModel>().ConfigureAwait(true);
-            if (navigated && Navigation.Current is AccessDeniedViewModel denied)
-            {
-                denied.BackToDashboardCommand = BackToDashboardCommand;
-            }
-
+            await Navigation.NavigateTo<AccessDeniedViewModel>(BackToDashboardCommand).ConfigureAwait(true);
             return;
         }
 
         await Navigation.NavigateTo(destination.ViewModelType).ConfigureAwait(true);
-        foreach (var item in Items)
-        {
-            item.IsSelected = item.Destination == destination;
-        }
     }
 
-    private async Task NavigateToTypeAsync(Type type, object parameter)
-    {
-        if (await Navigation.NavigateTo(type, parameter).ConfigureAwait(true))
-        {
-            foreach (var item in Items)
-            {
-                item.IsSelected = false;
-            }
-        }
-    }
+    private async Task NavigateToTypeAsync(Type type, object parameter) => await Navigation.NavigateTo(type, parameter).ConfigureAwait(true);
 
     private void OnCurrentChanged(object? sender, EventArgs e)
     {
+        // The highlight follows the page on screen, whoever opened it: a sidebar click, a dashboard card or the account menu.
+        var page = Navigation.Current?.GetType();
+        foreach (var item in Items)
+        {
+            item.IsSelected = item.Destination.ViewModelType == page;
+        }
+
         OnPropertyChanged(nameof(CurrentPage));
         OnPropertyChanged(nameof(PageTitle));
         OnPropertyChanged(nameof(WindowTitle));

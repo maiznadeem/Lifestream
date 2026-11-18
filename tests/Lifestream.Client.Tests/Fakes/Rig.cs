@@ -52,8 +52,14 @@ public sealed class FakeUpdateSource(Version? latest = null) : IUpdateSource
 
     public int Applied { get; private set; }
 
-    public Task<Version?> GetLatestVersionAsync(CancellationToken ct) =>
-        Throw ? throw new HttpRequestException("feed down") : Task.FromResult(Latest);
+    /// <summary>How many times the feed was asked.</summary>
+    public int Checks { get; private set; }
+
+    public Task<Version?> GetLatestVersionAsync(CancellationToken ct)
+    {
+        Checks++;
+        return Throw ? throw new HttpRequestException("feed down") : Task.FromResult(Latest);
+    }
 
     public Task ApplyAsync(CancellationToken ct)
     {

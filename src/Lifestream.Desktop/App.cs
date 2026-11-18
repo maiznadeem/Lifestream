@@ -85,5 +85,5 @@ public interface ISessionExpiredWatcher
 public sealed class SessionExpiredWatcher(Lifestream.Client.Session.ISessionService session, IAppFlow flow) : ISessionExpiredWatcher
 {
     public void Start() =>
-        session.Expired += (_, _) => Application.Current.Dispatcher.InvokeAsync(() => flow.SignOutAsync("Your session expired. Please sign in again."));
+        session.Expired += (_, _) => Application.Current.Dispatcher.InvokeAsync(() => flow.SignOutAsync("Your session expired. Please sign in again.", force: true));
 }

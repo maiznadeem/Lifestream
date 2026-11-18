@@ -19,5 +19,7 @@
     <ProjectReference Include="..\Lifestream.Client\Lifestream.Client.csproj" />
     <InternalsVisibleTo Include="Lifestream.Desktop.Tests" />
     <Content Include="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Inter, SIL Open Font License (Fonts/OFL.txt, version and hash in Fonts/README.md): the one font of the app, embedded in the executable. -->
+    <Resource Include="Fonts\InterVariable.ttf" />
   </ItemGroup>
 </Project>

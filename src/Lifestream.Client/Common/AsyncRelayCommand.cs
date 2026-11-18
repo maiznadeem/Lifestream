@@ -13,8 +13,9 @@ public sealed class AsyncRelayCommand : ICommand, System.ComponentModel.INotifyP
 {
     private readonly Func<object?, CancellationToken, Task> _execute;
     private readonly Func<object?, bool>? _canExecute;
-    private CancellationTokenSource? _cts;
-    private bool _isRunning;
+    private readonly bool _allowConcurrent;
+    private readonly Lock _gate = new();
+    private readonly List<CancellationTokenSource> _active = [];
     private Exception? _lastException;
 
     public AsyncRelayCommand(Func<CancellationToken, Task> execute, Func<bool>? canExecute = null)
@@ -22,10 +23,14 @@ public sealed class AsyncRelayCommand : ICommand, System.ComponentModel.INotifyP
     {
     }
 
-    public AsyncRelayCommand(Func<object?, CancellationToken, Task> execute, Func<object?, bool>? canExecute = null)
+    /// <param name="execute">The work.</param>
+    /// <param name="canExecute">Extra condition for <see cref="CanExecute"/>.</param>
+    /// <param name="allowConcurrent">True for a command that may be started again while it runs (sidebar navigation: the newer run supersedes the older, which the work cancels itself).</param>
+    public AsyncRelayCommand(Func<object?, CancellationToken, Task> execute, Func<object?, bool>? canExecute = null, bool allowConcurrent = false)
     {
         _execute = execute ?? throw new ArgumentNullException(nameof(execute));
         _canExecute = canExecute;
+        _allowConcurrent = allowConcurrent;
     }
 
     /// <summary>Receives every captured exception. The composition root points it at the error reporter.</summary>
@@ -37,14 +42,11 @@ public sealed class AsyncRelayCommand : ICommand, System.ComponentModel.INotifyP
 
     public bool IsRunning
     {
-        get => _isRunning;
-        private set
+        get
         {
-            if (_isRunning != value)
+            lock (_gate)
             {
-                _isRunning = value;
-                PropertyChanged?.Invoke(this, new(nameof(IsRunning)));
-                RaiseCanExecuteChanged();
+                return _active.Count > 0;
             }
         }
     }
@@ -59,7 +61,7 @@ public sealed class AsyncRelayCommand : ICommand, System.ComponentModel.INotifyP
         }
     }
 
-    public bool CanExecute(object? parameter) => !IsRunning && (_canExecute?.Invoke(parameter) ?? true);
+    public bool CanExecute(object? parameter) => (_allowConcurrent || !IsRunning) && (_canExecute?.Invoke(parameter) ?? true);
 
     public void Execute(object? parameter) => _ = ExecuteAsync(parameter);
 
@@ -71,10 +73,21 @@ public sealed class AsyncRelayCommand : ICommand, System.ComponentModel.INotifyP
             return;
         }
 
-        _cts = new CancellationTokenSource();
-        var token = _cts.Token;
+        var cts = new CancellationTokenSource();
+        var token = cts.Token;
         LastException = null;
-        IsRunning = true;
+        bool started;
+        lock (_gate)
+        {
+            _active.Add(cts);
+            started = _active.Count == 1;
+        }
+
+        if (started)
+        {
+            OnRunningChanged();
+        }
+
         try
         {
             await _execute(parameter, token).ConfigureAwait(true);
@@ -90,15 +103,48 @@ public sealed class AsyncRelayCommand : ICommand, System.ComponentModel.INotifyP
         }
         finally
         {
-            var cts = _cts;
-            _cts = null;
-            cts?.Dispose();
-            IsRunning = false;
+            bool stopped;
+            lock (_gate)
+            {
+                _active.Remove(cts);
+                stopped = _active.Count == 0;
+            }
+
+            cts.Dispose();
+            if (stopped)
+            {
+                OnRunningChanged();
+            }
         }
     }
 
     /// <summary>Asks the running work to stop.</summary>
-    public void Cancel() => _cts?.Cancel();
+    public void Cancel()
+    {
+        CancellationTokenSource[] running;
+        lock (_gate)
+        {
+            running = [.. _active];
+        }
+
+        foreach (var cts in running)
+        {
+            try
+            {
+                cts.Cancel();
+            }
+            catch (ObjectDisposedException)
+            {
+                // The run finished while it was being cancelled.
+            }
+        }
+    }
 
     public void RaiseCanExecuteChanged() => CanExecuteChanged?.Invoke(this, EventArgs.Empty);
+
+    private void OnRunningChanged()
+    {
+        PropertyChanged?.Invoke(this, new(nameof(IsRunning)));
+        RaiseCanExecuteChanged();
+    }
 }
