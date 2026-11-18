@@ -1,0 +1,46 @@
+<UserControl x:Class="Lifestream.Desktop.Features.Receipts.ReceiptViewerView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:Lifestream.Desktop.Controls"
+             xmlns:feat="clr-namespace:Lifestream.Desktop.Features"
+             xmlns:dialogs="clr-namespace:Lifestream.Desktop.Features.Dialogs"
+             xmlns:receipts="clr-namespace:Lifestream.Desktop.Features.Receipts"
+             Focusable="False" IsTabStop="False">
+  <!-- The receipt dialog: the printable page with Print and Save as PDF. They can be used again and again, so a duplicate receipt can always be produced. The data context is the ReceiptViewerViewModel. -->
+  <UserControl.Resources>
+    <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+  </UserControl.Resources>
+  <dialogs:DialogFrame>
+    <dialogs:DialogFrame.Fields>
+      <Grid MinHeight="360">
+        <controls:Skeleton Kind="Detail" Visibility="{Binding ShowSkeleton, Converter={StaticResource BoolToVisibility}}" />
+        <controls:ErrorState Message="{Binding ErrorMessage}" Detail="{Binding ErrorDetail}" RetryCommand="{Binding RetryCommand}" Visibility="{Binding HasError, Converter={StaticResource BoolToVisibility}}" />
+        <Grid Visibility="{Binding IsReady, Converter={StaticResource BoolToVisibility}}">
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+          </Grid.RowDefinitions>
+          <StackPanel Orientation="Horizontal" feat:Edge.Bottom="{DynamicResource Space.12}">
+            <Button Style="{DynamicResource Button.Primary}" Command="{Binding PrintCommand}" feat:Edge.Right="{DynamicResource Space.8}" AutomationProperties.Name="Print"
+                    controls:ButtonAssist.IsBusy="{Binding PrintCommand.IsRunning}" controls:ButtonAssist.BusyText="Printing...">
+              <StackPanel Orientation="Horizontal">
+                <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE749;" feat:Edge.Right="{DynamicResource Space.8}" VerticalAlignment="Center" />
+                <TextBlock Text="Print" VerticalAlignment="Center" />
+              </StackPanel>
+            </Button>
+            <Button Style="{DynamicResource Button.Secondary}" Command="{Binding SavePdfCommand}" AutomationProperties.Name="Save as PDF"
+                    controls:ButtonAssist.IsBusy="{Binding SavePdfCommand.IsRunning}" controls:ButtonAssist.BusyText="Saving...">
+              <StackPanel Orientation="Horizontal">
+                <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE74E;" feat:Edge.Right="{DynamicResource Space.8}" VerticalAlignment="Center" />
+                <TextBlock Text="Save as PDF" VerticalAlignment="Center" />
+              </StackPanel>
+            </Button>
+            <TextBlock Style="{DynamicResource Text.Body}" Foreground="{DynamicResource Brush.StatusSuccess}" Text="{Binding Notice}" VerticalAlignment="Center" feat:Edge.Left="{DynamicResource Space.12}"
+                       Visibility="{Binding HasNotice, Converter={StaticResource BoolToVisibility}}" AutomationProperties.LiveSetting="Polite" TextWrapping="Wrap" MaxWidth="260" />
+          </StackPanel>
+          <receipts:ReceiptPrintView Grid.Row="1" Receipt="{Binding Document}" />
+        </Grid>
+      </Grid>
+    </dialogs:DialogFrame.Fields>
+  </dialogs:DialogFrame>
+</UserControl>
