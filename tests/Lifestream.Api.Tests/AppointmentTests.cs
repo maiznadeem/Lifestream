@@ -200,7 +200,7 @@ public sealed class AppointmentTests(ApiFixture fx) : IClassFixture<ApiFixture>
     public async Task Appointment_UpdateOrDelete_UnknownId_404()
     {
         var staff = await fx.AddStaffAsync(Role.Staff);
-        using var patch = await staff.Client.PatchApi(ApiRoutes.AppointmentById, 987654, new RescheduleAppointmentRequest("AAAAAAAAB9E=", Seed.Slot(5, 10)));
+        using var patch = await staff.Client.PatchApi(ApiRoutes.AppointmentById, 987654, new RescheduleAppointmentRequest("AAAAAAAAAAE=", Seed.Slot(5, 10)));
         using var p1 = await patch.Problem(404, ProblemCodes.NotFound);
         using var delete = await staff.Client.DeleteApi(ApiRoutes.AppointmentById, 987654);
         using var p2 = await delete.Problem(404, ProblemCodes.NotFound);
@@ -220,9 +220,17 @@ public sealed class AppointmentTests(ApiFixture fx) : IClassFixture<ApiFixture>
         var staff = await fx.AddStaffAsync(Role.Staff);
 
         // Donor ids and appointment ids are made different on purpose: the old trigger mixed them up.
+        Donor? first = null;
         for (var i = 0; i < 5; i++)
         {
-            await Seed.AppointmentAsync(fx, await Seed.DonorAsync(fx), Seed.Slot(20 + i, 10));
+            first ??= await Seed.DonorAsync(fx);
+            await Seed.AppointmentAsync(fx, first, Seed.Slot(20 + i, 10));
+        }
+
+        // More appointments than donors, so the next appointment id is always ahead of the next donor id.
+        for (var i = 0; i < 3; i++)
+        {
+            await Seed.AppointmentAsync(fx, first!, Seed.Slot(25 + i, 11));
         }
 
         var (donor, target) = await PendingAsync(30, 10);

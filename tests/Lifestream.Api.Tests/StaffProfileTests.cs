@@ -142,7 +142,7 @@ public sealed class StaffProfileTests(ApiFixture fx) : IClassFixture<ApiFixture>
     public async Task Staff_UpdateOrDelete_UnknownId_404()
     {
         var admin = await fx.AddStaffAsync(Role.Admin);
-        using var patch = await admin.Client.PatchRaw(ApiRoutes.StaffById, 987654, Json(new { rowVersion = "AAAAAAAAB9E=", displayName = "x" }));
+        using var patch = await admin.Client.PatchRaw(ApiRoutes.StaffById, 987654, Json(new { rowVersion = "AAAAAAAAAAE=", displayName = "x" }));
         using var p1 = await patch.Problem(404, ProblemCodes.NotFound);
         using var delete = await admin.Client.DeleteApi(ApiRoutes.StaffById, 987654);
         using var p2 = await delete.Problem(404, ProblemCodes.NotFound);
@@ -234,7 +234,7 @@ public sealed class StaffProfileTests(ApiFixture fx) : IClassFixture<ApiFixture>
         var owner = await fx.AddStaffAsync(Role.Admin, change: s => s.IsProtected = true);
         using var response = await admin.Client.PostApi(ApiRoutes.StaffResetPassword, id: owner.Id);
         using var problem = await response.Problem(403, "forbidden");
-        using var edit = await admin.Client.PatchRaw(ApiRoutes.StaffById, owner.Id, Json(new { rowVersion = "AAAAAAAAB9E=", displayName = "x" }));
+        using var edit = await admin.Client.PatchRaw(ApiRoutes.StaffById, owner.Id, Json(new { rowVersion = "AAAAAAAAAAE=", displayName = "x" }));
         using var p2 = await edit.Problem(403, "forbidden");
     }
 
@@ -337,7 +337,7 @@ public sealed class StaffProfileTests(ApiFixture fx) : IClassFixture<ApiFixture>
         {
             await user.Client.PutApi(ApiRoutes.MePassword, new ChangePasswordRequest("nope", "x")),
             await user.Client.PatchMe(new { rowVersion = "bad", displayName = "x" }),
-            await admin.Client.PatchRaw(ApiRoutes.StaffById, user.Id, Json(new { rowVersion = "AAAAAAAAB9E=", displayName = "x" })),
+            await admin.Client.PatchRaw(ApiRoutes.StaffById, user.Id, Json(new { rowVersion = "AAAAAAAAAAE=", displayName = "x" })),
             await admin.Client.PostRaw(ApiRoutes.Staff, "{}"),
         })
         {

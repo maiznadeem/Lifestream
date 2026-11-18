@@ -229,7 +229,7 @@ public sealed class AuthorizationMatrixTests(ApiFixture fx) : IClassFixture<ApiF
         using var p1 = await own.Problem(403, "forbidden");
         using var other = await one.Client.GetApi(ApiRoutes.StaffById, two.Id);
         using var p2 = await other.Problem(403, "forbidden");
-        using var edit = await one.Client.PatchApi(ApiRoutes.StaffById, two.Id, new { rowVersion = "AAAAAAAAB9E=", displayName = "Hacked" });
+        using var edit = await one.Client.PatchApi(ApiRoutes.StaffById, two.Id, new { rowVersion = "AAAAAAAAAAE=", displayName = "Hacked" });
         using var p3 = await edit.Problem(403, "forbidden");
 
         // PATCH me edits the caller's row and nobody else's.
@@ -249,11 +249,11 @@ public sealed class AuthorizationMatrixTests(ApiFixture fx) : IClassFixture<ApiF
         foreach (var response in new[]
         {
             await demo.Client.PostApi(ApiRoutes.Staff, new { displayName = "X" }),
-            await demo.Client.PatchApi(ApiRoutes.StaffById, target.Id, new { rowVersion = "AAAAAAAAB9E=", displayName = "X" }),
+            await demo.Client.PatchApi(ApiRoutes.StaffById, target.Id, new { rowVersion = "AAAAAAAAAAE=", displayName = "X" }),
             await demo.Client.DeleteApi(ApiRoutes.StaffById, target.Id),
             await demo.Client.PostApi(ApiRoutes.StaffResetPassword, id: target.Id),
             await demo.Client.PutApi(ApiRoutes.MePassword, new { currentPassword = "a", newPassword = "bbbbbbbbbbbbbbbb" }),
-            await demo.Client.PatchMe(new { rowVersion = "AAAAAAAAB9E=", displayName = "X" }),
+            await demo.Client.PatchMe(new { rowVersion = "AAAAAAAAAAE=", displayName = "X" }),
         })
         {
             using var doc = await response.Problem(403, ProblemCodes.DemoForbidden);

@@ -62,7 +62,7 @@ public sealed class RequestStockTests(ApiFixture fx) : IClassFixture<ApiFixture>
     public async Task Request_UpdateOrDelete_UnknownId_404()
     {
         var staff = await fx.AddStaffAsync(Role.Staff);
-        using var patch = await staff.Client.PatchApi(ApiRoutes.RequestById, 987654, new UpdateRequestRequest("AAAAAAAAB9E=", Units: 2));
+        using var patch = await staff.Client.PatchApi(ApiRoutes.RequestById, 987654, new UpdateRequestRequest("AAAAAAAAAAE=", Units: 2));
         using var p1 = await patch.Problem(404, ProblemCodes.NotFound);
         using var delete = await staff.Client.DeleteApi(ApiRoutes.RequestById, 987654);
         using var p2 = await delete.Problem(404, ProblemCodes.NotFound);

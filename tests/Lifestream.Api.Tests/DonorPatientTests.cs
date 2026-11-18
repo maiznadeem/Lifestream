@@ -139,7 +139,7 @@ public sealed class DonorPatientTests(ApiFixture fx) : IClassFixture<ApiFixture>
     {
         var admin = await fx.AddStaffAsync(Role.Admin);
         using var response = verb == "update"
-            ? await admin.Client.PatchApi(ApiRoutes.DonorById, 987654, new UpdateDonorRequest("AAAAAAAAB9E=", Name: "x"))
+            ? await admin.Client.PatchApi(ApiRoutes.DonorById, 987654, new UpdateDonorRequest("AAAAAAAAAAE=", Name: "x"))
             : await admin.Client.DeleteApi(ApiRoutes.DonorById, 987654);
         using var problem = await response.Problem(404, ProblemCodes.NotFound);
     }
@@ -151,7 +151,7 @@ public sealed class DonorPatientTests(ApiFixture fx) : IClassFixture<ApiFixture>
     {
         var admin = await fx.AddStaffAsync(Role.Admin);
         using var response = verb == "update"
-            ? await admin.Client.PatchApi(ApiRoutes.PatientById, 987654, new UpdatePatientRequest("AAAAAAAAB9E=", Name: "x"))
+            ? await admin.Client.PatchApi(ApiRoutes.PatientById, 987654, new UpdatePatientRequest("AAAAAAAAAAE=", Name: "x"))
             : await admin.Client.DeleteApi(ApiRoutes.PatientById, 987654);
         using var problem = await response.Problem(404, ProblemCodes.NotFound);
     }
