@@ -1,0 +1,446 @@
+// Lifestream 2.0 infrastructure. Resource-group scope: deploy into resource group "Lifestream".
+//
+// Costs nothing while idle: Container Apps Consumption with minimum replicas 0, no registry (images come from GHCR),
+// no Key Vault, no gateway, no private endpoint, no container log destination. The SQL server and the BloodBank database
+// already exist (serverless free offer); they are declared here so the firewall, Entra-only switch, audit, locks and
+// backup settings are code. Nothing in this file is applied by the infra builder; see infra/README.md for the order.
+
+targetScope = 'resourceGroup'
+
+// ---------------------------------------------------------------- parameters
+
+@description('Region of the VNet, the Container Apps environment and the SQL server. Azure SQL virtual network rules only work inside the server\'s own region, so this must equal the region of lifestream-server (currently eastus), not the resource group\'s region.')
+param location string = 'eastus'
+
+@description('Existing logical SQL server.')
+param sqlServerName string = 'lifestream-server'
+
+@description('Existing serverless free-offer database.')
+param sqlDatabaseName string = 'BloodBank'
+
+@description('Full image reference of the API, for example ghcr.io/maiznadeem/lifestream-api:<sha>. The deploy workflow moves the running app to newer images; pass the currently running image when re-applying this template, or the app goes back to this one.')
+param apiImage string
+
+@description('Display name (user principal name) or group name of the Microsoft Entra administrator of the SQL server. The identity choice is the owner\'s.')
+param entraAdminLogin string
+
+@description('Object id of that Entra user or group.')
+param entraAdminObjectId string
+
+@description('Tenant of the Entra administrator.')
+param entraTenantId string = tenant().tenantId
+
+@description('Turns SQL authentication off entirely (the old admin login stops working). Left false until the Entra administrator, the contained database users and the API have been proven; the orchestrator flips it last.')
+param entraOnlyAuthentication bool = false
+
+@description('CanNotDelete locks on the SQL server and database. Locks apply to child resources too, so delete the two legacy firewall rules first (infra/README.md step 4) and set this to false for any run that must delete something.')
+param enableLocks bool = true
+
+@minValue(1)
+@maxValue(35)
+@description('Point-in-time restore window in days. The free offer with auto-pause on exhaustion caps it at 7 days (Microsoft Learn, Azure SQL Database free tier FAQ), which is what Azure reports today; requirement INFRA-08 asks for 14 or more, so raise this only if the offer ever allows it, because Azure rejects a value above what the offer allows.')
+param backupRetentionDays int = 7
+
+@description('Email address that receives the budget alerts.')
+param ownerEmail string
+
+@description('First day of the month the budget starts in (yyyy-MM-01). Azure requires the first of a month.')
+param budgetStartDate string = utcNow('yyyy-MM-01')
+
+@description('Monthly budget in the billing currency. The design budget is 1.')
+param budgetAmount int = 1
+
+@secure()
+@description('HMAC key that signs access tokens. Stored as the Container Apps secret jwt-signing-key; never committed.')
+param jwtSigningKey string
+
+@secure()
+@description('Initial password of the owner admin account that the migrate job creates. Stored as the job secret owner-admin-password; never committed.')
+param ownerAdminPassword string
+
+@description('GitHub repository allowed to deploy through OIDC (owner/name).')
+param githubRepository string = 'MaizNadeem/Lifestream-WPF'
+
+@description('Branch whose workflow runs may deploy.')
+param githubBranch string = 'master'
+
+@description('Days the audit events are kept in the Log Analytics workspace (31 or fewer are free).')
+@minValue(30)
+@maxValue(31)
+param auditRetentionDays int = 30
+
+// ---------------------------------------------------------------- names and constants
+
+var acaSubnetName = 'aca'
+var sqlFqdn = '${sqlServerName}${environment().suffixes.sqlServerHostname}'
+var contributorRoleId = 'b24988ac-6180-42a0-ab88-20f7382dd24c'
+
+// ---------------------------------------------------------------- network
+
+resource vnet 'Microsoft.Network/virtualNetworks@2024-05-01' = {
+  name: 'lifestream-vnet'
+  location: location
+  properties: {
+    addressSpace: { addressPrefixes: [ '10.40.0.0/16' ] }
+    subnets: [
+      {
+        name: acaSubnetName
+        properties: {
+          addressPrefix: '10.40.0.0/23'
+          // Workload-profile environments need the delegation; the Microsoft.Sql endpoint is what lets the SQL
+          // firewall admit this subnet instead of internet addresses.
+          delegations: [
+            {
+              name: 'aca-environments'
+              properties: { serviceName: 'Microsoft.App/environments' }
+            }
+          ]
+          serviceEndpoints: [
+            { service: 'Microsoft.Sql', locations: [ location ] }
+          ]
+        }
+      }
+    ]
+  }
+}
+
+var acaSubnetId = resourceId('Microsoft.Network/virtualNetworks/subnets', vnet.name, acaSubnetName)
+
+// ---------------------------------------------------------------- identities
+
+resource migrator 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: 'lifestream-migrator'
+  location: location
+}
+
+// The identity GitHub Actions signs in as. Trust is a federated credential bound to one repository and branch, so
+// GitHub stores no cloud secret (INFRA-13).
+resource deployer 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: 'lifestream-deployer'
+  location: location
+}
+
+resource deployerFederation 'Microsoft.ManagedIdentity/userAssignedIdentities/federatedIdentityCredentials@2023-01-31' = {
+  parent: deployer
+  name: 'github-${githubBranch}'
+  properties: {
+    issuer: 'https://token.actions.githubusercontent.com'
+    subject: 'repo:${githubRepository}:ref:refs/heads/${githubBranch}'
+    audiences: [ 'api://AzureADTokenExchange' ]
+  }
+}
+
+resource deployerContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(resourceGroup().id, deployer.id, contributorRoleId)
+  properties: {
+    principalId: deployer.properties.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', contributorRoleId)
+  }
+}
+
+// ---------------------------------------------------------------- SQL server, database, access
+
+resource sqlServer 'Microsoft.Sql/servers@2023-08-01' = {
+  name: sqlServerName
+  location: location
+  properties: {
+    version: '12.0'
+    minimalTlsVersion: '1.2'
+    publicNetworkAccess: 'Enabled' // a virtual network rule needs the public endpoint; the firewall below admits only the subnet
+    restrictOutboundNetworkAccess: 'Disabled'
+  }
+}
+
+// The Entra administrator is what creates the contained users (infra/bootstrap-sql.ps1).
+resource sqlEntraAdmin 'Microsoft.Sql/servers/administrators@2023-08-01' = {
+  parent: sqlServer
+  name: 'ActiveDirectory'
+  properties: {
+    administratorType: 'ActiveDirectory'
+    login: entraAdminLogin
+    sid: entraAdminObjectId
+    tenantId: entraTenantId
+  }
+}
+
+resource sqlEntraOnly 'Microsoft.Sql/servers/azureADOnlyAuthentications@2023-08-01' = {
+  parent: sqlServer
+  name: 'Default'
+  dependsOn: [ sqlEntraAdmin ]
+  properties: {
+    azureADOnlyAuthentication: entraOnlyAuthentication
+  }
+}
+
+// The only network rule. No firewallRules resource is declared on purpose: the legacy "Allow anyone"
+// (0.0.0.0-255.255.255.255) and "AllowAllWindowsAzureIps" rules are deleted by infra/README.md step 4, and nothing
+// recreates them (a template cannot delete a resource it does not declare).
+resource sqlVnetRule 'Microsoft.Sql/servers/virtualNetworkRules@2023-08-01' = {
+  parent: sqlServer
+  name: 'lifestream-aca'
+  properties: {
+    virtualNetworkSubnetId: acaSubnetId
+    ignoreMissingVnetServiceEndpoint: false
+  }
+}
+
+resource sqlDatabase 'Microsoft.Sql/servers/databases@2023-08-01' = {
+  parent: sqlServer
+  name: sqlDatabaseName
+  location: location
+  sku: {
+    name: 'GP_S_Gen5'
+    tier: 'GeneralPurpose'
+    family: 'Gen5'
+    capacity: 2
+  }
+  properties: {
+    collation: 'SQL_Latin1_General_CP1_CI_AS'
+    maxSizeBytes: 34359738368
+    minCapacity: json('0.5')
+    autoPauseDelay: 60
+    useFreeLimit: true
+    freeLimitExhaustionBehavior: 'AutoPause' // never bills: the database stops for the month instead
+    requestedBackupStorageRedundancy: 'Local'
+    zoneRedundant: false
+    readScale: 'Disabled'
+  }
+}
+
+resource sqlBackup 'Microsoft.Sql/servers/databases/backupShortTermRetentionPolicies@2023-08-01' = {
+  parent: sqlDatabase
+  name: 'default'
+  properties: {
+    retentionDays: backupRetentionDays
+    diffBackupIntervalInHours: 12
+  }
+}
+
+// ---------------------------------------------------------------- auditing (INFRA-07)
+// Server audit events go to a Log Analytics workspace. The first 5 GB a month are free, retention up to 31 days is
+// free, and the daily cap below stops ingestion at 0.1 GB a day (3 GB a month), so this can never bill. Only
+// sign-ins, failed sign-ins and schema, principal and role changes are audited; the per-row "who changed data" trail is
+// the application's AuditLog table. Defender for SQL (paid) stays off.
+
+resource auditWorkspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
+  name: 'lifestream-audit'
+  location: location
+  properties: {
+    sku: { name: 'PerGB2018' }
+    retentionInDays: auditRetentionDays
+    workspaceCapping: { dailyQuotaGb: json('0.1') }
+    features: { disableLocalAuth: false }
+  }
+}
+
+resource sqlAuditing 'Microsoft.Sql/servers/auditingSettings@2023-08-01' = {
+  parent: sqlServer
+  name: 'default'
+  properties: {
+    state: 'Enabled'
+    isAzureMonitorTargetEnabled: true
+    retentionDays: 0
+    auditActionsAndGroups: [
+      'SUCCESSFUL_DATABASE_AUTHENTICATION_GROUP'
+      'FAILED_DATABASE_AUTHENTICATION_GROUP'
+      'SCHEMA_OBJECT_CHANGE_GROUP'
+      'DATABASE_PRINCIPAL_CHANGE_GROUP'
+      'DATABASE_ROLE_MEMBER_CHANGE_GROUP'
+    ]
+  }
+}
+
+resource sqlMaster 'Microsoft.Sql/servers/databases@2023-08-01' existing = {
+  parent: sqlServer
+  name: 'master'
+}
+
+resource sqlAuditToWorkspace 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
+  name: 'lifestream-sql-audit'
+  scope: sqlMaster
+  dependsOn: [ sqlAuditing ]
+  properties: {
+    workspaceId: auditWorkspace.id
+    logs: [
+      { category: 'SQLSecurityAuditEvents', enabled: true }
+    ]
+  }
+}
+
+// ---------------------------------------------------------------- delete locks (INFRA-08)
+
+resource sqlServerLock 'Microsoft.Authorization/locks@2020-05-01' = if (enableLocks) {
+  name: 'lifestream-server-no-delete'
+  scope: sqlServer
+  properties: {
+    level: 'CanNotDelete'
+    notes: 'Lifestream SQL server. Remove this lock deliberately before deleting.'
+  }
+}
+
+resource sqlDatabaseLock 'Microsoft.Authorization/locks@2020-05-01' = if (enableLocks) {
+  name: 'lifestream-database-no-delete'
+  scope: sqlDatabase
+  properties: {
+    level: 'CanNotDelete'
+    notes: 'BloodBank database. Remove this lock deliberately before deleting.'
+  }
+}
+
+// ---------------------------------------------------------------- Container Apps (INFRA-09, OWN-02)
+
+resource acaEnvironment 'Microsoft.App/managedEnvironments@2024-03-01' = {
+  name: 'lifestream-env'
+  location: location
+  properties: {
+    appLogsConfiguration: { destination: 'none' } // no log destination, so nothing is ingested or billed
+    vnetConfiguration: {
+      infrastructureSubnetId: acaSubnetId
+      internal: false
+    }
+    workloadProfiles: [
+      { name: 'Consumption', workloadProfileType: 'Consumption' }
+    ]
+    zoneRedundant: false
+  }
+}
+
+var sqlConnectionBase = 'Server=tcp:${sqlFqdn},1433;Database=${sqlDatabaseName};Encrypt=True;TrustServerCertificate=False;Connection Timeout=60;Authentication=Active Directory Managed Identity'
+
+resource api 'Microsoft.App/containerApps@2024-03-01' = {
+  name: 'lifestream-api'
+  location: location
+  identity: { type: 'SystemAssigned' }
+  properties: {
+    environmentId: acaEnvironment.id
+    workloadProfileName: 'Consumption'
+    configuration: {
+      activeRevisionsMode: 'Single'
+      maxInactiveRevisions: 1
+      ingress: {
+        external: true
+        targetPort: 8080
+        transport: 'auto'
+        allowInsecure: false // plain HTTP is redirected to HTTPS
+        traffic: [ { latestRevision: true, weight: 100 } ]
+      }
+      secrets: [
+        { name: 'jwt-signing-key', value: jwtSigningKey }
+      ]
+    }
+    template: {
+      containers: [
+        {
+          name: 'api'
+          image: apiImage
+          resources: { cpu: json('0.25'), memory: '0.5Gi' }
+          env: [
+            { name: 'ASPNETCORE_URLS', value: 'http://+:8080' }
+            { name: 'ASPNETCORE_ENVIRONMENT', value: 'Production' }
+            // System-assigned identity: no user, no password, no key anywhere in this string.
+            { name: 'ConnectionStrings__Lifestream', value: sqlConnectionBase }
+            { name: 'Jwt__SigningKey', secretRef: 'jwt-signing-key' }
+            { name: 'Demo__Enabled', value: 'true' }
+          ]
+          probes: [
+            {
+              // Liveness of the process only; /healthz never opens a database connection, so a cold database cannot fail it.
+              type: 'Startup'
+              httpGet: { path: '/healthz', port: 8080 }
+              initialDelaySeconds: 1
+              periodSeconds: 2
+              timeoutSeconds: 3
+              failureThreshold: 30
+            }
+          ]
+        }
+      ]
+      scale: {
+        minReplicas: 0
+        maxReplicas: 1
+        rules: [
+          { name: 'http', http: { metadata: { concurrentRequests: '30' } } }
+        ]
+      }
+    }
+  }
+}
+
+// Runs the schema migration (EF Core) and creates the owner admin account. Started by the deploy workflow, never on a
+// schedule, so it cannot wake the database by itself. It signs in as lifestream-migrator, a contained user with DDL
+// rights and no password.
+resource migrateJob 'Microsoft.App/jobs@2024-03-01' = {
+  name: 'lifestream-migrate'
+  location: location
+  identity: {
+    type: 'UserAssigned'
+    userAssignedIdentities: { '${migrator.id}': {} }
+  }
+  properties: {
+    environmentId: acaEnvironment.id
+    workloadProfileName: 'Consumption'
+    configuration: {
+      triggerType: 'Manual'
+      replicaTimeout: 900
+      replicaRetryLimit: 0
+      manualTriggerConfig: { parallelism: 1, replicaCompletionCount: 1 }
+      secrets: [
+        { name: 'owner-admin-password', value: ownerAdminPassword }
+      ]
+    }
+    template: {
+      containers: [
+        {
+          name: 'migrate'
+          image: apiImage
+          args: [ '--migrate' ]
+          resources: { cpu: json('0.25'), memory: '0.5Gi' }
+          env: [
+            { name: 'ConnectionStrings__Lifestream', value: '${sqlConnectionBase};User Id=${migrator.properties.clientId}' }
+            { name: 'Owner__AdminPassword', secretRef: 'owner-admin-password' }
+          ]
+        }
+      ]
+    }
+  }
+}
+
+// ---------------------------------------------------------------- budget alert (INFRA-09)
+
+resource budget 'Microsoft.Consumption/budgets@2023-05-01' = {
+  name: 'lifestream-monthly'
+  properties: {
+    category: 'Cost'
+    amount: budgetAmount
+    timeGrain: 'Monthly'
+    timePeriod: { startDate: budgetStartDate }
+    notifications: {
+      actual50: {
+        enabled: true
+        operator: 'GreaterThan'
+        threshold: 50
+        thresholdType: 'Actual'
+        contactEmails: [ ownerEmail ]
+      }
+      actual100: {
+        enabled: true
+        operator: 'GreaterThan'
+        threshold: 100
+        thresholdType: 'Actual'
+        contactEmails: [ ownerEmail ]
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------- outputs
+
+output apiUrl string = 'https://${api.properties.configuration.ingress.fqdn}'
+output apiName string = api.name
+output apiPrincipalId string = api.identity.principalId
+output migratorName string = migrator.name
+output migratorPrincipalId string = migrator.properties.principalId
+output migratorClientId string = migrator.properties.clientId
+output deployerClientId string = deployer.properties.clientId
+output sqlServerFqdn string = sqlFqdn
