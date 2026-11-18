@@ -272,13 +272,13 @@ public sealed class ShellViewTests
                 Visit("Donors");
                 Visit("Stock");
                 Visit("Receipts");
-                return (changes, seen.Distinct().Count(), rig.Api.Calls.Count, shell.PageTitle);
+                return (changes, seen.Distinct().Count(), rig.Api.Calls.ToList(), shell.PageTitle);
             }
         });
 
         Assert.Equal([1, 1, 1], contextChanges); // each page's DataContext is its view model, set by navigation
         Assert.Equal(3, views); // one view per visit
-        Assert.Equal(0, calls);
+        Assert.Equal(["GetDonorsAsync", "GetStockAsync"], calls); // Donors and Stock are real screens (one load each); the Receipts placeholder makes no call
         Assert.Equal("Receipts", titles);
     }
 

@@ -1,0 +1,61 @@
+<UserControl x:Class="Lifestream.Desktop.Features.ListScreens.PersonFormFields"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:Lifestream.Desktop.Controls"
+             xmlns:feat="clr-namespace:Lifestream.Desktop.Features"
+             Focusable="False" IsTabStop="False">
+  <!-- The fields donors and patients share, in a left-aligned two-column grid with related fields grouped (FEAT-08). Required fields say so in their label (FEAT-07). -->
+  <UserControl.Resources>
+    <feat:FirstNonEmptyConverter x:Key="FirstNonEmpty" />
+  </UserControl.Resources>
+  <StackPanel HorizontalAlignment="Stretch">
+    <TextBlock Style="{DynamicResource Text.Heading}" Text="Personal details" feat:Edge.Bottom="{DynamicResource Space.12}" AutomationProperties.HeadingLevel="Level2" />
+    <Grid>
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*" MinWidth="150" />
+        <ColumnDefinition Width="16" />
+        <ColumnDefinition Width="*" MinWidth="150" />
+      </Grid.ColumnDefinitions>
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto" />
+        <RowDefinition Height="Auto" />
+        <RowDefinition Height="Auto" />
+      </Grid.RowDefinitions>
+      <controls:FormField Grid.ColumnSpan="3" Label="Full name (required)" IsRequired="True" controls:FormFocus.FieldName="Name" Error="{Binding [Name]}">
+        <TextBox x:Name="NameBox" Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" MaxLength="100" AutomationProperties.Name="Full name" />
+      </controls:FormField>
+      <controls:FormField Grid.Row="1" Label="Date of birth (required)" IsRequired="True" Hint="Format: 05 Mar 2022" controls:FormFocus.FieldName="DateOfBirth">
+        <controls:FormField.Error>
+          <MultiBinding Converter="{StaticResource FirstNonEmpty}">
+            <Binding Path="[DateOfBirth]" />
+            <Binding ElementName="DobField" Path="ParseError" />
+          </MultiBinding>
+        </controls:FormField.Error>
+        <controls:DateField x:Name="DobField" SelectedDate="{Binding DateOfBirth, Mode=TwoWay}" MaxDate="{Binding LatestDateOfBirth}" AutomationProperties.Name="Date of birth" />
+      </controls:FormField>
+      <controls:FormField Grid.Row="1" Grid.Column="2" Label="Gender (required)" IsRequired="True" controls:FormFocus.FieldName="Gender" Error="{Binding [Gender]}">
+        <ComboBox ItemsSource="{Binding GenderChoices}" DisplayMemberPath="Display" SelectedValuePath="Value" SelectedValue="{Binding Gender, Mode=TwoWay}" AutomationProperties.Name="Gender" />
+      </controls:FormField>
+      <controls:FormField Grid.Row="2" Label="Blood type (required)" IsRequired="True" controls:FormFocus.FieldName="BloodType" Error="{Binding [BloodType]}">
+        <ComboBox ItemsSource="{Binding BloodTypeChoices}" DisplayMemberPath="Display" SelectedValuePath="Value" SelectedValue="{Binding BloodType, Mode=TwoWay}" AutomationProperties.Name="Blood type" />
+      </controls:FormField>
+      <ContentControl x:Name="ExtraSlot" Grid.Row="2" Grid.Column="2" Focusable="False" IsTabStop="False"
+                      Content="{Binding Extra, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+    </Grid>
+
+    <TextBlock Style="{DynamicResource Text.Heading}" Text="Contact" feat:Edge.Top="{DynamicResource Space.16}" feat:Edge.Bottom="{DynamicResource Space.12}" AutomationProperties.HeadingLevel="Level2" />
+    <Grid>
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*" MinWidth="150" />
+        <ColumnDefinition Width="16" />
+        <ColumnDefinition Width="*" MinWidth="150" />
+      </Grid.ColumnDefinitions>
+      <controls:FormField Label="Phone" Hint="Digits only; a leading + is allowed" controls:FormFocus.FieldName="Phone" Error="{Binding [Phone]}">
+        <TextBox x:Name="PhoneBox" Text="{Binding Phone, UpdateSourceTrigger=PropertyChanged}" MaxLength="20" AutomationProperties.Name="Phone" />
+      </controls:FormField>
+      <controls:FormField Grid.Column="2" Label="Address" controls:FormFocus.FieldName="Address" Error="{Binding [Address]}">
+        <TextBox x:Name="AddressBox" Text="{Binding Address, UpdateSourceTrigger=PropertyChanged}" MaxLength="200" AutomationProperties.Name="Address" />
+      </controls:FormField>
+    </Grid>
+  </StackPanel>
+</UserControl>
