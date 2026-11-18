@@ -33,13 +33,22 @@ public sealed partial class UpdateService(IUpdateSource source, Version currentV
 
     public string Message => AvailableVersion is null ? string.Empty : $"Version {AvailableVersion.ToString(3)} is ready. Restart to update.";
 
+    private bool _answered;
+
+    /// <summary>Asks the feed. Once the feed has answered, later calls do nothing: the check happens once per run (at startup), not once per window.</summary>
     public async Task CheckAsync(CancellationToken ct = default)
     {
+        if (_answered || IsLoading)
+        {
+            return;
+        }
+
         IsLoading = true;
         try
         {
             var latest = await source.GetLatestVersionAsync(ct).ConfigureAwait(true);
             AvailableVersion = latest is not null && latest > currentVersion ? latest : null;
+            _answered = true;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

@@ -26,7 +26,7 @@ public interface IWindowHost
 /// </summary>
 public interface IAppFlow
 {
-    /// <summary>Shows the login window and warms the API up.</summary>
+    /// <summary>Shows the login window, warms the API up and checks the release feed for an update.</summary>
     void Start(string? notice = null);
 
     Task SignedInAsync();
@@ -50,6 +50,7 @@ public sealed partial class AppFlow(IServiceProvider services, ISessionService s
         _login.Notice = notice;
         windows.ShowLogin(_login);
         _ = api.WarmUpAsync();
+        _ = services.GetRequiredService<Lifestream.Client.Updates.UpdateService>().CheckAsync(); // at startup, before sign-in (SHELL-44)
     }
 
     public async Task SignedInAsync()
