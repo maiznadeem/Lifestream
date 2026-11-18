@@ -1,0 +1,6 @@
+# Test helpers create short-lived fakes that the process owns; the cancellation token of the test context adds nothing to
+# calls that are awaited immediately. Both rules stay at "suggestion" so they remain visible without failing the build.
+[*.cs]
+dotnet_diagnostic.CA2000.severity = suggestion
+dotnet_diagnostic.xUnit1051.severity = suggestion
+dotnet_diagnostic.CA1861.severity = suggestion

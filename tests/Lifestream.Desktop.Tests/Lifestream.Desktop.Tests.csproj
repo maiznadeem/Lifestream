@@ -5,5 +5,9 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\Lifestream.Desktop\Lifestream.Desktop.csproj" />
+    <Using Include="System.Net.Http" />
+    <Using Include="System.IO" />
+    <!-- The fake API and the manual clock are shared with the Client tests, so both projects exercise the same fakes. -->
+    <Compile Include="..\Lifestream.Client.Tests\Fakes\*.cs" Link="Fakes\%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>

@@ -1,0 +1,8 @@
+<UserControl x:Class="Lifestream.Desktop.Shell.PlaceholderView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:Lifestream.Desktop.Controls">
+  <controls:LoadSurface State="{Binding State}" SkeletonKind="Detail" ErrorMessage="{Binding ErrorMessage}" ErrorDetail="{Binding ErrorDetail}">
+    <controls:EmptyState Glyph="&#xE7C3;" Title="{Binding PageTitle}" Message="{Binding Message}" />
+  </controls:LoadSurface>
+</UserControl>
