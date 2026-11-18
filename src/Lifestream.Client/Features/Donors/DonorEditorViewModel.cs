@@ -54,7 +54,7 @@ public sealed partial class DonorEditorViewModel : PersonEditorViewModel
     protected override void AcceptExtraAsBaseline() => _baselineFrequency = Frequency;
 
     protected override string? ValidateExtraField(string field) =>
-        field == nameof(Frequency) && Frequency is null ? "Choose how often the donor gives blood." : null;
+        field == nameof(Frequency) && Frequency is null ? "Choose how often." : null;
 
     partial void OnFrequencyChanged(DonorFrequency? value) => FieldEdited(nameof(Frequency));
 

@@ -125,7 +125,7 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
     public partial TDetail? Detail { get; set; }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ShowDetailSkeleton), nameof(HasDetailError))]
+    [NotifyPropertyChangedFor(nameof(HasDetail), nameof(ShowDetailSkeleton), nameof(HasDetailError))]
     public partial LoadState DetailState { get; set; } = LoadState.Ready;
 
     [ObservableProperty]
@@ -398,8 +398,10 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
     {
         if (disposing)
         {
-            _detailCts?.Cancel();
-            _detailCts?.Dispose();
+            var detail = _detailCts;
+            _detailCts = null;
+            detail?.Cancel();
+            detail?.Dispose();
             Editor?.Dispose();
         }
 

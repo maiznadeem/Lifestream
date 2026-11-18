@@ -23,7 +23,7 @@
       <Grid.ColumnDefinitions>
         <ColumnDefinition Width="*" MinWidth="360" />
         <ColumnDefinition Width="16" />
-        <ColumnDefinition Width="380" />
+        <ColumnDefinition Width="400" />
       </Grid.ColumnDefinitions>
       <controls:LoadSurface x:Name="ListSurface" State="{Binding State}" SkeletonKind="List" SkeletonColumns="2*,100,90,*,130"
                             ErrorMessage="{Binding ErrorMessage}" ErrorDetail="{Binding ErrorDetail}" RetryCommand="{Binding RetryCommand}"
@@ -40,8 +40,20 @@
             <DataGrid.Columns>
               <DataGridTextColumn Header="Name" Binding="{Binding Name}" SortMemberPath="name" Width="2*" />
               <DataGridTextColumn Header="Blood type" Binding="{Binding BloodType, Converter={StaticResource BloodTypeText}}" SortMemberPath="bloodType" Width="100" />
-              <DataGridTextColumn Header="Gender" Binding="{Binding Gender}" Width="90" />
-              <DataGridTextColumn Header="Phone" Binding="{Binding Phone}" Width="*" />
+              <DataGridTemplateColumn Header="Gender" Width="90">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate>
+                    <TextBlock Text="{Binding Gender}" Style="{DynamicResource DataGrid.TextCell}" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTemplateColumn Header="Phone" Width="*" MinWidth="130">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate>
+                    <TextBlock Text="{Binding Phone}" Style="{DynamicResource DataGrid.TextCell}" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
               <DataGridTextColumn Header="Date of birth" Binding="{Binding DateOfBirth, Converter={StaticResource DateText}}" SortMemberPath="dateOfBirth" Width="130" />
             </DataGrid.Columns>
           </controls:LifestreamDataGrid>

@@ -23,9 +23,9 @@
       <Grid.ColumnDefinitions>
         <ColumnDefinition Width="*" MinWidth="360" />
         <ColumnDefinition Width="16" />
-        <ColumnDefinition Width="380" />
+        <ColumnDefinition Width="400" />
       </Grid.ColumnDefinitions>
-      <controls:LoadSurface x:Name="ListSurface" State="{Binding State}" SkeletonKind="List" SkeletonColumns="2*,100,90,*,110,130"
+      <controls:LoadSurface x:Name="ListSurface" State="{Binding State}" SkeletonKind="List" SkeletonColumns="2*,100,90,*,130"
                             ErrorMessage="{Binding ErrorMessage}" ErrorDetail="{Binding ErrorDetail}" RetryCommand="{Binding RetryCommand}"
                             EmptyGlyph="&#xE716;" EmptyTitle="{Binding EmptyTitle}" EmptyMessage="{Binding EmptyMessage}" EmptyActionText="{Binding EmptyActionText}"
                             EmptyActionCommand="{Binding EmptyActionCommand}">
@@ -40,9 +40,20 @@
             <DataGrid.Columns>
               <DataGridTextColumn Header="Name" Binding="{Binding Name}" SortMemberPath="name" Width="2*" />
               <DataGridTextColumn Header="Blood type" Binding="{Binding BloodType, Converter={StaticResource BloodTypeText}}" SortMemberPath="bloodType" Width="100" />
-              <DataGridTextColumn Header="Gender" Binding="{Binding Gender}" Width="90" />
-              <DataGridTextColumn Header="Phone" Binding="{Binding Phone}" Width="*" />
-              <DataGridTextColumn Header="Donates" Binding="{Binding Frequency}" Width="110" />
+              <DataGridTemplateColumn Header="Gender" Width="90">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate>
+                    <TextBlock Text="{Binding Gender}" Style="{DynamicResource DataGrid.TextCell}" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTemplateColumn Header="Phone" Width="*" MinWidth="130">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate>
+                    <TextBlock Text="{Binding Phone}" Style="{DynamicResource DataGrid.TextCell}" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
               <DataGridTextColumn Header="Last donated" Binding="{Binding LastDonated, Converter={StaticResource DateText}, ConverterParameter=Never}" SortMemberPath="lastDonated" Width="130" />
             </DataGrid.Columns>
           </controls:LifestreamDataGrid>
