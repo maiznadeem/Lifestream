@@ -77,9 +77,20 @@ public sealed class ConnectionProbe : DbConnectionInterceptor
 
     public int Opened => Volatile.Read(ref _opened);
 
+    /// <summary>The SQL error number simulated while failing (40613 resuming, -2 connect timeout, 42119 free allowance used up).</summary>
+    public int FailNumber { get; set; } = 40613;
+
+    /// <summary>When set, opening throws this non-SQL exception instead (an unexpected failure).</summary>
+    public bool ThrowGeneric { get; set; }
+
     public override ValueTask<InterceptionResult> ConnectionOpeningAsync(System.Data.Common.DbConnection connection, ConnectionEventData eventData, InterceptionResult result, CancellationToken cancellationToken = default)
     {
         Interlocked.Increment(ref _opened);
+        if (ThrowGeneric)
+        {
+            throw new InvalidOperationException("secret-detail: SELECT * FROM [Donor] violated FK_Secret on server prod-sql-01");
+        }
+
         if (FailuresRemaining != 0)
         {
             if (FailuresRemaining > 0)
@@ -87,7 +98,7 @@ public sealed class ConnectionProbe : DbConnectionInterceptor
                 FailuresRemaining--;
             }
 
-            throw SqlExceptions.Create(40613);
+            throw SqlExceptions.Create(FailNumber);
         }
 
         return base.ConnectionOpeningAsync(connection, eventData, result, cancellationToken);
@@ -234,6 +245,9 @@ public class ApiFixture : IAsyncLifetime
 
     protected virtual SqlServerDatabaseFixture CreateDb() => new();
 
+    /// <summary>False leaves the real readiness probe in place (it opens a real connection).</summary>
+    protected virtual bool UseFakeProbe => true;
+
     protected virtual void Configure(Dictionary<string, string?> settings)
     {
     }
@@ -257,7 +271,11 @@ public class ApiFixture : IAsyncLifetime
                 services.AddSingleton<TimeProvider>(Clock);
                 services.AddSingleton<IInterceptor>(Commands);
                 services.AddSingleton<IInterceptor>(Connections);
-                services.AddSingleton<IDatabaseProbe>(Probe);
+                if (UseFakeProbe)
+                {
+                    services.AddSingleton<IDatabaseProbe>(Probe);
+                }
+
                 services.AddSingleton<Microsoft.AspNetCore.Hosting.IStartupFilter, RemoteAddressFilter>();
             });
         });

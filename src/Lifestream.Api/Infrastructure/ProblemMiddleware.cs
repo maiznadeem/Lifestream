@@ -152,10 +152,20 @@ public sealed class CorrelationMiddleware(RequestDelegate next, ILogger<Correlat
             return Task.CompletedTask;
         });
 
-        var user = context.User.FindFirst("sub")?.Value;
-        using (logger.BeginScope(new Dictionary<string, object?> { ["CorrelationId"] = id, ["UserId"] = user }))
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
+        using (logger.BeginScope(new Dictionary<string, object?> { ["CorrelationId"] = id }))
         {
             await next(context);
+
+            // One structured access line per request: the route TEMPLATE (never the path or query, which can hold names), the
+            // status, the time, and the numeric staff id from the token. No body, header, token or personal data.
+            logger.LogInformation(
+                "HTTP {Method} {Route} {Status} {ElapsedMs}ms user {UserId}",
+                context.Request.Method,
+                (context.GetEndpoint() as RouteEndpoint)?.RoutePattern.RawText ?? "unmatched",
+                context.Response.StatusCode,
+                (long)System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds,
+                context.User.FindFirst("sub")?.Value ?? "anonymous");
         }
     }
 }

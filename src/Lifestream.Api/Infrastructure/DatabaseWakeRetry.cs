@@ -12,7 +12,11 @@ public static class DatabaseErrors
 
     // 40613 = database not currently available (resuming), 40197/40501/4922x = service busy or reconfiguring,
     // -2 = connect timeout, the rest are dropped connections while the database starts.
-    private static readonly HashSet<int> WakingNumbers = [40613, 40197, 40501, 49918, 49919, 49920, -2, 10060, 10054, 10053, 64, 233, 20];
+    private static readonly int[] WakingList = [40613, 40197, 40501, 49918, 49919, 49920, -2, 10060, 10054, 10053, 64, 233, 20];
+    private static readonly HashSet<int> WakingNumbers = [.. WakingList];
+
+    /// <summary>The error numbers the retrying strategy treats as "the database is still starting".</summary>
+    public static IReadOnlyList<int> RetryNumbers => WakingList;
 
     public static bool IsResting(Exception exception) => Find(exception).Any(e => e.Number == FreeAllowanceExhausted);
 
@@ -47,7 +51,7 @@ public static class DatabaseErrors
 /// takes up to about a minute to resume) with a capped exponential back-off; after that EF throws and the API answers 503.
 /// </summary>
 public sealed class WakeAwareExecutionStrategy(ExecutionStrategyDependencies dependencies, DatabaseSettings settings)
-    : SqlServerRetryingExecutionStrategy(dependencies, int.MaxValue, TimeSpan.FromSeconds(settings.MaxRetryDelaySeconds), [40613, 40197, 40501, 49918, 49919, 49920])
+    : SqlServerRetryingExecutionStrategy(dependencies, int.MaxValue, TimeSpan.FromSeconds(settings.MaxRetryDelaySeconds), [.. DatabaseErrors.RetryNumbers])
 {
     private readonly DateTime _started = DateTime.UtcNow;
     private readonly TimeSpan _budget = TimeSpan.FromSeconds(settings.WakeBudgetSeconds);
@@ -66,7 +70,10 @@ public sealed class WakeAwareExecutionStrategy(ExecutionStrategyDependencies dep
             return null;
         }
 
+        // EF waits at least 5 seconds after "database not available"; MaxRetryDelaySeconds is the real ceiling (tests lower it).
+        var ceiling = TimeSpan.FromSeconds(settings.MaxRetryDelaySeconds);
         var left = _budget - elapsed;
-        return delay.Value < left ? delay : left;
+        var wait = delay.Value < ceiling ? delay.Value : ceiling;
+        return wait < left ? wait : left;
     }
 }

@@ -17,10 +17,15 @@ public static class Migrator
 {
     public const string OwnerUsername = "owner";
 
-    public static async Task<int> RunAsync(string[] args, TimeProvider? time = null)
+    public static async Task<int> RunAsync(string[] args, TimeProvider? time = null, ILoggerProvider? extraLogs = null)
     {
         var builder = Host.CreateApplicationBuilder(args);
         builder.Logging.AddJsonConsole(o => o.IncludeScopes = true);
+        if (extraLogs is not null)
+        {
+            builder.Logging.AddProvider(extraLogs);
+        }
+
         builder.Services.Configure<DatabaseSettings>(builder.Configuration.GetSection(DatabaseSettings.Section));
         using var host = builder.Build();
         var logger = host.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Lifestream.Migrate");
