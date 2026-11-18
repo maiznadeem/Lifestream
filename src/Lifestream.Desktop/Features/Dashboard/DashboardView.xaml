@@ -1,0 +1,180 @@
+<UserControl x:Class="Lifestream.Desktop.Features.Dashboard.DashboardView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:Lifestream.Desktop.Controls"
+             xmlns:lvc="clr-namespace:LiveChartsCore.SkiaSharpView.WPF;assembly=LiveChartsCore.SkiaSharpView.WPF"
+             xmlns:dash="clr-namespace:Lifestream.Client.Features.Dashboard;assembly=Lifestream.Client"
+             Focusable="False">
+  <!-- The dashboard: cards, charts and the totals table, all from one API call. Cards are flat (no blur or shadow effect). -->
+  <UserControl.Resources>
+    <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+
+    <!-- A card that opens the matching list. Flat: surface colour only, a 2 px ring on keyboard focus. -->
+    <Style x:Key="Card.Button" TargetType="Button">
+      <Setter Property="Background" Value="{DynamicResource Brush.SurfaceRaised}" />
+      <Setter Property="Foreground" Value="{DynamicResource Brush.TextPrimary}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Brush.BorderSubtle}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Padding" Value="16" />
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+      <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="Bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
+                    CornerRadius="{DynamicResource Radius.Card}" Padding="{TemplateBinding Padding}">
+              <ContentPresenter />
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.SurfaceHover}" />
+              </Trigger>
+              <Trigger Property="IsPressed" Value="True">
+                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.SurfacePressed}" />
+              </Trigger>
+              <Trigger Property="IsKeyboardFocused" Value="True">
+                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Brush.FocusRing}" />
+                <Setter TargetName="Bd" Property="BorderThickness" Value="2" />
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <!-- Numbers right-aligned in cells and in their headers (FEAT-31): the header text is stretched across the column and right-aligned. -->
+    <Style x:Key="Cell.Number" TargetType="TextBlock">
+      <Setter Property="FontFamily" Value="{DynamicResource Font.Family}" />
+      <Setter Property="FontSize" Value="{DynamicResource FontSize.Body}" />
+      <Setter Property="Foreground" Value="{DynamicResource Brush.TextPrimary}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Padding" Value="12,0" />
+      <Setter Property="TextAlignment" Value="Right" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+    </Style>
+    <Style x:Key="Header.Number" TargetType="TextBlock">
+      <Setter Property="FontFamily" Value="{DynamicResource Font.Family}" />
+      <Setter Property="FontSize" Value="{DynamicResource FontSize.Label}" />
+      <Setter Property="FontWeight" Value="Medium" />
+      <Setter Property="Foreground" Value="{DynamicResource Brush.TextSecondary}" />
+      <Setter Property="TextAlignment" Value="Right" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+    </Style>
+  </UserControl.Resources>
+
+  <controls:LoadSurface State="{Binding State}" SkeletonKind="Dashboard" ErrorMessage="{Binding ErrorMessage}" ErrorDetail="{Binding ErrorDetail}" RetryCommand="{Binding RetryCommand}">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Focusable="False">
+      <StackPanel Margin="0,0,8,0">
+        <!-- Cards: each opens the list it counts, filtered. -->
+        <ItemsControl ItemsSource="{Binding Cards}" Focusable="False" AutomationProperties.Name="Summary cards">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <UniformGrid Columns="3" />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate DataType="{x:Type dash:KpiCard}">
+              <Button Style="{StaticResource Card.Button}" Margin="0,0,16,16" Command="{Binding DataContext.OpenCardCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                      CommandParameter="{Binding}" AutomationProperties.Name="{Binding AutomationName}" ToolTip="{Binding Hint}">
+                <StackPanel>
+                  <StackPanel Orientation="Horizontal">
+                    <controls:IconText Style="{DynamicResource Text.Icon}" Text="{Binding Glyph}" Foreground="{DynamicResource Brush.TextSecondary}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                    <TextBlock Style="{DynamicResource Text.Label}" Text="{Binding Title}" Foreground="{DynamicResource Brush.TextSecondary}" VerticalAlignment="Center" />
+                  </StackPanel>
+                  <TextBlock Style="{DynamicResource Text.Display}" Text="{Binding ValueText}" Margin="0,8,0,0" />
+                </StackPanel>
+              </Button>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <!-- Stock alert: every blood type below its threshold, with icon and words. -->
+        <Border Margin="0,0,16,16" Padding="16" Background="{DynamicResource Brush.SurfaceRaised}" BorderBrush="{DynamicResource Brush.StatusDanger}" BorderThickness="1"
+                CornerRadius="{DynamicResource Radius.Card}" Visibility="{Binding HasLowStock, Converter={StaticResource BoolToVisibility}}" AutomationProperties.Name="Low stock alert">
+          <StackPanel>
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+              <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE7BA;" Foreground="{DynamicResource Brush.StatusDanger}" VerticalAlignment="Center" Margin="0,0,8,0" />
+              <TextBlock Style="{DynamicResource Text.Heading}" Text="Low stock" VerticalAlignment="Center" AutomationProperties.HeadingLevel="Level2" />
+            </StackPanel>
+            <ItemsControl ItemsSource="{Binding LowStock}" Focusable="False">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <WrapPanel />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="{x:Type dash:LowStockAlert}">
+                  <Button Style="{DynamicResource Button.Secondary}" Margin="0,0,8,8" MinHeight="32" Command="{Binding DataContext.OpenLowStockCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                          CommandParameter="{Binding}" AutomationProperties.Name="{Binding Text}">
+                    <StackPanel Orientation="Horizontal">
+                      <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE783;" FontSize="12" Foreground="{DynamicResource Brush.StatusDanger}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                      <TextBlock Text="{Binding Text}" VerticalAlignment="Center" />
+                    </StackPanel>
+                  </Button>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </Border>
+
+        <!-- Period and blood types of the donations chart. -->
+        <Grid Margin="0,0,16,8">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="*" />
+          </Grid.ColumnDefinitions>
+          <controls:FormField Label="Period" Margin="0,0,16,0">
+            <ComboBox x:Name="PeriodBox" ItemsSource="{Binding Periods}" SelectedItem="{Binding SelectedPeriod, Mode=TwoWay}" MinWidth="170" AutomationProperties.Name="Period" />
+          </controls:FormField>
+          <StackPanel Grid.Column="1">
+            <TextBlock Style="{DynamicResource Text.Label}" Text="Blood types in the chart" Margin="0,0,0,4" />
+            <ItemsControl ItemsSource="{Binding BloodTypes}" Focusable="False" AutomationProperties.Name="Blood types in the chart">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <WrapPanel />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="{x:Type dash:BloodTypeToggle}">
+                  <CheckBox Content="{Binding Display}" IsChecked="{Binding IsSelected, Mode=TwoWay}" Margin="0,0,16,0" MinHeight="32" AutomationProperties.Name="{Binding Display}" />
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </Grid>
+
+        <!-- Charts, each with its table behind "View as table". -->
+        <controls:ChartFrame x:Name="DonationsFrame" Title="Donations and issues by month" Table="{Binding DonationsTable}" Height="340" Margin="0,0,16,16">
+          <lvc:CartesianChart x:Name="DonationsChart" AutomationProperties.Name="Donations and issues by month" />
+        </controls:ChartFrame>
+        <controls:ChartFrame x:Name="DemographicsFrame" Title="Donors by gender" Table="{Binding DemographicsTable}" Height="300" Margin="0,0,16,16">
+          <lvc:CartesianChart x:Name="DemographicsChart" AutomationProperties.Name="Donors by gender" />
+        </controls:ChartFrame>
+
+        <!-- Totals for the chosen period: numbers right-aligned under right-aligned headers, rows separated by lines only. -->
+        <Border Margin="0,0,16,16" Padding="16" Background="{DynamicResource Brush.SurfaceRaised}" CornerRadius="{DynamicResource Radius.Card}">
+          <StackPanel>
+            <TextBlock Style="{DynamicResource Text.Heading}" Text="Totals for the period" Margin="0,0,0,12" AutomationProperties.HeadingLevel="Level2" />
+            <controls:LifestreamDataGrid x:Name="TotalsGrid" ItemsSource="{Binding Totals}" SelectionMode="Single" Background="{DynamicResource Brush.SurfaceRaised}"
+                                         AutomationProperties.Name="Totals by blood type" VerticalScrollBarVisibility="Disabled" PreviewMouseWheel="OnTotalsMouseWheel">
+              <DataGrid.Columns>
+                <DataGridTextColumn Header="Blood type" Binding="{Binding Label}" Width="*" />
+                <DataGridTextColumn Binding="{Binding DonatedText}" Width="140" ElementStyle="{StaticResource Cell.Number}">
+                  <DataGridTextColumn.Header>
+                    <TextBlock Style="{StaticResource Header.Number}" Text="Donated" />
+                  </DataGridTextColumn.Header>
+                </DataGridTextColumn>
+                <DataGridTextColumn Binding="{Binding IssuedText}" Width="140" ElementStyle="{StaticResource Cell.Number}">
+                  <DataGridTextColumn.Header>
+                    <TextBlock Style="{StaticResource Header.Number}" Text="Issued" />
+                  </DataGridTextColumn.Header>
+                </DataGridTextColumn>
+              </DataGrid.Columns>
+            </controls:LifestreamDataGrid>
+          </StackPanel>
+        </Border>
+      </StackPanel>
+    </ScrollViewer>
+  </controls:LoadSurface>
+</UserControl>

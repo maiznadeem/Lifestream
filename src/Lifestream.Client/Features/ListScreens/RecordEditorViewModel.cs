@@ -36,7 +36,11 @@ public abstract partial class RecordEditorViewModel : FormViewModelBase
         SaveCommand = new AsyncRelayCommand(SaveAsync);
         CancelCommand = new AsyncRelayCommand(CancelAsync);
         ReloadCommand = new AsyncRelayCommand(ReloadAsync);
+        ErrorsChanged += (_, _) => OnPropertyChanged("Item[]"); // lets the view bind {Binding [Name]} to a field's message
     }
+
+    /// <summary>The message of a field, or null; bound by the view as <c>{Binding [Name]}</c> under each field.</summary>
+    public string? this[string field] => GetError(field);
 
     /// <summary>Raised once when the form is saved or cancelled; the screen then closes the drawer.</summary>
     public event EventHandler<EditorClosedEventArgs>? Closed;

@@ -108,7 +108,10 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
     /// <summary>Ctrl+N opens the new-record drawer.</summary>
     public override AsyncRelayCommand? NewCommand => AddCommand;
 
-    protected override string? NewActionText => $"Add {RecordType}";
+    protected override string? NewActionText => NewActionLabel;
+
+    /// <summary>The primary action names what it does: "Add donor".</summary>
+    public string NewActionLabel => $"Add {RecordType}";
 
     /// <summary>The record kind in lower case, used in messages ("donor").</summary>
     protected abstract string RecordType { get; }
