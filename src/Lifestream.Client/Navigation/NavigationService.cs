@@ -21,6 +21,12 @@ public interface INavigationService
 
     Task<bool> NavigateTo(Type viewModelType, object? parameter = null);
 
+    /// <summary>True when the current screen has unsaved changes.</summary>
+    bool HasUnsavedChanges { get; }
+
+    /// <summary>Asks "Discard changes?" when the current screen has unsaved changes. True means go ahead (nothing to lose, or the user chose to discard); false means stay.</summary>
+    Task<bool> ConfirmDiscardAsync();
+
     /// <summary>Loads the current screen again (after a demo reset, for example) without creating a new view model.</summary>
     Task ReloadCurrentAsync();
 
@@ -43,8 +49,7 @@ public sealed class NavigationService(IServiceProvider services, IDialogService 
     public async Task<bool> NavigateTo(Type viewModelType, object? parameter = null)
     {
         ArgumentNullException.ThrowIfNull(viewModelType);
-        if (_current is IDirtyTracking { HasUnsavedChanges: true }
-            && !await dialogs.ConfirmAsync("Discard changes?", "You have unsaved changes on this screen. If you leave now they will be lost.", "Discard changes").ConfigureAwait(true))
+        if (!await ConfirmDiscardAsync().ConfigureAwait(true))
         {
             return false;
         }
@@ -64,6 +69,12 @@ public sealed class NavigationService(IServiceProvider services, IDialogService 
         await next.LoadAsync().ConfigureAwait(true);
         return true;
     }
+
+    public bool HasUnsavedChanges => _current is IDirtyTracking { HasUnsavedChanges: true };
+
+    public async Task<bool> ConfirmDiscardAsync() =>
+        !HasUnsavedChanges
+        || await dialogs.ConfirmAsync("Discard changes?", "You have unsaved changes on this screen. If you leave now they will be lost.", "Discard changes").ConfigureAwait(true);
 
     public Task ReloadCurrentAsync() => _current?.LoadAsync() ?? Task.CompletedTask;
 

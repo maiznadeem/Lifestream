@@ -151,6 +151,12 @@ public sealed partial class ShellViewModel : ViewModelBase
 
     public string? UpdatePrompt => Updates.IsUpdateReady ? Updates.Message : null;
 
+    /// <summary>True when the page on screen has unsaved changes.</summary>
+    public bool HasUnsavedChanges => Navigation.HasUnsavedChanges;
+
+    /// <summary>Called when the main window is about to close: false means the user chose to stay (SHELL-24).</summary>
+    public Task<bool> ConfirmCloseAsync() => Navigation.ConfirmDiscardAsync();
+
     /// <summary>Opens the first destination and checks for an update in the background.</summary>
     public async Task StartAsync()
     {
