@@ -59,6 +59,7 @@ public sealed partial class ToastItem : ObservableObject, IDisposable
                 await _action().ConfigureAwait(true);
             }
         });
+        ActionCommand.PropertyChanged += (_, _) => OnPropertyChanged(nameof(IsBusy));
         Resume();
     }
 
@@ -73,6 +74,13 @@ public sealed partial class ToastItem : ObservableObject, IDisposable
     public AsyncRelayCommand DismissCommand { get; }
 
     public AsyncRelayCommand ActionCommand { get; }
+
+    /// <summary>A toast never loads anything; present so every view model offers the same state (SHELL-11).</summary>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "Bound from XAML like the other view models; the shared state name is the point (SHELL-11).")]
+    public bool IsLoading => false;
+
+    /// <summary>True while the toast's action is running.</summary>
+    public bool IsBusy => ActionCommand.IsRunning;
 
     [ObservableProperty]
     public partial bool IsPaused { get; set; }

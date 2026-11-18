@@ -21,12 +21,21 @@ public sealed partial class UpdateService(IUpdateSource source, Version currentV
     [NotifyPropertyChangedFor(nameof(IsUpdateReady), nameof(Message))]
     public partial Version? AvailableVersion { get; private set; }
 
+    /// <summary>True while the feed is being checked.</summary>
+    [ObservableProperty]
+    public partial bool IsLoading { get; private set; }
+
+    /// <summary>True while an update is being downloaded and applied.</summary>
+    [ObservableProperty]
+    public partial bool IsBusy { get; private set; }
+
     public bool IsUpdateReady => AvailableVersion is not null;
 
     public string Message => AvailableVersion is null ? string.Empty : $"Version {AvailableVersion.ToString(3)} is ready. Restart to update.";
 
     public async Task CheckAsync(CancellationToken ct = default)
     {
+        IsLoading = true;
         try
         {
             var latest = await source.GetLatestVersionAsync(ct).ConfigureAwait(true);
@@ -37,9 +46,24 @@ public sealed partial class UpdateService(IUpdateSource source, Version currentV
             // An unreachable feed must never get in the way of using the app.
             LogCheckFailed(logger, ex);
         }
+        finally
+        {
+            IsLoading = false;
+        }
     }
 
-    public Task ApplyAsync(CancellationToken ct = default) => source.ApplyAsync(ct);
+    public async Task ApplyAsync(CancellationToken ct = default)
+    {
+        IsBusy = true;
+        try
+        {
+            await source.ApplyAsync(ct).ConfigureAwait(true);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Update check failed")]
     private static partial void LogCheckFailed(ILogger logger, Exception exception);

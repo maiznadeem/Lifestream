@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Windows.Input;
 using Lifestream.Client.Api;
 using Lifestream.Client.Common;
+using Lifestream.Client.Shell;
 using Lifestream.Client.Tests.Fakes;
 
 namespace Lifestream.Client.Tests;
@@ -211,19 +212,41 @@ public sealed class ViewModelTests
     }
 
     [Fact]
-    public void EveryViewModel_ExposesBindableIsLoadingAndIsBusy()
+    public void EveryTypeWithChangeNotification_ThatExposesAsyncWork_ExposesBindableIsLoadingAndIsBusy()
     {
-        var types = ViewModelTypes();
-        Assert.NotEmpty(types);
-        foreach (var type in types)
+        // SHELL-11: not only ViewModelBase subclasses. Every non-command type in the Client assembly that implements
+        // INotifyPropertyChanged and offers async work (a Task-returning method or an AsyncRelayCommand) must have both.
+        var observable = typeof(ClientAssembly).Assembly.GetTypes()
+            .Where(t => t is { IsAbstract: false, IsInterface: false } && typeof(System.ComponentModel.INotifyPropertyChanged).IsAssignableFrom(t) && !typeof(ICommand).IsAssignableFrom(t))
+            .Where(t => !t.IsDefined(typeof(System.Runtime.CompilerServices.CompilerGeneratedAttribute), false))
+            .ToList();
+        Assert.Contains(typeof(Lifestream.Client.Lookups.RecordPickerViewModel), observable);
+        Assert.Contains(typeof(ViewModelBase), typeof(ViewModelBase).Assembly.GetTypes().Where(t => t.IsAbstract));
+
+        var missing = new List<string>();
+        var checkedTypes = 0;
+        foreach (var type in observable.Where(ExposesAsyncWork))
         {
-            var isLoading = type.GetProperty(nameof(ViewModelBase.IsLoading));
-            var isBusy = type.GetProperty(nameof(ViewModelBase.IsBusy));
-            Assert.NotNull(isLoading);
-            Assert.NotNull(isBusy);
-            Assert.True(typeof(System.ComponentModel.INotifyPropertyChanged).IsAssignableFrom(type), type.Name);
+            checkedTypes++;
+            foreach (var name in new[] { nameof(ViewModelBase.IsLoading), nameof(ViewModelBase.IsBusy) })
+            {
+                var property = type.GetProperty(name, BindingFlags.Public | BindingFlags.Instance);
+                if (property is null || property.PropertyType != typeof(bool))
+                {
+                    missing.Add($"{type.Name}.{name}");
+                }
+            }
         }
+
+        Assert.True(checkedTypes >= 5, $"only {checkedTypes} types were checked");
+        Assert.Empty(missing);
     }
+
+    private static bool ExposesAsyncWork(Type type) =>
+        type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+            .Any(m => typeof(Task).IsAssignableFrom(m.ReturnType) || m.ReturnType == typeof(ValueTask))
+        || typeof(ViewModelBase).IsAssignableFrom(type)
+        || type.GetProperties(BindingFlags.Public | BindingFlags.Instance).Any(p => p.PropertyType == typeof(AsyncRelayCommand));
 
     [Fact]
     public void IsBusy_RaisesPropertyChanged()
@@ -251,39 +274,117 @@ public sealed class ViewModelTests
     }
 
     [Fact]
-    public void EveryViewModelMember_ThatIsPublicAndWritable_RaisesPropertyChanged()
+    public void EveryViewModelMember_ThatIsPublicAndWritable_RaisesPropertyChanged_ForEveryPropertyType()
     {
-        // Each writable public property of a view model must announce changes: generated properties call OnPropertyChanged.
+        // SHELL-12: every public writable property of every type with change notification (any property type, none skipped)
+        // must announce its change. A property whose type cannot be given a sample value is a failure, not a skip.
+        using var rig = new Rig();
         var failures = new List<string>();
-        foreach (var type in ViewModelTypes().Where(t => t.GetConstructors().Any(c => c.GetParameters().Length == 0)))
+        var tested = 0;
+        var types = typeof(ClientAssembly).Assembly.GetTypes()
+            .Where(t => t is { IsAbstract: false, IsInterface: false } && typeof(System.ComponentModel.INotifyPropertyChanged).IsAssignableFrom(t) && !typeof(ICommand).IsAssignableFrom(t))
+            .Where(t => t.GetProperties(BindingFlags.Public | BindingFlags.Instance).Any(p => p.SetMethod is { IsPublic: true }));
+        foreach (var type in types)
         {
-            var vm = (ViewModelBase)Activator.CreateInstance(type)!;
-            foreach (var property in type.GetProperties().Where(p => p.SetMethod is { IsPublic: true } && p.GetIndexParameters().Length == 0 && p.DeclaringType == type))
+            var instance = Create(rig, type);
+            foreach (var property in type.GetProperties(BindingFlags.Public | BindingFlags.Instance).Where(p => p.SetMethod is { IsPublic: true } && p.GetIndexParameters().Length == 0 && !IsInitOnly(p)))
             {
-                var value = Sample(property.PropertyType);
-                if (value is null)
+                var current = property.GetValue(instance);
+                var value = Sample(property.PropertyType, current);
+                if (value is null || Equals(value, current))
                 {
+                    failures.Add($"{type.Name}.{property.Name}: no sample value of type {property.PropertyType.Name} that differs from the current one");
                     continue;
                 }
 
+                tested++;
                 var raised = false;
-                vm.PropertyChanged += (_, e) => raised |= e.PropertyName == property.Name;
-                property.SetValue(vm, value);
+                void Handler(object? s, System.ComponentModel.PropertyChangedEventArgs e) => raised |= e.PropertyName == property.Name;
+                instance.PropertyChanged += Handler;
+                property.SetValue(instance, value);
+                instance.PropertyChanged -= Handler;
                 if (!raised)
                 {
-                    failures.Add($"{type.Name}.{property.Name}");
+                    failures.Add($"{type.Name}.{property.Name} ({property.PropertyType.Name}) did not raise PropertyChanged");
                 }
             }
         }
 
+        Assert.True(tested >= 10, $"only {tested} properties were tested");
         Assert.Empty(failures);
     }
 
-    private static object? Sample(Type type) =>
-        type == typeof(string) ? "x" : type == typeof(bool) ? true : type == typeof(int) ? 5 : null;
+    private static System.ComponentModel.INotifyPropertyChanged Create(Rig rig, Type type)
+    {
+        if (type == typeof(ToastItem))
+        {
+            return rig.Get<IToastService>().Show(ToastKind.Info, "message");
+        }
 
-    private static List<Type> ViewModelTypes() =>
-        [.. typeof(ClientAssembly).Assembly.GetTypes().Where(t => typeof(ViewModelBase).IsAssignableFrom(t) && !t.IsAbstract)];
+        var registered = rig.Provider.GetService(type);
+        if (registered is not null)
+        {
+            return (System.ComponentModel.INotifyPropertyChanged)registered;
+        }
+
+        var pool = new object[] { RecordKind.Donor, NavigationCatalog.Default[0] };
+        var wanted = type.GetConstructors().SelectMany(c => c.GetParameters()).Select(p => p.ParameterType).ToHashSet();
+        return (System.ComponentModel.INotifyPropertyChanged)Microsoft.Extensions.DependencyInjection.ActivatorUtilities.CreateInstance(rig.Provider, type, [.. pool.Where(o => wanted.Contains(o.GetType()))]);
+    }
+
+    private static bool IsInitOnly(PropertyInfo property) =>
+        property.SetMethod!.ReturnParameter.GetRequiredCustomModifiers().Contains(typeof(System.Runtime.CompilerServices.IsExternalInit));
+
+    private static object? Sample(Type type, object? current)
+    {
+        var underlying = Nullable.GetUnderlyingType(type) ?? type;
+        if (underlying == typeof(string))
+        {
+            return current as string == "x" ? "y" : "x";
+        }
+
+        if (underlying == typeof(bool))
+        {
+            return !(current as bool? ?? false);
+        }
+
+        if (underlying.IsEnum)
+        {
+            return Enum.GetValues(underlying).Cast<object>().FirstOrDefault(v => !Equals(v, current));
+        }
+
+        if (underlying == typeof(TimeSpan))
+        {
+            return TimeSpan.FromSeconds(((current as TimeSpan?) ?? TimeSpan.Zero).TotalSeconds + 7);
+        }
+
+        if (underlying == typeof(DateOnly))
+        {
+            return new DateOnly(2022, 3, 5);
+        }
+
+        if (underlying == typeof(Version))
+        {
+            return new Version(9, 9, 9);
+        }
+
+        if (underlying == typeof(AsyncRelayCommand))
+        {
+            return new AsyncRelayCommand(_ => Task.CompletedTask);
+        }
+
+        if (underlying.IsPrimitive)
+        {
+            return Convert.ChangeType(Convert.ToDouble(current ?? 0, System.Globalization.CultureInfo.InvariantCulture) + 5, underlying, System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        if (underlying == typeof(Lifestream.Contracts.Lookups.RecordOption))
+        {
+            return new Lifestream.Contracts.Lookups.RecordOption(77, "Sample", null);
+        }
+
+        return null;
+    }
 
     [Fact]
     public void ThereIsExactlyOneCommandClass_InClient()

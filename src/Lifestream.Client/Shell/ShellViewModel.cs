@@ -162,12 +162,7 @@ public sealed partial class ShellViewModel : ViewModelBase
         ArgumentNullException.ThrowIfNull(destination);
         if (!destination.IsAllowedFor(_session.User))
         {
-            var navigated = await Navigation.NavigateTo<AccessDeniedViewModel>().ConfigureAwait(true);
-            if (navigated && Navigation.Current is AccessDeniedViewModel denied)
-            {
-                denied.BackToDashboardCommand = BackToDashboardCommand;
-            }
-
+            await Navigation.NavigateTo<AccessDeniedViewModel>(BackToDashboardCommand).ConfigureAwait(true);
             return;
         }
 
