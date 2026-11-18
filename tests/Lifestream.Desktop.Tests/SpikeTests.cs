@@ -14,6 +14,7 @@ namespace Lifestream.Desktop.Tests;
 /// The stack spike (plan Task 0): WPF-UI, LiveCharts2 and CommunityToolkit.Mvvm work together on .NET 11. It lives here, in the
 /// test project: the shipped app has no spike window or view model (SHELL-19).
 /// </summary>
+[Collection("Wpf")]
 public sealed partial class SpikeTests
 {
     private sealed partial class SpikeViewModel : ObservableObject
