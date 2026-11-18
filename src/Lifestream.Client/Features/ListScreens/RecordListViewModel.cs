@@ -60,7 +60,7 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
             OpenEditor(Detail);
             return Task.CompletedTask;
         }, () => Detail is not null && !IsEditing);
-        DeleteCommand = new AsyncRelayCommand(_ => DeleteSelectedAsync(), () => Detail is not null && !IsEditing);
+        DeleteCommand = new AsyncRelayCommand(_ => DeleteSelectedAsync(), () => Detail is { } record && !IsEditing && CanDelete(record));
         RetryDetailCommand = new AsyncRelayCommand(_ => LoadDetailAsync(_selectedId));
     }
 
@@ -174,6 +174,12 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
 
     /// <summary>Creates the record again with the values of a deleted one (Undo). The id changes, because the API has no restore route.</summary>
     protected abstract Task<ApiResult<TDetail>> RestoreAsync(TDetail deleted, CancellationToken ct);
+
+    /// <summary>Whether the selected record may be deleted at all (the signed-in admin's own staff record may not).</summary>
+    protected virtual bool CanDelete(TDetail detail) => true;
+
+    /// <summary>Whether a deleted record can be offered back with Undo; false for records that can't be rebuilt from what the list holds (staff).</summary>
+    protected virtual bool SupportsUndo => true;
 
     protected abstract RecordEditorViewModel CreateEditor(TDetail? existing);
 
@@ -358,7 +364,9 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
         var name = NameOfDetail(record);
         var confirmed = await Dialogs.ConfirmAsync(
             $"Delete {RecordType}?",
-            $"{Capitalise(RecordType)} '{name}' will be removed from the list. You can undo this for a few seconds afterwards.",
+            SupportsUndo
+                ? $"{Capitalise(RecordType)} '{name}' will be removed from the list. You can undo this for a few seconds afterwards."
+                : $"{Capitalise(RecordType)} '{name}' will be removed. This can't be undone.",
             $"Delete {RecordType}").ConfigureAwait(true);
         if (!confirmed)
         {
@@ -379,7 +387,7 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
         SelectedItem = null;
         ClearDetail();
         await RefreshAsync().ConfigureAwait(true);
-        Toasts.ShowForRecord(ToastKind.Success, Capitalise(RecordType), name, "deleted", "Undo", () => UndoAsync(record));
+        Toasts.ShowForRecord(ToastKind.Success, Capitalise(RecordType), name, "deleted", SupportsUndo ? "Undo" : null, SupportsUndo ? () => UndoAsync(record) : null);
     }
 
     private async Task UndoAsync(TDetail deleted)

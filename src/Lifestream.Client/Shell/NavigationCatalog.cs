@@ -36,16 +36,16 @@ public static class NavigationCatalog
     [
         new("Dashboard", "Overview", "", typeof(Features.Dashboard.DashboardViewModel)),
         new("Donors", "Donations", "", typeof(Features.Donors.DonorsViewModel)),
-        new("Appointments", "Donations", "", typeof(Placeholders.AppointmentsPlaceholderViewModel)),
+        new("Appointments", "Donations", "", typeof(Features.Appointments.AppointmentsViewModel)),
         new("Patients", "Transfusions", "", typeof(Features.Patients.PatientsViewModel)),
-        new("Requests", "Transfusions", "", typeof(Placeholders.RequestsPlaceholderViewModel)),
+        new("Requests", "Transfusions", "", typeof(Features.Requests.RequestsViewModel)),
         new("Stock", "Inventory", "", typeof(Features.Stock.StockViewModel)),
-        new("Receipts", "Inventory", "", typeof(Placeholders.ReceiptsPlaceholderViewModel)),
-        new("Staff", "Administration", "", typeof(Placeholders.StaffPlaceholderViewModel), Audience.AdminOrDemo),
+        new("Receipts", "Inventory", "", typeof(Features.Receipts.ReceiptsViewModel)),
+        new("Staff", "Administration", "", typeof(Features.Staff.StaffViewModel), Audience.AdminOrDemo),
     ];
 
     /// <summary>Where "Profile" in the account menu goes.</summary>
-    public static Type ProfileViewModelType { get; set; } = typeof(Placeholders.ProfilePlaceholderViewModel);
+    public static Type ProfileViewModelType { get; set; } = typeof(Features.Profile.ProfileViewModel);
 }
 
 /// <summary>Shown instead of a screen the user's role cannot use. The primary action goes back to the Dashboard; it never signs out (SHELL-22).</summary>

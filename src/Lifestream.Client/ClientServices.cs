@@ -4,9 +4,9 @@ using Lifestream.Client.Common;
 using Lifestream.Client.Navigation;
 using Lifestream.Client.Session;
 using Lifestream.Client.Shell;
-using Lifestream.Client.Shell.Placeholders;
 using Lifestream.Client.Updates;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Lifestream.Client;
 
@@ -32,6 +32,8 @@ public static class ClientServices
         services.AddSingleton<IToastService>(p => p.GetRequiredService<ToastService>());
         services.AddSingleton<DialogService>();
         services.AddSingleton<IDialogService>(p => p.GetRequiredService<DialogService>());
+        services.AddSingleton<FormDialogService>();
+        services.AddSingleton<IFormDialogService>(p => p.GetRequiredService<FormDialogService>());
         services.AddSingleton<IErrorReporter, ErrorReporter>();
         services.AddSingleton<IListViewStateStore, ListViewStateStore>();
         services.AddSingleton<INavigationService, NavigationService>();
@@ -48,12 +50,18 @@ public static class ClientServices
         services.AddTransient<Features.Patients.PatientsViewModel>();
         services.AddTransient<Features.Stock.StockViewModel>();
 
-        // Placeholder screens; the feature tasks register the real view models in their place.
-        services.AddTransient<AppointmentsPlaceholderViewModel>();
-        services.AddTransient<RequestsPlaceholderViewModel>();
-        services.AddTransient<ReceiptsPlaceholderViewModel>();
-        services.AddTransient<StaffPlaceholderViewModel>();
-        services.AddTransient<ProfilePlaceholderViewModel>();
+        // Feature screens (part 2).
+        services.AddTransient<Features.Appointments.AppointmentsViewModel>();
+        services.AddTransient<Features.Requests.RequestsViewModel>();
+        services.AddTransient<Features.Receipts.ReceiptsViewModel>();
+        services.AddTransient<Features.Staff.StaffViewModel>();
+        services.AddTransient<Features.Profile.ProfileViewModel>();
+        services.AddSingleton<Features.Receipts.IReceiptViewer, Features.Receipts.ReceiptViewerService>();
+        services.AddSingleton<Features.Profile.IChangePasswordPrompt, Features.Profile.ChangePasswordPrompt>();
+
+        // The window-system parts of printing and photo choosing; the Desktop project registers the real ones after this call, which win.
+        services.TryAddSingleton<Features.Receipts.IReceiptPrinter, Features.Receipts.NoReceiptPrinter>();
+        services.TryAddSingleton<Features.Profile.IPhotoPicker, Features.Profile.NoPhotoPicker>();
         return services;
     }
 }

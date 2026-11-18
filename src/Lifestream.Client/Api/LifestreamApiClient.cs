@@ -217,8 +217,8 @@ public sealed class LifestreamApiClient(HttpClient http, ISessionService session
     public Task<ApiResult> DeleteStaffAsync(int id, CancellationToken ct = default) =>
         SendAsync(HttpMethod.Delete, ApiRoutes.Path(ApiRoutes.StaffById, id), null, ct);
 
-    public Task<ApiResult<ResetPasswordResponse>> ResetStaffPasswordAsync(int id, CancellationToken ct = default) =>
-        SendAsync<ResetPasswordResponse>(HttpMethod.Post, ApiRoutes.Path(ApiRoutes.StaffResetPassword, id), null, ct: ct);
+    public Task<ApiResult> ResetStaffPasswordAsync(int id, ResetPasswordRequest request, CancellationToken ct = default) =>
+        SendAsync(HttpMethod.Post, ApiRoutes.Path(ApiRoutes.StaffResetPassword, id), request, ct);
 
     public Task<ApiResult<byte[]>> GetStaffPhotoAsync(int id, CancellationToken ct = default) =>
         GetBytesAsync(ApiRoutes.Path(ApiRoutes.StaffPhoto, id), ct);
@@ -234,7 +234,7 @@ public sealed class LifestreamApiClient(HttpClient http, ISessionService session
         SendAsync<ProfileResponse>(HttpMethod.Patch, ApiRoutes.Path(ApiRoutes.Me), request, ct: ct);
 
     public Task<ApiResult> ChangePasswordAsync(ChangePasswordRequest request, CancellationToken ct = default) =>
-        SendAsync(HttpMethod.Post, ApiRoutes.Path(ApiRoutes.MePassword), request, ct);
+        SendAsync(HttpMethod.Put, ApiRoutes.Path(ApiRoutes.MePassword), request, ct);
 
     public Task<ApiResult<byte[]>> GetMyPhotoAsync(CancellationToken ct = default) =>
         GetBytesAsync(ApiRoutes.Path(ApiRoutes.MePhoto), ct);
