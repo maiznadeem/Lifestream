@@ -1,0 +1,177 @@
+name: Release
+
+# On a version tag (v2.0.0): gate, publish the desktop app self-contained for win-x64 with ReadyToRun, scan it, pack the
+# Velopack installer and update packages, scan those, upload to a GitHub Release with SHA-256 checksums, and build the
+# Microsoft Store MSIX as an extra workflow artifact. Unsigned unless a signing certificate secret is configured.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  REPO_URL: https://github.com/MaizNadeem/Lifestream-WPF
+  VPK_VERSION: 1.2.161
+
+jobs:
+  gate:
+    name: gate (build whole solution, tests)
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      # The API tests need a Linux SQL Server container, which a Windows runner cannot start; they run in ci.yml on Ubuntu
+      # for the same commit. This gate builds everything and runs the tests that ship in the installer.
+      - name: Build (whole solution, warnings are errors)
+        run: dotnet build Lifestream.slnx -c Release
+
+      - name: Test (Client and Desktop, off-screen renders)
+        run: |
+          dotnet test tests/Lifestream.Client.Tests -c Release --no-build
+          dotnet test tests/Lifestream.Desktop.Tests -c Release --no-build
+
+  release:
+    name: release (publish, scan, pack, upload)
+    needs: gate
+    runs-on: windows-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write # create the release and upload assets with the built-in token
+    env:
+      GH_TOKEN: ${{ github.token }}
+      WINDOWS_SIGNING_PFX_BASE64: ${{ secrets.WINDOWS_SIGNING_PFX_BASE64 }}
+      WINDOWS_SIGNING_PFX_PASSWORD: ${{ secrets.WINDOWS_SIGNING_PFX_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Version from the tag
+        id: version
+        shell: pwsh
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          if ($tag -notmatch '^v(?<v>\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?)$') { throw "Tag '$tag' is not v<major>.<minor>.<patch>[-suffix]" }
+          "version=$($Matches.v)" >> $env:GITHUB_OUTPUT
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "prerelease=$($Matches.v.Contains('-'))".ToLower() >> $env:GITHUB_OUTPUT
+
+      - name: Publish the desktop app (self-contained, win-x64, ReadyToRun)
+        shell: pwsh
+        run: >
+          dotnet publish src/Lifestream.Desktop -c Release -r win-x64 --self-contained -p:PublishReadyToRun=true
+          -p:Version=${{ steps.version.outputs.version }} -o "$env:RUNNER_TEMP/publish" 2>&1 | Tee-Object "$env:RUNNER_TEMP/publish.log"
+
+      # Binaries, configs and the build log, before anything is packed or uploaded.
+      - name: Scan the publish folder and the publish log for credentials
+        shell: pwsh
+        run: ./tools/scan-artifacts.ps1 -Path "$env:RUNNER_TEMP/publish","$env:RUNNER_TEMP/publish.log" -ReportPath "$env:RUNNER_TEMP/scan-publish.json"
+
+      - name: Install the Velopack CLI
+        run: dotnet tool install --global vpk --version ${{ env.VPK_VERSION }}
+
+      - name: Prepare code signing (only when a certificate is configured)
+        id: signing
+        shell: pwsh
+        run: |
+          if ($env:WINDOWS_SIGNING_PFX_BASE64) {
+            $pfx = Join-Path $env:RUNNER_TEMP 'signing.pfx'
+            [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_SIGNING_PFX_BASE64))
+            "enabled=true" >> $env:GITHUB_OUTPUT
+            "pfx=$pfx" >> $env:GITHUB_OUTPUT
+          } else {
+            "enabled=false" >> $env:GITHUB_OUTPUT
+            Write-Host "::notice::No signing certificate configured: the release is unsigned and Windows SmartScreen will warn. SHA-256 checksums are published instead."
+          }
+
+      - name: Pack the installer and update packages
+        shell: pwsh
+        run: |
+          $vpkArgs = @('pack', '--packId', 'Lifestream', '--packVersion', '${{ steps.version.outputs.version }}',
+                    '--packDir', "$env:RUNNER_TEMP/publish", '--mainExe', 'Lifestream.exe', '--runtime', 'win-x64',
+                    '--outputDir', "$env:RUNNER_TEMP/Releases")
+          if ('${{ steps.signing.outputs.enabled }}' -eq 'true') {
+            $vpkArgs += @('--signParams', "/f `"${{ steps.signing.outputs.pfx }}`" /p `"$env:WINDOWS_SIGNING_PFX_PASSWORD`" /fd sha256 /tr http://timestamp.digicert.com /td sha256")
+          }
+          vpk @vpkArgs
+
+      - name: Verify the signature when signing is configured
+        if: steps.signing.outputs.enabled == 'true'
+        shell: pwsh
+        run: |
+          $bad = Get-ChildItem "$env:RUNNER_TEMP/Releases" -Filter '*Setup.exe' | Where-Object { (Get-AuthenticodeSignature $_.FullName).Status -ne 'Valid' }
+          if ($bad) { throw "Not validly signed: $($bad.Name -join ', ')" }
+
+      - name: Scan the installer and update packages for credentials
+        shell: pwsh
+        run: ./tools/scan-artifacts.ps1 -Path "$env:RUNNER_TEMP/Releases" -ReportPath "$env:RUNNER_TEMP/scan-releases.json"
+
+      - name: Checksums
+        shell: pwsh
+        run: |
+          $dir = "$env:RUNNER_TEMP/Releases"
+          Get-ChildItem $dir -File | Where-Object Name -ne 'SHA256SUMS.txt' | Sort-Object Name | ForEach-Object {
+            '{0} *{1}' -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower(), $_.Name
+          } | Set-Content -Path (Join-Path $dir 'SHA256SUMS.txt') -Encoding ascii
+          Get-Content (Join-Path $dir 'SHA256SUMS.txt')
+
+      - name: Upload to the GitHub Release (installer, update packages, update feed)
+        shell: pwsh
+        run: >
+          vpk upload github --repoUrl "$env:REPO_URL" --outputDir "$env:RUNNER_TEMP/Releases" --token "$env:GH_TOKEN"
+          --tag "${{ steps.version.outputs.tag }}" --releaseName "Lifestream ${{ steps.version.outputs.version }}"
+          --publish ${{ steps.version.outputs.prerelease == 'true' && '--pre' || '' }}
+
+      - name: Attach the checksum file
+        shell: pwsh
+        run: gh release upload "${{ steps.version.outputs.tag }}" "$env:RUNNER_TEMP/Releases/SHA256SUMS.txt" --clobber --repo MaizNadeem/Lifestream-WPF
+
+      # ---- Microsoft Store package: an extra workflow artifact, never a release asset (see packaging/store/README.md)
+      - name: Build the Store MSIX
+        id: msix
+        shell: pwsh
+        env:
+          STORE_IDENTITY_NAME: ${{ vars.STORE_IDENTITY_NAME }}
+          STORE_PUBLISHER: ${{ vars.STORE_PUBLISHER }}
+          STORE_PUBLISHER_DISPLAY_NAME: ${{ vars.STORE_PUBLISHER_DISPLAY_NAME }}
+        run: |
+          if (-not $env:STORE_IDENTITY_NAME -or -not $env:STORE_PUBLISHER -or -not $env:STORE_PUBLISHER_DISPLAY_NAME) {
+            Write-Host "::notice::Store identity variables are not set (STORE_IDENTITY_NAME, STORE_PUBLISHER, STORE_PUBLISHER_DISPLAY_NAME); skipping the MSIX. Owner steps: packaging/store/README.md."
+            "built=false" >> $env:GITHUB_OUTPUT
+            return
+          }
+          ./packaging/store/build-msix.ps1 -PublishDir "$env:RUNNER_TEMP/publish" -Version "${{ steps.version.outputs.version }}" -OutputDir "$env:RUNNER_TEMP/store"
+          ./tools/scan-artifacts.ps1 -Path "$env:RUNNER_TEMP/store"
+          "built=true" >> $env:GITHUB_OUTPUT
+
+      - name: Upload the Store MSIX artifact
+        if: steps.msix.outputs.built == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: store-msix
+          path: ${{ runner.temp }}/store/*.msix
+          if-no-files-found: error
+
+      - name: Upload the scan reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-scan-reports
+          path: |
+            ${{ runner.temp }}/scan-publish.json
+            ${{ runner.temp }}/scan-releases.json
+          if-no-files-found: ignore
