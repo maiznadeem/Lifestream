@@ -63,7 +63,7 @@
       <StackPanel x:Name="BusyLayer" Orientation="Horizontal" Visibility="Hidden" Margin="{TemplateBinding Padding}"
                   HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                   VerticalAlignment="{TemplateBinding VerticalContentAlignment}">
-        <Path x:Name="Spinner" Width="16" Height="16" Margin="0,0,8,0" Stretch="Uniform" StrokeThickness="2"
+        <Path x:Name="Spinner" Width="16" Height="16" Margin="{DynamicResource Inset.R8}" Stretch="Uniform" StrokeThickness="2"
               StrokeStartLineCap="Round" StrokeEndLineCap="Round" Stroke="{TemplateBinding Foreground}"
               Data="M 8,1 A 7,7 0 1 1 1,8" RenderTransformOrigin="0.5,0.5" VerticalAlignment="Center">
           <Path.RenderTransform>
@@ -74,7 +74,7 @@
                    Text="{TemplateBinding assist:ButtonAssist.BusyText}" />
       </StackPanel>
 
-      <Border x:Name="FocusRing" Margin="-4" CornerRadius="6" BorderThickness="{StaticResource Thickness.FocusRing}"
+      <Border x:Name="FocusRing" Margin="{DynamicResource Inset.Neg4}" CornerRadius="{DynamicResource Radius.6}" BorderThickness="{StaticResource Thickness.FocusRing}"
               BorderBrush="{DynamicResource Brush.FocusRing}" Visibility="Collapsed" IsHitTestVisible="False" />
     </Grid>
     <ControlTemplate.Triggers>
@@ -107,7 +107,7 @@
     <Setter Property="FontWeight" Value="Medium" />
     <Setter Property="MinHeight" Value="{StaticResource Height.Control}" />
     <Setter Property="MinWidth" Value="{StaticResource Height.Control}" />
-    <Setter Property="Padding" Value="16,0" />
+    <Setter Property="Padding" Value="{DynamicResource Inset.H16}" />
     <Setter Property="BorderThickness" Value="1" />
     <Setter Property="HorizontalContentAlignment" Value="Center" />
     <Setter Property="VerticalContentAlignment" Value="Center" />

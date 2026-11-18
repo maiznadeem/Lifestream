@@ -16,7 +16,7 @@
     <Setter Property="FontSize" Value="{StaticResource FontSize.Body}" />
     <Setter Property="Foreground" Value="{DynamicResource Brush.TextPrimary}" />
     <Setter Property="Height" Value="{StaticResource Height.Row}" />
-    <Setter Property="Margin" Value="8,0,8,2" />
+    <Setter Property="Margin" Value="{DynamicResource Inset.L8R8B2}" />
     <Setter Property="FocusVisualStyle" Value="{x:Null}" />
     <Setter Property="Cursor" Value="Hand" />
     <Setter Property="Template">
@@ -46,18 +46,18 @@
             <Border x:Name="Rest" CornerRadius="{StaticResource Radius.Control}" Background="Transparent" />
             <Border x:Name="HoverLayer" Opacity="0" CornerRadius="{StaticResource Radius.Control}" Background="{DynamicResource Brush.SurfaceHover}" />
             <Border x:Name="Selected" Opacity="0" CornerRadius="{StaticResource Radius.Control}" Background="{DynamicResource Brush.SurfaceSelected}" />
-            <Grid Margin="0,0,12,0">
+            <Grid Margin="{DynamicResource Inset.R12}">
               <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="4" />
                 <ColumnDefinition Width="40" />
                 <ColumnDefinition Width="*" />
               </Grid.ColumnDefinitions>
-              <Border x:Name="Bar" Width="4" Height="20" CornerRadius="2" Background="Transparent" VerticalAlignment="Center" />
+              <Border x:Name="Bar" Width="4" Height="20" CornerRadius="{DynamicResource Radius.2}" Background="Transparent" VerticalAlignment="Center" />
               <controls:IconText x:Name="Glyph" Grid.Column="1" Style="{StaticResource Text.Icon}" Text="{TemplateBinding Tag}" HorizontalAlignment="Center" VerticalAlignment="Center"
                          Foreground="{DynamicResource Brush.TextSecondary}" />
               <ContentPresenter Grid.Column="2" VerticalAlignment="Center" RecognizesAccessKey="False" />
             </Grid>
-            <Border x:Name="FocusRing" BorderThickness="{StaticResource Thickness.FocusRing}" BorderBrush="{DynamicResource Brush.FocusRing}" CornerRadius="6" Visibility="Collapsed"
+            <Border x:Name="FocusRing" BorderThickness="{StaticResource Thickness.FocusRing}" BorderBrush="{DynamicResource Brush.FocusRing}" CornerRadius="{DynamicResource Radius.6}" Visibility="Collapsed"
                     IsHitTestVisible="False" />
           </Grid>
           <ControlTemplate.Triggers>
@@ -76,7 +76,7 @@
   </Style>
 
   <Style x:Key="NavGroupHeader" TargetType="TextBlock" BasedOn="{StaticResource Text.Caption}">
-    <Setter Property="Margin" Value="20,16,12,4" />
+    <Setter Property="Margin" Value="{DynamicResource Inset.L20T16R12B4}" />
     <Setter Property="AutomationProperties.HeadingLevel" Value="Level2" />
   </Style>
 
@@ -86,7 +86,7 @@
     <Setter Property="FontSize" Value="{StaticResource FontSize.Body}" />
     <Setter Property="Foreground" Value="{DynamicResource Brush.TextPrimary}" />
     <Setter Property="MinHeight" Value="{StaticResource Height.Compact}" />
-    <Setter Property="Padding" Value="12,4" />
+    <Setter Property="Padding" Value="{DynamicResource Inset.H12V4}" />
     <Setter Property="FocusVisualStyle" Value="{x:Null}" />
     <Setter Property="Template">
       <Setter.Value>
@@ -112,7 +112,7 @@
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="ContextMenu">
-          <Border Background="{DynamicResource Brush.SurfaceRaised}" BorderBrush="{DynamicResource Brush.BorderInput}" BorderThickness="1" Padding="4"
+          <Border Background="{DynamicResource Brush.SurfaceRaised}" BorderBrush="{DynamicResource Brush.BorderInput}" BorderThickness="1" Padding="{DynamicResource Pad.4}"
                   CornerRadius="{StaticResource Radius.Card}" MinWidth="200">
             <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle" />
           </Border>
@@ -123,7 +123,7 @@
 
   <!-- The one account control: avatar, name and a chevron, at least 32 x 32 DIP. -->
   <Style x:Key="AccountButton" TargetType="Button" BasedOn="{StaticResource Button.Ghost}">
-    <Setter Property="Padding" Value="4,0,8,0" />
+    <Setter Property="Padding" Value="{DynamicResource Inset.L4R8}" />
     <Setter Property="MinHeight" Value="40" />
     <Setter Property="MinWidth" Value="40" />
   </Style>

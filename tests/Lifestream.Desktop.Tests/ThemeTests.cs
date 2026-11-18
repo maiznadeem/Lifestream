@@ -46,6 +46,72 @@ public sealed partial class ThemeTests
         }
     }
 
+    [GeneratedRegex(@"\b(Margin|Padding|CornerRadius|Spacing)=""(?!\{)([^""]*)""", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 5000)]
+    private static partial Regex SpacingAttribute();
+
+    [GeneratedRegex(@"<Setter\s+Property=""(Margin|Padding|CornerRadius|Spacing)""\s+Value=""(?!\{)([^""]*)""", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 5000)]
+    private static partial Regex SpacingSetter();
+
+    [GeneratedRegex(@"\b(Duration|KeyTime|BeginTime)=""(?!\{)([^""]*)""", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 5000)]
+    private static partial Regex MotionAttribute();
+
+    private static bool IsZero(string value) =>
+        value.Split([',', ' '], StringSplitOptions.RemoveEmptyEntries).All(p => double.TryParse(p, NumberStyles.Float, CultureInfo.InvariantCulture, out var n) && n == 0);
+
+    private static List<string> SpacingLiterals(string file, string text) =>
+    [
+        .. SpacingAttribute().Matches(text).Where(m => !IsZero(m.Groups[2].Value)).Select(m => $"{file}: {m.Value}"),
+        .. SpacingSetter().Matches(text).Where(m => !IsZero(m.Groups[2].Value)).Select(m => $"{file}: {m.Value}"),
+    ];
+
+    [Fact]
+    public void Theme_NoSpacingRadiusOrMotionLiteralsInViews_OnlyTokens()
+    {
+        // SHELL-25: every *.xaml outside Theme/, Features/ included, takes spacing, radii and motion from the tokens; 0 is the only literal.
+        var themeDir = Path.Combine(DesktopDir, "Theme") + Path.DirectorySeparatorChar;
+        var offenders = new List<string>();
+        var scanned = new List<string>();
+        foreach (var file in ViewXamlFiles().Where(f => !f.StartsWith(themeDir, StringComparison.OrdinalIgnoreCase)))
+        {
+            var text = File.ReadAllText(file);
+            var name = Path.GetRelativePath(DesktopDir, file);
+            scanned.Add(name);
+            offenders.AddRange(SpacingLiterals(name, text));
+            offenders.AddRange(MotionAttribute().Matches(text).Select(m => $"{name}: {m.Value}"));
+        }
+
+        Assert.True(scanned.Count >= 25, $"expected to scan every view and control, scanned {scanned.Count}");
+        Assert.Contains(scanned, f => f.StartsWith("Features" + Path.DirectorySeparatorChar, StringComparison.Ordinal)); // other builders' screens are scanned too
+        Assert.True(offenders.Count == 0, $"{offenders.Count} literal(s): " + string.Join("; ", offenders));
+    }
+
+    [Fact]
+    public void Theme_SpacingScanner_FindsPlantedLiterals_AndAllowsZeroAndTokens()
+    {
+        Assert.Single(SpacingLiterals("x", "<Border Margin=\"0,16,0,0\" />"));
+        Assert.Single(SpacingLiterals("x", "<Border CornerRadius=\"6\" />"));
+        Assert.Single(SpacingLiterals("x", "<StackPanel Spacing=\"8\" />"));
+        Assert.Single(SpacingLiterals("x", "<Setter Property=\"Padding\" Value=\"12,0\" />"));
+        Assert.Empty(SpacingLiterals("x", "<Border Margin=\"0\" Padding=\"0,0,0,0\" CornerRadius=\"{DynamicResource Radius.Card}\" />"));
+        Assert.Empty(SpacingLiterals("x", "<Setter Property=\"Margin\" Value=\"{StaticResource Gap.Field}\" />"));
+        Assert.Single(MotionAttribute().Matches("<DoubleAnimation Duration=\"0:0:0.2\" />"));
+        Assert.Empty(MotionAttribute().Matches("<DoubleAnimation Duration=\"{StaticResource Motion.Fast}\" />"));
+    }
+
+    [Fact]
+    public void Theme_MotionValuesLiveInTheTokenFile_NotInCode()
+    {
+        var tokens = File.ReadAllText(Path.Combine(DesktopDir, "Theme", "Tokens.xaml"));
+        foreach (var key in new[] { "Motion.Fast", "Motion.Standard", "Motion.Shimmer", "Motion.SpinnerTurn" })
+        {
+            Assert.Matches("<sys:Double x:Key=\"" + Regex.Escape(key) + @"\.Milliseconds"">\d+</sys:Double>", tokens);
+        }
+
+        // MotionSettings only applies the Windows "animation effects" switch; it holds no durations of its own.
+        var constants = typeof(MotionSettings).GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static).Where(f => f.IsLiteral).Select(f => f.Name);
+        Assert.Empty(constants);
+    }
+
     [Fact]
     public void Theme_HexLiteralScanner_FindsAPlantedLiteral()
     {
@@ -95,42 +161,67 @@ public sealed partial class ThemeTests
         return (Math.Max(l1, l2) + 0.05) / (Math.Min(l1, l2) + 0.05);
     }
 
-    /// <summary>Every text-on-surface and non-text pair the components use, with its bar (4.5 text, 3 non-text and large text).</summary>
-    public static TheoryData<string, string, double> Pairs() => new()
+    /// <summary>Tokens that are neither text nor a surface: scrims, shadows and decoration may fall below the bars.</summary>
+    private static readonly string[] ExemptFromContrast = ["Scrim", "Shadow", "BorderSubtle", "SkeletonBase", "SkeletonHighlight", "TextDisabled", "Primary", "PrimaryHover", "PrimaryPressed", "TextOnPrimary"];
+
+    /// <summary>The surfaces text can sit on: every Surface* token and the two danger-button fills, found by name in the token file.</summary>
+    private static List<string> SurfaceTokens() => [.. Colours().Keys.Where(k => k.StartsWith("Surface", StringComparison.Ordinal) || k is "DangerHover" or "DangerPressed")];
+
+    /// <summary>Every colour used as text, found by name in the token file: Text* (except the disabled and on-primary ones) and Status*.</summary>
+    private static List<string> TextTokens() => [.. Colours().Keys.Where(k => (k.StartsWith("Text", StringComparison.Ordinal) && k is not ("TextDisabled" or "TextOnPrimary")) || k.StartsWith("Status", StringComparison.Ordinal))];
+
+    /// <summary>Every text-on-surface pair (4.5:1), every non-text pair (3:1) and the white-on-primary pairs, computed from the token file rather than listed by hand.</summary>
+    public static TheoryData<string, string, double> Pairs()
     {
-        { "TextPrimary", "SurfaceCanvas", 4.5 },
-        { "TextPrimary", "SurfaceRaised", 4.5 },
-        { "TextPrimary", "SurfaceHover", 4.5 },
-        { "TextPrimary", "SurfacePressed", 4.5 },
-        { "TextPrimary", "SurfaceSelected", 4.5 },
-        { "TextSecondary", "SurfaceCanvas", 4.5 },
-        { "TextSecondary", "SurfaceRaised", 4.5 },
-        { "TextSecondary", "SurfaceHover", 4.5 },
-        { "TextMuted", "SurfaceRaised", 4.5 },
-        { "TextMuted", "SurfaceCanvas", 4.5 },
-        { "TextOnPrimary", "Primary", 4.5 },
-        { "TextOnPrimary", "PrimaryHover", 4.5 },
-        { "TextOnPrimary", "PrimaryPressed", 4.5 },
-        { "StatusDanger", "SurfaceRaised", 4.5 },
-        { "StatusDanger", "SurfaceCanvas", 4.5 },
-        { "StatusDanger", "DangerHover", 4.5 },
-        { "StatusDanger", "DangerPressed", 4.5 },
-        { "StatusSuccess", "SurfaceRaised", 4.5 },
-        { "StatusWarning", "SurfaceRaised", 4.5 },
-        { "StatusInfo", "SurfaceRaised", 4.5 },
-        { "StatusInfo", "SurfacePressed", 4.5 },
-        { "TextSecondary", "SurfacePressed", 4.5 },
-        { "FocusRing", "SurfaceCanvas", 3.0 },
-        { "FocusRing", "SurfaceRaised", 3.0 },
-        { "FocusRing", "Primary", 3.0 },
-        { "BorderInput", "SurfaceRaised", 3.0 },
-        { "BorderInput", "SurfaceCanvas", 3.0 },
-        { "Primary", "SurfaceCanvas", 3.0 },
-        { "StatusSuccess", "SurfaceSelected", 3.0 },
-        { "StatusInfo", "SurfaceSelected", 3.0 },
-        { "Chart1", "SurfaceRaised", 3.0 },
-        { "Chart2", "SurfaceRaised", 3.0 },
-    };
+        var data = new TheoryData<string, string, double>();
+        foreach (var (foreground, background, minimum) in ComputePairs())
+        {
+            data.Add(foreground, background, minimum);
+        }
+
+        return data;
+    }
+
+    private static List<(string Foreground, string Background, double Minimum)> ComputePairs()
+    {
+        var data = new List<(string, string, double)>();
+        var surfaces = SurfaceTokens();
+        foreach (var text in TextTokens())
+        {
+            foreach (var surface in surfaces)
+            {
+                data.Add((text, surface, 4.5));
+            }
+        }
+
+        foreach (var fill in new[] { "Primary", "PrimaryHover", "PrimaryPressed" })
+        {
+            data.Add(("TextOnPrimary", fill, 4.5));
+            data.Add(("FocusRing", fill, 3.0));
+        }
+
+        foreach (var nonText in new[] { "FocusRing", "BorderInput" })
+        {
+            foreach (var surface in surfaces)
+            {
+                data.Add((nonText, surface, 3.0));
+            }
+        }
+
+        foreach (var chart in Colours().Keys.Where(k => k.StartsWith("Chart", StringComparison.Ordinal)))
+        {
+            data.Add((chart, "SurfaceCanvas", 3.0));
+            data.Add((chart, "SurfaceRaised", 3.0));
+        }
+
+        foreach (var thumb in Colours().Keys.Where(k => k.StartsWith("ScrollThumb", StringComparison.Ordinal)))
+        {
+            data.Add((thumb, "ScrollTrack", 3.0));
+        }
+
+        data.Add(("Primary", "SurfaceCanvas", 3.0));
+        return data;
+    }
 
     [Theory]
     [MemberData(nameof(Pairs))]
@@ -139,6 +230,41 @@ public sealed partial class ThemeTests
         var ratio = Contrast(foreground, background);
 
         Assert.True(ratio >= minimum, $"{foreground} on {background} is {ratio:0.00}:1, needs {minimum}:1");
+    }
+
+    [Fact]
+    public void Tokens_ContrastPairs_AreEveryTextColourOnEverySurface_NotAHandPickedList()
+    {
+        var all = Colours().Keys.ToList();
+        var texts = TextTokens();
+        var surfaces = SurfaceTokens();
+
+        // Discovered by name: a token added to the file joins the pairs without touching this test.
+        Assert.Equal(7, surfaces.Count);
+        Assert.Contains("SurfacePressed", surfaces);
+        Assert.Contains("SurfaceSelected", surfaces);
+        Assert.True(texts.Count >= 7, string.Join(",", texts));
+        var covered = ComputePairs().Select(p => (p.Foreground, p.Background)).ToHashSet();
+        foreach (var text in texts)
+        {
+            foreach (var surface in surfaces)
+            {
+                Assert.Contains((text, surface), covered);
+            }
+        }
+
+        // Every colour token is either in a checked pair or explicitly exempt, so a new one cannot slip through unnoticed.
+        var inPairs = covered.SelectMany(c => new[] { c.Item1, c.Item2 }).ToHashSet();
+        var unchecked1 = all.Where(k => !inPairs.Contains(k) && !ExemptFromContrast.Contains(k)).ToList();
+        Assert.True(unchecked1.Count == 0, "colour tokens neither checked nor exempt: " + string.Join(", ", unchecked1));
+    }
+
+    [Fact]
+    public void Tokens_MutedTextOnThePressedSurface_MeetsTheBar_Regression()
+    {
+        // The verifier found muted text on the pressed surface at 4.05:1.
+        Assert.True(Contrast("TextMuted", "SurfacePressed") >= 4.5);
+        Assert.True(Contrast("TextMuted", "SurfaceSelected") >= 4.5);
     }
 
     [Fact]
@@ -224,15 +350,14 @@ public sealed partial class ThemeTests
     // Motion
 
     [Fact]
-    public void Motion_Tokens_AreWithinTheDesignedRanges_AndZeroWhenAnimationsAreOff()
+    public void Motion_Tokens_AreWithinTheDesignedRanges()
     {
-        Assert.InRange(MotionSettings.FastMilliseconds, 100, 150);
-        Assert.InRange(MotionSettings.StandardMilliseconds, 150, 200);
-        Assert.Equal(1200, MotionSettings.ShimmerMilliseconds);
+        var doc = XDocument.Load(Path.Combine(DesktopDir, "Theme", "Tokens.xaml"));
+        TimeSpan Token(string key) => TimeSpan.FromMilliseconds(double.Parse(doc.Descendants().Single(e => e.Name.LocalName == "Double" && (string?)e.Attribute(Xaml + "Key") == key + ".Milliseconds").Value, CultureInfo.InvariantCulture));
 
-        Assert.Equal(TimeSpan.FromMilliseconds(120), MotionSettings.Resolve(MotionSettings.FastMilliseconds, animationsEnabled: true).TimeSpan);
-        Assert.Equal(TimeSpan.Zero, MotionSettings.Resolve(MotionSettings.FastMilliseconds, animationsEnabled: false).TimeSpan);
-        Assert.Equal(TimeSpan.Zero, MotionSettings.Resolve(MotionSettings.ShimmerMilliseconds, animationsEnabled: false).TimeSpan);
+        Assert.InRange(Token("Motion.Fast").TotalMilliseconds, 100, 150);
+        Assert.InRange(Token("Motion.Standard").TotalMilliseconds, 150, 200);
+        Assert.Equal(1200, Token("Motion.Shimmer").TotalMilliseconds);
     }
 
     [Fact]

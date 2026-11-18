@@ -15,7 +15,7 @@
   <!-- Text -->
   <Color x:Key="Color.TextPrimary">#F4EFEF</Color>
   <Color x:Key="Color.TextSecondary">#C4B8BC</Color>
-  <Color x:Key="Color.TextMuted">#9C8F94</Color>
+  <Color x:Key="Color.TextMuted">#AA9DA2</Color>
   <Color x:Key="Color.TextDisabled">#7A6E73</Color>
   <Color x:Key="Color.TextOnPrimary">#FFFFFF</Color>
 
@@ -94,6 +94,65 @@
   <Thickness x:Key="Pad.32">32</Thickness>
   <Thickness x:Key="Pad.Page">24</Thickness>
   <Thickness x:Key="Gap.Field">0,0,0,16</Thickness>
+
+  <!-- Insets and radii used by the views: the name says which sides (H = left and right, V = top and bottom, L T R B = one side) -->
+  <Thickness x:Key="Inset.B12">0,0,0,12</Thickness>
+  <Thickness x:Key="Inset.B4">0,0,0,4</Thickness>
+  <Thickness x:Key="Inset.H12">12,0,12,0</Thickness>
+  <Thickness x:Key="Inset.H12V16">12,16,12,16</Thickness>
+  <Thickness x:Key="Inset.H12V4">12,4,12,4</Thickness>
+  <Thickness x:Key="Inset.H12V6">12,6,12,6</Thickness>
+  <Thickness x:Key="Inset.H12V8">12,8,12,8</Thickness>
+  <Thickness x:Key="Inset.H16">16,0,16,0</Thickness>
+  <Thickness x:Key="Inset.H16V12">16,12,16,12</Thickness>
+  <Thickness x:Key="Inset.H16V8">16,8,16,8</Thickness>
+  <Thickness x:Key="Inset.H8">8,0,8,0</Thickness>
+  <Thickness x:Key="Inset.H8V4">8,4,8,4</Thickness>
+  <Thickness x:Key="Inset.L12">12,0,0,0</Thickness>
+  <Thickness x:Key="Inset.L12R36">12,0,36,0</Thickness>
+  <Thickness x:Key="Inset.L12R4">12,0,4,0</Thickness>
+  <Thickness x:Key="Inset.L12R44">12,0,44,0</Thickness>
+  <Thickness x:Key="Inset.L12R48">12,0,48,0</Thickness>
+  <Thickness x:Key="Inset.L12T8R4B8">12,8,4,8</Thickness>
+  <Thickness x:Key="Inset.L13R36">13,0,36,0</Thickness>
+  <Thickness x:Key="Inset.L20T16R12B4">20,16,12,4</Thickness>
+  <Thickness x:Key="Inset.L20T16R20B8">20,16,20,8</Thickness>
+  <Thickness x:Key="Inset.L24R16">24,0,16,0</Thickness>
+  <Thickness x:Key="Inset.L24R24B24">24,0,24,24</Thickness>
+  <Thickness x:Key="Inset.L24R24B8">24,0,24,8</Thickness>
+  <Thickness x:Key="Inset.L24T16R24B24">24,16,24,24</Thickness>
+  <Thickness x:Key="Inset.L4R8">4,0,8,0</Thickness>
+  <Thickness x:Key="Inset.L8">8,0,0,0</Thickness>
+  <Thickness x:Key="Inset.L8R8B2">8,0,8,2</Thickness>
+  <Thickness x:Key="Inset.Neg3">-3</Thickness>
+  <Thickness x:Key="Inset.Neg4">-4</Thickness>
+  <Thickness x:Key="Inset.R12">0,0,12,0</Thickness>
+  <Thickness x:Key="Inset.R16">0,0,16,0</Thickness>
+  <Thickness x:Key="Inset.R4">0,0,4,0</Thickness>
+  <Thickness x:Key="Inset.R6">0,0,6,0</Thickness>
+  <Thickness x:Key="Inset.R8">0,0,8,0</Thickness>
+  <Thickness x:Key="Inset.T12">0,12,0,0</Thickness>
+  <Thickness x:Key="Inset.T16">0,16,0,0</Thickness>
+  <Thickness x:Key="Inset.T24">0,24,0,0</Thickness>
+  <Thickness x:Key="Inset.T2R10">0,2,10,0</Thickness>
+  <Thickness x:Key="Inset.T2R6">0,2,6,0</Thickness>
+  <Thickness x:Key="Inset.T4">0,4,0,0</Thickness>
+  <Thickness x:Key="Inset.T4B32">0,4,0,32</Thickness>
+  <Thickness x:Key="Inset.T4B8">0,4,0,8</Thickness>
+  <Thickness x:Key="Inset.T8">0,8,0,0</Thickness>
+  <Thickness x:Key="Inset.V12">0,12,0,12</Thickness>
+  <Thickness x:Key="Inset.V32">0,32,0,32</Thickness>
+  <CornerRadius x:Key="Radius.14">14</CornerRadius>
+  <CornerRadius x:Key="Radius.2">2</CornerRadius>
+  <CornerRadius x:Key="Radius.6">6</CornerRadius>
+  <CornerRadius x:Key="Radius.Left8">8,0,0,8</CornerRadius>
+
+  <!-- Motion, in milliseconds: 100 to 150 for hover and press, 150 to 200 for drawers and dialogs, a 1.2 s skeleton shimmer and a 0.9 s
+       spinner turn. Theme/Motion.xaml turns them into the Duration resources the templates use (all zero when Windows "Animation effects" is off). -->
+  <sys:Double x:Key="Motion.Fast.Milliseconds">120</sys:Double>
+  <sys:Double x:Key="Motion.Standard.Milliseconds">180</sys:Double>
+  <sys:Double x:Key="Motion.Shimmer.Milliseconds">1200</sys:Double>
+  <sys:Double x:Key="Motion.SpinnerTurn.Milliseconds">900</sys:Double>
 
   <!-- Sizes -->
   <sys:Double x:Key="Height.Compact">32</sys:Double>

@@ -11,10 +11,10 @@
   <Grid x:Name="Root">
     <!-- Search mode: a text box with a hint (the hint is a separate element, never the value) and a popup of matches. -->
     <Grid x:Name="SearchMode" Visibility="{Binding ShowSearch, Converter={StaticResource BoolToVisibility}}">
-      <TextBox x:Name="SearchBox" Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" Padding="12,0,36,0"
+      <TextBox x:Name="SearchBox" Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" Padding="{DynamicResource Inset.L12R36}"
                AutomationProperties.Name="{Binding Label}" PreviewKeyDown="OnSearchKeyDown" GotKeyboardFocus="OnSearchGotFocus" />
       <TextBlock x:Name="HintText" Style="{DynamicResource Text.Body}" Foreground="{DynamicResource Brush.TextMuted}" Text="Search by name or ID" IsHitTestVisible="False"
-                 VerticalAlignment="Center" Margin="13,0,36,0" TextWrapping="NoWrap">
+                 VerticalAlignment="Center" Margin="{DynamicResource Inset.L13R36}" TextWrapping="NoWrap">
         <TextBlock.Visibility>
           <Binding ElementName="SearchBox" Path="Text.Length">
             <Binding.Converter>
@@ -24,17 +24,17 @@
         </TextBlock.Visibility>
       </TextBlock>
       <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE721;" Foreground="{DynamicResource Brush.TextSecondary}" HorizontalAlignment="Right" VerticalAlignment="Center"
-                 Margin="0,0,12,0" IsHitTestVisible="False" />
+                 Margin="{DynamicResource Inset.R12}" IsHitTestVisible="False" />
       <Popup x:Name="ResultsPopup" IsOpen="{Binding IsOpen, Mode=TwoWay}" PlacementTarget="{Binding ElementName=SearchBox}" Placement="Bottom" StaysOpen="False"
              AllowsTransparency="True" Focusable="False">
-        <Border MinWidth="{Binding ActualWidth, ElementName=SearchBox}" MaxHeight="280" Margin="0,4,0,8" Background="{DynamicResource Brush.SurfaceRaised}"
+        <Border MinWidth="{Binding ActualWidth, ElementName=SearchBox}" MaxHeight="280" Margin="{DynamicResource Inset.T4B8}" Background="{DynamicResource Brush.SurfaceRaised}"
                 BorderBrush="{DynamicResource Brush.BorderInput}" BorderThickness="1" CornerRadius="{DynamicResource Radius.Control}">
           <Grid MinHeight="52">
             <ListBox x:Name="ResultsList" ItemsSource="{Binding Options}" BorderThickness="0" Background="Transparent" Focusable="True"
                      AutomationProperties.Name="Matches" PreviewKeyDown="OnListKeyDown" MouseDoubleClick="OnListChosen">
               <ListBox.ItemContainerStyle>
                 <Style TargetType="ListBoxItem">
-                  <Setter Property="Padding" Value="12,6" />
+                  <Setter Property="Padding" Value="{DynamicResource Inset.H12V6}" />
                   <Setter Property="FocusVisualStyle" Value="{x:Null}" />
                   <Setter Property="Template">
                     <Setter.Value>
@@ -66,15 +66,15 @@
                       <TextBlock Style="{DynamicResource Text.Body}" Text="{Binding Title}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
                       <TextBlock Style="{DynamicResource Text.Caption}" Text="{Binding Subtitle}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
                     </StackPanel>
-                    <TextBlock Grid.Column="1" Style="{DynamicResource Text.Caption}" Text="{Binding Id, StringFormat=#{0}}" VerticalAlignment="Center" Margin="12,0,0,0" />
+                    <TextBlock Grid.Column="1" Style="{DynamicResource Text.Caption}" Text="{Binding Id, StringFormat=#{0}}" VerticalAlignment="Center" Margin="{DynamicResource Inset.L12}" />
                   </Grid>
                 </DataTemplate>
               </ListBox.ItemTemplate>
             </ListBox>
             <controls:Skeleton Kind="Picker" Visibility="{Binding IsSearching, Converter={StaticResource BoolToVisibility}}" />
-            <TextBlock x:Name="NoMatches" Style="{DynamicResource Text.Body}" Foreground="{DynamicResource Brush.TextSecondary}" Text="No matches" Margin="12,16"
+            <TextBlock x:Name="NoMatches" Style="{DynamicResource Text.Body}" Foreground="{DynamicResource Brush.TextSecondary}" Text="No matches" Margin="{DynamicResource Inset.H12V16}"
                        Visibility="{Binding HasNoMatches, Converter={StaticResource BoolToVisibility}}" />
-            <TextBlock x:Name="SearchError" Style="{DynamicResource Text.Body}" Foreground="{DynamicResource Brush.StatusDanger}" Text="{Binding SearchError}" Margin="12,16"
+            <TextBlock x:Name="SearchError" Style="{DynamicResource Text.Body}" Foreground="{DynamicResource Brush.StatusDanger}" Text="{Binding SearchError}" Margin="{DynamicResource Inset.H12V16}"
                        Visibility="{Binding SearchError, Converter={StaticResource HasText}}" />
           </Grid>
         </Border>
@@ -84,7 +84,7 @@
     <!-- Chosen: a summary chip with Change. -->
     <Border x:Name="Chip" Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibility}}" MinHeight="{DynamicResource Height.Control}"
             Background="{DynamicResource Brush.SurfaceRaised}" BorderBrush="{DynamicResource Brush.BorderInput}" BorderThickness="1"
-            CornerRadius="{DynamicResource Radius.Control}" Padding="12,0,4,0">
+            CornerRadius="{DynamicResource Radius.Control}" Padding="{DynamicResource Inset.L12R4}">
       <Grid>
         <Grid.ColumnDefinitions>
           <ColumnDefinition Width="*" />
