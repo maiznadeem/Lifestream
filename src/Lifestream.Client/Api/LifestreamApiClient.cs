@@ -526,6 +526,7 @@ public sealed class LifestreamApiClient(HttpClient http, ISessionService session
         string? title = null;
         string? detail = null;
         string? text = null;
+        IReadOnlyDictionary<string, string[]>? errors = null;
         try
         {
             text = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
@@ -535,6 +536,7 @@ public sealed class LifestreamApiClient(HttpClient http, ISessionService session
             title = JsonText.Property(root, "title");
             detail = JsonText.Property(root, "detail");
             correlation ??= JsonText.Property(root, "correlationId");
+            errors = JsonText.Errors(root);
         }
         catch (JsonException)
         {
@@ -552,6 +554,6 @@ public sealed class LifestreamApiClient(HttpClient http, ISessionService session
             502 or 503 or 504 => ProblemCodes.DatabaseWaking,
             _ => "error",
         };
-        return new ApiProblem(status, code, title ?? response.ReasonPhrase ?? "The request failed.", correlation, detail);
+        return new ApiProblem(status, code, title ?? response.ReasonPhrase ?? "The request failed.", correlation, detail, errors);
     }
 }
