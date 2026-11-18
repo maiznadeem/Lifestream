@@ -1,0 +1,93 @@
+name: CI
+
+# The gate. A pull request cannot merge when any job here fails: the build treats every compiler, analyzer and
+# NuGet audit warning as an error, and every test must pass.
+on:
+  pull_request:
+  push:
+    branches: [master, overhaul]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  api:
+    name: api (build, analyzers, Domain/Data/Api/Client tests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      # SQL Server 2025 for the data and API tests. Started here instead of as a `services:` block so the SA password is
+      # generated per run and masked, never written into the repository.
+      - name: Start SQL Server 2025
+        run: |
+          password="Aa1!$(openssl rand -hex 16)"
+          echo "::add-mask::$password"
+          docker run -d --name lifestream-sql -p 1433:1433 \
+            -e ACCEPT_EULA=Y -e "MSSQL_SA_PASSWORD=$password" \
+            mcr.microsoft.com/mssql/server:2025-latest
+          echo "LIFESTREAM_TEST_SQL=Server=localhost,1433;User Id=sa;Password=$password;TrustServerCertificate=true" >> "$GITHUB_ENV"
+          for attempt in $(seq 1 60); do
+            if docker logs lifestream-sql 2>&1 | grep -q "SQL Server is now ready for client connections"; then
+              echo "SQL Server ready after $attempt checks"
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs lifestream-sql | tail -50
+          echo "SQL Server did not become ready" >&2
+          exit 1
+
+      - name: Build (warnings are errors)
+        run: >
+          dotnet build tests/Lifestream.Domain.Tests tests/Lifestream.Client.Tests tests/Lifestream.Api.Tests
+          -c Release
+
+      - name: Test
+        run: |
+          dotnet test tests/Lifestream.Domain.Tests -c Release --no-build
+          dotnet test tests/Lifestream.Client.Tests -c Release --no-build
+          dotnet test tests/Lifestream.Api.Tests -c Release --no-build
+
+  desktop:
+    name: desktop (build whole solution, Desktop tests)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      LIFESTREAM_CAPTURE_DIR: ${{ runner.temp }}\captures
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Gate, build (whole solution, warnings are errors)
+        run: dotnet build Lifestream.slnx -c Release
+
+      - name: Gate, Desktop and Client tests (off-screen renders, no window is shown)
+        run: |
+          dotnet test tests/Lifestream.Client.Tests -c Release --no-build
+          dotnet test tests/Lifestream.Desktop.Tests -c Release --no-build
+
+      - name: Upload render captures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-captures
+          path: ${{ runner.temp }}\captures
+          if-no-files-found: ignore

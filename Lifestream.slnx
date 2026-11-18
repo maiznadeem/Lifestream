@@ -1,0 +1,16 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Lifestream.Api/Lifestream.Api.csproj" />
+    <Project Path="src/Lifestream.Client/Lifestream.Client.csproj" />
+    <Project Path="src/Lifestream.Contracts/Lifestream.Contracts.csproj" />
+    <Project Path="src/Lifestream.Data/Lifestream.Data.csproj" />
+    <Project Path="src/Lifestream.Desktop/Lifestream.Desktop.csproj" />
+    <Project Path="src/Lifestream.Domain/Lifestream.Domain.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Lifestream.Api.Tests/Lifestream.Api.Tests.csproj" />
+    <Project Path="tests/Lifestream.Client.Tests/Lifestream.Client.Tests.csproj" />
+    <Project Path="tests/Lifestream.Desktop.Tests/Lifestream.Desktop.Tests.csproj" />
+    <Project Path="tests/Lifestream.Domain.Tests/Lifestream.Domain.Tests.csproj" />
+  </Folder>
+</Solution>

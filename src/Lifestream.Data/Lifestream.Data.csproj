@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- EF Core DbContext, entity configurations, migrations and data generators arrive in the db task. -->
+  <ItemGroup>
+    <ProjectReference Include="..\Lifestream.Domain\Lifestream.Domain.csproj" />
+  </ItemGroup>
+</Project>

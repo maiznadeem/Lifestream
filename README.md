@@ -1,93 +1,66 @@
-[![Lifestream Banner](https://raw.githubusercontent.com/MaizNadeem/Lifestream-WPF/master/Frontend%20Screenshots/Banner.png)](https://drive.google.com/file/d/1nIkd2B33SWNDmx52lNxCo_Q8FhJ9_icL/view?usp=sharing)
+# Lifestream 2.0
 
-# Lifestream - Blood Bank System
+Lifestream is a blood-bank management desktop app: donors, patients, appointments, blood requests, stock and receipts,
+with a dashboard. Version **2.0.0** is a ground-up rewrite of the original course project on .NET 11.
 
-## About
-Lifestream is a blood donation management system designed to streamline blood donation activities and facilitate efficient management of donor information, appointments, and requests. It provides a user-friendly interface for staff members to perform various tasks related to blood donations and ensures smooth coordination between donors, appointments, and blood requests.
+> Status: the solution skeleton is in place (contracts, build rules, CI, desktop stack spike). The database, API
+> endpoints and screens are being built on top of it; see `docs/superpowers/plans/2026-11-19-lifestream-overhaul.md`.
 
-## Documentation
-Detailed documentation for the Lifestream - Blood Bank System can be found [here](https://github.com/MaizNadeem/Lifestream-WPF/blob/master/Documentation.pdf).
+## Try it (demo login)
 
-## Installation Instructions
+Start the app and press **Try the demo**. No account, username or password is needed. The demo runs against synthetic
+data only (see [docs/data-retention.md](docs/data-retention.md)), is reset every day, and has a **Reset demo data**
+action. The first request after a quiet period can take up to a minute while the server wakes up.
 
-1. Download the installation file from latest releases or by clicking on the following link: [Download Lifestream](https://github.com/MaizNadeem/Lifestream-WPF/releases/latest)
-2. Extract the contents of the `Lifestream-1.0.0.zip` file to a desired location on your computer.
-3. Inside, you will find a file named `setup.exe`. Double-click on it to run the setup.
+## Architecture
 
-To uninstall Lifestream:
+```
+Lifestream.Desktop (WPF, .NET 11)  --HTTPS + JWT-->  Lifestream.Api (ASP.NET Core 11, Azure Container Apps)
+                                                          |
+                                                          v  EF Core, managed identity
+                                                     Azure SQL
+```
 
-1. Go to the "Apps & features" settings on your computer.
-2. In the list of installed applications, locate "Lifestream" and click uninstall.
+| Project | What it holds |
+|---|---|
+| `src/Lifestream.Domain` | Enums (blood types, genders, shifts, statuses) and rules (eligibility, shelf life). No dependencies. |
+| `src/Lifestream.Contracts` | Every request/response record, route, header and problem code shared by API and client. Frozen API surface. |
+| `src/Lifestream.Data` | EF Core context, migrations, demo and scale data generators. Used only by the API. |
+| `src/Lifestream.Api` | Minimal API, one folder per feature. The only code that talks to the database. |
+| `src/Lifestream.Client` | View models, services and the API client. No WPF, EF Core or SqlClient reference. |
+| `src/Lifestream.Desktop` | WPF views, design system, app host, Velopack updater. |
+| `tests/*` | One test project per source project, plus off-screen UI render tests. |
 
-## Screenshots
-Here are some screenshots of the Lifestream - Blood Bank System:
+The full design is in [docs/superpowers/specs](docs/superpowers/specs/2026-11-19-lifestream-overhaul-design.md); every
+requirement, with the wording each proof is written against, is in [docs/requirements.md](docs/requirements.md).
 
-### Login Screen
-<p align="center">
-  <img src="https://github.com/MaizNadeem/Lifestream-WPF/blob/master/Frontend%20Screenshots/Login.png?raw=true" alt="Login Screen" width="70%">
-</p>
+## Build and test
 
-### Main View
-<p align="center">
-  <img src="https://github.com/MaizNadeem/Lifestream-WPF/blob/master/Frontend%20Screenshots/Dashboard.png?raw=true" alt="Main View">
-</p>
+Requirements: the .NET SDK version in `global.json` (11.0.x) on Windows 10/11 for the desktop app. SQL Server is only
+needed for the data and API tests (set `LIFESTREAM_TEST_SQL`; it defaults to the local default instance with Windows
+authentication).
 
-### Other Views
-<p align="center">
-  <img src="https://github.com/MaizNadeem/Lifestream-WPF/blob/master/Frontend%20Screenshots/View%20Donors.png?raw=true" alt="Donor View">
-  <img src="https://github.com/MaizNadeem/Lifestream-WPF/blob/master/Frontend%20Screenshots/View%20Staff.png?raw=true" alt="Staff View">
-  <img src="https://github.com/MaizNadeem/Lifestream-WPF/blob/master/Frontend%20Screenshots/Staff's%20Info.png?raw=true" alt="Staff Info View">
-</p>
+```
+dotnet build Lifestream.slnx -c Release
+dotnet test  Lifestream.slnx -c Release --no-build
+```
 
-You can find all the application screenshots [here](https://github.com/MaizNadeem/Lifestream-WPF/tree/master/Frontend%20Screenshots).
+The build treats every warning as an error (nullable enabled, analyzers for unused code and usings and undisposed
+resources, NuGet audit at high severity). Package versions are pinned centrally in `Directory.Packages.props`.
 
-## Entity Relationship Diagram (ERD)
-![ERD](https://github.com/MaizNadeem/Lifestream-WPF/blob/master/Frontend%20Screenshots/ERD.png?raw=true)
+## Run
 
-The ERD illustrates the logical structure and relationships between the entities (tables) in the Lifestream - Blood Bank System's database.
+```
+dotnet run --project src/Lifestream.Api         # API on http://localhost:5080, GET /healthz
+dotnet run --project src/Lifestream.Desktop     # desktop client
+```
 
-## Technologies Used
-The Lifestream - Blood Bank System is built using the following technologies:
+## Releases
 
-- **.NET Framework 4.8:** The application is developed using the .NET Framework 4.8, which provides a robust and stable development platform for Windows applications.
-- **WPF (Windows Presentation Foundation):** The user interface is built using WPF, a powerful framework for creating desktop applications with rich UI and interactive user experiences.
-- **MSSQL Server / Azure Database:** The application uses either Microsoft SQL Server or Azure Database as the backend database to store and manage donor information, appointments, and requests.
-- **NuGet Packages:**
-  - **Lepoco:** Used for UI design and controls, providing a modern and visually appealing user interface.
-  - **LiveCharts.Wpf:** Used for creating interactive and dynamic charts to visualize blood donation data.
-  - **FontAwesome.Sharp:** Used to incorporate a wide range of icons and fonts into the application for enhanced visual elements.
+Installers are published on the [GitHub Releases page](../../releases) with SHA-256 checksums. They are not code-signed,
+so Windows SmartScreen shows a "More info, Run anyway" prompt; compare the checksum before running.
 
-## Deployment Instructions
-To deploy the Lifestream - Blood Bank System on your own Windows machine, follow these steps:
+## Repository rules
 
-1. Download the source code from the [GitHub repository](https://github.com/MaizNadeem/Lifestream-WPF).
-2. Ensure that you have the following dependencies installed:
-   - Visual Studio (2019 or later) with .NET Framework 4.8 development tools.
-   - .NET Framework 4.8 runtime.
-   - Azure Cloud account with Azure Data Studio (or SQL Server Management Studio - SSMS) installed.
-3. Open the project in Visual Studio.
-4. Update the connection string in the `RepositoryBase.cs` file located at `Lifestream-WPF/Repositories/RepositoryBase.cs`. Replace `"AZURE_CONNECTION_STRING"` with your own connection string.
-5. Build the solution to restore NuGet packages and compile the project.
-6. Publish the project using Visual Studio to create the executable files.
-7. Copy the published files to the target machine.
-8. Install .NET Framework 4.8 runtime on the target machine if it's not already installed.
-9. Run the executable file to start the Lifestream - Blood Bank System.
-
-## Database Setup
-To set up the database for the Lifestream - Blood Bank System, follow these steps:
-
-1. Download the [BloodBank.bacpac](https://github.com/MaizNadeem/Lifestream-WPF/blob/master/BloodBank.bacpac) file from the GitHub repository.
-2. Open Azure Data Studio or SQL Server Management Studio (SSMS).
-3. Connect to your Azure Database or local MSSQL Server.
-4. Right-click on the Databases folder and choose "Import Data-tier Application."
-5. Select the downloaded BloodBank.bacpac file and follow the import wizard to restore the database.
-6. Once the database is restored, update the connection string in the `RepositoryBase.cs` file of the application to point to the newly restored database.
-
-## Additional Notes
-- Make sure to have Visual Studio (2019 or later) and .NET Framework 4.8 installed on your machine before proceeding with the deployment.
-- The `BloodBank.bacpac` file contains the pre-configured database schema for the Lifestream - Blood Bank System. You can use it to quickly set up the database.
-- For any issues or questions, please refer to the project's [GitHub repository](https://github.com/MaizNadeem/Lifestream-WPF) or contact the project owner.
-
-<hr>
-
-<h4 align="center">© M. Maiz Nadeem</h4>
+Database dumps and backups (`*.bak`, `*.bacpac`, `*.rar`), certificates (`*.pfx`), `publish/` output and `.env` files
+are git-ignored and never committed. Documentation and generated screenshots live under `docs/`.
