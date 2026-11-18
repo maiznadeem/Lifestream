@@ -81,6 +81,9 @@ public sealed partial class StaffEditorViewModel : RecordEditorViewModel
     /// <summary>The username is chosen once, on the new-staff form.</summary>
     public bool CanEditUsername => IsNew;
 
+    /// <summary>The username box is read-only when editing.</summary>
+    public bool IsUsernameReadOnly => !IsNew;
+
     public string PasswordHint => $"At least {ResetPasswordDialogViewModel.MinLength} characters. The person can change it after signing in.";
 
     /// <summary>The latest date of birth the date field accepts: the youngest allowed age today.</summary>

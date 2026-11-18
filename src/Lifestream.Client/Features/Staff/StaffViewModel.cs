@@ -279,10 +279,13 @@ public sealed partial class StaffViewModel : SortedRecordListViewModel<StaffRow,
         }
     }
 
+    private bool _disposed;
+
     protected override void Dispose(bool disposing)
     {
-        if (disposing)
+        if (disposing && !_disposed)
         {
+            _disposed = true; // the navigation service and the service container may both dispose the screen
             _photoCts.Cancel();
             _photoCts.Dispose();
             _photoGate.Dispose();
