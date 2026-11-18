@@ -35,6 +35,12 @@
   <Color x:Key="Color.StatusWarning">#FFC861</Color>
   <Color x:Key="Color.StatusInfo">#8EC5FF</Color>
 
+  <!-- Scroll bars: a dark track and a thumb that is at least 3:1 against it -->
+  <Color x:Key="Color.ScrollTrack">#221B24</Color>
+  <Color x:Key="Color.ScrollThumb">#8C7F85</Color>
+  <Color x:Key="Color.ScrollThumbHover">#B0A3A9</Color>
+  <Color x:Key="Color.ScrollThumbPressed">#C4B8BC</Color>
+
   <!-- Skeleton (decorative) and charts -->
   <Color x:Key="Color.SkeletonBase">#2E2530</Color>
   <Color x:Key="Color.SkeletonHighlight">#3A303D</Color>
@@ -64,6 +70,10 @@
   <SolidColorBrush x:Key="Brush.StatusSuccess" Color="{StaticResource Color.StatusSuccess}" />
   <SolidColorBrush x:Key="Brush.StatusWarning" Color="{StaticResource Color.StatusWarning}" />
   <SolidColorBrush x:Key="Brush.StatusInfo" Color="{StaticResource Color.StatusInfo}" />
+  <SolidColorBrush x:Key="Brush.ScrollTrack" Color="{StaticResource Color.ScrollTrack}" />
+  <SolidColorBrush x:Key="Brush.ScrollThumb" Color="{StaticResource Color.ScrollThumb}" />
+  <SolidColorBrush x:Key="Brush.ScrollThumbHover" Color="{StaticResource Color.ScrollThumbHover}" />
+  <SolidColorBrush x:Key="Brush.ScrollThumbPressed" Color="{StaticResource Color.ScrollThumbPressed}" />
   <SolidColorBrush x:Key="Brush.SkeletonBase" Color="{StaticResource Color.SkeletonBase}" />
   <SolidColorBrush x:Key="Brush.Chart1" Color="{StaticResource Color.Chart1}" />
   <SolidColorBrush x:Key="Brush.Chart2" Color="{StaticResource Color.Chart2}" />
@@ -95,6 +105,8 @@
   <GridLength x:Key="Grid.Width.Sidebar">232</GridLength>
   <GridLength x:Key="Grid.Height.Caption">32</GridLength>
   <sys:Double x:Key="Size.FocusRing">2</sys:Double>
+  <sys:Double x:Key="Size.ScrollBar">12</sys:Double>
+  <Thickness x:Key="Pad.ScrollThumb">2</Thickness>
   <Thickness x:Key="Thickness.FocusRing">2</Thickness>
 
   <!-- Radii -->
