@@ -129,15 +129,18 @@ public abstract partial class RecordEditorViewModel : FormViewModelBase
         }
 
         var submit = PrepareSubmit();
-        ApiProblem? problem;
-        try
+        ApiProblem? problem = null;
+        await RunBusyAsync(async () =>
         {
-            problem = await Task.Run(() => submit(ct), ct).ConfigureAwait(true);
-        }
-        catch (ApiProblemException ex)
-        {
-            problem = ex.Problem;
-        }
+            try
+            {
+                problem = await Task.Run(() => submit(ct), ct).ConfigureAwait(true);
+            }
+            catch (ApiProblemException ex)
+            {
+                problem = ex.Problem;
+            }
+        }).ConfigureAwait(true);
 
         if (problem is null)
         {
@@ -198,7 +201,8 @@ public abstract partial class RecordEditorViewModel : FormViewModelBase
     private async Task ReloadAsync(CancellationToken ct)
     {
         var reload = PrepareReload();
-        var problem = await Task.Run(() => reload(ct), ct).ConfigureAwait(true);
+        ApiProblem? problem = null;
+        await RunBusyAsync(async () => problem = await Task.Run(() => reload(ct), ct).ConfigureAwait(true)).ConfigureAwait(true);
         if (problem is null)
         {
             ApplyReloaded();

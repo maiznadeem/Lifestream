@@ -1,6 +1,7 @@
 <UserControl x:Class="Lifestream.Desktop.Features.Dashboard.DashboardView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:feat="clr-namespace:Lifestream.Desktop.Features"
              xmlns:controls="clr-namespace:Lifestream.Desktop.Controls"
              xmlns:lvc="clr-namespace:LiveChartsCore.SkiaSharpView.WPF;assembly=LiveChartsCore.SkiaSharpView.WPF"
              xmlns:dash="clr-namespace:Lifestream.Client.Features.Dashboard;assembly=Lifestream.Client"
@@ -15,7 +16,7 @@
       <Setter Property="Foreground" Value="{DynamicResource Brush.TextPrimary}" />
       <Setter Property="BorderBrush" Value="{DynamicResource Brush.BorderSubtle}" />
       <Setter Property="BorderThickness" Value="1" />
-      <Setter Property="Padding" Value="12" />
+      <Setter Property="Padding" Value="{DynamicResource Pad.12}" />
       <Setter Property="HorizontalContentAlignment" Value="Stretch" />
       <Setter Property="VerticalContentAlignment" Value="Top" />
       <Setter Property="FocusVisualStyle" Value="{x:Null}" />
@@ -50,7 +51,7 @@
       <Setter Property="FontSize" Value="{DynamicResource FontSize.Body}" />
       <Setter Property="Foreground" Value="{DynamicResource Brush.TextPrimary}" />
       <Setter Property="VerticalAlignment" Value="Center" />
-      <Setter Property="Padding" Value="12,0" />
+      <Setter Property="feat:Edge.PadX" Value="{DynamicResource Space.12}" />
       <Setter Property="TextAlignment" Value="Right" />
       <Setter Property="HorizontalAlignment" Value="Stretch" />
     </Style>
@@ -66,7 +67,7 @@
 
   <controls:LoadSurface State="{Binding State}" SkeletonKind="Dashboard" ErrorMessage="{Binding ErrorMessage}" ErrorDetail="{Binding ErrorDetail}" RetryCommand="{Binding RetryCommand}">
     <ScrollViewer VerticalScrollBarVisibility="Auto" Focusable="False">
-      <StackPanel Margin="0,0,8,0">
+      <StackPanel feat:Edge.Right="{DynamicResource Space.8}">
         <!-- Cards: each opens the list it counts, filtered. -->
         <ItemsControl ItemsSource="{Binding Cards}" Focusable="False" AutomationProperties.Name="Summary cards">
           <ItemsControl.ItemsPanel>
@@ -76,14 +77,14 @@
           </ItemsControl.ItemsPanel>
           <ItemsControl.ItemTemplate>
             <DataTemplate DataType="{x:Type dash:KpiCard}">
-              <Button Style="{StaticResource Card.Button}" Margin="0,0,12,16" Command="{Binding DataContext.OpenCardCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+              <Button Style="{StaticResource Card.Button}" feat:Edge.Right="{DynamicResource Space.12}" feat:Edge.Bottom="{DynamicResource Space.16}" Command="{Binding DataContext.OpenCardCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                       CommandParameter="{Binding}" AutomationProperties.Name="{Binding AutomationName}" ToolTip="{Binding Hint}">
                 <StackPanel>
                   <StackPanel Orientation="Horizontal">
-                    <controls:IconText Style="{DynamicResource Text.Icon}" Text="{Binding Glyph}" Foreground="{DynamicResource Brush.TextSecondary}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                    <controls:IconText Style="{DynamicResource Text.Icon}" Text="{Binding Glyph}" Foreground="{DynamicResource Brush.TextSecondary}" VerticalAlignment="Center" feat:Edge.Right="{DynamicResource Space.8}" />
                     <TextBlock Style="{DynamicResource Text.Label}" Text="{Binding Title}" Foreground="{DynamicResource Brush.TextSecondary}" VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="104" MinHeight="36" />
                   </StackPanel>
-                  <TextBlock Style="{DynamicResource Text.Display}" Text="{Binding ValueText}" Margin="0,8,0,0" />
+                  <TextBlock Style="{DynamicResource Text.Display}" Text="{Binding ValueText}" feat:Edge.Top="{DynamicResource Space.8}" />
                 </StackPanel>
               </Button>
             </DataTemplate>
@@ -91,11 +92,11 @@
         </ItemsControl>
 
         <!-- Stock alert: every blood type below its threshold, with icon and words. -->
-        <Border Margin="0,0,16,16" Padding="16" Background="{DynamicResource Brush.SurfaceRaised}" BorderBrush="{DynamicResource Brush.StatusDanger}" BorderThickness="1"
+        <Border feat:Edge.Right="{DynamicResource Space.16}" feat:Edge.Bottom="{DynamicResource Space.16}" Padding="{DynamicResource Pad.16}" Background="{DynamicResource Brush.SurfaceRaised}" BorderBrush="{DynamicResource Brush.StatusDanger}" BorderThickness="1"
                 CornerRadius="{DynamicResource Radius.Card}" Visibility="{Binding HasLowStock, Converter={StaticResource BoolToVisibility}}" AutomationProperties.Name="Low stock alert">
           <StackPanel>
-            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-              <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE7BA;" Foreground="{DynamicResource Brush.StatusDanger}" VerticalAlignment="Center" Margin="0,0,8,0" />
+            <StackPanel Orientation="Horizontal" feat:Edge.Bottom="{DynamicResource Space.8}">
+              <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE7BA;" Foreground="{DynamicResource Brush.StatusDanger}" VerticalAlignment="Center" feat:Edge.Right="{DynamicResource Space.8}" />
               <TextBlock Style="{DynamicResource Text.Heading}" Text="Low stock" VerticalAlignment="Center" AutomationProperties.HeadingLevel="Level2" />
             </StackPanel>
             <ItemsControl ItemsSource="{Binding LowStock}" Focusable="False">
@@ -106,10 +107,10 @@
               </ItemsControl.ItemsPanel>
               <ItemsControl.ItemTemplate>
                 <DataTemplate DataType="{x:Type dash:LowStockAlert}">
-                  <Button Style="{DynamicResource Button.Secondary}" Margin="0,0,8,8" MinHeight="32" Command="{Binding DataContext.OpenLowStockCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                  <Button Style="{DynamicResource Button.Secondary}" feat:Edge.Right="{DynamicResource Space.8}" feat:Edge.Bottom="{DynamicResource Space.8}" MinHeight="32" Command="{Binding DataContext.OpenLowStockCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                           CommandParameter="{Binding}" AutomationProperties.Name="{Binding Text}">
                     <StackPanel Orientation="Horizontal">
-                      <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE783;" FontSize="12" Foreground="{DynamicResource Brush.StatusDanger}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                      <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE783;" FontSize="12" Foreground="{DynamicResource Brush.StatusDanger}" VerticalAlignment="Center" feat:Edge.Right="{DynamicResource Space.8}" />
                       <TextBlock Text="{Binding Text}" VerticalAlignment="Center" />
                     </StackPanel>
                   </Button>
@@ -120,16 +121,16 @@
         </Border>
 
         <!-- Period and blood types of the donations chart. -->
-        <Grid Margin="0,0,16,8">
+        <Grid feat:Edge.Right="{DynamicResource Space.16}" feat:Edge.Bottom="{DynamicResource Space.8}">
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="*" />
           </Grid.ColumnDefinitions>
-          <controls:FormField Label="Period" Margin="0,0,16,0">
+          <controls:FormField Label="Period" feat:Edge.Right="{DynamicResource Space.16}">
             <ComboBox x:Name="PeriodBox" ItemsSource="{Binding Periods}" SelectedItem="{Binding SelectedPeriod, Mode=TwoWay}" MinWidth="170" AutomationProperties.Name="Period" />
           </controls:FormField>
           <StackPanel Grid.Column="1">
-            <TextBlock Style="{DynamicResource Text.Label}" Text="Blood types in the chart" Margin="0,0,0,4" />
+            <TextBlock Style="{DynamicResource Text.Label}" Text="Blood types in the chart" feat:Edge.Bottom="{DynamicResource Space.4}" />
             <ItemsControl ItemsSource="{Binding BloodTypes}" Focusable="False" AutomationProperties.Name="Blood types in the chart">
               <ItemsControl.ItemsPanel>
                 <ItemsPanelTemplate>
@@ -138,7 +139,7 @@
               </ItemsControl.ItemsPanel>
               <ItemsControl.ItemTemplate>
                 <DataTemplate DataType="{x:Type dash:BloodTypeToggle}">
-                  <CheckBox Content="{Binding Display}" IsChecked="{Binding IsSelected, Mode=TwoWay}" Margin="0,0,16,0" MinHeight="32" AutomationProperties.Name="{Binding Display}" />
+                  <CheckBox Content="{Binding Display}" IsChecked="{Binding IsSelected, Mode=TwoWay}" feat:Edge.Right="{DynamicResource Space.16}" MinHeight="32" AutomationProperties.Name="{Binding Display}" />
                 </DataTemplate>
               </ItemsControl.ItemTemplate>
             </ItemsControl>
@@ -146,17 +147,17 @@
         </Grid>
 
         <!-- Charts, each with its table behind "View as table". -->
-        <controls:ChartFrame x:Name="DonationsFrame" Title="Donations and issues by month" Table="{Binding DonationsTable}" Height="340" Margin="0,0,16,16">
+        <controls:ChartFrame x:Name="DonationsFrame" Title="Donations and issues by month" Table="{Binding DonationsTable}" Height="340" feat:Edge.Right="{DynamicResource Space.16}" feat:Edge.Bottom="{DynamicResource Space.16}">
           <lvc:CartesianChart x:Name="DonationsChart" Background="{DynamicResource Brush.SurfaceRaised}" AutomationProperties.Name="Donations and issues by month" />
         </controls:ChartFrame>
-        <controls:ChartFrame x:Name="DemographicsFrame" Title="Donors by gender" Table="{Binding DemographicsTable}" Height="300" Margin="0,0,16,16">
+        <controls:ChartFrame x:Name="DemographicsFrame" Title="Donors by gender" Table="{Binding DemographicsTable}" Height="300" feat:Edge.Right="{DynamicResource Space.16}" feat:Edge.Bottom="{DynamicResource Space.16}">
           <lvc:CartesianChart x:Name="DemographicsChart" Background="{DynamicResource Brush.SurfaceRaised}" AutomationProperties.Name="Donors by gender" />
         </controls:ChartFrame>
 
         <!-- Totals for the chosen period: numbers right-aligned under right-aligned headers, rows separated by lines only. -->
-        <Border Margin="0,0,16,16" Padding="16" Background="{DynamicResource Brush.SurfaceRaised}" CornerRadius="{DynamicResource Radius.Card}">
+        <Border feat:Edge.Right="{DynamicResource Space.16}" feat:Edge.Bottom="{DynamicResource Space.16}" Padding="{DynamicResource Pad.16}" Background="{DynamicResource Brush.SurfaceRaised}" CornerRadius="{DynamicResource Radius.Card}">
           <StackPanel>
-            <TextBlock Style="{DynamicResource Text.Heading}" Text="Totals for the period" Margin="0,0,0,12" AutomationProperties.HeadingLevel="Level2" />
+            <TextBlock Style="{DynamicResource Text.Heading}" Text="Totals for the period" feat:Edge.Bottom="{DynamicResource Space.12}" AutomationProperties.HeadingLevel="Level2" />
             <controls:LifestreamDataGrid x:Name="TotalsGrid" ItemsSource="{Binding Totals}" SelectionMode="Single" Background="{DynamicResource Brush.SurfaceRaised}"
                                          AutomationProperties.Name="Totals by blood type" VerticalScrollBarVisibility="Disabled" PreviewMouseWheel="OnTotalsMouseWheel">
               <DataGrid.Columns>

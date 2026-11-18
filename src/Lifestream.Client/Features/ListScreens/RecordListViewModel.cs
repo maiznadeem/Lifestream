@@ -27,7 +27,7 @@ public enum StockFilter
 /// the selected record. The editor opens in a side drawer. Delete asks first, names the record, changes the list only after the API
 /// confirms, shows a plain message on failure and offers Undo after success (FEAT-06).
 /// </summary>
-public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListViewModel<TItem>, INavigationParameterReceiver
+public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListViewModel<TItem>, INavigationParameterReceiver, IDirtyTracking
     where TItem : class
     where TDetail : class
 {
@@ -141,6 +141,9 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
     public partial RecordEditorViewModel? Editor { get; set; }
 
     public bool IsEditing => Editor is not null;
+
+    /// <summary>True while the open editor has unsaved changes: leaving the screen then asks "Discard changes?" (SHELL-24).</summary>
+    public bool HasUnsavedChanges => Editor?.HasUnsavedChanges == true;
 
     public bool HasDetail => Detail is not null && DetailState == LoadState.Ready;
 

@@ -3,6 +3,7 @@ using Lifestream.Client.Common;
 using Lifestream.Client.Features.Donors;
 using Lifestream.Client.Features.ListScreens;
 using Lifestream.Client.Features.Patients;
+using Lifestream.Client.Features.Stock;
 using Lifestream.Client.Shell;
 using Lifestream.Client.Tests.Fakes;
 using Lifestream.Contracts;
@@ -295,5 +296,119 @@ public sealed class RecordScreenTests
         var vm = (DonorsViewModel)navigation.Current!;
         Assert.Equal("ann", vm.SearchText);
         Assert.Equal(BloodType.ONeg, vm.BloodTypeFilter.Value);
+    }
+
+    private sealed class AnsweringPresenter(bool answer) : IDialogPresenter
+    {
+        public List<string> Titles { get; } = [];
+
+        public Task<bool> ConfirmAsync(string title, string body, string dangerVerb)
+        {
+            Titles.Add(title);
+            return Task.FromResult(answer);
+        }
+
+        public Task ShowErrorAsync(string title, string message, string? details) => Task.CompletedTask;
+    }
+
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public async Task Navigation_AwayFromADonorsScreenWithADirtyEditor_AsksDiscardChanges_FakeApi(bool discard, bool staysOnDonors)
+    {
+        using var rig = new Rig();
+        rig.SignIn();
+        var presenter = new AnsweringPresenter(discard);
+        rig.Get<DialogService>().Presenter = presenter;
+        rig.Api.On("GetDonorsAsync", ApiResult<PagedResult<DonorListItem>>.Ok(Samples.DonorPage(2)));
+        rig.Api.On("GetStockAsync", ApiResult<IReadOnlyList<Contracts.Stock.StockItem>>.Ok(Samples.Stock()));
+        var navigation = rig.Get<Navigation.INavigationService>();
+        await navigation.NavigateTo<DonorsViewModel>();
+        var donors = (DonorsViewModel)navigation.Current!;
+        await donors.AddCommand.ExecuteAsync();
+
+        Assert.False(donors.HasUnsavedChanges); // an untouched form does not ask
+        ((DonorEditorViewModel)donors.Editor!).Name = "Typed something";
+        Assert.True(donors.HasUnsavedChanges);
+
+        var moved = await navigation.NavigateTo<StockViewModel>();
+
+        Assert.Equal(["Discard changes?"], presenter.Titles);
+        Assert.Equal(!staysOnDonors, moved);
+        Assert.Equal(staysOnDonors, ReferenceEquals(navigation.Current, donors));
+    }
+
+    [Fact]
+    public async Task Navigation_AwayFromACleanDonorsScreen_AsksNothing_FakeApi()
+    {
+        using var rig = new Rig();
+        rig.SignIn();
+        var presenter = new AnsweringPresenter(false);
+        rig.Get<DialogService>().Presenter = presenter;
+        rig.Api.On("GetDonorsAsync", ApiResult<PagedResult<DonorListItem>>.Ok(Samples.DonorPage(2)));
+        rig.Api.On("GetStockAsync", ApiResult<IReadOnlyList<Contracts.Stock.StockItem>>.Ok(Samples.Stock()));
+        var navigation = rig.Get<Navigation.INavigationService>();
+        await navigation.NavigateTo<DonorsViewModel>();
+
+        Assert.True(await navigation.NavigateTo<StockViewModel>());
+        Assert.Empty(presenter.Titles);
+    }
+
+    [Fact]
+    public async Task Editors_AndScreens_ExposeIsBusy_WhileWorking_AndIsLoadingWhileLoading_FakeApi()
+    {
+        var rig = new FeatureRig();
+        var form = rig.NewDonorForm();
+        form.Name = "Maria Lopez";
+        form.DateOfBirth = rig.Today.AddYears(-30);
+        form.Gender = Gender.Female;
+        form.BloodType = BloodType.APos;
+        form.Frequency = DonorFrequency.Regular;
+        var gate = new TaskCompletionSource();
+        rig.Fake.On("CreateDonorAsync", async _ =>
+        {
+            await gate.Task;
+            return ApiResult<DonorDetail>.Ok(Samples.Donor());
+        });
+        var busy = new List<bool>();
+        form.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(form.IsBusy))
+            {
+                busy.Add(form.IsBusy);
+            }
+        };
+
+        var save = form.SaveCommand.ExecuteAsync();
+        Assert.True(form.IsBusy);
+        gate.SetResult();
+        await save;
+        Assert.False(form.IsBusy);
+        Assert.Equal([true, false], busy);
+
+        var donors = rig.Donors();
+        rig.DonorsReturn(_ => Samples.DonorPage(1));
+        var load = donors.LoadAsync();
+        Assert.True(donors.IsLoading);
+        await load;
+        Assert.False(donors.IsLoading);
+    }
+
+    [Fact]
+    public async Task List_SortChange_RaisesChangeNotification_ForTheGridIndicator_FakeApi()
+    {
+        var rig = new FeatureRig();
+        rig.DonorsReturn(_ => Samples.DonorPage(3));
+        var vm = rig.Donors();
+        await vm.LoadAsync();
+        var raised = new List<string?>();
+        vm.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+
+        await vm.SortCommand.ExecuteAsync("-bloodType");
+
+        Assert.Equal("bloodType", vm.SortColumn);
+        Assert.True(vm.SortDescending);
+        Assert.Contains(nameof(vm.SortColumn), raised);
+        Assert.Contains(nameof(vm.SortDescending), raised);
     }
 }

@@ -24,18 +24,18 @@
         <ColumnDefinition Width="Auto" />
         <ColumnDefinition Width="*" />
       </Grid.ColumnDefinitions>
-      <controls:FormField Label="Show" Margin="0,0,16,0">
+      <controls:FormField Label="Show" feat:Edge.Right="{DynamicResource Space.16}">
         <ComboBox x:Name="ViewBox" ItemsSource="{Binding ViewOptions}" SelectedItem="{Binding ViewFilter, Mode=TwoWay}" DisplayMemberPath="Display" MinWidth="160"
                   AutomationProperties.Name="Show" />
       </controls:FormField>
-      <controls:FormField Grid.Column="1" Label="Blood type" Margin="0,0,16,0">
+      <controls:FormField Grid.Column="1" Label="Blood type" feat:Edge.Right="{DynamicResource Space.16}">
         <ComboBox x:Name="BloodTypeBox" ItemsSource="{Binding BloodTypeOptions}" SelectedItem="{Binding BloodTypeFilter, Mode=TwoWay}" DisplayMemberPath="Display" MinWidth="160"
                   AutomationProperties.Name="Blood type" />
       </controls:FormField>
-      <Button Grid.Column="2" Style="{DynamicResource Button.Ghost}" Content="Clear filters" Command="{Binding ClearFiltersCommand}" VerticalAlignment="Bottom" Margin="0,0,0,16"
+      <Button Grid.Column="2" Style="{DynamicResource Button.Ghost}" Content="Clear filters" Command="{Binding ClearFiltersCommand}" VerticalAlignment="Bottom" feat:Edge.Bottom="{DynamicResource Space.16}"
               Visibility="{Binding HasFilters, Converter={StaticResource BoolToVisibility}}" AutomationProperties.Name="Clear filters" />
       <TextBlock Grid.Column="3" Style="{DynamicResource Text.Body}" Text="{Binding SummaryText}" Foreground="{DynamicResource Brush.TextSecondary}" HorizontalAlignment="Right"
-                 VerticalAlignment="Bottom" Margin="0,0,0,24" AutomationProperties.LiveSetting="Polite" AutomationProperties.Name="Stock summary" />
+                 VerticalAlignment="Bottom" feat:Edge.Bottom="{DynamicResource Space.24}" AutomationProperties.LiveSetting="Polite" AutomationProperties.Name="Stock summary" />
     </Grid>
 
     <controls:LoadSurface Grid.Row="1" State="{Binding State}" SkeletonKind="StockTiles" ErrorMessage="{Binding ErrorMessage}" ErrorDetail="{Binding ErrorDetail}"
@@ -50,19 +50,19 @@
             </ItemsControl.ItemsPanel>
             <ItemsControl.ItemTemplate>
               <DataTemplate DataType="{x:Type stock:StockTile}">
-                <Border Width="208" Margin="0,0,16,16" Padding="16" Background="{DynamicResource Brush.SurfaceRaised}" BorderBrush="{DynamicResource Brush.BorderSubtle}"
+                <Border Width="208" feat:Edge.Right="{DynamicResource Space.16}" feat:Edge.Bottom="{DynamicResource Space.16}" Padding="{DynamicResource Pad.16}" Background="{DynamicResource Brush.SurfaceRaised}" BorderBrush="{DynamicResource Brush.BorderSubtle}"
                         BorderThickness="1" CornerRadius="{DynamicResource Radius.Card}" AutomationProperties.Name="{Binding AutomationName}">
                   <StackPanel>
                     <TextBlock Style="{DynamicResource Text.Display}" Text="{Binding BloodTypeText}" />
-                    <TextBlock Style="{DynamicResource Text.Body}" Text="{Binding AvailableText}" Margin="0,4,0,0" />
-                    <TextBlock Style="{DynamicResource Text.Caption}" Foreground="{DynamicResource Brush.TextSecondary}" Text="{Binding ExpiringText}" TextWrapping="Wrap" Margin="0,4,0,12" />
+                    <TextBlock Style="{DynamicResource Text.Body}" Text="{Binding AvailableText}" feat:Edge.Top="{DynamicResource Space.4}" />
+                    <TextBlock Style="{DynamicResource Text.Caption}" Foreground="{DynamicResource Brush.TextSecondary}" Text="{Binding ExpiringText}" TextWrapping="Wrap" feat:Edge.Top="{DynamicResource Space.4}" feat:Edge.Bottom="{DynamicResource Space.12}" />
                     <!-- Flag: a chip (icon, words, token colour) when low or expiring; a tick and "In stock" otherwise. -->
                     <controls:StatusChip x:Name="Flag" Status="{Binding Severity, Converter={StaticResource SeverityToStatus}}" Visibility="Collapsed" />
                     <StackPanel x:Name="InStock" Orientation="Horizontal">
-                      <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE73E;" FontSize="12" Foreground="{DynamicResource Brush.StatusSuccess}" VerticalAlignment="Center" Margin="0,0,6,0" />
+                      <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE73E;" FontSize="12" Foreground="{DynamicResource Brush.StatusSuccess}" VerticalAlignment="Center" feat:Edge.Right="{DynamicResource Space.8}" />
                       <TextBlock Style="{DynamicResource Text.Caption}" Text="In stock" VerticalAlignment="Center" />
                     </StackPanel>
-                    <TextBlock Style="{DynamicResource Text.Caption}" Foreground="{DynamicResource Brush.TextMuted}" Text="{Binding ThresholdText}" Margin="0,8,0,0" />
+                    <TextBlock Style="{DynamicResource Text.Caption}" Foreground="{DynamicResource Brush.TextMuted}" Text="{Binding ThresholdText}" feat:Edge.Top="{DynamicResource Space.8}" />
                   </StackPanel>
                 </Border>
                 <DataTemplate.Triggers>

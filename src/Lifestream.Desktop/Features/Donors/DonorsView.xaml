@@ -35,7 +35,7 @@
             <RowDefinition Height="Auto" />
           </Grid.RowDefinitions>
           <controls:LifestreamDataGrid x:Name="Grid" ItemsSource="{Binding Items}" SelectedItem="{Binding SelectedItem, Mode=TwoWay}" SortCommand="{Binding SortCommand}"
-                                       SortColumn="{Binding ViewState.SortColumn, Mode=OneWay}" SortDescending="{Binding ViewState.SortDescending, Mode=OneWay}"
+                                       SortColumn="{Binding SortColumn, Mode=OneWay}" SortDescending="{Binding SortDescending, Mode=OneWay}"
                                        AutomationProperties.Name="Donors">
             <DataGrid.Columns>
               <DataGridTextColumn Header="Name" Binding="{Binding Name}" SortMemberPath="name" Width="2*" />

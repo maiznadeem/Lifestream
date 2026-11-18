@@ -90,6 +90,11 @@ public abstract partial class PagedListViewModel<TItem> : ViewModelBase
 
     public AsyncRelayCommand RetryCommand { get; }
 
+    /// <summary>The sorted column's server name (for example "name"), or null; the grid shows its indicator from this (SHELL-39).</summary>
+    public string? SortColumn => ViewState.SortColumn;
+
+    public bool SortDescending => ViewState.SortDescending;
+
     /// <summary>What is in the search box. Typing sends the search after <see cref="ListDefaults.SearchDebounce"/>.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasActiveFilters), nameof(EmptyTitle), nameof(EmptyMessage), nameof(EmptyActionText), nameof(EmptyActionCommand))]
@@ -243,11 +248,14 @@ public abstract partial class PagedListViewModel<TItem> : ViewModelBase
         {
             ViewState.SortColumn = null;
             ViewState.SortDescending = false;
-            return;
+        }
+        else
+        {
+            ViewState.SortDescending = expression[0] == '-';
+            ViewState.SortColumn = ViewState.SortDescending ? expression[1..] : expression;
         }
 
-        ViewState.SortDescending = expression[0] == '-';
-        ViewState.SortColumn = ViewState.SortDescending ? expression[1..] : expression;
+        Raise(nameof(SortColumn), nameof(SortDescending));
     }
 
     partial void OnSearchTextChanged(string value)

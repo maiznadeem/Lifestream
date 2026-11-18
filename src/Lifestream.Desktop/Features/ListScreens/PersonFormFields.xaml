@@ -9,7 +9,7 @@
     <feat:FirstNonEmptyConverter x:Key="FirstNonEmpty" />
   </UserControl.Resources>
   <StackPanel HorizontalAlignment="Stretch">
-    <TextBlock Style="{DynamicResource Text.Heading}" Text="Personal details" Margin="0,0,0,12" AutomationProperties.HeadingLevel="Level2" />
+    <TextBlock Style="{DynamicResource Text.Heading}" Text="Personal details" feat:Edge.Bottom="{DynamicResource Space.12}" AutomationProperties.HeadingLevel="Level2" />
     <Grid>
       <Grid.ColumnDefinitions>
         <ColumnDefinition Width="*" MinWidth="150" />
@@ -43,7 +43,7 @@
                       Content="{Binding Extra, RelativeSource={RelativeSource AncestorType=UserControl}}" />
     </Grid>
 
-    <TextBlock Style="{DynamicResource Text.Heading}" Text="Contact" Margin="0,16,0,12" AutomationProperties.HeadingLevel="Level2" />
+    <TextBlock Style="{DynamicResource Text.Heading}" Text="Contact" feat:Edge.Top="{DynamicResource Space.16}" feat:Edge.Bottom="{DynamicResource Space.12}" AutomationProperties.HeadingLevel="Level2" />
     <Grid>
       <Grid.ColumnDefinitions>
         <ColumnDefinition Width="*" MinWidth="150" />

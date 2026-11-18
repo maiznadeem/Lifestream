@@ -303,4 +303,31 @@ public sealed class DashboardStockViewTests
         Assert.Equal(1, facts.none);
         Assert.Equal(1, facts.Calls);
     }
+
+    [Fact]
+    public void FeatureXaml_UsesThemeTokensForSpacingAndRadius_NoLiteralNumbers_NoHexColours()
+    {
+        var featuresDir = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "src", "Lifestream.Desktop", "Features"));
+        var literal = new System.Text.RegularExpressions.Regex(""""(?:Margin|Padding|CornerRadius|Spacing)\s*=\s*"([^"{]*)"|Property="(?:Margin|Padding|CornerRadius|Spacing)"\s+Value="([^"{]*)"""");
+        var hex = new System.Text.RegularExpressions.Regex("""#[0-9A-Fa-f]{6,8}""");
+        var offenders = new List<string>();
+        var files = Directory.EnumerateFiles(featuresDir, "*.xaml", SearchOption.AllDirectories).ToList();
+        foreach (var file in files)
+        {
+            var text = File.ReadAllText(file);
+            foreach (System.Text.RegularExpressions.Match match in literal.Matches(text))
+            {
+                var value = match.Groups[1].Success ? match.Groups[1].Value : match.Groups[2].Value;
+                if (value.Split(',', ' ').Any(part => part.Length > 0 && part != "0"))
+                {
+                    offenders.Add($"{Path.GetFileName(file)}: {match.Value}");
+                }
+            }
+
+            offenders.AddRange(hex.Matches(text).Select(m => $"{Path.GetFileName(file)}: {m.Value}"));
+        }
+
+        Assert.True(files.Count >= 11, $"scanned {files.Count} files");
+        Assert.True(offenders.Count == 0, string.Join("; ", offenders));
+    }
 }

@@ -9,7 +9,7 @@
     <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
     <feat:NullToVisibleConverter x:Key="NullToVisible" />
   </UserControl.Resources>
-  <Border Background="{DynamicResource Brush.SurfaceRaised}" CornerRadius="{DynamicResource Radius.Card}" Padding="16" AutomationProperties.Name="Details">
+  <Border Background="{DynamicResource Brush.SurfaceRaised}" CornerRadius="{DynamicResource Radius.Card}" Padding="{DynamicResource Pad.16}" AutomationProperties.Name="Details">
     <Grid>
       <!-- Nothing selected -->
       <TextBlock x:Name="NoSelection" Style="{DynamicResource Text.Body}" Foreground="{DynamicResource Brush.TextSecondary}" Text="{Binding NoSelectionText}" TextWrapping="Wrap"
@@ -23,17 +23,17 @@
           <RowDefinition Height="*" />
         </Grid.RowDefinitions>
         <TextBlock Style="{DynamicResource Text.Heading}" Text="{Binding DetailTitle}" TextWrapping="Wrap" AutomationProperties.HeadingLevel="Level2" />
-        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,12,0,16">
-          <Button x:Name="EditButton" Style="{DynamicResource Button.Secondary}" Command="{Binding EditCommand}" Margin="0,0,8,0" AutomationProperties.Name="Edit">
+        <StackPanel Grid.Row="1" Orientation="Horizontal" feat:Edge.Top="{DynamicResource Space.12}" feat:Edge.Bottom="{DynamicResource Space.16}">
+          <Button x:Name="EditButton" Style="{DynamicResource Button.Secondary}" Command="{Binding EditCommand}" feat:Edge.Right="{DynamicResource Space.8}" AutomationProperties.Name="Edit">
             <StackPanel Orientation="Horizontal">
-              <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE70F;" Margin="0,0,8,0" VerticalAlignment="Center" />
+              <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE70F;" feat:Edge.Right="{DynamicResource Space.8}" VerticalAlignment="Center" />
               <TextBlock Text="Edit" VerticalAlignment="Center" />
             </StackPanel>
           </Button>
           <Button x:Name="DeleteButton" Style="{DynamicResource Button.Danger}" Command="{Binding DeleteCommand}" AutomationProperties.Name="Delete"
                   controls:ButtonAssist.IsBusy="{Binding DeleteCommand.IsRunning}" controls:ButtonAssist.BusyText="Deleting...">
             <StackPanel Orientation="Horizontal">
-              <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE74D;" Margin="0,0,8,0" VerticalAlignment="Center" />
+              <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE74D;" feat:Edge.Right="{DynamicResource Space.8}" VerticalAlignment="Center" />
               <TextBlock Text="Delete" VerticalAlignment="Center" />
             </StackPanel>
           </Button>
@@ -42,7 +42,7 @@
           <ItemsControl ItemsSource="{Binding DetailFacts}" Focusable="False" AutomationProperties.Name="Record details">
             <ItemsControl.ItemTemplate>
               <DataTemplate>
-                <StackPanel Margin="0,0,0,12">
+                <StackPanel feat:Edge.Bottom="{DynamicResource Space.12}">
                   <TextBlock Style="{DynamicResource Text.Caption}" Text="{Binding Label}" Foreground="{DynamicResource Brush.TextMuted}" />
                   <TextBlock Style="{DynamicResource Text.Body}" Text="{Binding Value}" TextWrapping="Wrap" />
                 </StackPanel>
