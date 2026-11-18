@@ -12,12 +12,15 @@ public sealed record ListRow<T>(T Item, int Total);
 
 public static class Lists
 {
-    /// <summary>Page 1 or later; size defaults to 50 and is clamped to 200 so no list can ever return more.</summary>
+    /// <summary>The highest page a caller may ask for. With the largest page size (200) its offset stays far inside int range, so no page number can overflow the OFFSET arithmetic.</summary>
+    public const int MaxPage = 100_000;
+
+    /// <summary>Page 1..<see cref="MaxPage"/>; size defaults to 50 and is clamped to 200 so no list can ever return more.</summary>
     public static (int Page, int Size) Normalize(int page, int pageSize)
     {
-        if (page < 1)
+        if (page is < 1 or > MaxPage)
         {
-            throw ApiException.Validation("page", "must be 1 or more");
+            throw ApiException.Validation("page", $"must be between 1 and {MaxPage}");
         }
 
         var size = pageSize <= 0 ? Paging.DefaultPageSize : Math.Min(pageSize, Paging.MaxPageSize);
@@ -48,8 +51,8 @@ public static class Lists
     /// <summary>Day-based range: from the start of the "from" day to the end of the "to" day, whatever its time (half-open, never BETWEEN).</summary>
     public static (DateTime? Start, DateTime? EndExclusive) DayRange(DateTime? from, DateTime? to)
     {
-        var start = from is { } f ? Dates.Utc(f).Date : (DateTime?)null;
-        var end = to is { } t ? DateTime.SpecifyKind(Dates.Utc(t).Date.AddDays(1), DateTimeKind.Utc) : (DateTime?)null;
+        var start = from is { } f ? Dates.CheckWindow(Dates.Utc(f), "fromUtc").Date : (DateTime?)null;
+        var end = to is { } t ? DateTime.SpecifyKind(Dates.CheckWindow(Dates.Utc(t), "toUtc").Date.AddDays(1), DateTimeKind.Utc) : (DateTime?)null;
         if (start is { } s)
         {
             start = DateTime.SpecifyKind(s, DateTimeKind.Utc);

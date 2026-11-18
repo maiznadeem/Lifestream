@@ -35,8 +35,10 @@ public sealed class AdminRuleConcurrencyTests(ApiFixture fx) : IClassFixture<Api
 
             var admins = await AdminCountAsync();
             Assert.True(admins >= 1, $"round {round}: statuses {statuses[0]},{statuses[1]} left {admins} administrators");
-            Assert.Equal(1, statuses.Count(s => s == HttpStatusCode.NoContent));
-            Assert.Equal(1, statuses.Count(s => s == HttpStatusCode.Conflict));
+            Assert.True(statuses.Count(s => s == HttpStatusCode.NoContent) == 1, $"round {round}: statuses {statuses[0]},{statuses[1]}");
+
+            // The other request is refused by the rule (409) or, when it arrives after its caller was deleted, its session is already gone (401).
+            Assert.Single(statuses, s => s is HttpStatusCode.Conflict or HttpStatusCode.Unauthorized);
         }
     }
 
@@ -54,7 +56,10 @@ public sealed class AdminRuleConcurrencyTests(ApiFixture fx) : IClassFixture<Api
 
             var admins = await AdminCountAsync();
             Assert.True(admins >= 1, $"round {round}: statuses {statuses[0]},{statuses[1]} left {admins} administrators");
-            Assert.Equal(1, statuses.Count(s => s == HttpStatusCode.OK));
+            Assert.True(statuses.Count(s => s == HttpStatusCode.OK) == 1, $"round {round}: statuses {statuses[0]},{statuses[1]}");
+
+            // The other is refused by the rule (409) or, when its caller was just demoted, is no longer allowed on an admin route (403).
+            Assert.Single(statuses, s => s is HttpStatusCode.Conflict or HttpStatusCode.Forbidden);
         }
     }
 

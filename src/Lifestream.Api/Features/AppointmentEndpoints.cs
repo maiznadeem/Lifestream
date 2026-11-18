@@ -83,6 +83,8 @@ public static class AppointmentEndpoints
             throw ApiException.Validation("date", "is required (yyyy-MM-dd)");
         }
 
+        Dates.CheckWindow(day, "date");
+
         var slots = clinic.SlotsOn(day).ToList();
         if (slots.Count == 0)
         {
