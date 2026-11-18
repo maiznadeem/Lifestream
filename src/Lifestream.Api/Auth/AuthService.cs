@@ -18,7 +18,8 @@ public sealed class AuthService(
     TimeProvider time,
     IOptions<AuthSettings> authSettings,
     IOptions<JwtSettings> jwtSettings,
-    IOptions<DemoSettings> demoSettings)
+    IOptions<DemoSettings> demoSettings,
+    IMemoryCache cache)
 {
     // Verified against when the user does not exist, so an unknown name costs the same time as a wrong password.
     private static readonly Lazy<string> DummyHash = new(() => PasswordHashing.Hash("not-a-real-account"));
@@ -189,7 +190,7 @@ public sealed class AuthService(
         var now = Now;
         await db.RefreshTokens.Where(t => t.StaffId == staffId && t.RevokedAtUtc == null && t.FamilyId != except)
             .ExecuteUpdateAsync(t => t.SetProperty(x => x.RevokedAtUtc, now), ct);
-        RevocationCache.Clear();
+        RevocationCache.Clear(cache);
     }
 
     private TokenResponse DemoTokens(int staffId, string displayName, Guid family)
@@ -203,7 +204,7 @@ public sealed class AuthService(
         var now = Now;
         await db.RefreshTokens.Where(t => t.FamilyId == family && t.RevokedAtUtc == null)
             .ExecuteUpdateAsync(t => t.SetProperty(x => x.RevokedAtUtc, now), ct);
-        RevocationCache.Clear();
+        RevocationCache.Clear(cache);
     }
 
     private async Task<TokenResponse> IssueAsync(int staffId, string displayName, Role role, bool isDemo, CancellationToken ct, Guid? family = null)
@@ -236,13 +237,20 @@ public sealed record SessionState(bool Active, Role Role);
 /// </summary>
 public static class RevocationCache
 {
-    private static int _version;
+    private sealed class Version
+    {
+        public int Value;
+    }
 
-    public static void Clear() => Interlocked.Increment(ref _version);
+    // The version lives inside the cache it guards, so two hosts in one process (tests) never invalidate each other.
+    private static Version VersionOf(IMemoryCache cache) => cache.GetOrCreate("lifestream.session-version", _ => new Version())!;
+
+    /// <summary>Forgets every remembered session state (after a logout, role change, password reset or delete).</summary>
+    public static void Clear(IMemoryCache cache) => Interlocked.Increment(ref VersionOf(cache).Value);
 
     public static async Task<SessionState> StateAsync(IMemoryCache cache, LifestreamDbContext db, TimeProvider time, Guid family, CancellationToken ct)
     {
-        var key = (Volatile.Read(ref _version), family);
+        var key = (Volatile.Read(ref VersionOf(cache).Value), family);
         if (cache.TryGetValue(key, out SessionState? cached) && cached is not null)
         {
             return cached;

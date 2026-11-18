@@ -2,6 +2,7 @@ using Lifestream.Api.Infrastructure;
 using Lifestream.Data;
 using Lifestream.Data.Seed;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace Lifestream.Api.Auth;
 
@@ -10,7 +11,7 @@ namespace Lifestream.Api.Auth;
 /// happened (so older sessions get the X-Demo-Reset header) and the once-per-UTC-day reset guard. One replica, so memory is enough;
 /// the database application lock (inside <see cref="DemoReset"/>) still makes the reset safe if there were two.
 /// </summary>
-public sealed class DemoDirectory : IDisposable
+public sealed class DemoDirectory(IMemoryCache cache) : IDisposable
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
     private int _demoStaffId;
@@ -74,6 +75,6 @@ public sealed class DemoDirectory : IDisposable
     {
         LastResetUtc = now;
         Volatile.Write(ref _demoStaffId, 0);
-        RevocationCache.Clear();
+        RevocationCache.Clear(cache);
     }
 }

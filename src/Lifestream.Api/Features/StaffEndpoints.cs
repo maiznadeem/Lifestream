@@ -10,6 +10,7 @@ using Lifestream.Data.Security;
 using Lifestream.Domain;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace Lifestream.Api.Features;
 
@@ -239,7 +240,7 @@ public static class StaffEndpoints
         return TypedResults.Created($"{ApiRoutes.Prefix}/staff/{staff.Id}", ToDetail(staff));
     }
 
-    private static async Task<StaffDetail> UpdateAsync(int id, HttpRequest http, LifestreamDbContext db, CurrentUser user, TimeProvider time, CancellationToken ct)
+    private static async Task<StaffDetail> UpdateAsync(int id, HttpRequest http, LifestreamDbContext db, CurrentUser user, TimeProvider time, IMemoryCache cache, CancellationToken ct)
     {
         var r = await http.ReadBodyAsync<UpdateStaffRequest>(ct);
         var version = RowVersions.FromText(r.RowVersion);
@@ -348,11 +349,11 @@ public static class StaffEndpoints
         }, ct);
 
         // The role in the database is authoritative on every request; forget what was cached so a demotion applies at once.
-        RevocationCache.Clear();
+        RevocationCache.Clear(cache);
         return ToDetail(staff);
     }
 
-    private static async Task<NoContent> DeleteAsync(int id, LifestreamDbContext db, CurrentUser user, CancellationToken ct)
+    private static async Task<NoContent> DeleteAsync(int id, LifestreamDbContext db, CurrentUser user, IMemoryCache cache, CancellationToken ct)
     {
         await db.RunAsync(async token =>
         {
@@ -376,7 +377,7 @@ public static class StaffEndpoints
             await db.SaveChangesAsync(token);
             return true;
         }, ct);
-        RevocationCache.Clear();
+        RevocationCache.Clear(cache);
         return TypedResults.NoContent();
     }
 
