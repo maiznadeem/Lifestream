@@ -56,7 +56,7 @@ public static class ReceiptEndpoints
                 hits = hits.Where(h => h.CreatedAtUtc < hitEnd);
             }
 
-            var pageOfHits = HitSorts.Apply(hits, q.Sort).Skip((page - 1) * size).Take(size).ForSearch(q.Search);
+            var pageOfHits = HitSorts.Apply(hits, q.Sort).Skip((page - 1) * size).Take(size);
             pageOfReceipts = Sorts.Apply(db.Receipts.AsNoTracking().Join(pageOfHits, r => r.Id, h => h.Id, (r, _) => r), q.Sort);
             total = Lists.Total(hits);
             countWhenEmpty = () => hits.CountAsync(ct);

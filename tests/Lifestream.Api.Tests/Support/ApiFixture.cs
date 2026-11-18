@@ -89,14 +89,16 @@ public sealed class StatementCapture : DbCommandInterceptor
         return list;
     }
 
-    public override ValueTask<InterceptionResult<System.Data.Common.DbDataReader>> ReaderExecutingAsync(System.Data.Common.DbCommand command, CommandEventData eventData, InterceptionResult<System.Data.Common.DbDataReader> result, CancellationToken cancellationToken = default)
+    // Recorded after execution, so the text is what was really sent (interceptors that run later, such as the search-plan one, have
+    // already rewritten it).
+    public override ValueTask<System.Data.Common.DbDataReader> ReaderExecutedAsync(System.Data.Common.DbCommand command, CommandExecutedEventData eventData, System.Data.Common.DbDataReader result, CancellationToken cancellationToken = default)
     {
         if (Recording)
         {
             _statements.Enqueue((command.CommandText, [.. command.Parameters.Cast<SqlParameter>().Select(p => (SqlParameter)((ICloneable)p).Clone())]));
         }
 
-        return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
+        return base.ReaderExecutedAsync(command, eventData, result, cancellationToken);
     }
 }
 

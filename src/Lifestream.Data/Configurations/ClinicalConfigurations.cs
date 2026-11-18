@@ -81,8 +81,9 @@ internal sealed class ReceiptConfiguration : IEntityTypeConfiguration<Receipt>
         // An appointment can be receipted once. The filtered unique index also supports the foreign key.
         // The three foreign keys also carry date, kind and blood type: the receipt search finds, filters and orders its matches from them.
         b.HasIndex(x => x.AppointmentId).IsUnique().HasFilter("[AppointmentId] IS NOT NULL").IncludeProperties(x => new { x.CreatedAtUtc, x.Kind, x.BloodType });
-        b.HasIndex(x => x.RequestId).IncludeProperties(x => new { x.CreatedAtUtc, x.Kind, x.BloodType });
-        b.HasIndex(x => x.StaffId).IncludeProperties(x => new { x.CreatedAtUtc, x.Kind, x.BloodType });
+        b.HasIndex(x => x.RequestId).HasFilter("[RequestId] IS NOT NULL").IncludeProperties(x => new { x.CreatedAtUtc, x.Kind, x.BloodType });
+        b.HasIndex(x => x.StaffId); // the narrowest index of the table: COUNT(*) reads this
+        b.HasIndex(x => new { x.StaffId, x.CreatedAtUtc }).IncludeProperties(x => new { x.Kind, x.BloodType });
 
         // Receipt list (and the dashboard series, which reads kind, blood type, units and date): narrow, ordered, covering.
         b.HasIndex(x => new { x.Kind, x.CreatedAtUtc }).IncludeProperties(x => new { x.BloodType, x.Units, x.StaffId, x.AppointmentId, x.RequestId });

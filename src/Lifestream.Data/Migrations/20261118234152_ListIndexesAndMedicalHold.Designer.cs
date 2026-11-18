@@ -12,8 +12,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Lifestream.Data.Migrations;
 
 [DbContext(typeof(LifestreamDbContext))]
-[Migration("20261118230752_ListIndexesAndMedicalHold")]
-partial class _20261118230752_ListIndexesAndMedicalHold
+[Migration("20261118234152_ListIndexesAndMedicalHold")]
+partial class _20261118234152_ListIndexesAndMedicalHold
 {
     /// <inheritdoc />
     protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -440,21 +440,24 @@ partial class _20261118230752_ListIndexesAndMedicalHold
 
                 SqlServerIndexBuilderExtensions.IncludeProperties(index0, new[] { "Kind", "BloodType", "Units", "StaffId", "AppointmentId", "RequestId" });
 
-                var index1 = b.HasIndex("RequestId");
+                var index1 = b.HasIndex("RequestId")
+                    .HasFilter("[RequestId] IS NOT NULL");
 
                 SqlServerIndexBuilderExtensions.IncludeProperties(index1, new[] { "CreatedAtUtc", "Kind", "BloodType" });
 
-                var index2 = b.HasIndex("StaffId");
+                b.HasIndex("StaffId");
 
-                SqlServerIndexBuilderExtensions.IncludeProperties(index2, new[] { "CreatedAtUtc", "Kind", "BloodType" });
+                var index2 = b.HasIndex("BloodType", "CreatedAtUtc");
 
-                var index3 = b.HasIndex("BloodType", "CreatedAtUtc");
+                SqlServerIndexBuilderExtensions.IncludeProperties(index2, new[] { "Kind", "Units", "StaffId", "AppointmentId", "RequestId" });
 
-                SqlServerIndexBuilderExtensions.IncludeProperties(index3, new[] { "Kind", "Units", "StaffId", "AppointmentId", "RequestId" });
+                var index3 = b.HasIndex("Kind", "CreatedAtUtc");
 
-                var index4 = b.HasIndex("Kind", "CreatedAtUtc");
+                SqlServerIndexBuilderExtensions.IncludeProperties(index3, new[] { "BloodType", "Units", "StaffId", "AppointmentId", "RequestId" });
 
-                SqlServerIndexBuilderExtensions.IncludeProperties(index4, new[] { "BloodType", "Units", "StaffId", "AppointmentId", "RequestId" });
+                var index4 = b.HasIndex("StaffId", "CreatedAtUtc");
+
+                SqlServerIndexBuilderExtensions.IncludeProperties(index4, new[] { "Kind", "BloodType" });
 
                 var index5 = b.HasIndex("Kind", "BloodType", "CreatedAtUtc");
 

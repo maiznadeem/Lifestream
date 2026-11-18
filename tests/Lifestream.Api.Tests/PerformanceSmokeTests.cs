@@ -138,6 +138,7 @@ internal static class PerfShapes
 
 /// <summary>Warm-API timings against the 100x dataset (27,000 receipts, 30,000 appointments, 15,000 requests, 3,500 donors/patients). Category=Perf: run locally, reported (not gated) in CI.</summary>
 [Trait("Category", "Perf")]
+[Collection("Scale datasets: one class at a time")] // the 100x databases load 100,000 rows and the perf tests time requests, so they do not overlap
 public sealed class PerformanceSmokeTests(ScaleApiFixture fx) : IClassFixture<ScaleApiFixture>
 {
     [Fact]
@@ -152,6 +153,7 @@ public sealed class PerformanceSmokeTests(ScaleApiFixture fx) : IClassFixture<Sc
 /// appointments, 150 requests, 40 donors).
 /// </summary>
 [Trait("Category", "Perf")]
+[Collection("Scale datasets: one class at a time")] // the 100x databases load 100,000 rows and the perf tests time requests, so they do not overlap
 public sealed class PerformanceAtDemoSizeTests(DemoSizeApiFixture fx) : IClassFixture<DemoSizeApiFixture>
 {
     [Fact]

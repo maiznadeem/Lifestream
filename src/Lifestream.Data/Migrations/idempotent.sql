@@ -742,7 +742,7 @@ GO
 BEGIN TRANSACTION;
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
     DROP INDEX [IX_Request_BloodType_PlacedAtUtc] ON [Request];
@@ -750,7 +750,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
     DROP INDEX [IX_Request_BloodType_RequiredBy] ON [Request];
@@ -758,7 +758,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
     DROP INDEX [IX_Request_BloodType_Status_PlacedAtUtc] ON [Request];
@@ -766,7 +766,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
     DROP INDEX [IX_Request_PatientId_PlacedAtUtc] ON [Request];
@@ -774,7 +774,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
     DROP INDEX [IX_Request_PlacedAtUtc] ON [Request];
@@ -782,7 +782,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
     DROP INDEX [IX_Request_RequiredBy] ON [Request];
@@ -790,7 +790,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
     DROP INDEX [IX_Request_Status_PlacedAtUtc] ON [Request];
@@ -798,7 +798,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
     DROP INDEX [IX_Request_Status_RequiredBy] ON [Request];
@@ -806,7 +806,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
     DROP INDEX [IX_Receipt_AppointmentId] ON [Receipt];
@@ -814,7 +814,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
     DROP INDEX [IX_Receipt_BloodType_CreatedAtUtc] ON [Receipt];
@@ -822,7 +822,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
     DROP INDEX [IX_Receipt_CreatedAtUtc] ON [Receipt];
@@ -830,7 +830,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
     DROP INDEX [IX_Receipt_Kind_CreatedAtUtc] ON [Receipt];
@@ -838,7 +838,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
     DROP INDEX [IX_Receipt_RequestId] ON [Receipt];
@@ -846,15 +846,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
-)
-BEGIN
-    DROP INDEX [IX_Receipt_StaffId] ON [Receipt];
-END;
-
-IF NOT EXISTS (
-    SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
     DROP INDEX [IX_Patient_BloodType_Name] ON [Patient];
@@ -862,7 +854,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
     DROP INDEX [IX_Patient_Name] ON [Patient];
@@ -870,7 +862,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
     DROP INDEX [IX_Donor_BloodType_Name] ON [Donor];
@@ -878,7 +870,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
     DROP INDEX [IX_Donor_LastDonated] ON [Donor];
@@ -886,7 +878,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
     DROP INDEX [IX_Donor_Name] ON [Donor];
@@ -894,7 +886,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
     DROP INDEX [IX_Appointment_DonorBloodType_PlacedAtUtc] ON [Appointment];
@@ -902,7 +894,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
     DROP INDEX [IX_Appointment_DonorBloodType_SlotStartUtc] ON [Appointment];
@@ -910,7 +902,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
     DROP INDEX [IX_Appointment_PlacedAtUtc] ON [Appointment];
@@ -918,7 +910,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
     DROP INDEX [IX_Appointment_SlotStartUtc] ON [Appointment];
@@ -926,7 +918,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
     DROP INDEX [IX_Appointment_Status_PlacedAtUtc] ON [Appointment];
@@ -934,7 +926,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
     DROP INDEX [IX_Appointment_Status_SlotStartUtc] ON [Appointment];
@@ -942,7 +934,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
     ALTER TABLE [Donor] ADD [MedicalHold] bit NOT NULL DEFAULT CAST(0 AS bit);
@@ -950,7 +942,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
     CREATE INDEX [IX_Request_BloodType_PlacedAtUtc] ON [Request] ([BloodType], [PlacedAtUtc]) INCLUDE ([PatientId], [Units], [RequiredBy], [Status]);
@@ -958,7 +950,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
     CREATE INDEX [IX_Request_BloodType_RequiredBy] ON [Request] ([BloodType], [RequiredBy]) INCLUDE ([PatientId], [Units], [PlacedAtUtc], [Status]);
@@ -966,7 +958,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
     CREATE INDEX [IX_Request_BloodType_Status_PlacedAtUtc] ON [Request] ([BloodType], [Status], [PlacedAtUtc]) INCLUDE ([PatientId], [Units], [RequiredBy]);
@@ -974,7 +966,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
     CREATE INDEX [IX_Request_BloodType_Status_RequiredBy] ON [Request] ([BloodType], [Status], [RequiredBy]) INCLUDE ([PatientId], [Units], [PlacedAtUtc]);
@@ -982,7 +974,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
     CREATE INDEX [IX_Request_PatientId] ON [Request] ([PatientId]);
@@ -990,7 +982,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
     CREATE INDEX [IX_Request_PatientId_PlacedAtUtc] ON [Request] ([PatientId], [PlacedAtUtc]) INCLUDE ([RequiredBy], [Status], [BloodType], [Units]);
@@ -998,7 +990,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
     CREATE INDEX [IX_Request_PlacedAtUtc] ON [Request] ([PlacedAtUtc]) INCLUDE ([PatientId], [BloodType], [Units], [RequiredBy], [Status]);
@@ -1006,7 +998,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
     CREATE INDEX [IX_Request_RequiredBy] ON [Request] ([RequiredBy]) INCLUDE ([PatientId], [BloodType], [Units], [PlacedAtUtc], [Status]);
@@ -1014,7 +1006,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
     CREATE INDEX [IX_Request_Status_PlacedAtUtc] ON [Request] ([Status], [PlacedAtUtc]) INCLUDE ([PatientId], [BloodType], [Units], [RequiredBy]);
@@ -1022,7 +1014,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
     CREATE INDEX [IX_Request_Status_RequiredBy] ON [Request] ([Status], [RequiredBy]) INCLUDE ([PatientId], [BloodType], [Units], [PlacedAtUtc]);
@@ -1030,7 +1022,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
     EXEC(N'CREATE UNIQUE INDEX [IX_Receipt_AppointmentId] ON [Receipt] ([AppointmentId]) INCLUDE ([CreatedAtUtc], [Kind], [BloodType]) WHERE [AppointmentId] IS NOT NULL');
@@ -1038,7 +1030,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
     CREATE INDEX [IX_Receipt_BloodType_CreatedAtUtc] ON [Receipt] ([BloodType], [CreatedAtUtc]) INCLUDE ([Kind], [Units], [StaffId], [AppointmentId], [RequestId]);
@@ -1046,7 +1038,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
     CREATE INDEX [IX_Receipt_CreatedAtUtc] ON [Receipt] ([CreatedAtUtc]) INCLUDE ([Kind], [BloodType], [Units], [StaffId], [AppointmentId], [RequestId]);
@@ -1054,7 +1046,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
     CREATE INDEX [IX_Receipt_Kind_BloodType_CreatedAtUtc] ON [Receipt] ([Kind], [BloodType], [CreatedAtUtc]) INCLUDE ([Units], [StaffId], [AppointmentId], [RequestId]);
@@ -1062,7 +1054,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
     CREATE INDEX [IX_Receipt_Kind_CreatedAtUtc] ON [Receipt] ([Kind], [CreatedAtUtc]) INCLUDE ([BloodType], [Units], [StaffId], [AppointmentId], [RequestId]);
@@ -1070,23 +1062,23 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
-    CREATE INDEX [IX_Receipt_RequestId] ON [Receipt] ([RequestId]) INCLUDE ([CreatedAtUtc], [Kind], [BloodType]);
+    EXEC(N'CREATE INDEX [IX_Receipt_RequestId] ON [Receipt] ([RequestId]) INCLUDE ([CreatedAtUtc], [Kind], [BloodType]) WHERE [RequestId] IS NOT NULL');
 END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
-    CREATE INDEX [IX_Receipt_StaffId] ON [Receipt] ([StaffId]) INCLUDE ([CreatedAtUtc], [Kind], [BloodType]);
+    CREATE INDEX [IX_Receipt_StaffId_CreatedAtUtc] ON [Receipt] ([StaffId], [CreatedAtUtc]) INCLUDE ([Kind], [BloodType]);
 END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
     CREATE INDEX [IX_Patient_BloodType_Name] ON [Patient] ([BloodType], [Name]) INCLUDE ([DateOfBirth], [Gender], [Phone]);
@@ -1094,7 +1086,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
     CREATE INDEX [IX_Patient_Name] ON [Patient] ([Name]) INCLUDE ([DateOfBirth], [Gender], [BloodType], [Phone]);
@@ -1102,7 +1094,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
     CREATE INDEX [IX_Patient_Phone] ON [Patient] ([Phone]);
@@ -1110,7 +1102,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
     CREATE INDEX [IX_Donor_BloodType_LastDonated] ON [Donor] ([BloodType], [LastDonated]) INCLUDE ([Name], [DateOfBirth], [Gender], [Phone], [Frequency], [MedicalHold]);
@@ -1118,7 +1110,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
     CREATE INDEX [IX_Donor_BloodType_Name] ON [Donor] ([BloodType], [Name]) INCLUDE ([DateOfBirth], [Gender], [Phone], [Frequency], [LastDonated], [MedicalHold]);
@@ -1126,7 +1118,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
     CREATE INDEX [IX_Donor_LastDonated] ON [Donor] ([LastDonated]) INCLUDE ([Name], [DateOfBirth], [Gender], [BloodType], [Phone], [Frequency], [MedicalHold]);
@@ -1134,7 +1126,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
     CREATE INDEX [IX_Donor_Name] ON [Donor] ([Name]) INCLUDE ([DateOfBirth], [Gender], [BloodType], [Phone], [Frequency], [LastDonated], [MedicalHold]);
@@ -1142,7 +1134,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
     CREATE INDEX [IX_Donor_Phone] ON [Donor] ([Phone]);
@@ -1150,7 +1142,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
     CREATE INDEX [IX_Appointment_DonorBloodType_PlacedAtUtc] ON [Appointment] ([DonorBloodType], [PlacedAtUtc]) INCLUDE ([SlotStartUtc], [Status], [DonorId]);
@@ -1158,7 +1150,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
     CREATE INDEX [IX_Appointment_DonorBloodType_SlotStartUtc] ON [Appointment] ([DonorBloodType], [SlotStartUtc]) INCLUDE ([PlacedAtUtc], [Status], [DonorId]);
@@ -1166,7 +1158,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
     CREATE INDEX [IX_Appointment_DonorId] ON [Appointment] ([DonorId]);
@@ -1174,7 +1166,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
     CREATE INDEX [IX_Appointment_PlacedAtUtc] ON [Appointment] ([PlacedAtUtc]) INCLUDE ([SlotStartUtc], [Status], [DonorId]);
@@ -1182,7 +1174,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
     CREATE INDEX [IX_Appointment_SlotStartUtc] ON [Appointment] ([SlotStartUtc]) INCLUDE ([PlacedAtUtc], [Status], [DonorId]);
@@ -1190,7 +1182,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
     CREATE INDEX [IX_Appointment_Status_DonorBloodType_PlacedAtUtc] ON [Appointment] ([Status], [DonorBloodType], [PlacedAtUtc]) INCLUDE ([SlotStartUtc], [DonorId]);
@@ -1198,7 +1190,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
     CREATE INDEX [IX_Appointment_Status_DonorBloodType_SlotStartUtc] ON [Appointment] ([Status], [DonorBloodType], [SlotStartUtc]) INCLUDE ([PlacedAtUtc], [DonorId]);
@@ -1206,7 +1198,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
     CREATE INDEX [IX_Appointment_Status_PlacedAtUtc] ON [Appointment] ([Status], [PlacedAtUtc]) INCLUDE ([SlotStartUtc], [DonorId]);
@@ -1214,7 +1206,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
     CREATE INDEX [IX_Appointment_Status_SlotStartUtc] ON [Appointment] ([Status], [SlotStartUtc]) INCLUDE ([PlacedAtUtc], [DonorId]);
@@ -1222,11 +1214,11 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261118230752_ListIndexesAndMedicalHold'
+    WHERE [MigrationId] = N'20261118234152_ListIndexesAndMedicalHold'
 )
 BEGIN
     INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
-    VALUES (N'20261118230752_ListIndexesAndMedicalHold', N'11.0.0');
+    VALUES (N'20261118234152_ListIndexesAndMedicalHold', N'11.0.0');
 END;
 
 COMMIT;

@@ -164,5 +164,20 @@ public sealed class ScaleDatabaseFixture : SqlServerDatabaseFixture
         Receipts = set.Receipts.Count;
         set.AddTo(db);
         await db.SaveChangesAsync(ct);
+        await SettleAsync(ct);
+    }
+
+    /// <summary>
+    /// What a database that has just been bulk loaded needs before its plans mean anything: indexes rebuilt (rows arrive in clustered-key
+    /// order but in random order for every other index, so the nonclustered ones are half empty and look bigger than the table itself)
+    /// and statistics read in full (the automatic ones are sampled, and a sample differs from run to run). The same maintenance a
+    /// production database gets.
+    /// </summary>
+    private async Task SettleAsync(CancellationToken ct)
+    {
+        foreach (var table in new[] { "Donor", "Patient", "Staff", "Appointment", "Request", "Receipt", "BloodBag" })
+        {
+            await ExecuteAsync($"ALTER INDEX ALL ON [{table}] REBUILD; UPDATE STATISTICS [{table}] WITH FULLSCAN;", ct);
+        }
     }
 }

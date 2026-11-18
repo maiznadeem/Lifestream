@@ -145,6 +145,12 @@ erDiagram
     date; donors and patients: name, blood type + name, last donated). A wide covering index is as wide as the table itself, so
     each of these tables also has a **single-column foreign-key index** (`Appointment.DonorId`, `Request.PatientId`, the three
     `Receipt` keys): it is the narrowest index and is what `COUNT(*)` and joins read, rather than the clustered index.
+  - **Bulk-loaded databases need maintenance before plans mean anything.** Rows arrive in clustered-key order but in random
+    order for every other index, so the nonclustered indexes of a freshly loaded table are half empty, look bigger than the table
+    itself, and the optimizer then prefers to scan the clustered index; automatic statistics are also sampled, and a sample differs
+    from run to run. The 100x test fixture therefore runs `ALTER INDEX ALL ... REBUILD` and `UPDATE STATISTICS ... WITH FULLSCAN`
+    on every large table after loading, the maintenance a production database gets. Without it, one-letter receipt searches (the
+    staff-name branch) still show a Clustered Index Scan of `Receipt` in the plan matrix (8 cases).
   - **The total is a one-row cross join** (`Lists.Total`: `GROUP BY` a constant), not a scalar subquery in the page's select
     list, which SQL Server may work out again for every row. The patient list joins the page back to `Patient` before it counts
     each patient's pending requests, so the count is worked out for 50 rows and not for every row the `OFFSET` skips.
@@ -157,7 +163,9 @@ erDiagram
     receipts of the page are then fetched by id.
   - **Search queries are compiled for their term.** The same SQL text serves a term that matches 3 donors and one that matches
     1,200, and the plan that suits one scans for the other (the first term compiled decides for all later ones). List queries
-    that carry a search are tagged and `SearchPlanInterceptor` appends `OPTION (RECOMPILE)` to them.
+    that carry a search (donors, patients, appointments, requests) are tagged and `SearchPlanInterceptor` appends `OPTION (RECOMPILE)`
+    to them. The receipt search is not: its set-based union plan is the same for every term, and compiling it for each request
+    costs about 35 ms of the 100 ms budget.
   - "Appointments of donors with blood type X" uses `Appointment.DonorBloodType`, a copy of the donor's blood type kept by
     `LifestreamDbContext` (set when an appointment is added; rewritten in the same transaction when the donor's blood type
     changes, with an audit row per rewritten appointment; see Audit). A `BulkUpdateAsync` of `Donor.BloodType` keeps it in

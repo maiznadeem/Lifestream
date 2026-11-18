@@ -19,6 +19,7 @@ namespace Lifestream.Api.Tests.Data;
 /// name searches, every documented sort, page 1 and a deep page. Each list request must also be one database call (API-22).
 /// Set LIFESTREAM_PLAN_CAPTURE to a file path to write one line per request (operators, pages read, SQL).
 /// </summary>
+[Collection("Scale datasets: one class at a time")] // the 100x databases load 100,000 rows and the perf tests time requests, so they do not overlap
 public sealed class ApiPlanMatrixTests(ScaleApiFixture fx) : IClassFixture<ScaleApiFixture>
 {
     private const int BigTableRows = 5_000;

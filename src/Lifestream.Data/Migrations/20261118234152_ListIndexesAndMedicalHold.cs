@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace Lifestream.Data.Migrations;
 
 /// <inheritdoc />
-public partial class _20261118230752_ListIndexesAndMedicalHold : Migration
+public partial class _20261118234152_ListIndexesAndMedicalHold : Migration
 {
     /// <inheritdoc />
     protected override void Up(MigrationBuilder migrationBuilder)
@@ -60,10 +60,6 @@ public partial class _20261118230752_ListIndexesAndMedicalHold : Migration
 
         migrationBuilder.DropIndex(
             name: "IX_Receipt_RequestId",
-            table: "Receipt");
-
-        migrationBuilder.DropIndex(
-            name: "IX_Receipt_StaffId",
             table: "Receipt");
 
         migrationBuilder.DropIndex(
@@ -211,14 +207,15 @@ public partial class _20261118230752_ListIndexesAndMedicalHold : Migration
         migrationBuilder.CreateIndex(
             name: "IX_Receipt_RequestId",
             table: "Receipt",
-            column: "RequestId")
+            column: "RequestId",
+            filter: "[RequestId] IS NOT NULL")
             .Annotation("SqlServer:Include", new[] { "CreatedAtUtc", "Kind", "BloodType" });
 
         migrationBuilder.CreateIndex(
-            name: "IX_Receipt_StaffId",
+            name: "IX_Receipt_StaffId_CreatedAtUtc",
             table: "Receipt",
-            column: "StaffId")
-            .Annotation("SqlServer:Include", new[] { "CreatedAtUtc", "Kind", "BloodType" });
+            columns: new[] { "StaffId", "CreatedAtUtc" })
+            .Annotation("SqlServer:Include", new[] { "Kind", "BloodType" });
 
         migrationBuilder.CreateIndex(
             name: "IX_Patient_BloodType_Name",
@@ -388,7 +385,7 @@ public partial class _20261118230752_ListIndexesAndMedicalHold : Migration
             table: "Receipt");
 
         migrationBuilder.DropIndex(
-            name: "IX_Receipt_StaffId",
+            name: "IX_Receipt_StaffId_CreatedAtUtc",
             table: "Receipt");
 
         migrationBuilder.DropIndex(
@@ -531,11 +528,6 @@ public partial class _20261118230752_ListIndexesAndMedicalHold : Migration
             name: "IX_Receipt_RequestId",
             table: "Receipt",
             column: "RequestId");
-
-        migrationBuilder.CreateIndex(
-            name: "IX_Receipt_StaffId",
-            table: "Receipt",
-            column: "StaffId");
 
         migrationBuilder.CreateIndex(
             name: "IX_Patient_BloodType_Name",

@@ -16,7 +16,7 @@ partial class LifestreamDbContextModelSnapshot : ModelSnapshot
     // If you encounter a merge conflict in the line below, it means you need to
     // discard one of the migration branches and recreate its migrations on top of
     // the other branch. See https://aka.ms/efcore-docs-migrations-conflicts for more info.
-    public override string LastMigrationId => "20261118230752_ListIndexesAndMedicalHold";
+    public override string LastMigrationId => "20261118234152_ListIndexesAndMedicalHold";
 
     protected override void BuildModel(ModelBuilder modelBuilder)
     {
@@ -442,21 +442,24 @@ partial class LifestreamDbContextModelSnapshot : ModelSnapshot
 
                 SqlServerIndexBuilderExtensions.IncludeProperties(index0, new[] { "Kind", "BloodType", "Units", "StaffId", "AppointmentId", "RequestId" });
 
-                var index1 = b.HasIndex("RequestId");
+                var index1 = b.HasIndex("RequestId")
+                    .HasFilter("[RequestId] IS NOT NULL");
 
                 SqlServerIndexBuilderExtensions.IncludeProperties(index1, new[] { "CreatedAtUtc", "Kind", "BloodType" });
 
-                var index2 = b.HasIndex("StaffId");
+                b.HasIndex("StaffId");
 
-                SqlServerIndexBuilderExtensions.IncludeProperties(index2, new[] { "CreatedAtUtc", "Kind", "BloodType" });
+                var index2 = b.HasIndex("BloodType", "CreatedAtUtc");
 
-                var index3 = b.HasIndex("BloodType", "CreatedAtUtc");
+                SqlServerIndexBuilderExtensions.IncludeProperties(index2, new[] { "Kind", "Units", "StaffId", "AppointmentId", "RequestId" });
 
-                SqlServerIndexBuilderExtensions.IncludeProperties(index3, new[] { "Kind", "Units", "StaffId", "AppointmentId", "RequestId" });
+                var index3 = b.HasIndex("Kind", "CreatedAtUtc");
 
-                var index4 = b.HasIndex("Kind", "CreatedAtUtc");
+                SqlServerIndexBuilderExtensions.IncludeProperties(index3, new[] { "BloodType", "Units", "StaffId", "AppointmentId", "RequestId" });
 
-                SqlServerIndexBuilderExtensions.IncludeProperties(index4, new[] { "BloodType", "Units", "StaffId", "AppointmentId", "RequestId" });
+                var index4 = b.HasIndex("StaffId", "CreatedAtUtc");
+
+                SqlServerIndexBuilderExtensions.IncludeProperties(index4, new[] { "Kind", "BloodType" });
 
                 var index5 = b.HasIndex("Kind", "BloodType", "CreatedAtUtc");
 

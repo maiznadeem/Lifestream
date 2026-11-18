@@ -19,6 +19,7 @@ namespace Lifestream.Api.Tests.Data;
 /// alone, then with every sort, on page 1 and on a deep page (261). The statements are the real ones EF sends, replayed
 /// with their parameters under <c>SET STATISTICS XML</c>.
 /// </summary>
+[Collection("Scale datasets: one class at a time")] // the 100x databases load 100,000 rows and the perf tests time requests, so they do not overlap
 public sealed class ListQueryPlanTests(ScaleDatabaseFixture fixture) : IClassFixture<ScaleDatabaseFixture>
 {
     private const int BigTableRows = 5_000;
