@@ -357,7 +357,7 @@ public sealed class StaffProfileTests(ApiFixture fx) : IClassFixture<ApiFixture>
         Assert.InRange(upload.Length, 31_000, 1_000_000);
 
         using var put = await admin.Client.PutBytes(ApiRoutes.StaffPhoto, worker.Id, upload, "image/jpeg");
-        Assert.Equal(HttpStatusCode.NoContent, put.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, put.StatusCode);
 
         using var get = await admin.Client.GetApi(ApiRoutes.StaffPhoto, worker.Id);
         Assert.Equal(HttpStatusCode.OK, get.StatusCode);
@@ -386,7 +386,7 @@ public sealed class StaffProfileTests(ApiFixture fx) : IClassFixture<ApiFixture>
     {
         var user = await fx.AddStaffAsync(Role.Staff);
         using var put = await user.Client.PutBytes(ApiRoutes.MePhoto, null, TestImages.Png(120, 120), "image/png");
-        Assert.Equal(HttpStatusCode.NoContent, put.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, put.StatusCode);
         using var get = await user.Client.GetApi(ApiRoutes.StaffPhoto, user.Id);
         Assert.Equal("image/jpeg", get.Content.Headers.ContentType!.MediaType);
         var bytes = await get.Content.ReadAsByteArrayAsync(Ct);

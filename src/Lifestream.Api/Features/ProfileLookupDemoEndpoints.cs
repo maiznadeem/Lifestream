@@ -28,7 +28,7 @@ public static class ProfileEndpoints
     private static async Task<ProfileResponse> LoadAsync(LifestreamDbContext db, int id, CancellationToken ct)
     {
         var s = await db.Staff.AsNoTracking().Where(x => x.Id == id)
-            .Select(x => new { x.Id, x.DisplayName, x.Username, x.Designation, x.Shift, x.Phone, x.HasPhoto, x.RowVersion })
+            .Select(x => new { x.Id, x.DisplayName, x.Username, x.Designation, x.Shift, x.Phone, HasPhoto = db.StaffPhotos.Any(p => p.StaffId == x.Id), x.RowVersion })
             .FirstOrDefaultAsync(ct) ?? throw ApiException.NotFound("The profile");
         return new ProfileResponse(s.Id, s.DisplayName, s.Username, s.Designation, s.Shift, s.Phone, s.HasPhoto, RowVersions.ToText(s.RowVersion));
     }
@@ -124,10 +124,11 @@ public static class ProfileEndpoints
         return TypedResults.NoContent();
     }
 
-    private static async Task<NoContent> UploadPhotoAsync(HttpRequest http, CurrentUser user, PhotoProcessor photos, StaffService staff, CancellationToken ct)
+    /// <summary>Returns the profile (with its row version, which the upload did not change), so the caller needs no reload.</summary>
+    private static async Task<ProfileResponse> UploadPhotoAsync(HttpRequest http, CurrentUser user, PhotoProcessor photos, StaffService staff, LifestreamDbContext db, CancellationToken ct)
     {
         await staff.SavePhotoAsync(user.TokenStaffId, await photos.ReadAsync(http, ct), ct);
-        return TypedResults.NoContent();
+        return await LoadAsync(db, user.TokenStaffId, ct);
     }
 }
 

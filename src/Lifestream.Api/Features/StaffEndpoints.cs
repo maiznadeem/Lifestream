@@ -62,13 +62,8 @@ public sealed class StaffService(LifestreamDbContext db, TimeProvider time)
                 await db.SaveChangesAsync(token);
             }
 
-            var staff = await db.Staff.FirstAsync(s => s.Id == staffId, token);
-            if (!staff.HasPhoto)
-            {
-                staff.HasPhoto = true;
-                await db.SaveChangesAsync(token);
-            }
-
+            // The Staff row is not touched: a photo lives in StaffPhoto, and any write to the row would change its row version and make
+            // the next save from a client that already holds the record fail with 409. HasPhoto is read from the existence of the StaffPhoto row; the Staff.HasPhoto column is no longer written.
             return true;
         }, ct);
     }
@@ -145,15 +140,15 @@ public static class StaffEndpoints
         // Salary and phone are read, and sent, for an Admin only. Never the password hash, never the photo bytes.
         var rows = user.IsAdmin
             ? await sorted.Select(s => new ListRow<StaffListItem>(
-                new StaffListItem(s.Id, s.DisplayName, s.Username, s.Designation, s.Shift, s.Role, s.HasPhoto, s.Salary, s.Phone), filtered.Count())).ToListAsync(ct)
+                new StaffListItem(s.Id, s.DisplayName, s.Username, s.Designation, s.Shift, s.Role, db.StaffPhotos.Any(p => p.StaffId == s.Id), s.Salary, s.Phone), filtered.Count())).ToListAsync(ct)
             : await sorted.Select(s => new ListRow<StaffListItem>(
-                new StaffListItem(s.Id, s.DisplayName, s.Username, s.Designation, s.Shift, s.Role, s.HasPhoto, null, null), filtered.Count())).ToListAsync(ct);
+                new StaffListItem(s.Id, s.DisplayName, s.Username, s.Designation, s.Shift, s.Role, db.StaffPhotos.Any(p => p.StaffId == s.Id), null, null), filtered.Count())).ToListAsync(ct);
         return await Lists.BuildAsync(rows, page, size, () => filtered.CountAsync(ct));
     }
 
     private static async Task<StaffDetail> GetAsync(int id, LifestreamDbContext db, CurrentUser user, CancellationToken ct) =>
         ToDetail(
-            await Visible(db, user).Where(s => s.Id == id).Select(s => new StaffRow(s.Id, s.DisplayName, s.Username, s.Gender, s.DateOfBirth, s.Designation, s.Shift, s.Role, s.HasPhoto, s.Salary, s.Phone, s.IsProtected, s.RowVersion)).FirstOrDefaultAsync(ct)
+            await Visible(db, user).Where(s => s.Id == id).Select(s => new StaffRow(s.Id, s.DisplayName, s.Username, s.Gender, s.DateOfBirth, s.Designation, s.Shift, s.Role, db.StaffPhotos.Any(p => p.StaffId == s.Id), s.Salary, s.Phone, s.IsProtected, s.RowVersion)).FirstOrDefaultAsync(ct)
                 ?? throw ApiException.NotFound("The staff member"),
             user.IsAdmin);
 
@@ -162,8 +157,8 @@ public static class StaffEndpoints
     private static StaffDetail ToDetail(StaffRow s, bool includePrivate) =>
         new(s.Id, s.DisplayName, s.Username, s.Gender, s.DateOfBirth, s.Designation, s.Shift, s.Role, s.HasPhoto, includePrivate ? s.Salary : null, includePrivate ? s.Phone : null, s.IsProtected, RowVersions.ToText(s.RowVersion));
 
-    private static StaffDetail ToDetail(Staff s) =>
-        ToDetail(new StaffRow(s.Id, s.DisplayName, s.Username, s.Gender, s.DateOfBirth, s.Designation, s.Shift, s.Role, s.HasPhoto, s.Salary, s.Phone, s.IsProtected, s.RowVersion), true);
+    private static StaffDetail ToDetail(Staff s, bool hasPhoto) =>
+        ToDetail(new StaffRow(s.Id, s.DisplayName, s.Username, s.Gender, s.DateOfBirth, s.Designation, s.Shift, s.Role, hasPhoto, s.Salary, s.Phone, s.IsProtected, s.RowVersion), true);
 
     private static async Task<IResult> PhotoAsync(int id, CurrentUser user, StaffService staff, LifestreamDbContext db, CancellationToken ct)
     {
@@ -182,7 +177,8 @@ public static class StaffEndpoints
         return await staff.PhotoAsync(id, ct);
     }
 
-    private static async Task<NoContent> UploadPhotoAsync(int id, HttpRequest http, PhotoProcessor photos, StaffService staff, LifestreamDbContext db, CurrentUser user, CancellationToken ct)
+    /// <summary>Returns the person (with their current row version, which the upload did not change), so the caller needs no reload.</summary>
+    private static async Task<StaffDetail> UploadPhotoAsync(int id, HttpRequest http, PhotoProcessor photos, StaffService staff, LifestreamDbContext db, CurrentUser user, CancellationToken ct)
     {
         // Same gate as edit and reset: the owner's own record can be changed only by the owner.
         if (id != user.TokenStaffId && await db.Staff.AnyAsync(s => s.Id == id && s.IsProtected, ct))
@@ -191,7 +187,7 @@ public static class StaffEndpoints
         }
 
         await staff.SavePhotoAsync(id, await photos.ReadAsync(http, ct), ct);
-        return TypedResults.NoContent();
+        return await GetAsync(id, db, user, ct);
     }
 
     private static async Task<Created<StaffDetail>> CreateAsync(HttpRequest http, LifestreamDbContext db, TimeProvider time, CancellationToken ct)
@@ -243,7 +239,7 @@ public static class StaffEndpoints
             await db.SaveChangesAsync(token);
             return entity;
         }, ct);
-        return TypedResults.Created($"{ApiRoutes.Prefix}/staff/{staff.Id}", ToDetail(staff));
+        return TypedResults.Created($"{ApiRoutes.Prefix}/staff/{staff.Id}", ToDetail(staff, hasPhoto: false));
     }
 
     private static async Task<StaffDetail> UpdateAsync(int id, HttpRequest http, LifestreamDbContext db, CurrentUser user, TimeProvider time, IMemoryCache cache, CancellationToken ct)
@@ -362,7 +358,7 @@ public static class StaffEndpoints
 
         // The role in the database is authoritative on every request; forget what was cached so a demotion applies at once.
         RevocationCache.Clear(cache);
-        return ToDetail(staff);
+        return ToDetail(staff, await db.StaffPhotos.AnyAsync(p => p.StaffId == staff.Id, ct));
     }
 
     private static async Task<NoContent> DeleteAsync(int id, LifestreamDbContext db, CurrentUser user, IMemoryCache cache, CancellationToken ct)

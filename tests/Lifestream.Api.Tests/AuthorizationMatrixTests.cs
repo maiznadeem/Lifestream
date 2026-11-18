@@ -339,7 +339,7 @@ public sealed class AuthorizationMatrixTests(ApiFixture fx) : IClassFixture<ApiF
         using var byDemo = await demo.Client.PutBytes(ApiRoutes.StaffPhoto, staff.Id, png, "image/png");
         using var p3 = await byDemo.Problem(403, ProblemCodes.DemoForbidden);
         using var ok = await admin.Client.PutBytes(ApiRoutes.StaffPhoto, staff.Id, png, "image/png");
-        Assert.Equal(HttpStatusCode.NoContent, ok.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, ok.StatusCode);
     }
 }
 
