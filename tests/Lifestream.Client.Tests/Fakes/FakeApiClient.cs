@@ -95,7 +95,26 @@ public sealed class FakeApiClient : ILifestreamApiClient
 
     public Task<ApiResult<TokenResponse>> DemoLoginAsync(CancellationToken ct = default) => Run<TokenResponse>(nameof(DemoLoginAsync), ct);
 
-    public Task<ApiResult> LogoutAsync(CancellationToken ct = default) => RunVoid(nameof(LogoutAsync), ct);
+    /// <summary>The refresh tokens that LogoutAsync was called with, in order.</summary>
+    public List<string> LogoutTokens { get; } = [];
+
+    /// <summary>When set, LogoutAsync throws before it returns a task, like a client that fails while building the request.</summary>
+    public bool LogoutThrowsSynchronously { get; set; }
+
+    public Task<ApiResult> LogoutAsync(string refreshToken, CancellationToken ct = default)
+    {
+        if (LogoutThrowsSynchronously)
+        {
+            throw new InvalidOperationException("logout failed before returning a task");
+        }
+
+        lock (LogoutTokens)
+        {
+            LogoutTokens.Add(refreshToken);
+        }
+
+        return RunVoid(nameof(LogoutAsync), ct);
+    }
 
     public Task<ApiResult<PagedResult<DonorListItem>>> GetDonorsAsync(DonorQuery query, CancellationToken ct = default) => Run<PagedResult<DonorListItem>>(nameof(GetDonorsAsync), ct);
 

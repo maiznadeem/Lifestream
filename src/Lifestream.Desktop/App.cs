@@ -61,6 +61,7 @@ public sealed class App : Application
         var address = configuration["Api:BaseAddress"] ?? throw new InvalidOperationException("Api:BaseAddress is not configured.");
         var version = Assembly.GetEntryAssembly()?.GetName().Version ?? new Version(2, 0, 0);
         services.AddLifestreamClient(new Uri(address), version);
+        services.AddSingleton<IUiDispatcher>(_ => new WpfUiDispatcher(Current.Dispatcher));
         services.AddSingleton<IWindowHost, WpfWindowHost>();
         services.AddSingleton<Lifestream.Client.Updates.IUpdateSource>(_ => new StoreAwareUpdateSource(new WindowsPackageIdentityProbe(), () => new VelopackFeed(ReleaseRepositoryUrl)));
         services.AddSingleton<ISessionExpiredWatcher, SessionExpiredWatcher>();

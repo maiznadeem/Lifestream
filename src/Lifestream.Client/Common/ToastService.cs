@@ -129,9 +129,16 @@ public sealed partial class ToastItem : ObservableObject, IDisposable
 
 public sealed class ToastService : IToastService
 {
-    private readonly SynchronizationContext? _context = SynchronizationContext.Current;
+    private readonly IUiDispatcher _dispatcher;
 
-    public ToastService(TimeProvider? clock = null) => Clock = clock ?? TimeProvider.System;
+    /// <param name="dispatcher">The UI thread. Every change to <see cref="Toasts"/> runs on it, whichever thread asked (SHELL-01).</param>
+    /// <param name="clock">The clock for the auto-dismiss timers; tests pass a manual one.</param>
+    public ToastService(IUiDispatcher dispatcher, TimeProvider? clock = null)
+    {
+        ArgumentNullException.ThrowIfNull(dispatcher);
+        _dispatcher = dispatcher;
+        Clock = clock ?? TimeProvider.System;
+    }
 
     /// <summary>How long a toast stays: inside the 6 to 10 second window the design asks for.</summary>
     public static TimeSpan Lifetime { get; } = TimeSpan.FromSeconds(8);
@@ -149,15 +156,6 @@ public sealed class ToastService : IToastService
 
     internal void Remove(ToastItem toast) => Post(() => Toasts.Remove(toast));
 
-    internal void Post(Action action)
-    {
-        if (_context is null || SynchronizationContext.Current == _context)
-        {
-            action();
-        }
-        else
-        {
-            _context.Post(_ => action(), null);
-        }
-    }
+    /// <summary>Runs the action on the UI thread (inline when already there); posts keep their order, so an add always runs before its remove.</summary>
+    internal void Post(Action action) => _dispatcher.Run(action);
 }
