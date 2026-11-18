@@ -1,3 +1,6 @@
 [*.cs]
 # Test helpers hand HttpContent and the web host to the client and fixture, which dispose them.
 dotnet_diagnostic.CA2000.severity = none
+dotnet_diagnostic.CA1305.severity = none
+dotnet_diagnostic.CA1861.severity = none
+dotnet_diagnostic.CA2234.severity = none

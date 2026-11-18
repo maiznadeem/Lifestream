@@ -406,6 +406,16 @@ public static class HttpExtensions
     public static Task<HttpResponseMessage> PostRaw(this HttpClient client, string template, string json) =>
         client.PostAsync(ApiRoutes.Path(template), new StringContent(json, System.Text.Encoding.UTF8, "application/json"), Ct);
 
+    public static Task<HttpResponseMessage> PatchMe(this HttpClient client, object body) =>
+        client.PatchAsync(ApiRoutes.Path(ApiRoutes.Me), JsonContent.Create(body, body.GetType(), options: ApiFixture.Json), Ct);
+
+    public static Task<HttpResponseMessage> PutBytes(this HttpClient client, string template, int? id, byte[] bytes, string contentType)
+    {
+        var content = new ByteArrayContent(bytes);
+        content.Headers.ContentType = new MediaTypeHeaderValue(contentType);
+        return client.PutAsync(id is { } i ? ApiRoutes.Path(template, i) : ApiRoutes.Path(template), content, Ct);
+    }
+
     public static Task<HttpResponseMessage> PutApi(this HttpClient client, string template, object body, int? id = null) =>
         client.PutAsync(id is { } i ? ApiRoutes.Path(template, i) : ApiRoutes.Path(template), JsonContent.Create(body, body.GetType(), options: ApiFixture.Json), Ct);
 

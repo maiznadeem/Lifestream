@@ -129,9 +129,12 @@ public static class BodyReader
             check.ThrowIfInvalid();
             return JsonSerializer.Deserialize<T>(bytes, options) ?? throw ApiException.Validation("body", "is required");
         }
-        catch (JsonException)
+        catch (JsonException exception)
         {
-            throw ApiException.Validation("body", "is not valid for this request");
+            // Name the field that could not be read (from the JSON path), never the parser's own message.
+            var path = exception.Path ?? "";
+            var field = path.StartsWith("$.", StringComparison.Ordinal) ? path[2..].Split('.', '[')[0] : "body";
+            throw ApiException.Validation(field.Length > 0 ? field : "body", "is not a valid value");
         }
     }
 
