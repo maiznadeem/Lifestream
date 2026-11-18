@@ -40,7 +40,8 @@ public static class DemoReset
                 await TakeLockAsync(db, transaction.GetDbTransaction(), ct);
 
                 var state = await db.DemoState.SingleOrDefaultAsync(ct);
-                var serverNow = await db.Database.SqlQuery<DateTime>($"SELECT SYSUTCDATETIME() AS [Value]").SingleAsync(ct);
+                // A raw query returns Kind=Unspecified; the server clock is UTC by definition.
+                var serverNow = DateTime.SpecifyKind(await db.Database.SqlQuery<DateTime>($"SELECT SYSUTCDATETIME() AS [Value]").SingleAsync(ct), DateTimeKind.Utc);
                 var due = force
                     ? state?.LastForcedResetAtUtc is not { } last || serverNow - last >= ForceCooldown
                     : state?.LastResetDate is not { } lastDate || lastDate < todayUtc;

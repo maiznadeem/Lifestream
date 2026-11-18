@@ -30,6 +30,12 @@ erDiagram
         varbinary Content "30 KB max"
         int Width "256 max"
     }
+    Appointment {
+        int Id PK
+        int DonorId FK
+        varchar DonorBloodType "copy of the donor's, kept by LifestreamDbContext"
+        datetime2 SlotStartUtc
+    }
     Receipt {
         int Id PK
         varchar Kind "Donation or Issue"
@@ -72,7 +78,7 @@ erDiagram
 - `Staff.Username` is unique with the case-insensitive collation pinned on the column. `Donor.Name`, `Patient.Name` and
   `Staff.DisplayName` use `Latin1_General_100_CI_AI` so a search is case- and accent-insensitive without a function on the column.
 - `Staff.PasswordHash` is `varchar(256)` with a `CHECK` that it is an ASP.NET Core Identity v3 hash
-  (PBKDF2-HMAC-SHA512, base64, starts `AQAAAAI`). Plain text cannot be stored. `PasswordHashing` uses 600,000 iterations.
+  (PBKDF2-HMAC-SHA512, base64, header `AQAAAAIA....AAAAE`, 84 to 256 characters). Plain text cannot be stored. `PasswordHashing` uses 600,000 iterations.
 - Staff photos live in `StaffPhoto` (at most 30 KB, 256 px). `Staff.HasPhoto` tells the API a photo exists, so a Staff query
   never touches the photo table.
 - `Receipt` is one table for both directions. A `CHECK` requires an appointment (and no request) for a `Donation` and a
@@ -86,9 +92,47 @@ erDiagram
   `BloodBag` is kept. (Owner decision DB-17, default taken.)
 - **Audit.** Every insert, update and delete on `Donor`, `Patient`, `Request`, `Receipt`, `Appointment` and `Staff` writes an
   `AuditLog` row (user id from `LifestreamDbContext.CurrentStaffId`, action, entity, entity id, server UTC time) from
-  `SaveChanges`. Updates and deletes are in the same batch as the change. An insert whose id the database generates is audited by a
-  second `SaveChanges` straight after the first, so wrap multi-step writes in one transaction (the API does) to make them atomic.
-  Bulk system work (generators, the demo reset) turns auditing off with `AuditEnabled = false`.
+  `SaveChanges`/`SaveChangesAsync`, every overload. The change and its audit rows commit atomically: when the caller has no
+  transaction open, the save opens one (inside the EF execution strategy, so a retry repeats the whole thing) and commits only
+  after the audit rows are written; when the caller owns a transaction, the audit rows join it. The business rows are saved
+  with `acceptAllChangesOnSuccess: false` first, so the audit row carries the real generated id, and the change tracker is
+  accepted only after both writes succeeded (a failed attempt puts temporary ids back, so a retry inserts a new row instead
+  of a duplicate). Bulk system work (generators, the demo reset) turns auditing off with `AuditEnabled = false`.
+- **Bulk changes bypass auditing.** `ExecuteUpdate`/`ExecuteDelete` (and raw SQL) skip the change tracker, so EF cannot audit
+  them. For the six audited tables use `LifestreamDbContext.BulkDeleteAsync(query)` / `BulkUpdateAsync(query, setters)`: they
+  select the ids, change exactly those rows and write one audit row per id in one serializable transaction (or the caller's).
+  Never call `ExecuteDeleteAsync`/`ExecuteUpdateAsync` on `Donors`, `Patients`, `Appointments`, `Requests`, `Receipts` or `Staff`
+  from the API.
+- **UTC only.** Every `DateTime` column is `datetime2(3)` with a value converter (`UtcDateTimeConverter`): writing a
+  `DateTime` whose `Kind` is `Local` or `Unspecified` throws an `ArgumentException` ("must have Kind=Utc"), and values read
+  back have `Kind=Utc`. The same applies to a `DateTime` used as a query parameter. Timestamps the server owns
+  (`PlacedAtUtc`, `CreatedAtUtc`, `OccurredAtUtc`) default to `SYSUTCDATETIME()`; the client never supplies them.
+- **Password hash check.** `CK_Staff_PasswordHash` accepts only text shaped like an Identity v3 hash as far as T-SQL can tell:
+  base64 alphabet, padding only at the end, length a multiple of 4 and between 84 and 256, and the exact header (version
+  byte 1, PRF HMAC-SHA512, iteration count under 2^24, salt length 16). It cannot decode base64 (no functions or XML methods
+  in a CHECK), so the iteration floor and randomness stay with `PasswordHashing.IsValidHash`, which the tests apply to every
+  Staff row of a seeded database.
+- **List queries and indexes (DB-05).** Every filter and sort the `*Query` records allow is served by an index; the plan
+  tests (`ListQueryPlanTests`) run the whole matrix (each filter alone and with each sort, page 1 and page 261, plus the
+  total count) at 100x and fail on any scan of a table over 5,000 rows. Rules the API follows to stay inside it:
+  - Sorts are `ORDER BY <indexed key>, Id` (the nonclustered indexes end in the clustered key `Id`, so key + id is the
+    keyset order). Supported sorts: donors `name`, `lastDonated`; patients `name`; appointments `slot`, `placed`; requests
+    `placed`, `requiredBy`; receipts `date`; staff `name`, `username` (each ascending or descending). Any other sort value is
+    a 400, not a slow query.
+  - Name search is a **prefix** match on the indexed, case- and accent-insensitive name column
+    (`SearchQueries.NameStartsWith`, `DonorNameStartsWith`, `PatientNameStartsWith`, `PartyNameStartsWith`); contains-search is
+    not offered. Never use `string.StartsWith(variable)`: EF turns it into `LEFT(col, LEN(@p)) = @p`, which is not seekable.
+  - Appointment search by donor name and request search by patient name are two steps: the ids of the matching donors or
+    patients (`SearchQueries.DonorIdsByNamePrefixAsync` / `PatientIdsByNamePrefixAsync`, a seek on the name index), then the
+    rows whose `DonorId`/`PatientId` is in that list (a seek per id on a covering index). In one statement with a join the
+    optimizer scans the appointment or request table instead.
+  - "Appointments of donors with blood type X" uses `Appointment.DonorBloodType`, a copy of the donor's blood type kept by
+    `LifestreamDbContext` (set when an appointment is added, rewritten in the same transaction when the donor's blood type
+    changes; only with `AuditEnabled`, so generators set it themselves). It makes the filter one index seek instead of a join.
+  - Receipt search by donor or patient name uses two seek paths joined by `UNION` (name, then appointment/request, then
+    receipt), because one `OR` across both would scan.
+  - Deep pages (`Skip` in the thousands) read only the narrow sort index and fetch the 50 rows by id
+    (`ListPaging.PageById`), instead of scanning the table for the columns the page needs.
 - **No logic in the database.** Donation (receipt, bags, completing the appointment, `Donor.LastDonated`) and issue (oldest
   unexpired bags first) are API code inside transactions.
 - **Ids after a demo reset are not restarted** (`DBCC CHECKIDENT` and `IDENTITY_INSERT` need `ALTER`, which the API identity
