@@ -1,0 +1,96 @@
+<UserControl x:Class="Lifestream.Desktop.Features.Appointments.AppointmentEditorView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:Lifestream.Desktop.Controls"
+             xmlns:feat="clr-namespace:Lifestream.Desktop.Features"
+             xmlns:lists="clr-namespace:Lifestream.Desktop.Features.ListScreens"
+             xmlns:appointments="clr-namespace:Lifestream.Desktop.Features.Appointments"
+             xmlns:services="clr-namespace:Lifestream.Desktop.Services"
+             Focusable="False" IsTabStop="False">
+  <!-- The booking and reschedule form: the donor from a record picker (or their name when rescheduling), the eligibility banner, a date that can't be in the past, the clinic's times in local time with taken times disabled, and a reason when the donor isn't eligible. The data context is the AppointmentEditorViewModel. -->
+  <UserControl.Resources>
+    <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+    <feat:FirstNonEmptyConverter x:Key="FirstNonEmpty" />
+    <services:InverseBooleanToVisibilityConverter x:Key="InverseBool" />
+    <Style x:Key="SlotItem" TargetType="ListBoxItem">
+      <Setter Property="IsEnabled" Value="{Binding IsAvailable}" />
+      <Setter Property="Margin" Value="{DynamicResource Pad.4}" />
+      <Setter Property="AutomationProperties.Name" Value="{Binding Label}" />
+      <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ListBoxItem">
+            <Border x:Name="Bd" MinWidth="64" MinHeight="32" Padding="{DynamicResource Pad.8}" CornerRadius="{DynamicResource Radius.Control}" Background="{DynamicResource Brush.SurfaceRaised}"
+                    BorderBrush="{DynamicResource Brush.BorderInput}" BorderThickness="1">
+              <TextBlock x:Name="Caption" Style="{DynamicResource Text.Body}" Text="{Binding Label}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.SurfaceHover}" />
+              </Trigger>
+              <Trigger Property="IsSelected" Value="True">
+                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.SurfaceSelected}" />
+                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Brush.Primary}" />
+              </Trigger>
+              <Trigger Property="IsKeyboardFocused" Value="True">
+                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Brush.FocusRing}" />
+                <Setter TargetName="Bd" Property="BorderThickness" Value="2" />
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter TargetName="Caption" Property="Foreground" Value="{DynamicResource Brush.TextDisabled}" />
+                <Setter TargetName="Caption" Property="TextDecorations" Value="Strikethrough" />
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+  </UserControl.Resources>
+  <lists:RecordEditorChrome>
+    <lists:RecordEditorChrome.Fields>
+      <StackPanel>
+        <controls:FormField Label="Donor (required)" IsRequired="True" controls:FormFocus.FieldName="DonorId" Error="{Binding [DonorId]}" Visibility="{Binding ShowDonorPicker, Converter={StaticResource BoolToVisibility}}">
+          <controls:RecordPicker Kind="Donor" Label="Donor" SelectedOption="{Binding DonorOption, Mode=TwoWay}" />
+        </controls:FormField>
+        <StackPanel Visibility="{Binding ShowDonorPicker, Converter={StaticResource InverseBool}}" feat:Edge.Bottom="{DynamicResource Space.16}">
+          <TextBlock Style="{DynamicResource Text.Caption}" Foreground="{DynamicResource Brush.TextMuted}" Text="Donor" />
+          <TextBlock Style="{DynamicResource Text.Body}" Text="{Binding DonorName}" TextWrapping="Wrap" />
+        </StackPanel>
+
+        <appointments:EligibilityBannerView DataContext="{Binding Banner}" />
+
+        <controls:FormField Label="Date (required)" IsRequired="True" Hint="Format: 05 Mar 2022. Today or later." controls:FormFocus.FieldName="Date">
+          <controls:FormField.Error>
+            <MultiBinding Converter="{StaticResource FirstNonEmpty}">
+              <Binding Path="[Date]" />
+              <Binding Path="Content.ParseError" RelativeSource="{RelativeSource Self}" />
+            </MultiBinding>
+          </controls:FormField.Error>
+          <controls:DateField SelectedDate="{Binding Date, Mode=TwoWay}" MinDate="{Binding EarliestDate}" AutomationProperties.Name="Appointment date" />
+        </controls:FormField>
+
+        <controls:FormField Label="Time (required)" IsRequired="True" Hint="Choose a time below, or type one such as 13:00 or 1:00 PM. Times are in your local time." controls:FormFocus.FieldName="Time" Error="{Binding [Time]}">
+          <StackPanel>
+            <TextBox Text="{Binding TimeText, UpdateSourceTrigger=PropertyChanged}" MaxLength="8" AutomationProperties.Name="Appointment time" />
+            <controls:Skeleton Kind="Picker" Visibility="{Binding IsLoadingSlots, Converter={StaticResource BoolToVisibility}}" feat:Edge.Top="{DynamicResource Space.8}" />
+            <TextBlock Style="{DynamicResource Text.Caption}" Foreground="{DynamicResource Brush.TextSecondary}" Text="{Binding SlotsMessage}" TextWrapping="Wrap" feat:Edge.Top="{DynamicResource Space.8}"
+                       Visibility="{Binding HasSlotsMessage, Converter={StaticResource BoolToVisibility}}" AutomationProperties.LiveSetting="Polite" />
+            <ListBox ItemsSource="{Binding Slots}" SelectedItem="{Binding SelectedSlot, Mode=TwoWay}" ItemContainerStyle="{StaticResource SlotItem}" feat:Edge.Top="{DynamicResource Space.8}"
+                     Background="{x:Null}" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="Available times">
+              <ListBox.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <WrapPanel />
+                </ItemsPanelTemplate>
+              </ListBox.ItemsPanel>
+            </ListBox>
+          </StackPanel>
+        </controls:FormField>
+
+        <controls:FormField Label="Reason for booking an ineligible donor (required)" IsRequired="True" controls:FormFocus.FieldName="OverrideReason" Error="{Binding [OverrideReason]}"
+                            Visibility="{Binding Banner.RequiresReason, Converter={StaticResource BoolToVisibility}}" Hint="It is stored with the appointment.">
+          <TextBox Text="{Binding OverrideReason, UpdateSourceTrigger=PropertyChanged}" MaxLength="300" TextWrapping="Wrap" AutomationProperties.Name="Override reason" />
+        </controls:FormField>
+      </StackPanel>
+    </lists:RecordEditorChrome.Fields>
+  </lists:RecordEditorChrome>
+</UserControl>
