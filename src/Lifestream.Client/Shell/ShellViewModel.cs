@@ -33,7 +33,6 @@ public sealed partial class ShellViewModel : ViewModelBase
     private readonly IServerStatus _serverStatus;
     private readonly IReadOnlyList<Destination> _catalog;
     private readonly SynchronizationContext? _context = SynchronizationContext.Current;
-    private int _visit;
 
     public ShellViewModel(
         INavigationService navigation,
@@ -174,31 +173,20 @@ public sealed partial class ShellViewModel : ViewModelBase
             return;
         }
 
-        var visit = Interlocked.Increment(ref _visit);
-        var navigated = await Navigation.NavigateTo(destination.ViewModelType).ConfigureAwait(true);
-        if (navigated && visit == Volatile.Read(ref _visit))
-        {
-            // Only the latest visit moves the highlight: an older one that finishes late must not undo it.
-            foreach (var item in Items)
-            {
-                item.IsSelected = item.Destination == destination;
-            }
-        }
+        await Navigation.NavigateTo(destination.ViewModelType).ConfigureAwait(true);
     }
 
-    private async Task NavigateToTypeAsync(Type type, object parameter)
-    {
-        if (await Navigation.NavigateTo(type, parameter).ConfigureAwait(true))
-        {
-            foreach (var item in Items)
-            {
-                item.IsSelected = false;
-            }
-        }
-    }
+    private async Task NavigateToTypeAsync(Type type, object parameter) => await Navigation.NavigateTo(type, parameter).ConfigureAwait(true);
 
     private void OnCurrentChanged(object? sender, EventArgs e)
     {
+        // The highlight follows the page on screen, whoever opened it: a sidebar click, a dashboard card or the account menu.
+        var page = Navigation.Current?.GetType();
+        foreach (var item in Items)
+        {
+            item.IsSelected = item.Destination.ViewModelType == page;
+        }
+
         OnPropertyChanged(nameof(CurrentPage));
         OnPropertyChanged(nameof(PageTitle));
         OnPropertyChanged(nameof(WindowTitle));

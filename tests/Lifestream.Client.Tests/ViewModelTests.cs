@@ -312,7 +312,7 @@ public sealed class ViewModelTests
         }
 
         Assert.True(tested >= 10, $"only {tested} properties were tested");
-        Assert.Empty(failures);
+        Assert.True(failures.Count == 0, string.Join(Environment.NewLine, failures));
     }
 
     private static System.ComponentModel.INotifyPropertyChanged Create(Rig rig, Type type)
@@ -328,9 +328,14 @@ public sealed class ViewModelTests
             return (System.ComponentModel.INotifyPropertyChanged)registered;
         }
 
+        // Not registered (editors are built by their list screen, with a private constructor): build it from the constructor that
+        // has the most parameters, taking each from the container, a sample, or null for an optional/nullable one.
         var pool = new object[] { RecordKind.Donor, NavigationCatalog.Default[0] };
-        var wanted = type.GetConstructors().SelectMany(c => c.GetParameters()).Select(p => p.ParameterType).ToHashSet();
-        return (System.ComponentModel.INotifyPropertyChanged)Microsoft.Extensions.DependencyInjection.ActivatorUtilities.CreateInstance(rig.Provider, type, [.. pool.Where(o => wanted.Contains(o.GetType()))]);
+        var constructor = type.GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance).OrderByDescending(c => c.GetParameters().Length).First();
+        var arguments = constructor.GetParameters()
+            .Select(p => rig.Provider.GetService(p.ParameterType) ?? pool.FirstOrDefault(o => p.ParameterType.IsInstanceOfType(o)) ?? (p.ParameterType == typeof(TimeProvider) ? TimeProvider.System : null))
+            .ToArray();
+        return (System.ComponentModel.INotifyPropertyChanged)constructor.Invoke(arguments);
     }
 
     private static bool IsInitOnly(PropertyInfo property) =>
@@ -384,7 +389,41 @@ public sealed class ViewModelTests
             return new Lifestream.Contracts.Lookups.RecordOption(77, "Sample", null);
         }
 
-        return null;
+        // Collections: a list holding one sample element.
+        var element = underlying.IsGenericType && underlying.GetGenericTypeDefinition() is var d && (d == typeof(IReadOnlyList<>) || d == typeof(IEnumerable<>) || d == typeof(IList<>) || d == typeof(List<>) || d == typeof(IReadOnlyCollection<>))
+            ? underlying.GetGenericArguments()[0]
+            : null;
+        if (element is not null)
+        {
+            var list = (System.Collections.IList)Activator.CreateInstance(typeof(List<>).MakeGenericType(element))!;
+            list.Add(Sample(element, null) ?? (element.IsValueType ? Activator.CreateInstance(element) : null));
+            return list;
+        }
+
+        // Any other type: an instance built from its widest constructor (an abstract type: from the first concrete subclass in the assembly).
+        var concrete = underlying.IsAbstract || underlying.IsInterface
+            ? typeof(ClientAssembly).Assembly.GetTypes().FirstOrDefault(t => !t.IsAbstract && underlying.IsAssignableFrom(t))
+            : underlying;
+        return concrete is null ? null : Build(concrete);
+    }
+
+    private static object Build(Type type)
+    {
+        var constructor = type.GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance).OrderByDescending(c => c.GetParameters().Length).FirstOrDefault();
+        if (constructor is null)
+        {
+            return Activator.CreateInstance(type)!;
+        }
+
+        var arguments = constructor.GetParameters().Select(p => p.ParameterType == typeof(string) ? "x" : p.ParameterType.IsValueType ? Activator.CreateInstance(p.ParameterType) : null).ToArray();
+        try
+        {
+            return constructor.Invoke(arguments);
+        }
+        catch (TargetInvocationException)
+        {
+            return System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(type);
+        }
     }
 
     [Fact]
