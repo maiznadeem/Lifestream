@@ -26,15 +26,19 @@ public interface IWindowHost
 /// </summary>
 public interface IAppFlow
 {
-    /// <summary>Shows the login window and warms the API up.</summary>
+    /// <summary>Shows the login window, warms the API up and checks the release feed for an update.</summary>
     void Start(string? notice = null);
 
     Task SignedInAsync();
 
-    Task SignOutAsync(string? notice = null);
+    /// <summary>
+    /// Signs out. A user-initiated sign-out asks "Discard changes?" first when the current form has unsaved changes and stays signed in on
+    /// Cancel (SHELL-24); <paramref name="force"/> (an expired session) skips the question because the session is already gone.
+    /// </summary>
+    Task SignOutAsync(string? notice = null, bool force = false);
 }
 
-public sealed partial class AppFlow(IServiceProvider services, ISessionService session, ILifestreamApiClient api, IWindowHost windows, IListViewStateStore listState, ILogger<AppFlow> logger) : IAppFlow
+public sealed partial class AppFlow(IServiceProvider services, ISessionService session, ILifestreamApiClient api, IWindowHost windows, IListViewStateStore listState, INavigationService navigation, ILogger<AppFlow> logger) : IAppFlow
 {
     private LoginViewModel? _login;
     private ShellViewModel? _shell;
@@ -46,6 +50,7 @@ public sealed partial class AppFlow(IServiceProvider services, ISessionService s
         _login.Notice = notice;
         windows.ShowLogin(_login);
         _ = api.WarmUpAsync();
+        _ = services.GetRequiredService<Lifestream.Client.Updates.UpdateService>().CheckAsync(); // at startup, before sign-in (SHELL-44)
     }
 
     public async Task SignedInAsync()
@@ -58,11 +63,21 @@ public sealed partial class AppFlow(IServiceProvider services, ISessionService s
         await _shell.StartAsync().ConfigureAwait(true);
     }
 
-    public Task SignOutAsync(string? notice = null)
+    public async Task SignOutAsync(string? notice = null, bool force = false)
     {
+        if (_shell is null)
+        {
+            return; // nothing to sign out of
+        }
+
+        if (!force && !await navigation.ConfirmDiscardAsync().ConfigureAwait(true))
+        {
+            return; // the user chose to stay (SHELL-24)
+        }
+
         if (_shell is null || Interlocked.Exchange(ref _signingOut, 1) == 1)
         {
-            return Task.CompletedTask; // logout runs once: a second call, or a call with nothing to sign out of, does nothing
+            return; // logout runs once: a second call, or a call with nothing to sign out of, does nothing
         }
 
         // The refresh token is taken before the session is cleared; the server is told afterwards, in the background (SHELL-17).
@@ -87,8 +102,6 @@ public sealed partial class AppFlow(IServiceProvider services, ISessionService s
         {
             _ = RevokeAsync(refreshToken);
         }
-
-        return Task.CompletedTask;
     }
 
     /// <summary>Fire and forget: one attempt, 5 s, no retries. A failure is logged and never shown; the local session is already gone.</summary>

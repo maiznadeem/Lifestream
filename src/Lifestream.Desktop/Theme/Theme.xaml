@@ -4,6 +4,7 @@
   <ResourceDictionary.MergedDictionaries>
     <ResourceDictionary Source="/Lifestream;component/Theme/Tokens.xaml" />
     <ResourceDictionary Source="/Lifestream;component/Theme/Motion.xaml" />
+    <ResourceDictionary Source="/Lifestream;component/Theme/ScrollBars.xaml" />
     <ResourceDictionary Source="/Lifestream;component/Theme/Typography.xaml" />
     <ResourceDictionary Source="/Lifestream;component/Theme/Images.xaml" />
     <ResourceDictionary Source="/Lifestream;component/Controls/Buttons.xaml" />
