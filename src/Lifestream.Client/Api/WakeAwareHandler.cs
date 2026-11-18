@@ -140,7 +140,7 @@ public sealed class WakeAwareHandler(WakePolicy policy, ServerStatus status, Htt
         {
             var text = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
             using var doc = JsonDocument.Parse(text);
-            var code = doc.RootElement.TryGetProperty("code", out var c) ? c.GetString() : null;
+            var code = JsonText.Property(doc.RootElement, "code");
             return code != ProblemCodes.DatabaseResting;
         }
         catch (JsonException)

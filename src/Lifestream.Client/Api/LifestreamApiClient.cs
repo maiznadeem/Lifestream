@@ -531,10 +531,10 @@ public sealed class LifestreamApiClient(HttpClient http, ISessionService session
             text = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
             using var doc = JsonDocument.Parse(text);
             var root = doc.RootElement;
-            code = root.TryGetProperty("code", out var c) ? c.GetString() : null;
-            title = root.TryGetProperty("title", out var t) ? t.GetString() : null;
-            detail = root.TryGetProperty("detail", out var d) ? d.GetString() : null;
-            correlation ??= root.TryGetProperty("correlationId", out var cid) ? cid.GetString() : null;
+            code = JsonText.Property(root, "code");
+            title = JsonText.Property(root, "title");
+            detail = JsonText.Property(root, "detail");
+            correlation ??= JsonText.Property(root, "correlationId");
         }
         catch (JsonException)
         {
