@@ -1,0 +1,347 @@
+using System.Globalization;
+using System.Text;
+using Lifestream.Api.Tests.Support;
+using Lifestream.Contracts;
+using Lifestream.Contracts.Appointments;
+using Lifestream.Contracts.Donors;
+using Lifestream.Contracts.Patients;
+using Lifestream.Contracts.Receipts;
+using Lifestream.Contracts.Requests;
+using Lifestream.Domain;
+
+namespace Lifestream.Api.Tests.Data;
+
+/// <summary>
+/// DB-05 through the REAL API: every list, lookup, stock and dashboard request below goes over HTTP into the API hosted on a 100x
+/// database on a real SQL Server. An EF command interceptor records the SQL the API sends (with its parameters); each statement is
+/// replayed under <c>SET STATISTICS XML</c> and the actual plan must contain no Table Scan or Clustered Index Scan on a table with more
+/// than 5,000 rows. The matrix uses COMMON filter values (Fulfilled requests, Completed appointments, blood type OPos), 1- and 2-letter
+/// name searches, every documented sort, page 1 and a deep page. Each list request must also be one database call (API-22).
+/// Set LIFESTREAM_PLAN_CAPTURE to a file path to write one line per request (operators, pages read, SQL).
+/// </summary>
+public sealed class ApiPlanMatrixTests(ScaleApiFixture fx) : IClassFixture<ScaleApiFixture>
+{
+    private const int BigTableRows = 5_000;
+
+    private static CancellationToken Ct => TestContext.Current.CancellationToken;
+
+    private sealed record ListShape(string Route, string[] Sorts, string[] Filters, int DeepPage);
+
+    private static readonly string[] Letters = ["a", "A", "m", "S", "Ay", "Al", "ma", "12"];
+
+    private static readonly Dictionary<string, ListShape> Lists = new()
+    {
+        ["donors"] = new(ApiRoutes.Donors, ["name", "-name", "lastDonated", "-lastDonated"], ["", "bloodType=OPos", "bloodType=ONeg", .. Letters.Select(l => "search=" + l), "search=a&bloodType=OPos", "search=Al&bloodType=APos"], 60),
+        ["patients"] = new(ApiRoutes.Patients, ["name", "-name"], ["", "bloodType=OPos", .. Letters.Select(l => "search=" + l), "search=a&bloodType=OPos"], 60),
+        ["appointments"] = new(
+            ApiRoutes.Appointments,
+            ["slot", "-slot", "placed", "-placed"],
+            [
+                "",
+                "status=Completed",
+                "status=Pending",
+                "status=Cancelled",
+                "status=NoShow",
+                "bloodType=OPos",
+                "bloodType=ONeg",
+                "status=Completed&bloodType=OPos",
+                "status=Pending&bloodType=ABNeg",
+                "donorId={donor}",
+                "donorId={donor}&status=Completed",
+                "fromUtc={from}&toUtc={to}",
+                "fromUtc={from}",
+                "toUtc={to}",
+                "status=Completed&fromUtc={from}&toUtc={to}",
+                "bloodType=OPos&fromUtc={from}&toUtc={to}",
+                "status=Completed&bloodType=OPos&fromUtc={from}&toUtc={to}",
+                .. Letters.Select(l => "search=" + l),
+                "search=a&status=Completed&bloodType=OPos",
+            ],
+            500),
+        ["requests"] = new(
+            ApiRoutes.Requests,
+            ["placed", "-placed", "requiredBy", "-requiredBy"],
+            [
+                "",
+                "status=Fulfilled",
+                "status=Pending",
+                "status=Cancelled",
+                "bloodType=OPos",
+                "bloodType=ONeg",
+                "status=Fulfilled&bloodType=OPos",
+                "status=Fulfilled&bloodType=APos",
+                "status=Pending&bloodType=OPos",
+                "status=Cancelled&bloodType=OPos",
+                "patientId={patient}",
+                "patientId={patient}&status=Fulfilled",
+                "fromUtc={from}&toUtc={to}",
+                "status=Fulfilled&fromUtc={from}&toUtc={to}",
+                .. Letters.Select(l => "search=" + l),
+                "search=a&status=Fulfilled&bloodType=OPos",
+            ],
+            250),
+        ["receipts"] = new(
+            ApiRoutes.Receipts,
+            ["date", "-date"],
+            [
+                "",
+                "kind=Donation",
+                "kind=Issue",
+                "bloodType=OPos",
+                "kind=Donation&bloodType=OPos",
+                "kind=Issue&bloodType=OPos",
+                "fromUtc={from}&toUtc={to}",
+                "kind=Donation&fromUtc={from}&toUtc={to}",
+                "bloodType=OPos&fromUtc={from}&toUtc={to}",
+                .. Letters.Select(l => "search=" + l),
+                "search=a&kind=Donation&bloodType=OPos",
+                "search=Al&fromUtc={from}&toUtc={to}",
+            ],
+            500),
+    };
+
+    public static TheoryData<string> Cases()
+    {
+        var data = new TheoryData<string>();
+        foreach (var (list, shape) in Lists)
+        {
+            foreach (var filter in shape.Filters)
+            {
+                foreach (var sort in shape.Sorts)
+                {
+                    data.Add($"{list}|{filter}|{sort}|1");
+                    data.Add($"{list}|{filter}|{sort}|deep");
+                }
+            }
+        }
+
+        data.Add("page-size-200|donors");
+        data.Add("page-size-200|appointments");
+        data.Add("page-size-200|requests");
+        data.Add("page-size-200|receipts");
+        foreach (var lookup in new[] { "donors", "patients", "staff", "appointments", "requests" })
+        {
+            foreach (var term in new[] { "a", "A", "Al", "1" })
+            {
+                data.Add($"lookup|{lookup}|{term}");
+            }
+        }
+
+        data.Add("staff|none");
+        data.Add("staff|search=a");
+        data.Add("stock|none");
+        data.Add("dashboard|default");
+        data.Add("dashboard|36-months");
+        data.Add("dashboard|offset");
+        data.Add("eligibility|donor");
+        data.Add("slots|today");
+        return data;
+    }
+
+    [Fact]
+    public void Matrix_CoversEveryFilterAndSortOfEveryQueryRecord()
+    {
+        var records = new Dictionary<string, (Type Type, string[] Properties)>
+        {
+            ["donors"] = (typeof(DonorQuery), ["Search", "BloodType"]),
+            ["patients"] = (typeof(PatientQuery), ["Search", "BloodType"]),
+            ["appointments"] = (typeof(AppointmentQuery), ["Search", "DonorId", "Status", "BloodType", "FromUtc", "ToUtc"]),
+            ["requests"] = (typeof(RequestQuery), ["Search", "PatientId", "Status", "BloodType"]),
+            ["receipts"] = (typeof(ReceiptQuery), ["Search", "Kind", "BloodType", "FromUtc", "ToUtc"]),
+        };
+        foreach (var (list, (type, expected)) in records)
+        {
+            var actual = type.GetProperties().Select(p => p.Name).Where(n => n is not ("Page" or "PageSize" or "Sort")).Order().ToArray();
+            Assert.Equal(expected.Order().ToArray(), actual);
+            var filters = Lists[list].Filters;
+            Assert.All(expected, name => Assert.Contains(filters, f => f.Contains(char.ToLowerInvariant(name[0]) + name[1..], StringComparison.Ordinal)));
+        }
+
+        // The common values the earlier verification found scanning must be in the matrix.
+        Assert.Contains("status=Fulfilled&bloodType=OPos", Lists["requests"].Filters);
+        Assert.Contains("status=Completed&bloodType=OPos", Lists["appointments"].Filters);
+        Assert.Contains("search=a", Lists["receipts"].Filters);
+        Assert.Contains("search=Ay", Lists["receipts"].Filters);
+    }
+
+    [Fact]
+    public async Task RanAgainstTheScaleDataset_OnARealSqlServer_ThroughTheApi()
+    {
+        Assert.Contains("Microsoft SQL Server", fx.Db.ServerVersion, StringComparison.Ordinal);
+        Assert.Equal(27_000, await fx.Db.ScalarAsync<int>("SELECT COUNT(*) FROM Receipt", Ct));
+        Assert.Equal(30_000, await fx.Db.ScalarAsync<int>("SELECT COUNT(*) FROM Appointment", Ct));
+        Assert.Equal(15_000, await fx.Db.ScalarAsync<int>("SELECT COUNT(*) FROM Request", Ct));
+
+        // The data really holds the common values the matrix filters on (a rare value would hide a scan).
+        Assert.True(await fx.Db.ScalarAsync<int>("SELECT COUNT(*) FROM Request WHERE Status = 'Fulfilled'", Ct) > 5_000);
+        Assert.True(await fx.Db.ScalarAsync<int>("SELECT COUNT(*) FROM Appointment WHERE Status = 'Completed'", Ct) > 5_000);
+        Assert.True(await fx.Db.ScalarAsync<int>("SELECT COUNT(*) FROM Appointment WHERE DonorBloodType = 'OPos'", Ct) > 5_000);
+    }
+
+    [Theory]
+    [MemberData(nameof(Cases))]
+    public async Task ApiRequest_AtScale_UsesNoTableScan_AndOneDatabaseCall(string @case)
+    {
+        var admin = await AdminAsync();
+        var sizes = (await fx.Db.RowsAsync(
+            "SELECT t.name, SUM(p.rows) FROM sys.tables t JOIN sys.partitions p ON p.object_id = t.object_id AND p.index_id IN (0, 1) GROUP BY t.name", Ct))
+            .ToDictionary(r => (string)r[0]!, r => Convert.ToInt64(r[1], CultureInfo.InvariantCulture));
+        var url = await UrlAsync(@case, admin.Client);
+
+        fx.Statements.Drain();
+        fx.Statements.Recording = true;
+        HttpResponseMessage response;
+        try
+        {
+            response = await admin.Client.GetAsync(url, Ct);
+        }
+        finally
+        {
+            fx.Statements.Recording = false;
+        }
+
+        var body = await response.Content.ReadAsStringAsync(Ct);
+        Assert.True(response.IsSuccessStatusCode, $"{url}: {(int)response.StatusCode} {body}");
+        // The session check of a token that has just expired from the cache (refresh-token and demo-state rows, tiny tables) is not the
+        // data call of the click; every other statement is.
+        var statements = fx.Statements.Drain().Where(s => !s.Sql.Contains("FROM [RefreshToken]", StringComparison.Ordinal) && !s.Sql.Contains("[DemoState]", StringComparison.Ordinal)).ToList();
+        Assert.NotEmpty(statements);
+
+        var plans = new List<ExecutedPlan>();
+        var parameterText = new List<string>();
+        foreach (var (sql, parameters) in statements)
+        {
+            plans.Add(await PlanHelper.ReplayAsync(fx.Db.ConnectionString, sql, parameters, Ct));
+            parameterText.Add(string.Join(", ", parameters.Select(p => $"{p.ParameterName} {p.SqlDbType}({p.Size})={p.Value}")));
+        }
+
+        Record(url, plans, parameterText);
+
+        var kind = @case.Split('|')[0];
+        if (kind is "donors" or "patients" or "appointments" or "requests" or "receipts" or "page-size-200" or "staff")
+        {
+            // API-22: a filter click is one database call (page and total together); the deep pages here are inside the data.
+            Assert.True(plans.Count == 1, $"{url}: {plans.Count} database calls, expected 1:\n{string.Join("\n---\n", plans.Select(p => p.Sql))}");
+        }
+
+        foreach (var plan in plans)
+        {
+            var scans = plan.TableScans()
+                .Select(t => t.Trim('[', ']'))
+                .Where(t => sizes.TryGetValue(t, out var rows) && rows > BigTableRows)
+                .ToList();
+            Assert.True(scans.Count == 0, $"{url}: scans {string.Join(", ", scans)} on a table over {BigTableRows} rows\n{plan.Sql}");
+        }
+    }
+
+    private static readonly SemaphoreSlim AdminLock = new(1, 1);
+    private static TestUser? _admin;
+
+    /// <summary>One signed-in admin for the whole matrix (the fixture is shared by the class).</summary>
+    private async Task<TestUser> AdminAsync()
+    {
+        await AdminLock.WaitAsync(Ct);
+        try
+        {
+            if (_admin is null)
+            {
+                _admin = await fx.AddStaffAsync(Role.Admin, "planadmin");
+
+                // The first request of a session also checks the session (refresh-token row, demo state); that is not a filter click.
+                (await _admin.Client.GetAsync(ApiRoutes.Path(ApiRoutes.Me), Ct)).EnsureSuccessStatusCode();
+            }
+
+            return _admin;
+        }
+        finally
+        {
+            AdminLock.Release();
+        }
+    }
+
+    private async Task<string> UrlAsync(string @case, HttpClient client)
+    {
+        var parts = @case.Split('|');
+        var from = DateTime.UtcNow.AddDays(-120).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var to = DateTime.UtcNow.AddDays(-60).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        string Fill(string text) => text
+            .Replace("{from}", from, StringComparison.Ordinal)
+            .Replace("{to}", to, StringComparison.Ordinal)
+            .Replace("{donor}", "1", StringComparison.Ordinal)
+            .Replace("{patient}", "1", StringComparison.Ordinal);
+
+        switch (parts[0])
+        {
+            case "page-size-200":
+                return ApiRoutes.Path(Lists[parts[1]].Route) + "?pageSize=200&page=2";
+            case "lookup":
+                return ApiRoutes.Path("lookups/" + parts[1]) + "?search=" + parts[2];
+            case "staff":
+                return ApiRoutes.Path(ApiRoutes.Staff) + (parts[1] == "none" ? "?pageSize=200" : "?pageSize=200&" + parts[1]);
+            case "stock":
+                return ApiRoutes.Path(ApiRoutes.Stock);
+            case "dashboard":
+                return ApiRoutes.Path(ApiRoutes.Dashboard) + parts[1] switch
+                {
+                    "36-months" => "?from=2023-12-01",
+                    "offset" => "?utcOffsetMinutes=-300",
+                    _ => "",
+                };
+            case "eligibility":
+                var donorId = await fx.Db.ScalarAsync<int>("SELECT MIN(Id) FROM Donor", Ct);
+                return ApiRoutes.Path(ApiRoutes.DonorEligibility, donorId);
+            case "slots":
+                return ApiRoutes.Path(ApiRoutes.AppointmentSlots) + "?date=" + DateTime.UtcNow.AddDays(1).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+            default:
+                var shape = Lists[parts[0]];
+                var query = new List<string>();
+                if (parts[1].Length > 0)
+                {
+                    query.Add(Fill(parts[1]));
+                }
+
+                query.Add("sort=" + Uri.EscapeDataString(parts[2]));
+                var baseUrl = ApiRoutes.Path(shape.Route) + "?" + string.Join('&', query);
+                if (parts[3] != "deep")
+                {
+                    return baseUrl + "&page=" + parts[3];
+                }
+
+                // The deep page: page 261 at most, but never past the end of this filter's results (a page past the end is a different,
+                // two-call path that is not a filter click).
+                var first = await client.GetAsync(baseUrl + "&page=1", Ct);
+                var total = System.Text.Json.JsonElement.Parse(await first.Content.ReadAsStringAsync(Ct)).GetProperty("total").GetInt32();
+                first.Dispose();
+                var lastPage = Math.Max(1, (total + 49) / 50);
+                return baseUrl + "&page=" + Math.Min(shape.DeepPage, lastPage);
+        }
+    }
+
+    private static readonly object Gate = new();
+
+    private static void Record(string url, List<ExecutedPlan> plans, List<string> parameterText)
+    {
+        var path = Environment.GetEnvironmentVariable("LIFESTREAM_PLAN_CAPTURE");
+        if (string.IsNullOrEmpty(path))
+        {
+            return;
+        }
+
+        var sb = new StringBuilder();
+        sb.Append("API ").Append(url).Append(" | statements=").Append(plans.Count).Append(" | reads=[")
+            .Append(string.Join(',', plans.Select(p => p.LogicalReads))).Append("] | scans=[")
+            .Append(string.Join(',', plans.SelectMany(p => p.TableScans()))).Append("] | ops=[")
+            .Append(string.Join(',', plans.SelectMany(p => p.Operators().Select(o => o.Physical + (o.Table is null ? "" : ":" + o.Table))).Distinct())).AppendLine("]");
+        for (var i = 0; i < plans.Count; i++)
+        {
+            sb.Append("   SQL: ").AppendLine(plans[i].Sql.ReplaceLineEndings(" "));
+            sb.Append("   PARAMS: ").AppendLine(parameterText[i]);
+            sb.Append("   PLAN: ").AppendLine(plans[i].Describe());
+        }
+
+        lock (Gate)
+        {
+            File.AppendAllText(path, sb.ToString());
+        }
+    }
+}

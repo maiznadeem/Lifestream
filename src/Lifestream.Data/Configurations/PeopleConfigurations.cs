@@ -19,10 +19,14 @@ internal sealed class DonorConfiguration : IEntityTypeConfiguration<Donor>
         b.Property(x => x.Phone).HasMaxLength(20).IsUnicode(false);
         b.Property(x => x.Address).HasMaxLength(200);
         b.Property(x => x.RowVersion).IsRowVersion();
-        b.HasIndex(x => x.Name);
-        b.HasIndex(x => new { x.BloodType, x.Name });
+
+        // The list shows these columns; every index the list is sorted by carries them, so a page never goes back to the table.
+        b.HasIndex(x => x.Name).IncludeProperties(x => new { x.DateOfBirth, x.Gender, x.BloodType, x.Phone, x.Frequency, x.LastDonated, x.MedicalHold });
+        b.HasIndex(x => new { x.BloodType, x.Name }).IncludeProperties(x => new { x.DateOfBirth, x.Gender, x.Phone, x.Frequency, x.LastDonated, x.MedicalHold });
+        b.HasIndex(x => x.LastDonated).IncludeProperties(x => new { x.Name, x.DateOfBirth, x.Gender, x.BloodType, x.Phone, x.Frequency, x.MedicalHold });
+        b.HasIndex(x => new { x.BloodType, x.LastDonated }).IncludeProperties(x => new { x.Name, x.DateOfBirth, x.Gender, x.Phone, x.Frequency, x.MedicalHold });
+        b.HasIndex(x => x.Phone);
         b.HasIndex(x => x.Gender);
-        b.HasIndex(x => x.LastDonated);
     }
 }
 
@@ -38,8 +42,10 @@ internal sealed class PatientConfiguration : IEntityTypeConfiguration<Patient>
         b.Property(x => x.Phone).HasMaxLength(20).IsUnicode(false);
         b.Property(x => x.Address).HasMaxLength(200);
         b.Property(x => x.RowVersion).IsRowVersion();
-        b.HasIndex(x => x.Name);
-        b.HasIndex(x => new { x.BloodType, x.Name });
+
+        b.HasIndex(x => x.Name).IncludeProperties(x => new { x.DateOfBirth, x.Gender, x.BloodType, x.Phone });
+        b.HasIndex(x => new { x.BloodType, x.Name }).IncludeProperties(x => new { x.DateOfBirth, x.Gender, x.Phone });
+        b.HasIndex(x => x.Phone);
         b.HasIndex(x => x.Gender);
     }
 }
@@ -57,7 +63,8 @@ internal sealed class StaffConfiguration : IEntityTypeConfiguration<Staff>
     /// bytes 9-12 = 16 (salt length). Base64 characters 1-8 are therefore <c>AQAAAAIA</c> and 13-17 are <c>AAAAE</c>.</item>
     /// </list>
     /// What it cannot check: the iteration count floor (the application's <c>PasswordHashing.IsValidHash</c> does) and that
-    /// the salt and subkey are random. Plain text, and plain text behind a valid-looking prefix, cannot pass.
+    /// the salt and subkey are random. Plain text and anything that breaks the header or the base64 shape cannot pass; base64-looking
+    /// text behind a valid header can (a real hash with a low iteration count passes too), so only the application's check is complete.
     /// </summary>
     public const string HashCheck =
         "LEN([PasswordHash]) BETWEEN 84 AND 256 AND LEN([PasswordHash]) % 4 = 0 " +

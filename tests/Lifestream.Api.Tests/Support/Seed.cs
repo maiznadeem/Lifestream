@@ -14,12 +14,13 @@ public static class Seed
     public static DateTime Slot(int daysAhead, int hour, int minute = 0) =>
         DateTime.SpecifyKind(DateTime.UtcNow.Date.AddDays(daysAhead).AddHours(hour).AddMinutes(minute), DateTimeKind.Utc);
 
-    public static async Task<Donor> DonorAsync(ApiFixture fx, string? name = null, BloodType type = BloodType.OPos, DateOnly? dob = null, DateOnly? lastDonated = null, Gender gender = Gender.Female)
+    public static async Task<Donor> DonorAsync(ApiFixture fx, string? name = null, BloodType type = BloodType.OPos, DateOnly? dob = null, DateOnly? lastDonated = null, Gender gender = Gender.Female, bool medicalHold = false)
     {
         await using var db = fx.Db.NewContext();
         var donor = TestRows.Donor(name ?? fx.NextName("Donor "), gender, type);
         donor.DateOfBirth = dob ?? DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-30));
         donor.LastDonated = lastDonated;
+        donor.MedicalHold = medicalHold;
         db.Donors.Add(donor);
         await db.SaveChangesAsync(Ct);
         return donor;

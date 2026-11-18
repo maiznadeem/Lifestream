@@ -67,6 +67,39 @@ public sealed class CommandLog : DbCommandInterceptor
     }
 }
 
+/// <summary>
+/// Records every query the API sends (text and a copy of each parameter) while <see cref="Recording"/> is true, so a test can replay
+/// the exact statements under SET STATISTICS XML and read the actual execution plans.
+/// </summary>
+public sealed class StatementCapture : DbCommandInterceptor
+{
+    private readonly ConcurrentQueue<(string Sql, List<SqlParameter> Parameters)> _statements = new();
+
+    public bool Recording { get; set; }
+
+    /// <summary>Returns what was recorded since the last call and clears it.</summary>
+    public List<(string Sql, List<SqlParameter> Parameters)> Drain()
+    {
+        var list = new List<(string, List<SqlParameter>)>();
+        while (_statements.TryDequeue(out var item))
+        {
+            list.Add(item);
+        }
+
+        return list;
+    }
+
+    public override ValueTask<InterceptionResult<System.Data.Common.DbDataReader>> ReaderExecutingAsync(System.Data.Common.DbCommand command, CommandEventData eventData, InterceptionResult<System.Data.Common.DbDataReader> result, CancellationToken cancellationToken = default)
+    {
+        if (Recording)
+        {
+            _statements.Enqueue((command.CommandText, [.. command.Parameters.Cast<SqlParameter>().Select(p => (SqlParameter)((ICloneable)p).Clone())]));
+        }
+
+        return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
+    }
+}
+
 /// <summary>Counts connections opened and can make opening fail the way a resuming serverless database does (error 40613).</summary>
 public sealed class ConnectionProbe : DbConnectionInterceptor
 {
@@ -226,6 +259,7 @@ public class ApiFixture : IAsyncLifetime
 
     public TestClock Clock { get; } = new();
     public CommandLog Commands { get; } = new();
+    public StatementCapture Statements { get; } = new();
     public ConnectionProbe Connections { get; } = new();
     public FakeProbe Probe { get; } = new();
     public CapturingLoggerProvider Logs { get; } = new();
@@ -270,6 +304,7 @@ public class ApiFixture : IAsyncLifetime
             {
                 services.AddSingleton<TimeProvider>(Clock);
                 services.AddSingleton<IInterceptor>(Commands);
+                services.AddSingleton<IInterceptor>(Statements);
                 services.AddSingleton<IInterceptor>(Connections);
                 if (UseFakeProbe)
                 {

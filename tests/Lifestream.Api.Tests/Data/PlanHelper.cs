@@ -23,6 +23,19 @@ internal sealed record ExecutedPlan(string Sql, XDocument Plan, int LogicalReads
     public IEnumerable<string> TableScans() =>
         Operators().Where(o => o.Physical is "Table Scan" or "Clustered Index Scan").Select(o => o.Table ?? "?");
 
+    /// <summary>Each scan, seek, join and sort of the actual plan with the rows it produced and how many times it ran.</summary>
+    public string Describe() => string.Join(
+        " ; ",
+        Plan.Descendants(Ns + "RelOp")
+            .Select(op => (Op: op, Name: (string)op.Attribute("PhysicalOp")!))
+            .Where(x => x.Name.Contains("Scan", StringComparison.Ordinal) || x.Name.Contains("Seek", StringComparison.Ordinal) || x.Name.Contains("Join", StringComparison.Ordinal) || x.Name.Contains("Sort", StringComparison.Ordinal))
+            .Select(x =>
+            {
+                var counters = x.Op.Elements(Ns + "RunTimeInformation").Elements(Ns + "RunTimeCountersPerThread").ToList();
+                var table = x.Op.Elements().SelectMany(e => e.Elements(Ns + "Object")).FirstOrDefault() is { } o ? $":{(string?)o.Attribute("Table")}.{(string?)o.Attribute("Index")}" : "";
+                return $"{x.Name}[rows={counters.Sum(c => (long)c.Attribute("ActualRows")!)},exec={counters.Sum(c => (long)c.Attribute("ActualExecutions")!)}]{table}";
+            }));
+
     public bool HasJoin() => Operators().Any(o => o.Logical.Contains("Join", StringComparison.Ordinal));
 }
 
@@ -49,7 +62,8 @@ internal static class PlanHelper
         return plans;
     }
 
-    private static async Task<ExecutedPlan> ReplayAsync(string connectionString, string sql, List<SqlParameter> parameters, CancellationToken ct)
+    /// <summary>Runs one captured statement with its parameters under SET STATISTICS XML and IO and returns the actual plan.</summary>
+    internal static async Task<ExecutedPlan> ReplayAsync(string connectionString, string sql, List<SqlParameter> parameters, CancellationToken ct)
     {
         var reads = 0;
         await using var connection = new SqlConnection(connectionString);
