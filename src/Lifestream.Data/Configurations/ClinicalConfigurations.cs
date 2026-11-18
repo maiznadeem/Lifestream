@@ -10,15 +10,22 @@ internal sealed class AppointmentConfiguration : IEntityTypeConfiguration<Appoin
 {
     public void Configure(EntityTypeBuilder<Appointment> b)
     {
-        b.Table("Appointment", ("Status", InList<AppointmentStatus>("Status")));
+        b.Table("Appointment", ("Status", InList<AppointmentStatus>("Status")), ("DonorBloodType", InList<BloodType>("DonorBloodType")));
         b.Property(x => x.PlacedAtUtc).HasDefaultValueSql(UtcNow);
         b.Property(x => x.OverrideReason).HasMaxLength(300);
         b.Property(x => x.RowVersion).IsRowVersion();
         b.HasOne(x => x.Donor).WithMany().HasForeignKey(x => x.DonorId).OnDelete(DeleteBehavior.Restrict);
-        b.HasIndex(x => x.DonorId);
+
+        // A donor's appointments (and the appointments of the donors a name search found) in date order, without lookups.
+        b.HasIndex(x => new { x.DonorId, x.SlotStartUtc }).IncludeProperties(x => new { x.PlacedAtUtc, x.Status });
         b.HasIndex(x => new { x.Status, x.SlotStartUtc });
-        b.HasIndex(x => x.SlotStartUtc);
-        b.HasIndex(x => x.PlacedAtUtc);
+        b.HasIndex(x => new { x.Status, x.PlacedAtUtc });
+
+        // A date range on one of the two dates with the list sorted by the other reads only these narrow indexes, never the table.
+        b.HasIndex(x => x.SlotStartUtc).IncludeProperties(x => new { x.PlacedAtUtc, x.Status });
+        b.HasIndex(x => x.PlacedAtUtc).IncludeProperties(x => new { x.SlotStartUtc, x.Status });
+        b.HasIndex(x => new { x.DonorBloodType, x.SlotStartUtc });
+        b.HasIndex(x => new { x.DonorBloodType, x.PlacedAtUtc });
     }
 }
 
@@ -34,9 +41,11 @@ internal sealed class RequestConfiguration : IEntityTypeConfiguration<Request>
         b.Property(x => x.PlacedAtUtc).HasDefaultValueSql(UtcNow);
         b.Property(x => x.RowVersion).IsRowVersion();
         b.HasOne(x => x.Patient).WithMany().HasForeignKey(x => x.PatientId).OnDelete(DeleteBehavior.Restrict);
-        b.HasIndex(x => x.PatientId);
+        b.HasIndex(x => new { x.PatientId, x.PlacedAtUtc }).IncludeProperties(x => x.RequiredBy);
         b.HasIndex(x => new { x.Status, x.PlacedAtUtc });
         b.HasIndex(x => new { x.BloodType, x.Status, x.PlacedAtUtc });
+        b.HasIndex(x => new { x.BloodType, x.PlacedAtUtc });
+        b.HasIndex(x => new { x.BloodType, x.RequiredBy });
         b.HasIndex(x => new { x.Status, x.RequiredBy });
         b.HasIndex(x => x.PlacedAtUtc);
         b.HasIndex(x => x.RequiredBy);

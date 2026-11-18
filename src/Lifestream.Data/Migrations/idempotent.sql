@@ -550,3 +550,192 @@ END;
 COMMIT;
 GO
 
+BEGIN TRANSACTION;
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261118220716_HardenHashCheckAndListIndexes'
+)
+BEGIN
+    ALTER TABLE [Staff] DROP CONSTRAINT [CK_Staff_PasswordHash];
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261118220716_HardenHashCheckAndListIndexes'
+)
+BEGIN
+    DROP INDEX [IX_Request_PatientId] ON [Request];
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261118220716_HardenHashCheckAndListIndexes'
+)
+BEGIN
+    DROP INDEX [IX_Patient_BloodType] ON [Patient];
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261118220716_HardenHashCheckAndListIndexes'
+)
+BEGIN
+    DROP INDEX [IX_Donor_BloodType] ON [Donor];
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261118220716_HardenHashCheckAndListIndexes'
+)
+BEGIN
+    DROP INDEX [IX_Appointment_DonorId] ON [Appointment];
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261118220716_HardenHashCheckAndListIndexes'
+)
+BEGIN
+    DROP INDEX [IX_Appointment_PlacedAtUtc] ON [Appointment];
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261118220716_HardenHashCheckAndListIndexes'
+)
+BEGIN
+    DROP INDEX [IX_Appointment_SlotStartUtc] ON [Appointment];
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261118220716_HardenHashCheckAndListIndexes'
+)
+BEGIN
+    ALTER TABLE [Appointment] ADD [DonorBloodType] varchar(5) NOT NULL DEFAULT '';
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261118220716_HardenHashCheckAndListIndexes'
+)
+BEGIN
+    EXEC(N'UPDATE a SET a.DonorBloodType = d.BloodType FROM Appointment a JOIN Donor d ON d.Id = a.DonorId')
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261118220716_HardenHashCheckAndListIndexes'
+)
+BEGIN
+    EXEC(N'ALTER TABLE [Staff] ADD CONSTRAINT [CK_Staff_PasswordHash] CHECK (LEN([PasswordHash]) BETWEEN 84 AND 256 AND LEN([PasswordHash]) % 4 = 0 AND [PasswordHash] NOT LIKE ''%[^A-Za-z0-9+/=]%'' COLLATE Latin1_General_100_BIN2 AND [PasswordHash] NOT LIKE ''%=%[^=]%'' COLLATE Latin1_General_100_BIN2 AND [PasswordHash] NOT LIKE ''%===%'' COLLATE Latin1_General_100_BIN2 AND [PasswordHash] LIKE ''AQAAAAIA____AAAAE%'' COLLATE Latin1_General_100_BIN2)');
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261118220716_HardenHashCheckAndListIndexes'
+)
+BEGIN
+    CREATE INDEX [IX_Request_BloodType_PlacedAtUtc] ON [Request] ([BloodType], [PlacedAtUtc]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261118220716_HardenHashCheckAndListIndexes'
+)
+BEGIN
+    CREATE INDEX [IX_Request_BloodType_RequiredBy] ON [Request] ([BloodType], [RequiredBy]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261118220716_HardenHashCheckAndListIndexes'
+)
+BEGIN
+    CREATE INDEX [IX_Request_PatientId_PlacedAtUtc] ON [Request] ([PatientId], [PlacedAtUtc]) INCLUDE ([RequiredBy]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261118220716_HardenHashCheckAndListIndexes'
+)
+BEGIN
+    CREATE INDEX [IX_Patient_BloodType_Name] ON [Patient] ([BloodType], [Name]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261118220716_HardenHashCheckAndListIndexes'
+)
+BEGIN
+    CREATE INDEX [IX_Donor_BloodType_Name] ON [Donor] ([BloodType], [Name]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261118220716_HardenHashCheckAndListIndexes'
+)
+BEGIN
+    CREATE INDEX [IX_Appointment_DonorBloodType_PlacedAtUtc] ON [Appointment] ([DonorBloodType], [PlacedAtUtc]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261118220716_HardenHashCheckAndListIndexes'
+)
+BEGIN
+    CREATE INDEX [IX_Appointment_DonorBloodType_SlotStartUtc] ON [Appointment] ([DonorBloodType], [SlotStartUtc]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261118220716_HardenHashCheckAndListIndexes'
+)
+BEGIN
+    CREATE INDEX [IX_Appointment_DonorId_SlotStartUtc] ON [Appointment] ([DonorId], [SlotStartUtc]) INCLUDE ([PlacedAtUtc], [Status]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261118220716_HardenHashCheckAndListIndexes'
+)
+BEGIN
+    CREATE INDEX [IX_Appointment_PlacedAtUtc] ON [Appointment] ([PlacedAtUtc]) INCLUDE ([SlotStartUtc], [Status]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261118220716_HardenHashCheckAndListIndexes'
+)
+BEGIN
+    CREATE INDEX [IX_Appointment_SlotStartUtc] ON [Appointment] ([SlotStartUtc]) INCLUDE ([PlacedAtUtc], [Status]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261118220716_HardenHashCheckAndListIndexes'
+)
+BEGIN
+    CREATE INDEX [IX_Appointment_Status_PlacedAtUtc] ON [Appointment] ([Status], [PlacedAtUtc]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261118220716_HardenHashCheckAndListIndexes'
+)
+BEGIN
+    EXEC(N'ALTER TABLE [Appointment] ADD CONSTRAINT [CK_Appointment_DonorBloodType] CHECK ([DonorBloodType] IN (''APos'', ''ANeg'', ''BPos'', ''BNeg'', ''ABPos'', ''ABNeg'', ''OPos'', ''ONeg''))');
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261118220716_HardenHashCheckAndListIndexes'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20261118220716_HardenHashCheckAndListIndexes', N'11.0.0');
+END;
+
+COMMIT;
+GO
+
