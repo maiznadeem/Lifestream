@@ -37,7 +37,7 @@ internal sealed class SqlDatabaseProbe(IConfiguration configuration, IOptions<Da
 
 public static class ApiSetup
 {
-    private static readonly string[] DefaultTrustedNetworks = ["10.40.0.0/23", "127.0.0.0/8", "::1/128"];
+    private static readonly string[] DefaultTrustedNetworks = ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10", "127.0.0.0/8", "::1/128"];
 
     public static WebApplicationBuilder AddLifestreamApi(this WebApplicationBuilder builder)
     {
@@ -72,7 +72,7 @@ public static class ApiSetup
         });
 
         // Only a proxy on a trusted network may set X-Forwarded-For; anything else is judged by its real address.
-        // ForwardedHeaders:KnownNetworks (CIDR list) defaults to the Container Apps subnet from infra/main.bicep plus loopback.
+        // ForwardedHeaders:KnownNetworks (CIDR list) defaults to the private ranges (the Container Apps ingress hop comes from one) plus loopback.
         services.AddOptions<ForwardedHeadersOptions>().Configure<IConfiguration>((o, configuration) =>
         {
             o.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
