@@ -5,7 +5,7 @@
 .DESCRIPTION
   Run once by the orchestrator after infra/main.bicep has created the identities, and again whenever the identities change
   (it is idempotent). Connects to the database as the signed-in Microsoft Entra administrator of the SQL server, with an
-  access token from `az account get-access-token`; no password is used or written anywhere.
+  access token from the Azure CLI (az account get-access-token --subscription $SubscriptionId); no password is used or written anywhere.
 
     lifestream-api       the API container app (system-assigned identity)   db_datareader, db_datawriter, EXECUTE. No DDL.
     lifestream-migrator  the migrate job (user-assigned identity)           db_ddladmin, db_datareader, db_datawriter.
@@ -27,6 +27,7 @@ param(
     [ValidatePattern('^[A-Za-z0-9-]{1,64}$')][string]$ApiName = 'lifestream-api',
     [Parameter(Mandatory)][ValidatePattern('^[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$')][string]$MigratorPrincipalId,
     [ValidatePattern('^[A-Za-z0-9-]{1,64}$')][string]$MigratorName = 'lifestream-migrator',
+    [ValidatePattern('^[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$')][string]$SubscriptionId = '88f308cf-f1e5-4e4d-b0bc-3e8b14ef9c65',
     [int]$WakeTimeoutSeconds = 240,
     [switch]$PrintOnly
 )
@@ -92,8 +93,8 @@ if ($PSVersionTable.PSEdition -eq 'Core') {
 }
 
 Add-Type -AssemblyName System.Data
-$token = (& az account get-access-token --resource https://database.windows.net/ --query accessToken -o tsv)
-if ($LASTEXITCODE -ne 0 -or -not $token) { throw "az account get-access-token failed. Run 'az login' as the Entra administrator of $ServerName." }
+$token = (& az account get-access-token --subscription $SubscriptionId --resource https://database.windows.net/ --query accessToken -o tsv)
+if ($LASTEXITCODE -ne 0 -or -not $token) { throw "Getting the database access token failed. Run 'az login' as the Entra administrator of $ServerName." }
 
 $connectionString = "Server=tcp:$ServerName.database.windows.net,1433;Database=$Database;Encrypt=True;TrustServerCertificate=False;Connection Timeout=60"
 $deadline = (Get-Date).AddSeconds($WakeTimeoutSeconds)
@@ -105,7 +106,7 @@ while ($true) {
     catch [System.Data.SqlClient.SqlException] {
         $connection.Dispose()
         $waking = $_.Exception.Number -in 40613, 40197, 40501, 49918, 4060
-        if ($_.Exception.Number -eq 40615) { throw "The SQL firewall does not admit this machine (error 40615). Add a temporary client IP rule, see infra/README.md step 3." }
+        if ($_.Exception.Number -eq 40615) { throw "The SQL firewall does not admit this machine (error 40615). Add a temporary client IP rule (az sql server firewall-rule create --subscription $SubscriptionId ...), see infra/README.md step 5." }
         if (-not $waking -or (Get-Date) -gt $deadline) { throw }
         Write-Host "Database is waking (error $($_.Exception.Number)); retrying in 10 s"
         Start-Sleep -Seconds 10

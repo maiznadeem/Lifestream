@@ -3,7 +3,9 @@ name: Deploy API
 # Separate from the PR build (ci.yml). Runs on a push to master that touches the API, its libraries or the
 # infrastructure, after its own build-and-test gate. Signs in to Azure with GitHub OIDC (no stored cloud secret; the
 # only secret used is the built-in GITHUB_TOKEN). Order: gate, image (built, scanned, then pushed), migrate job, app
-# update, health check, prune old image versions.
+# update, SQL firewall sync (only the environment's outbound addresses), health check, prune old image versions. The decisions
+# (firewall set, which image versions to delete or keep, the count and manifest checks) live in scripts under infra/ and tools/ with
+# Pester tests (tests/infra), not in this file.
 on:
   push:
     branches: [master]
@@ -29,6 +31,10 @@ env:
   AZURE_RESOURCE_GROUP: Lifestream
   CONTAINER_APP: lifestream-api
   MIGRATE_JOB: lifestream-migrate
+  CONTAINER_ENVIRONMENT: lifestream-env
+  SQL_SERVER: lifestream-server
+  # An identifier, not a secret. Every az command passes it explicitly so it can never run against the CLI's default subscription.
+  AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
 jobs:
   gate:
@@ -138,9 +144,9 @@ jobs:
       - name: Run the migration job
         run: |
           set -euo pipefail
-          az containerapp job update --name "$MIGRATE_JOB" --resource-group "$AZURE_RESOURCE_GROUP" \
+          az containerapp job update --name "$MIGRATE_JOB" --resource-group "$AZURE_RESOURCE_GROUP" --subscription "$AZURE_SUBSCRIPTION_ID" \
             --image "$IMAGE:$GITHUB_SHA" --only-show-errors --output none
-          execution="$(az containerapp job start --name "$MIGRATE_JOB" --resource-group "$AZURE_RESOURCE_GROUP" \
+          execution="$(az containerapp job start --name "$MIGRATE_JOB" --resource-group "$AZURE_RESOURCE_GROUP" --subscription "$AZURE_SUBSCRIPTION_ID" \
             --query name --output tsv)"
           echo "Started job execution: $execution"
           # Proof of life: the execution must report a status within 5 minutes, otherwise the watcher exits NO SIGNAL.
@@ -148,7 +154,7 @@ jobs:
           started=$(date +%s); first_status=""; failures=0
           while true; do
             now=$(date +%s); elapsed=$((now - started))
-            if status="$(az containerapp job execution show --name "$MIGRATE_JOB" --resource-group "$AZURE_RESOURCE_GROUP" \
+            if status="$(az containerapp job execution show --name "$MIGRATE_JOB" --resource-group "$AZURE_RESOURCE_GROUP" --subscription "$AZURE_SUBSCRIPTION_ID" \
                 --job-execution-name "$execution" --query properties.status --output tsv 2>/dev/null)"; then
               failures=0
             else
@@ -167,13 +173,19 @@ jobs:
 
       - name: Update the container app
         run: |
-          az containerapp update --name "$CONTAINER_APP" --resource-group "$AZURE_RESOURCE_GROUP" \
+          az containerapp update --name "$CONTAINER_APP" --resource-group "$AZURE_RESOURCE_GROUP" --subscription "$AZURE_SUBSCRIPTION_ID" \
             --image "$IMAGE:$GITHUB_SHA" --only-show-errors --output none
+
+      # The API reaches Azure SQL from the environment's outbound addresses, which Azure may change. The script makes the firewall
+      # exactly that set (aca-outbound-<n>) and deletes every other rule; it fails, deleting nothing, if no address is returned.
+      - name: Sync the SQL firewall to the environment's outbound addresses
+        shell: pwsh
+        run: ./infra/sync-sql-firewall.ps1 -SubscriptionId $env:AZURE_SUBSCRIPTION_ID -ResourceGroup $env:AZURE_RESOURCE_GROUP -Server $env:SQL_SERVER -Environment $env:CONTAINER_ENVIRONMENT
 
       - name: Wait for /healthz to return 200 (up to 5 minutes)
         run: |
           set -euo pipefail
-          fqdn="$(az containerapp show --name "$CONTAINER_APP" --resource-group "$AZURE_RESOURCE_GROUP" \
+          fqdn="$(az containerapp show --name "$CONTAINER_APP" --resource-group "$AZURE_RESOURCE_GROUP" --subscription "$AZURE_SUBSCRIPTION_ID" \
             --query properties.configuration.ingress.fqdn --output tsv)"
           [ -n "$fqdn" ] || { echo "NO SIGNAL: the container app has no ingress address" >&2; exit 1; }
           url="https://$fqdn/healthz"
@@ -187,16 +199,13 @@ jobs:
             sleep 5
           done
 
-      # Runs only after a green health check, so the image that was just deployed is the newest and can never be
-      # among the deleted versions.
+      # Runs only after a green health check. The guards (keep at least 1, the deployed tag must exist and be among the newest 3,
+      # an empty list is an error) are in tools/prune-image-versions.ps1 and tested in tests/infra/ImageVersions.Tests.ps1.
       - name: Prune old image versions (keep the newest 3)
-        uses: actions/delete-package-versions@v5
-        with:
-          package-name: lifestream-api
-          package-type: container
-          min-versions-to-keep: 3
-          owner: ${{ github.repository_owner }}
-          token: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./tools/prune-image-versions.ps1 -Owner $env:GITHUB_REPOSITORY_OWNER -Package lifestream-api -DeployedTag $env:GITHUB_SHA -Keep 3
 
       - name: Sign in to GHCR
         uses: docker/login-action@v3
@@ -205,16 +214,8 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Verify exactly the newest 3 versions remain and the deployed tag resolves
+      - name: Verify at most 3 versions remain, the deployed tag is among them and its manifest inspects
+        shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          versions="$(gh api --paginate "/users/${GITHUB_REPOSITORY_OWNER}/packages/container/lifestream-api/versions" --jq '.[] | [.id, (.metadata.container.tags | join(","))] | @tsv')"
-          echo "Remaining package versions (id, tags):"
-          echo "$versions"
-          count="$(printf '%s\n' "$versions" | grep -c . || true)"
-          if [ "$count" -gt 3 ]; then echo "FAILED: $count versions remain, expected at most 3" >&2; exit 1; fi
-          if ! printf '%s\n' "$versions" | grep -q "$GITHUB_SHA"; then echo "FAILED: the deployed tag $GITHUB_SHA is not among the remaining versions" >&2; exit 1; fi
-          docker manifest inspect "$IMAGE:$GITHUB_SHA" > /dev/null
-          echo "OK: $count version(s) remain and $IMAGE:$GITHUB_SHA passes docker manifest inspect"
+        run: ./tools/verify-image-versions.ps1 -Owner $env:GITHUB_REPOSITORY_OWNER -Package lifestream-api -Image $env:IMAGE -DeployedTag $env:GITHUB_SHA -Max 3
