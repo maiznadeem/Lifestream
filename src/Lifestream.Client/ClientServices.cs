@@ -42,13 +42,15 @@ public static class ClientServices
         services.AddTransient<ShellViewModel>();
         services.AddTransient<AccessDeniedViewModel>();
 
+        // Feature screens (part 1).
+        services.AddTransient<Features.Dashboard.DashboardViewModel>();
+        services.AddTransient<Features.Donors.DonorsViewModel>();
+        services.AddTransient<Features.Patients.PatientsViewModel>();
+        services.AddTransient<Features.Stock.StockViewModel>();
+
         // Placeholder screens; the feature tasks register the real view models in their place.
-        services.AddTransient<DashboardPlaceholderViewModel>();
-        services.AddTransient<DonorsPlaceholderViewModel>();
         services.AddTransient<AppointmentsPlaceholderViewModel>();
-        services.AddTransient<PatientsPlaceholderViewModel>();
         services.AddTransient<RequestsPlaceholderViewModel>();
-        services.AddTransient<StockPlaceholderViewModel>();
         services.AddTransient<ReceiptsPlaceholderViewModel>();
         services.AddTransient<StaffPlaceholderViewModel>();
         services.AddTransient<ProfilePlaceholderViewModel>();
