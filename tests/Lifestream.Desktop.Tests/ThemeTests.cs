@@ -387,7 +387,7 @@ public sealed partial class ThemeTests
     {
         var doc = File.ReadAllText(RepoPaths.Find("docs/design-system.md"));
 
-        foreach (var needle in new[] { "surface.canvas", "#17121A", "focus.ring", "Segoe UI Variable", "display", "caption", "Skeleton", "Record picker", "Deviation" })
+        foreach (var needle in new[] { "surface.canvas", "#17121A", "focus.ring", "Inter", "OFL.txt", "display", "caption", "Skeleton", "Record picker", "Deviation" })
         {
             Assert.Contains(needle, doc, StringComparison.OrdinalIgnoreCase);
         }
