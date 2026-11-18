@@ -231,8 +231,11 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
             return;
         }
 
-        _ = LoadDetailAsync(_selectedId);
+        PendingDetail = LoadDetailAsync(_selectedId);
     }
+
+    /// <summary>Completes when the detail load started by the last selection has finished (for tests).</summary>
+    internal Task PendingDetail { get; private set; } = Task.CompletedTask;
 
     partial void OnDetailChanged(TDetail? value)
     {
