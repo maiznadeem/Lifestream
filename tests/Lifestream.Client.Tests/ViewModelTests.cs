@@ -7,6 +7,7 @@ using Lifestream.Client.Tests.Fakes;
 
 namespace Lifestream.Client.Tests;
 
+[Collection("GlobalErrorHandler")]
 public sealed class ViewModelTests
 {
     private sealed class TestViewModel : ViewModelBase

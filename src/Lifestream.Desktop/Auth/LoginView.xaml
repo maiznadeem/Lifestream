@@ -44,6 +44,20 @@
           </StackPanel>
         </Border>
 
+        <!-- Cold start: the server is waking up (shown from the third second of a slow call). Cancel stops the attempt (SHELL-07). -->
+        <Border x:Name="WakingBanner" Margin="0,0,0,16" Padding="12,8" Background="{DynamicResource Brush.SurfaceRaised}" BorderBrush="{DynamicResource Brush.StatusInfo}" BorderThickness="1"
+                CornerRadius="{DynamicResource Radius.Control}" Visibility="{Binding IsServerWaking, Converter={StaticResource BoolToVisibility}}"
+                AutomationProperties.LiveSetting="Polite" AutomationProperties.Name="Waking up the server">
+          <StackPanel>
+            <StackPanel Orientation="Horizontal">
+              <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE895;" Foreground="{DynamicResource Brush.StatusInfo}" VerticalAlignment="Top" Margin="0,2,10,0" />
+              <TextBlock Style="{DynamicResource Text.Body}" Text="{Binding WakingText}" MaxWidth="290" />
+            </StackPanel>
+            <Button x:Name="CancelButton" Style="{DynamicResource Button.Secondary}" Content="Cancel" Command="{Binding CancelCommand}" HorizontalAlignment="Left" Margin="0,8,0,0" MinHeight="32"
+                    Visibility="{Binding CanCancel, Converter={StaticResource BoolToVisibility}}" AutomationProperties.Name="Cancel sign-in" />
+          </StackPanel>
+        </Border>
+
         <Button x:Name="SignInButton" Style="{DynamicResource Button.Primary}" Content="Sign in" Command="{Binding SignInCommand}" IsDefault="True"
                 controls:ButtonAssist.IsBusy="{Binding SignInCommand.IsRunning}" controls:ButtonAssist.BusyText="Signing in..." HorizontalAlignment="Stretch"
                 AutomationProperties.Name="Sign in" />

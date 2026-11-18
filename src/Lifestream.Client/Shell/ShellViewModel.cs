@@ -33,6 +33,7 @@ public sealed partial class ShellViewModel : ViewModelBase
     private readonly IServerStatus _serverStatus;
     private readonly IReadOnlyList<Destination> _catalog;
     private readonly SynchronizationContext? _context = SynchronizationContext.Current;
+    private int _visit;
 
     public ShellViewModel(
         INavigationService navigation,
@@ -69,7 +70,8 @@ public sealed partial class ShellViewModel : ViewModelBase
             .. allowed.GroupBy(d => d.Group).Select(g => new NavGroup(g.Key, [.. g.Select(d => new NavItem(d))])),
         ];
 
-        NavigateCommand = new AsyncRelayCommand((parameter, _) => parameter is NavItem item ? OpenAsync(item.Destination) : Task.CompletedTask);
+        // Concurrent on purpose: the sidebar stays usable while a screen loads, and the newer click supersedes the older one (SHELL-07).
+        NavigateCommand = new AsyncRelayCommand((parameter, _) => parameter is NavItem item ? OpenAsync(item.Destination) : Task.CompletedTask, allowConcurrent: true);
         ProfileCommand = new AsyncRelayCommand(_ => NavigateToTypeAsync(NavigationCatalog.ProfileViewModelType, "profile"));
         ChangePasswordCommand = new AsyncRelayCommand(_ => NavigateToTypeAsync(NavigationCatalog.ProfileViewModelType, "change-password"));
         SignOutCommand = new AsyncRelayCommand(_ => _flow.SignOutAsync());
@@ -166,10 +168,15 @@ public sealed partial class ShellViewModel : ViewModelBase
             return;
         }
 
-        await Navigation.NavigateTo(destination.ViewModelType).ConfigureAwait(true);
-        foreach (var item in Items)
+        var visit = Interlocked.Increment(ref _visit);
+        var navigated = await Navigation.NavigateTo(destination.ViewModelType).ConfigureAwait(true);
+        if (navigated && visit == Volatile.Read(ref _visit))
         {
-            item.IsSelected = item.Destination == destination;
+            // Only the latest visit moves the highlight: an older one that finishes late must not undo it.
+            foreach (var item in Items)
+            {
+                item.IsSelected = item.Destination == destination;
+            }
         }
     }
 

@@ -30,13 +30,22 @@ public sealed partial class LoginViewModel : ViewModelBase
     private readonly ILifestreamApiClient _api;
     private readonly ISessionService _session;
     private readonly IAppFlow _flow;
+    private readonly IServerStatus? _serverStatus;
+    private readonly SynchronizationContext? _context = SynchronizationContext.Current;
 
-    public LoginViewModel(ILifestreamApiClient api, ISessionService session, IAppFlow flow)
+    public LoginViewModel(ILifestreamApiClient api, ISessionService session, IAppFlow flow, IServerStatus? serverStatus = null)
         : base(LoadState.Ready)
     {
         _api = api;
         _session = session;
         _flow = flow;
+        _serverStatus = serverStatus;
+        if (serverStatus is not null)
+        {
+            serverStatus.Changed += OnServerStatusChanged;
+            IsServerWaking = serverStatus.State == ServerState.Waking;
+        }
+
         SignInCommand = new AsyncRelayCommand(SignInAsync, () => CanSignIn);
         DemoCommand = new AsyncRelayCommand(DemoAsync, () => !IsBusy);
         RetryCommand = new AsyncRelayCommand(RetryAsync, () => Problem is LoginProblem.ServerUnreachable or LoginProblem.ServerWaking);
@@ -49,6 +58,17 @@ public sealed partial class LoginViewModel : ViewModelBase
     }
 
     public override string PageTitle => "Lifestream";
+
+    /// <summary>True from the third second of a slow or waking call until it ends: the server is starting from cold (SHELL-07).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanCancel))]
+    public partial bool IsServerWaking { get; set; }
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "Bound from XAML, which needs instance properties.")]
+    public string WakingText => "Waking up the server, this can take up to a minute.";
+
+    /// <summary>Cancel is offered while an attempt is waiting on a waking server.</summary>
+    public bool CanCancel => IsBusy && IsServerWaking;
 
     public AsyncRelayCommand SignInCommand { get; }
 
@@ -98,6 +118,7 @@ public sealed partial class LoginViewModel : ViewModelBase
         OnPropertyChanged(nameof(AreFieldsReadOnly));
         OnPropertyChanged(nameof(SignInText));
         OnPropertyChanged(nameof(DemoText));
+        OnPropertyChanged(nameof(CanCancel));
         SignInCommand.RaiseCanExecuteChanged();
         DemoCommand.RaiseCanExecuteChanged();
     }
@@ -107,6 +128,29 @@ public sealed partial class LoginViewModel : ViewModelBase
     partial void OnUsernameChanged(string value) => SignInCommand.RaiseCanExecuteChanged();
 
     partial void OnPasswordChanged(string value) => SignInCommand.RaiseCanExecuteChanged();
+
+    private void OnServerStatusChanged(object? sender, EventArgs e)
+    {
+        void Apply() => IsServerWaking = _serverStatus?.State == ServerState.Waking;
+        if (_context is null || SynchronizationContext.Current == _context)
+        {
+            Apply();
+        }
+        else
+        {
+            _context.Post(_ => Apply(), null);
+        }
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing && _serverStatus is not null)
+        {
+            _serverStatus.Changed -= OnServerStatusChanged;
+        }
+
+        base.Dispose(disposing);
+    }
 
     private Task SignInAsync(CancellationToken ct)
     {
