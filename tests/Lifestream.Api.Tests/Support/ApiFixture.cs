@@ -100,6 +100,51 @@ public sealed class StatementCapture : DbCommandInterceptor
     }
 }
 
+/// <summary>
+/// Fault injection (DB-10): while <see cref="FailWhenSqlContains"/> is set, the first command whose text contains it throws, as if the
+/// database had failed at exactly that step of a multi-step write.
+/// </summary>
+public sealed class FaultInjector : DbCommandInterceptor
+{
+    public string? FailWhenSqlContains { get; set; }
+
+    /// <summary>How many commands were failed on purpose.</summary>
+    public int Injected { get; private set; }
+
+    private void Check(System.Data.Common.DbCommand command)
+    {
+        if (FailWhenSqlContains is { } marker && command.CommandText.Contains(marker, StringComparison.Ordinal))
+        {
+            Injected++;
+            throw new InvalidOperationException("injected fault: " + marker);
+        }
+    }
+
+    public override InterceptionResult<System.Data.Common.DbDataReader> ReaderExecuting(System.Data.Common.DbCommand command, CommandEventData eventData, InterceptionResult<System.Data.Common.DbDataReader> result)
+    {
+        Check(command);
+        return base.ReaderExecuting(command, eventData, result);
+    }
+
+    public override ValueTask<InterceptionResult<System.Data.Common.DbDataReader>> ReaderExecutingAsync(System.Data.Common.DbCommand command, CommandEventData eventData, InterceptionResult<System.Data.Common.DbDataReader> result, CancellationToken cancellationToken = default)
+    {
+        Check(command);
+        return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
+    }
+
+    public override InterceptionResult<int> NonQueryExecuting(System.Data.Common.DbCommand command, CommandEventData eventData, InterceptionResult<int> result)
+    {
+        Check(command);
+        return base.NonQueryExecuting(command, eventData, result);
+    }
+
+    public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(System.Data.Common.DbCommand command, CommandEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+    {
+        Check(command);
+        return base.NonQueryExecutingAsync(command, eventData, result, cancellationToken);
+    }
+}
+
 /// <summary>Counts connections opened and can make opening fail the way a resuming serverless database does (error 40613).</summary>
 public sealed class ConnectionProbe : DbConnectionInterceptor
 {
@@ -260,6 +305,7 @@ public class ApiFixture : IAsyncLifetime
     public TestClock Clock { get; } = new();
     public CommandLog Commands { get; } = new();
     public StatementCapture Statements { get; } = new();
+    public FaultInjector Faults { get; } = new();
     public ConnectionProbe Connections { get; } = new();
     public FakeProbe Probe { get; } = new();
     public CapturingLoggerProvider Logs { get; } = new();
@@ -305,6 +351,7 @@ public class ApiFixture : IAsyncLifetime
                 services.AddSingleton<TimeProvider>(Clock);
                 services.AddSingleton<IInterceptor>(Commands);
                 services.AddSingleton<IInterceptor>(Statements);
+                services.AddSingleton<IInterceptor>(Faults);
                 services.AddSingleton<IInterceptor>(Connections);
                 if (UseFakeProbe)
                 {
@@ -424,6 +471,12 @@ public class ApiFixture : IAsyncLifetime
 public sealed class ScaleApiFixture : ApiFixture
 {
     protected override SqlServerDatabaseFixture CreateDb() => new ScaleDatabaseFixture();
+}
+
+/// <summary>The same host over a database that holds the 1x demo dataset (270 receipts, 300 appointments, 40 donors).</summary>
+public sealed class DemoSizeApiFixture : ApiFixture
+{
+    protected override SqlServerDatabaseFixture CreateDb() => new DemoSizeDatabaseFixture();
 }
 
 public static class HttpExtensions

@@ -133,6 +133,19 @@ public sealed class EmptyDatabaseFixture : SqlServerDatabaseFixture
     protected override bool ApplyMigrations => false;
 }
 
+/// <summary>The same database with the 1x demo dataset loaded (what the public demo holds after each reset), once per class.</summary>
+public sealed class DemoSizeDatabaseFixture : SqlServerDatabaseFixture
+{
+    protected override async Task OnMigratedAsync(CancellationToken ct)
+    {
+        await using var db = NewContext();
+        db.AuditEnabled = false;
+        db.ChangeTracker.AutoDetectChangesEnabled = false;
+        Lifestream.Data.Seed.ScaleDataGenerator.Generate(1, DateOnly.FromDateTime(DateTime.UtcNow)).AddTo(db);
+        await db.SaveChangesAsync(ct);
+    }
+}
+
 /// <summary>The same database with the 100x dataset loaded, once per class. Used by the plan and I/O tests and available to performance tests.</summary>
 public sealed class ScaleDatabaseFixture : SqlServerDatabaseFixture
 {

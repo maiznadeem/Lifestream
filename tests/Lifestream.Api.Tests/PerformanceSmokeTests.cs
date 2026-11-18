@@ -7,21 +7,19 @@ using Lifestream.Domain;
 namespace Lifestream.Api.Tests;
 
 /// <summary>
-/// Warm-API timings against the 100x dataset (27,000 receipts, 30,000 appointments, 15,000 requests, 3,500 donors/patients) on a real
-/// local SQL Server. Tagged Category=Perf: run locally, reported (not gated) in CI. Set LIFESTREAM_PERF_RESULTS to a file path to
-/// write the results table.
+/// The timings, shared by the 100x and the 1x runs (DB-06): the same requests, the same budget, two dataset sizes. Warm API, real local
+/// SQL Server. Set LIFESTREAM_PERF_RESULTS to a file path to write the results table.
 /// </summary>
-[Trait("Category", "Perf")]
-public sealed class PerformanceSmokeTests(ScaleApiFixture fx) : IClassFixture<ScaleApiFixture>
+internal static class PerfShapes
 {
     private const int Warmup = 8;
     private const int Samples = 40;
-    private static readonly TimeSpan Budget = TimeSpan.FromMilliseconds(100);
+    public static readonly TimeSpan Budget = TimeSpan.FromMilliseconds(100);
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    private sealed record Timing(string Name, double P50, double P95, double Max, int Bytes);
+    public sealed record Timing(string Name, double P50, double P95, double Max, int Bytes);
 
-    private static async Task<Timing> MeasureAsync(HttpClient client, string name, string template, string query)
+    public static async Task<Timing> MeasureAsync(HttpClient client, string name, string template, string query)
     {
         var url = ApiRoutes.Path(template) + query;
         var bytes = 0;
@@ -47,7 +45,7 @@ public sealed class PerformanceSmokeTests(ScaleApiFixture fx) : IClassFixture<Sc
         return new Timing(name, times[times.Count / 2], times[(int)Math.Ceiling(times.Count * 0.95) - 1], times[^1], bytes);
     }
 
-    private static void Report(IReadOnlyList<Timing> timings, string title, ScaleApiFixture fx)
+    public static void Report(IReadOnlyList<Timing> timings, string title, ApiFixture fx)
     {
         var path = Environment.GetEnvironmentVariable("LIFESTREAM_PERF_RESULTS");
         if (string.IsNullOrEmpty(path))
@@ -67,11 +65,11 @@ public sealed class PerformanceSmokeTests(ScaleApiFixture fx) : IClassFixture<Sc
         File.AppendAllText(path, sb.ToString());
     }
 
-    [Fact]
-    public async Task Perf_ListEndpoints_P95Under100ms_At100x()
+    public static async Task RunListsAsync(ApiFixture fx, string label, int expectedReceipts)
     {
         var admin = await fx.AddStaffAsync(Role.Admin);
-        Assert.Equal(27_000, await fx.Db.ScalarAsync<int>("SELECT COUNT(*) FROM Receipt", Ct));
+        Assert.Contains("Microsoft SQL Server", fx.Db.ServerVersion, StringComparison.Ordinal);
+        Assert.Equal(expectedReceipts, await fx.Db.ScalarAsync<int>("SELECT COUNT(*) FROM Receipt", Ct));
         var from = DateTime.UtcNow.AddDays(-60).ToString("yyyy-MM-dd");
         var to = DateTime.UtcNow.AddDays(-30).ToString("yyyy-MM-dd");
         var cases = new (string Name, string Route, string Query)[]
@@ -79,17 +77,29 @@ public sealed class PerformanceSmokeTests(ScaleApiFixture fx) : IClassFixture<Sc
             ("GET donors (page 1)", ApiRoutes.Donors, ""),
             ("GET donors search=a", ApiRoutes.Donors, "?search=a"),
             ("GET donors bloodType=OPos sort=-lastDonated", ApiRoutes.Donors, "?bloodType=OPos&sort=-lastDonated"),
+            ("GET donors page 60 (deep)", ApiRoutes.Donors, "?page=60"),
             ("GET patients (page 1)", ApiRoutes.Patients, ""),
             ("GET patients search=a", ApiRoutes.Patients, "?search=a"),
+            ("GET patients page 60 (deep)", ApiRoutes.Patients, "?page=60"),
             ("GET appointments (page 1)", ApiRoutes.Appointments, ""),
             ("GET appointments status=Pending", ApiRoutes.Appointments, "?status=Pending"),
+            ("GET appointments status=Completed bloodType=OPos", ApiRoutes.Appointments, "?status=Completed&bloodType=OPos"),
+            ("GET appointments status=Completed bloodType=OPos sort=-placed page 100", ApiRoutes.Appointments, "?status=Completed&bloodType=OPos&sort=-placed&page=100"),
             ("GET appointments search=a, date range", ApiRoutes.Appointments, $"?search=a&fromUtc={from}&toUtc={to}"),
+            ("GET appointments search=a sort=slot page 20", ApiRoutes.Appointments, "?search=a&sort=slot&page=20"),
+            ("GET appointments search=Ay sort=slot page 3", ApiRoutes.Appointments, "?search=Ay&sort=slot&page=3"),
             ("GET requests (page 1)", ApiRoutes.Requests, ""),
             ("GET requests status=Pending", ApiRoutes.Requests, "?status=Pending"),
+            ("GET requests status=Fulfilled bloodType=OPos sort=requiredBy", ApiRoutes.Requests, "?status=Fulfilled&bloodType=OPos&sort=requiredBy"),
+            ("GET requests status=Fulfilled bloodType=OPos sort=-requiredBy page 40", ApiRoutes.Requests, "?status=Fulfilled&bloodType=OPos&sort=-requiredBy&page=40"),
             ("GET requests search=a", ApiRoutes.Requests, "?search=a"),
+            ("GET requests search=a page 30", ApiRoutes.Requests, "?search=a&page=30"),
             ("GET receipts (page 1)", ApiRoutes.Receipts, ""),
             ("GET receipts kind=Donation, date range", ApiRoutes.Receipts, $"?kind=Donation&fromUtc={from}&toUtc={to}"),
+            ("GET receipts kind=Donation bloodType=OPos", ApiRoutes.Receipts, "?kind=Donation&bloodType=OPos"),
             ("GET receipts search=a", ApiRoutes.Receipts, "?search=a"),
+            ("GET receipts search=Ay", ApiRoutes.Receipts, "?search=Ay"),
+            ("GET receipts search=a page 100", ApiRoutes.Receipts, "?search=a&page=100"),
             ("GET receipts page 100", ApiRoutes.Receipts, "?page=100"),
             ("GET receipts page 500 (deep)", ApiRoutes.Receipts, "?page=500"),
             ("GET appointments page 500 (deep)", ApiRoutes.Appointments, "?page=500"),
@@ -105,13 +115,12 @@ public sealed class PerformanceSmokeTests(ScaleApiFixture fx) : IClassFixture<Sc
             timings.Add(await MeasureAsync(admin.Client, name, route, query));
         }
 
-        Report(timings, "List endpoints at 100x (warm, local SQL Server)", fx);
+        Report(timings, $"List endpoints at {label} (warm, local SQL Server)", fx);
         var slow = timings.Where(t => t.P95 >= Budget.TotalMilliseconds).Select(t => $"{t.Name}: p95 {t.P95:F1} ms").ToList();
         Assert.True(slow.Count == 0, string.Join("; ", slow));
     }
 
-    [Fact]
-    public async Task Perf_Dashboard_P95Under100ms_At100x()
+    public static async Task RunDashboardAsync(ApiFixture fx, string label)
     {
         var admin = await fx.AddStaffAsync(Role.Admin);
         var timings = new List<Timing>
@@ -119,10 +128,35 @@ public sealed class PerformanceSmokeTests(ScaleApiFixture fx) : IClassFixture<Sc
             await MeasureAsync(admin.Client, "GET dashboard (default 12 months, uncached)", ApiRoutes.Dashboard, ""),
             await MeasureAsync(admin.Client, "GET dashboard (36 months, uncached)", ApiRoutes.Dashboard, "?from=2023-12-01"),
         };
-        Report(timings, "Dashboard at 100x (warm, no cache)", fx);
+        Report(timings, $"Dashboard at {label} (warm, no cache)", fx);
 
         // The budget is for the default 12-month dashboard. The 36-month range is measured and reported for information only.
         var standard = timings[0];
         Assert.True(standard.P95 < Budget.TotalMilliseconds, $"{standard.Name}: p95 {standard.P95:F1} ms");
     }
+}
+
+/// <summary>Warm-API timings against the 100x dataset (27,000 receipts, 30,000 appointments, 15,000 requests, 3,500 donors/patients). Category=Perf: run locally, reported (not gated) in CI.</summary>
+[Trait("Category", "Perf")]
+public sealed class PerformanceSmokeTests(ScaleApiFixture fx) : IClassFixture<ScaleApiFixture>
+{
+    [Fact]
+    public Task Perf_ListEndpoints_P95Under100ms_At100x() => PerfShapes.RunListsAsync(fx, "100x", 27_000);
+
+    [Fact]
+    public Task Perf_Dashboard_P95Under100ms_At100x() => PerfShapes.RunDashboardAsync(fx, "100x");
+}
+
+/// <summary>
+/// DB-06: the same timings against the 1x demo dataset (the data the public demo holds after each daily reset: 270 receipts, 300
+/// appointments, 150 requests, 40 donors).
+/// </summary>
+[Trait("Category", "Perf")]
+public sealed class PerformanceAtDemoSizeTests(DemoSizeApiFixture fx) : IClassFixture<DemoSizeApiFixture>
+{
+    [Fact]
+    public Task Perf_ListEndpoints_P95Under100ms_AtDemoSize1x() => PerfShapes.RunListsAsync(fx, "1x demo size", 270);
+
+    [Fact]
+    public Task Perf_Dashboard_P95Under100ms_AtDemoSize1x() => PerfShapes.RunDashboardAsync(fx, "1x demo size");
 }
