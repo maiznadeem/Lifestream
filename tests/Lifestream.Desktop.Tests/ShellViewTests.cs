@@ -24,7 +24,7 @@ public sealed class ShellViewTests
 {
     private static (Rig Rig, ShellViewModel Shell) ShellFor(Lifestream.Domain.Role role = Lifestream.Domain.Role.Admin, bool demo = false, Version? latest = null)
     {
-        var rig = new Rig(latestVersion: latest);
+        var rig = new Rig(latestVersion: latest, dispatcher: WpfTestUi.Dispatcher());
         rig.SignIn(role, demo);
         return (rig, rig.Get<ShellViewModel>());
     }
@@ -336,7 +336,7 @@ public sealed class ShellViewTests
     {
         var (usernameText, buttonEnabled, hasForgot, texts, distinct) = StaHost.Run(() =>
         {
-            using var rig = new Rig();
+            using var rig = new Rig(dispatcher: WpfTestUi.Dispatcher());
             var vm = rig.Get<LoginViewModel>();
             var view = LoginFor(vm);
             using var host = Hosted.Create(view, 520, 688);
@@ -361,7 +361,7 @@ public sealed class ShellViewTests
     {
         var (demoText, demoCommandCalls, texts) = StaHost.Run(() =>
         {
-            using var rig = new Rig();
+            using var rig = new Rig(dispatcher: WpfTestUi.Dispatcher());
             rig.Api.On("DemoLoginAsync", ApiResult<TokenResponse>.Ok(FakeApiClient.Tokens(FakeApiClient.User(demo: true))));
             var vm = rig.Get<LoginViewModel>();
             using var host = Hosted.Create(LoginFor(vm), 520, 688);
@@ -382,7 +382,7 @@ public sealed class ShellViewTests
     {
         var (elapsed, busyText, spinnerVisible, fieldsReadOnly, isDefault, status, afterFailure) = StaHost.Run(() =>
         {
-            using var rig = new Rig();
+            using var rig = new Rig(dispatcher: WpfTestUi.Dispatcher());
             var gate = new TaskCompletionSource<ApiResult<TokenResponse>>();
             rig.Api.On<TokenResponse>("LoginAsync", _ => gate.Task);
             var vm = rig.Get<LoginViewModel>();
@@ -435,7 +435,7 @@ public sealed class ShellViewTests
                 ("waking", FakeApiClient.Fail<TokenResponse>(503, Lifestream.Contracts.ProblemCodes.DatabaseWaking)),
             })
             {
-                using var rig = new Rig();
+                using var rig = new Rig(dispatcher: WpfTestUi.Dispatcher());
                 rig.Api.On("LoginAsync", answer);
                 var vm = rig.Get<LoginViewModel>();
                 using var host = Hosted.Create(LoginFor(vm), 520, 688);
@@ -462,7 +462,7 @@ public sealed class ShellViewTests
     {
         var (live, labels, names) = StaHost.Run(() =>
         {
-            using var rig = new Rig();
+            using var rig = new Rig(dispatcher: WpfTestUi.Dispatcher());
             var vm = rig.Get<LoginViewModel>();
             using var host = Hosted.Create(LoginFor(vm), 520, 688);
             host.Settle(200);
@@ -511,7 +511,7 @@ public sealed class ShellViewTests
                 }
             }
 
-            using (var rig = new Rig())
+            using (var rig = new Rig(dispatcher: WpfTestUi.Dispatcher()))
             {
                 using var host = Hosted.Create(LoginFor(rig.Get<LoginViewModel>()), 520, 688);
                 host.Settle(250);
@@ -576,7 +576,7 @@ public sealed class ShellViewTests
     {
         var order = StaHost.Run(() =>
         {
-            using var rig = new Rig();
+            using var rig = new Rig(dispatcher: WpfTestUi.Dispatcher());
             var vm = rig.Get<LoginViewModel>();
             using var host = Hosted.Create(LoginFor(vm), 520, 688);
             host.Settle(250);

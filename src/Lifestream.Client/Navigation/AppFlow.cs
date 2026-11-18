@@ -58,38 +58,53 @@ public sealed partial class AppFlow(IServiceProvider services, ISessionService s
         await _shell.StartAsync().ConfigureAwait(true);
     }
 
-    public async Task SignOutAsync(string? notice = null)
+    public Task SignOutAsync(string? notice = null)
     {
         if (_shell is null || Interlocked.Exchange(ref _signingOut, 1) == 1)
         {
-            return; // logout runs once: a second call, or a call with nothing to sign out of, does nothing
+            return Task.CompletedTask; // logout runs once: a second call, or a call with nothing to sign out of, does nothing
         }
 
+        // The refresh token is taken before the session is cleared; the server is told afterwards, in the background (SHELL-17).
+        var refreshToken = session.RefreshToken;
         try
         {
-            if (session.IsAuthenticated)
-            {
-                try
-                {
-                    await api.LogoutAsync().ConfigureAwait(true); // best effort: the server revokes the refresh token
-                }
-                catch (Exception ex) when (ex is not OutOfMemoryException)
-                {
-                    // Whatever went wrong, signing out never depends on the server: it is logged and the local sign-out goes on.
-                    LogLogoutFailed(logger, ex);
-                }
-            }
-        }
-        finally
-        {
-            // Fail closed: every step runs even if an earlier one throws, so the session never survives a sign-out.
+            // Fail closed: every step runs even if an earlier one throws, so the session never survives a sign-out,
+            // and nothing here waits on the network (a waking server can take 120 s to answer).
             Guarded(session.Clear);
             Guarded(listState.Clear);
             Guarded(windows.CloseMain);
             Guarded(() => _shell?.Dispose());
             _shell = null;
             Guarded(() => Start(notice));
+        }
+        finally
+        {
             Volatile.Write(ref _signingOut, 0);
+        }
+
+        if (refreshToken is not null)
+        {
+            _ = RevokeAsync(refreshToken);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    /// <summary>Fire and forget: one attempt, 5 s, no retries. A failure is logged and never shown; the local session is already gone.</summary>
+    private async Task RevokeAsync(string refreshToken)
+    {
+        try
+        {
+            var result = await api.LogoutAsync(refreshToken).ConfigureAwait(false);
+            if (!result.IsOk)
+            {
+                LogLogoutFailed(logger, null);
+            }
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            LogLogoutFailed(logger, ex);
         }
     }
 
@@ -105,8 +120,8 @@ public sealed partial class AppFlow(IServiceProvider services, ISessionService s
         }
     }
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "The server could not be told about the sign-out; signing out locally")]
-    private static partial void LogLogoutFailed(ILogger logger, Exception exception);
+    [LoggerMessage(Level = LogLevel.Warning, Message = "The server could not be told about the sign-out; the local session was already cleared")]
+    private static partial void LogLogoutFailed(ILogger logger, Exception? exception);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "A sign-out step failed; the remaining steps still ran")]
     private static partial void LogSignOutStepFailed(ILogger logger, Exception exception);

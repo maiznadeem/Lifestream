@@ -299,7 +299,7 @@ public sealed class ComponentTests
         var (names, paused, resumed, live, messageLive) = StaHost.Run(() =>
         {
             var clock = new ManualTimeProvider();
-            var service = new ToastService(clock);
+            var service = new ToastService(WpfTestUi.Dispatcher(), clock);
             var host = new ToastHost { DataContext = service };
             host.SetBinding(ItemsControl.ItemsSourceProperty, new Binding(nameof(IToastService.Toasts)));
             using var hosted = Hosted.Create(Canvas(700, 300, host), 700, 300);

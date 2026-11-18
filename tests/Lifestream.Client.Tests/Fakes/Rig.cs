@@ -1,4 +1,5 @@
 using Lifestream.Client.Api;
+using Lifestream.Client.Common;
 using Lifestream.Client.Auth;
 using Lifestream.Client.Navigation;
 using Lifestream.Client.Session;
@@ -64,7 +65,7 @@ public sealed class FakeUpdateSource(Version? latest = null) : IUpdateSource
 /// <summary>The real client services wired to the fake API, a fake window host and a fake update source.</summary>
 public sealed class Rig : IDisposable
 {
-    public Rig(FakeApiClient? api = null, Version? latestVersion = null, Version? currentVersion = null)
+    public Rig(FakeApiClient? api = null, Version? latestVersion = null, Version? currentVersion = null, IUiDispatcher? dispatcher = null)
     {
         Api = api ?? new FakeApiClient();
         Updates = new FakeUpdateSource(latestVersion);
@@ -75,6 +76,7 @@ public sealed class Rig : IDisposable
         services.AddSingleton<ILifestreamApiClient>(Api);
         services.AddSingleton<IUpdateSource>(Updates);
         services.AddSingleton<IWindowHost>(Windows);
+        services.AddSingleton(dispatcher ?? new InlineUiDispatcher());
         Provider = services.BuildServiceProvider();
     }
 

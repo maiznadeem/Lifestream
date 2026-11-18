@@ -335,7 +335,7 @@ public sealed class RuntimeTests
     {
         var (loginTitle, mainTitle, afterNavigation, minWidth, minHeight) = StaHost.Run(() =>
         {
-            using var rig = new Rig();
+            using var rig = new Rig(dispatcher: WpfTestUi.Dispatcher());
             rig.SignIn(Lifestream.Domain.Role.Admin);
             var shell = rig.Get<Lifestream.Client.Shell.ShellViewModel>();
             var login = new Lifestream.Desktop.Auth.LoginWindow { DataContext = rig.Get<Lifestream.Client.Auth.LoginViewModel>() };
