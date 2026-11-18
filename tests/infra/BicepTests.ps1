@@ -87,6 +87,17 @@ Describe 'INFRA-05 Entra-only authentication' {
         $readme | Should -Match '-ManagedIdentityLoginProven'
     }
 
+    It 'orders the runbook: apply app, bootstrap users, prove the managed identity login, enable Entra-only, then sync the firewall; and states the security trade-off' {
+        $readme = Get-Content (Join-Path $script:InfraDir 'README.md') -Raw
+        $order = 'az deployment group create', 'bootstrap-sql.ps1 -ApiPrincipalId', 'Prove the managed identity login', 'enable-entra-only.ps1 -SubscriptionId', 'sync-sql-firewall.ps1 -SubscriptionId'
+        $pos = $order | ForEach-Object { $readme.IndexOf($_) }
+        ($pos | Where-Object { $_ -lt 0 }) | Should -BeNullOrEmpty -Because 'every runbook step must exist'
+        for ($i = 1; $i -lt $pos.Count; $i++) { $pos[$i] | Should -BeGreaterThan $pos[$i - 1] -Because $order[$i] }
+        $readme | Should -Match '## Security trade-offs'
+        $readme | Should -Match 'not a tenant boundary'
+        $readme | Should -Match 'Authentication is the real control'
+    }
+
     It 'lets the final apply flip the switch from the parameter file (LIFESTREAM_ENTRA_ONLY=true)' {
         $paramFile = Get-Content (Join-Path $script:InfraDir 'main.bicepparam') -Raw
         $paramFile | Should -Match 'param entraOnlyAuthentication = .*LIFESTREAM_ENTRA_ONLY'

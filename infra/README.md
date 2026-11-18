@@ -46,7 +46,7 @@ No container registry (images live in GHCR), no Key Vault, no gateway, no privat
   (`aca-outbound-<n>`), deleting every other rule including "Allow anyone" and `AllowAllWindowsAzureIps`. It runs after every app
   update in `deploy-api.yml` and weekly in `sync-sql-firewall.yml`, and it never touches the database. It fails, deleting nothing, if the
   environment reports no addresses. A CanNotDelete lock on the server also blocks deleting firewall rules, so a sync that has to delete
-  something while `enableLocks` is true fails with that hint; set `LIFESTREAM_ENABLE_LOCKS=false` for that run (step 3).
+  something while `enableLocks` is true fails with that hint; set `LIFESTREAM_ENABLE_LOCKS=false` for that run (step 3). The script also refuses to add any outbound-address rule while Entra-only authentication is off (see Security trade-offs).
 - **Backups.** The free offer with auto-pause on exhaustion limits point-in-time restore to **7 days** (Microsoft Learn,
   "Azure SQL Database free tier FAQ"); the live policy is already 7. Requirement INFRA-08 asks for 14 or more and cannot be met on
   the free offer; `backupRetentionDays` defaults to 7 and Azure rejects a larger value. Moving to a paid database to get 14 days
@@ -71,7 +71,8 @@ Each step lists what it needs and how to check it. Steps that change Azure are t
    | `LIFESTREAM_JWT_SIGNING_KEY` | Generate 48+ random bytes (base64) once. Keep it in the secret store. |
    | `LIFESTREAM_OWNER_ADMIN_PASSWORD` | Initial password of the owner admin account (`lifestream-owner-admin` in the store). |
 
-3. **Dry run**, then apply (locks off for now because step 4 has to delete child resources):
+3. **Dry run**, then apply, which deploys the app with its managed identity (locks off for now because step 8 deletes firewall rules,
+   which a lock on the server blocks):
    ```
    az deployment group what-if --subscription 88f308cf-f1e5-4e4d-b0bc-3e8b14ef9c65 --resource-group Lifestream --parameters infra/main.bicepparam
    $env:LIFESTREAM_ENABLE_LOCKS = 'false'
@@ -80,35 +81,53 @@ Each step lists what it needs and how to check it. Steps that change Azure are t
    Read `outputs.apiPrincipalId`, `outputs.migratorPrincipalId`, `outputs.deployerClientId`.
    Never use `--mode Complete`: it would try to delete the `master` database and is not needed.
 4. **Create the contained database users** (Windows PowerShell 5.1 or pwsh; signed in with `az login` as the Entra administrator;
-   the legacy firewall rules are still open at this point, which is what lets your machine connect):
+   the legacy firewall rules are still open at this point, which is what lets your machine and the environment connect):
    `./infra/bootstrap-sql.ps1 -ApiPrincipalId <apiPrincipalId> -MigratorPrincipalId <migratorPrincipalId>`.
    It prints `OK: lifestream-api holds db_datareader, db_datawriter and EXECUTE only` or lists every problem. If `CREATE USER ...
    FROM EXTERNAL PROVIDER` is refused, give the SQL server a system-assigned identity and grant it the Entra *Directory Readers*
    role, then rerun (the script is idempotent).
-5. **Make the firewall hold only the API's outbound addresses** (a template cannot delete what it does not declare, so a script does it):
-   ```
-   ./infra/sync-sql-firewall.ps1 -SubscriptionId 88f308cf-f1e5-4e4d-b0bc-3e8b14ef9c65 -ResourceGroup Lifestream -Server lifestream-server -Environment lifestream-env
-   az sql server firewall-rule list --subscription 88f308cf-f1e5-4e4d-b0bc-3e8b14ef9c65 -g Lifestream -s lifestream-server    # only aca-outbound-<n> rules
-   ```
-   It deletes "Allow anyone" and `AllowAllWindowsAzureIps`. After this only the environment's outbound addresses can reach the
-   database, so nothing on your own machine can: run any further SQL tooling from the job or add a temporary client-IP rule (the next
-   sync removes it). If the environment lists no outbound address yet (no app has started), the script stops and changes nothing; start
-   the app once (step 6) and run it again. From here on `deploy-api.yml` and the weekly `sync-sql-firewall.yml` keep it in sync.
-6. **Run the migration once** from the GitHub workflow (push to `master`, or *Run workflow*), or by hand:
-   `az containerapp job start --subscription 88f308cf-f1e5-4e4d-b0bc-3e8b14ef9c65 -n lifestream-migrate -g Lifestream`. The job must exit 0.
-7. **GitHub settings** (owner, once): repository variables `AZURE_CLIENT_ID` (= `deployerClientId`), `AZURE_TENANT_ID`,
+5. **Prove the managed identity login**: run the migration once, from the GitHub workflow (push to `master`, or *Run workflow*; its
+   firewall-sync step will refuse until step 7, which is expected) or by hand:
+   `az containerapp job start --subscription 88f308cf-f1e5-4e4d-b0bc-3e8b14ef9c65 -n lifestream-migrate -g Lifestream`. The job must exit 0 (the migrator signed in
+   with its identity), and one API request that reads the database must succeed (the API signed in with its identity).
+6. **GitHub settings** (owner, once): repository variables `AZURE_CLIENT_ID` (= `deployerClientId`), `AZURE_TENANT_ID`,
    `AZURE_SUBSCRIPTION_ID`; secret scanning and push protection on; Dependabot on. These ids are not secrets.
-8. **Locks**: rerun step 3 with `LIFESTREAM_ENABLE_LOCKS=true` (or unset it).
-9. **Entra-only, last**, only after the API's managed identity login and the migrate job have been proven against the database
-   (steps 4 and 6 succeeded and the API answered a request that reads the database):
+7. **Enable Entra-only authentication**, only after step 5 succeeded:
    ```
    ./infra/enable-entra-only.ps1 -SubscriptionId 88f308cf-f1e5-4e4d-b0bc-3e8b14ef9c65 -ResourceGroup Lifestream -Server lifestream-server -ManagedIdentityLoginProven
    ```
    The script refuses without that switch or without an Entra administrator, changes nothing if it is already on, and fails unless
-   `az sql server ad-only-auth get --subscription 88f308cf-f1e5-4e4d-b0bc-3e8b14ef9c65` then reports true. The old admin login stops working entirely. To keep the template in step, also
-   set `$env:LIFESTREAM_ENTRA_ONLY = 'true'` and rerun step 3 with `LIFESTREAM_API_IMAGE` set to the **currently running** image
+   `az sql server ad-only-auth get --subscription 88f308cf-f1e5-4e4d-b0bc-3e8b14ef9c65` then reports true. SQL logins, including the old admin login, stop working.
+8. **Make the firewall hold only the API's outbound addresses** (a template cannot delete what it does not declare, so a script does it):
+   ```
+   ./infra/sync-sql-firewall.ps1 -SubscriptionId 88f308cf-f1e5-4e4d-b0bc-3e8b14ef9c65 -ResourceGroup Lifestream -Server lifestream-server -Environment lifestream-env
+   az sql server firewall-rule list --subscription 88f308cf-f1e5-4e4d-b0bc-3e8b14ef9c65 -g Lifestream -s lifestream-server    # only aca-outbound-<n> rules
+   ```
+   The script refuses to add any outbound-address rule unless Entra-only authentication reads true back from the server (step 7), because the
+   addresses are shared Azure egress (see Security trade-offs). It deletes "Allow anyone" and `AllowAllWindowsAzureIps`. After this only
+   the environment's outbound addresses can reach the database, so nothing on your own machine can: run any further SQL tooling from
+   the job. If the environment lists no outbound address (no app has started), the script stops and changes nothing. From here on
+   `deploy-api.yml` and the weekly `sync-sql-firewall.yml` keep it in sync.
+9. **Locks, and the template in step with reality**: rerun step 3 with `LIFESTREAM_ENABLE_LOCKS=true` and
+   `$env:LIFESTREAM_ENTRA_ONLY = 'true'`, with `LIFESTREAM_API_IMAGE` set to the **currently running** image
    (`az containerapp show --subscription 88f308cf-f1e5-4e4d-b0bc-3e8b14ef9c65 -n lifestream-api -g Lifestream --query properties.template.containers[0].image`),
    because the deploy workflow moves the app to newer images and the template would otherwise move it back.
+
+## Security trade-offs
+
+- **The firewall narrows exposure; it is not a tenant boundary.** A plain Consumption environment has no virtual network, so the API
+  reaches Azure SQL from outbound public addresses that Azure owns and shares with other customers' Container Apps in the region.
+  Allow-listing them keeps out the rest of the internet and the "all Azure services" rule, but another tenant's container could connect
+  from the same address and reach the login endpoint.
+- **Authentication is the real control.** Entra-only authentication (no SQL logins, no passwords to guess or leak) and the
+  least-privilege contained users (`lifestream-api` reads and writes data only; `lifestream-migrator` is the only DDL identity) are what
+  keep other tenants out. That is why `sync-sql-firewall.ps1` refuses to open the firewall to the outbound addresses until Entra-only is on.
+- **Paid alternatives, and what they cost while idle** (all rejected for OWN-02, "costs nothing while there is no traffic"; Microsoft Learn,
+  read 2026-11-19): a custom virtual network with a SQL service endpoint or private networking bills a static public IP and a load
+  balancer around the clock (`container-apps/custom-virtual-networks#managed-resources`); a NAT gateway for a fixed outbound address
+  bills per hour plus its public IP (`container-apps/networking`: NAT gateway needs a workload profile environment with a VNet); a
+  private endpoint to the SQL server bills per hour, and in Container Apps private endpoints also incur the Dedicated Plan Management
+  charge (`container-apps/billing`). Moving to any of them is an owner decision that ends the zero idle cost.
 
 ## Contract with the API image
 

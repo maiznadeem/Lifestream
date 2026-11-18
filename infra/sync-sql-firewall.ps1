@@ -19,6 +19,9 @@
   versions. If both are empty the script FAILS and deletes nothing: an empty answer is a broken query, not an instruction to
   close the server to everyone.
 
+  Security gate: the addresses are shared multi-tenant Azure egress, so the firewall narrows exposure but is not a tenant boundary.
+  The script therefore refuses to run (changing nothing, deleting nothing) unless `az sql server ad-only-auth get` returns true.
+
   Locks: a CanNotDelete lock on the server also blocks deleting its firewall rules. Deletion failures are reported with that hint.
 
   Every az call passes --subscription explicitly. Needs the Azure CLI containerapp extension.
@@ -69,6 +72,19 @@ function Get-OutboundIp {
         foreach ($ip in @($app.properties.outboundIpAddresses)) { if ($ip) { [void]$found.Add([string]$ip) } }
     }
     $found
+}
+
+# Security gate. The outbound addresses are shared Azure egress (other tenants' containers use them too), so the firewall is not a
+# tenant boundary; authentication is. Refuse to open the server to those addresses until Entra-only authentication is on.
+function Test-EntraOnly {
+    $r = Invoke-AzJson @('sql', 'server', 'ad-only-auth', 'get', '--resource-group', $ResourceGroup, '--name', $Server)
+    if ($null -eq $r) { return $false }
+    $prop = $r.PSObject.Properties | Where-Object { $_.Name -ieq 'azureAdOnlyAuthentication' } | Select-Object -First 1
+    if ($null -eq $prop -and $r.PSObject.Properties.Name -contains 'properties') { $prop = $r.properties.PSObject.Properties | Where-Object { $_.Name -ieq 'azureAdOnlyAuthentication' } | Select-Object -First 1 }
+    ($null -ne $prop) -and ($prop.Value -eq $true)
+}
+if (-not (Test-EntraOnly)) {
+    throw "FAILED: Entra-only authentication is not on for $Server (az sql server ad-only-auth get). Refusing to add outbound-address rules: those addresses are shared Azure egress, so SQL authentication must be off first (infra/enable-entra-only.ps1, runbook step 7). Nothing was changed."
 }
 
 $addresses = @(Get-OutboundIp)

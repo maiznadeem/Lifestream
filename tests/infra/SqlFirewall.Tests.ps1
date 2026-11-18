@@ -14,6 +14,7 @@ BeforeAll {
         for ($i = 0; $i -lt $a.Count; $i++) { if ($a[$i] -like '--*' -and $i + 1 -lt $a.Count) { $named[$a[$i]] = $a[$i + 1] } }
         if ($global:Fake.FailOn -and ($a -join ' ') -match $global:Fake.FailOn) { $global:LASTEXITCODE = 1; return 'ERROR: simulated failure' }
         switch -Regex ($a[0..2] -join ' ') {
+            '^sql server ad-only-auth' { return ([pscustomobject]@{ azureAdOnlyAuthentication = $global:Fake.EntraOnly } | ConvertTo-Json) }
             '^containerapp env show' { return ([pscustomobject]@{ properties = [pscustomobject]@{ outboundIpAddresses = $global:Fake.EnvIps } } | ConvertTo-Json -Depth 5) }
             '^containerapp list' { return (ConvertTo-Json -InputObject @($global:Fake.Apps) -Depth 6) }
             '^sql server firewall-rule' {
@@ -31,8 +32,8 @@ BeforeAll {
         "unexpected az call: $($a -join ' ')"
     }
 
-    function script:New-Fake([string[]]$EnvIps, $Rules, $Apps = @(), [string]$FailOn = '') {
-        $global:Fake = @{ EnvIps = $EnvIps; Rules = @($Rules); Apps = $Apps; Calls = [System.Collections.Generic.List[string]]::new(); FailOn = $FailOn }
+    function script:New-Fake([string[]]$EnvIps, $Rules, $Apps = @(), [string]$FailOn = '', [bool]$EntraOnly = $true) {
+        $global:Fake = @{ EntraOnly = $EntraOnly; EnvIps = $EnvIps; Rules = @($Rules); Apps = $Apps; Calls = [System.Collections.Generic.List[string]]::new(); FailOn = $FailOn }
     }
     function script:Rule([string]$name, [string]$start, [string]$end) { [pscustomobject]@{ name = $name; start = $start; end = $end } }
     function script:Sync {
@@ -119,6 +120,23 @@ Describe 'sync-sql-firewall.ps1 (mocked az)' {
         New-Fake -EnvIps @('20.1.1.1') -Rules @((Rule 'Allow anyone' '0.0.0.0' '255.255.255.255')) -FailOn 'firewall-rule delete'
         $global:Fake.Calls.Clear()
         { Sync } | Should -Throw '*simulated failure*'
+    }
+
+    It 'refuses to add any outbound-address rule while Entra-only authentication is off, and deletes nothing' {
+        New-Fake -EnvIps @('20.1.1.1') -Rules @((Rule 'Allow anyone' '0.0.0.0' '255.255.255.255')) -EntraOnly $false
+        { Sync } | Should -Throw '*Entra-only authentication is not on*'
+        RulesNow | Should -Be @('Allow anyone=0.0.0.0-255.255.255.255')
+        @($global:Fake.Calls | Where-Object { $_ -match 'firewall-rule (create|update|delete)' }) | Should -BeNullOrEmpty
+        @($global:Fake.Calls | Where-Object { $_ -match 'containerapp' }) | Should -BeNullOrEmpty -Because 'the gate runs before anything else is read'
+    }
+
+    It 'checks Entra-only with az sql server ad-only-auth get before it touches the firewall' {
+        New-Fake -EnvIps @('20.1.1.1') -Rules @()
+        Sync
+        $calls = @($global:Fake.Calls)
+        $gate = ($calls | Select-String 'sql server ad-only-auth get').LineNumber
+        $firstWrite = ($calls | Select-String 'firewall-rule create').LineNumber
+        $gate | Should -BeLessThan $firstWrite
     }
 
     It 'changes nothing with -WhatIfOnly' {
