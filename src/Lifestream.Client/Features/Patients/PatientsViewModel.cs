@@ -8,8 +8,8 @@ using Lifestream.Domain;
 namespace Lifestream.Client.Features.Patients;
 
 /// <summary>The Patients screen: a paged, filterable list with the selected patient's detail beside it and the editor in a drawer (FEAT-01 to FEAT-08).</summary>
-public sealed class PatientsViewModel(ILifestreamApiClient api, IListViewStateStore states, IToastService toasts, IDialogService dialogs)
-    : RecordListViewModel<PatientListItem, PatientDetail>(states, "patients", toasts, dialogs)
+public sealed class PatientsViewModel(ILifestreamApiClient api, IListViewStateStore states, IToastService toasts, IDialogService dialogs, IUiDispatcher ui)
+    : RecordListViewModel<PatientListItem, PatientDetail>(states, "patients", toasts, dialogs, ui)
 {
     public override string PageTitle => "Patients";
 

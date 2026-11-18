@@ -38,8 +38,8 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
     private IReadOnlyList<DetailFact> _fetchedExtraFacts = [];
     private FilterOption<BloodType> _bloodTypeFilter;
 
-    protected RecordListViewModel(IListViewStateStore states, string stateKey, IToastService toasts, IDialogService dialogs)
-        : base(states, stateKey)
+    protected RecordListViewModel(IListViewStateStore states, string stateKey, IToastService toasts, IDialogService dialogs, IUiDispatcher ui)
+        : base(states, stateKey, ui)
     {
         Toasts = toasts;
         Dialogs = dialogs;

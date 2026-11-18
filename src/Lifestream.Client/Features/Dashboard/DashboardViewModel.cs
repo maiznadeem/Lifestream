@@ -256,9 +256,12 @@ public sealed partial class DashboardViewModel : ViewModelBase
     {
         if (!_changingPeriod && value is not null)
         {
-            _ = LoadAsync(); // the period is part of the one call, so a new period is a new call
+            PendingLoad = LoadAsync(); // the period is part of the one call, so a new period is a new call
         }
     }
+
+    /// <summary>Completes when the load started by the last period change has finished (for tests).</summary>
+    internal Task PendingLoad { get; private set; } = Task.CompletedTask;
 
     private Task OpenCardAsync(object? parameter) =>
         parameter is KpiCard card ? OpenAsync(card.DestinationTitle, card.Prefilter) : Task.CompletedTask;

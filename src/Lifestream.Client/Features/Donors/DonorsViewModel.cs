@@ -8,8 +8,8 @@ using Lifestream.Domain;
 namespace Lifestream.Client.Features.Donors;
 
 /// <summary>The Donors screen: a paged, filterable list with the selected donor's detail beside it and the editor in a drawer (FEAT-01 to FEAT-08).</summary>
-public sealed class DonorsViewModel(ILifestreamApiClient api, IListViewStateStore states, IToastService toasts, IDialogService dialogs)
-    : RecordListViewModel<DonorListItem, DonorDetail>(states, "donors", toasts, dialogs)
+public sealed class DonorsViewModel(ILifestreamApiClient api, IListViewStateStore states, IToastService toasts, IDialogService dialogs, IUiDispatcher ui)
+    : RecordListViewModel<DonorListItem, DonorDetail>(states, "donors", toasts, dialogs, ui)
 {
     public override string PageTitle => "Donors";
 

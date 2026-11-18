@@ -27,14 +27,16 @@ public readonly record struct ListRequest(int Page, int PageSize, string? Search
 /// </summary>
 public abstract partial class PagedListViewModel<TItem> : ViewModelBase
 {
-    private readonly SynchronizationContext? _uiContext = SynchronizationContext.Current;
+    private readonly IUiDispatcher _ui;
     private ITimer? _debounce;
     private PagedResult<TItem>? _fetched;
     private bool _restoring;
 
-    protected PagedListViewModel(IListViewStateStore states, string stateKey)
+    protected PagedListViewModel(IListViewStateStore states, string stateKey, IUiDispatcher ui)
     {
         ArgumentNullException.ThrowIfNull(states);
+        ArgumentNullException.ThrowIfNull(ui);
+        _ui = ui;
         ViewState = states.GetState(stateKey);
         _restoring = true;
         SearchText = ViewState.Search ?? string.Empty;
@@ -274,18 +276,8 @@ public abstract partial class PagedListViewModel<TItem> : ViewModelBase
         _debounce = null;
     }
 
-    /// <summary>Runs the action on the UI context captured when the model was created (or inline when there is none, as in tests).</summary>
-    protected void PostToUi(Action action)
-    {
-        if (_uiContext is null || SynchronizationContext.Current == _uiContext)
-        {
-            action();
-        }
-        else
-        {
-            _uiContext.Post(_ => action(), null);
-        }
-    }
+    /// <summary>Runs the action on the UI thread (inline when already there): timers fire on other threads.</summary>
+    protected void PostToUi(Action action) => _ui.Run(action);
 
     private void Raise(params string[] names)
     {
