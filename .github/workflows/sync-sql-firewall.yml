@@ -1,0 +1,48 @@
+name: Sync SQL firewall
+
+# Keeps the SQL server firewall equal to the Container Apps environment's outbound addresses (INFRA-04). The addresses are
+# Azure-owned and may change without a deploy, so this runs weekly as well as after every app update (deploy-api.yml). It only
+# edits firewall rules; it never connects to the database. Signs in with GitHub OIDC (no stored cloud secret). The logic is in
+# infra/sync-sql-firewall.ps1 (Pester: tests/infra/SqlFirewall.Tests.ps1).
+on:
+  schedule:
+    - cron: '23 5 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-sql-firewall
+  cancel-in-progress: false
+
+env:
+  AZURE_RESOURCE_GROUP: Lifestream
+  CONTAINER_ENVIRONMENT: lifestream-env
+  SQL_SERVER: lifestream-server
+  AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+jobs:
+  sync:
+    name: sync (SQL firewall = environment outbound addresses)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      id-token: write # OIDC token for azure/login
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sign in to Azure (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Install the Container Apps CLI extension
+        run: az extension add --name containerapp --upgrade --only-show-errors
+
+      - name: Sync the SQL firewall
+        shell: pwsh
+        run: ./infra/sync-sql-firewall.ps1 -SubscriptionId $env:AZURE_SUBSCRIPTION_ID -ResourceGroup $env:AZURE_RESOURCE_GROUP -Server $env:SQL_SERVER -Environment $env:CONTAINER_ENVIRONMENT

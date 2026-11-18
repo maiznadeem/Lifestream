@@ -34,10 +34,10 @@ Describe 'template shape' {
 
     It 'names every resource it creates with the lifestream- prefix' {
         $created = $script:Resources | Where-Object {
-            $_.type -in 'Microsoft.Network/virtualNetworks', 'Microsoft.App/managedEnvironments', 'Microsoft.App/containerApps',
+            $_.type -in 'Microsoft.App/managedEnvironments', 'Microsoft.App/containerApps',
                         'Microsoft.App/jobs', 'Microsoft.ManagedIdentity/userAssignedIdentities', 'Microsoft.OperationalInsights/workspaces'
         }
-        $created.Count | Should -Be 7
+        $created.Count | Should -Be 6
         foreach ($r in $created) { $r.name | Should -Match '^lifestream-' }
     }
 }
@@ -54,23 +54,18 @@ Describe 'INFRA-04 SQL firewall: no allow-all, only the API environment' {
         $script:RawJson | Should -Not -Match 'Allow anyone'
     }
 
-    It 'admits the Container Apps subnet through one virtual network rule' {
-        $rule = Single 'Microsoft.Sql/servers/virtualNetworkRules' 'the aca subnet'
-        $rule.properties.virtualNetworkSubnetId | Should -Be "[variables('acaSubnetId')]"
-        $script:Template.variables.acaSubnetName | Should -Be 'aca'
-        $script:Template.variables.acaSubnetId | Should -Match "virtualNetworks/subnets', 'lifestream-vnet', variables\('acaSubnetName'\)"
-        $rule.properties.ignoreMissingVnetServiceEndpoint | Should -Be $false
+    It 'has no virtual network, subnet or virtual network rule, and no network resource of any kind (OWN-02: a VNet environment bills a public IP and a load balancer at idle)' {
+        OfType 'Microsoft.Network/virtualNetworks' | Should -BeNullOrEmpty
+        OfType 'Microsoft.Sql/servers/virtualNetworkRules' | Should -BeNullOrEmpty
+        @($script:Resources | Where-Object { $_.type -like 'Microsoft.Network/*' }) | Should -BeNullOrEmpty
+        $script:RawJson | Should -Not -Match 'vnetConfiguration|infrastructureSubnetId|serviceEndpoints|acaSubnet'
     }
 
-    It 'keeps the SQL service endpoint on the aca subnet and no other egress path (no NAT gateway, no public IP)' {
-        $vnet = Single 'Microsoft.Network/virtualNetworks' 'the VNet'
-        $vnet.properties.addressSpace.addressPrefixes | Should -Contain '10.40.0.0/16'
-        $aca = @($vnet.properties.subnets | Where-Object name -eq "[variables('acaSubnetName')]")
-        $aca.Count | Should -Be 1
-        $aca[0].properties.addressPrefix | Should -Be '10.40.0.0/23'
-        @($aca[0].properties.serviceEndpoints.service) | Should -Contain 'Microsoft.Sql'
-        OfType 'Microsoft.Network/natGateways' | Should -BeNullOrEmpty
-        OfType 'Microsoft.Network/publicIPAddresses' | Should -BeNullOrEmpty
+    It 'leaves the firewall to infra/sync-sql-firewall.ps1: the script, the deploy step and the weekly workflow exist' {
+        $root = Split-Path $script:InfraDir -Parent
+        Test-Path (Join-Path $script:InfraDir 'sync-sql-firewall.ps1') | Should -BeTrue
+        Test-Path (Join-Path $root '.github' 'workflows' 'sync-sql-firewall.yml') | Should -BeTrue
+        (Get-Content (Join-Path $root '.github' 'workflows' 'deploy-api.yml') -Raw) | Should -Match 'infra/sync-sql-firewall\.ps1'
     }
 }
 
@@ -83,6 +78,13 @@ Describe 'INFRA-05 Entra-only authentication' {
         $only.properties.azureADOnlyAuthentication | Should -Be "[parameters('entraOnlyAuthentication')]"
         $script:Template.parameters.entraOnlyAuthentication.type | Should -Be 'bool'
         $script:Template.parameters.entraOnlyAuthentication.defaultValue | Should -Be $false
+    }
+
+    It 'ships infra/enable-entra-only.ps1 (idempotent, post-checked; behaviour in EntraOnly.Tests.ps1) and the runbook orders it after the managed identity login is proven' {
+        Test-Path (Join-Path $script:InfraDir 'enable-entra-only.ps1') | Should -BeTrue
+        $readme = Get-Content (Join-Path $script:InfraDir 'README.md') -Raw
+        $readme | Should -Match 'enable-entra-only\.ps1'
+        $readme | Should -Match '-ManagedIdentityLoginProven'
     }
 
     It 'lets the final apply flip the switch from the parameter file (LIFESTREAM_ENTRA_ONLY=true)' {
@@ -190,13 +192,13 @@ Describe 'INFRA-08 locks and backups' {
 }
 
 Describe 'INFRA-09 / OWN-02 container app on Consumption, scale to zero' {
-    It 'runs in a VNet-integrated environment with only the Consumption profile and no log destination' {
+    It 'runs in a plain environment (no VNet) with only the Consumption profile and no log destination' {
         $env = Single 'Microsoft.App/managedEnvironments' 'the environment'
         $profiles = @($env.properties.workloadProfiles)
         $profiles.Count | Should -Be 1
         $profiles[0].workloadProfileType | Should -Be 'Consumption'
         $env.properties.appLogsConfiguration.destination | Should -Be 'none'
-        $env.properties.vnetConfiguration.infrastructureSubnetId | Should -Be "[variables('acaSubnetId')]"
+        $env.properties.PSObject.Properties.Name | Should -Not -Contain 'vnetConfiguration'
         $env.properties.zoneRedundant | Should -Be $false
     }
 
@@ -239,12 +241,76 @@ Describe 'INFRA-09 / OWN-02 container app on Consumption, scale to zero' {
         $n[0].contactEmails | Should -Contain "[parameters('ownerEmail')]"
     }
 
+    It 'gives the budget a fixed start date on the first of a month, so re-applying the template in a later month does not change it' {
+        $p = $script:Template.parameters.budgetStartDate
+        $p.defaultValue | Should -Match '^\d{4}-\d{2}-01$'
+        $script:RawJson | Should -Not -Match 'utcNow'
+        $b = Single 'Microsoft.Consumption/budgets' 'the budget'
+        $b.properties.timePeriod.startDate | Should -Be "[parameters('budgetStartDate')]"
+    }
+
     It 'adds nothing that bills at idle: no registry, vault, storage, gateway, private endpoint, Redis or dedicated profile' {
         foreach ($t in 'Microsoft.ContainerRegistry/registries', 'Microsoft.KeyVault/vaults', 'Microsoft.Storage/storageAccounts',
                        'Microsoft.Network/applicationGateways', 'Microsoft.Cache/redis', 'Microsoft.Network/privateEndpoints') {
             OfType $t | Should -BeNullOrEmpty -Because $t
         }
         $script:RawJson | Should -Not -Match '"workloadProfileType": "D\d'
+    }
+}
+
+# OWN-02 allow-list. Every resource type the compiled template may contain, each with the reason it costs nothing while there is
+# no traffic. A type that is not listed fails the build, so a new billable resource has to be reviewed and added here on purpose.
+# Sources (Microsoft Learn, read 2026-11-19): container-apps/billing (consumption plan bills vCPU-s, GiB-s and requests only; zero
+# replicas = no charge; jobs bill only while an execution runs; no plan-management fee without a Dedicated profile or private
+# endpoint), container-apps/custom-virtual-networks#managed-resources (the public IP and load balancer exist only with a custom VNet),
+# azure-monitor/logs/log-analytics-workspace-overview#cost (no cost for creating a workspace; charged for ingestion and retention),
+# entra managed-identities overview ("free with Microsoft Entra ID"), cost-management budgets tutorial (alerts only).
+Describe 'OWN-02 allow-list of resource types that cost nothing while idle' {
+    BeforeAll {
+        $script:IdleFree = [ordered]@{
+            'Microsoft.App/managedEnvironments'                                             = 'plain Consumption environment: no VNet, so no public IP or load balancer; logs destination none'
+            'Microsoft.App/containerApps'                                                   = 'Consumption app, minReplicas 0: no resource charge at zero replicas; first 2M requests a month free'
+            'Microsoft.App/jobs'                                                            = 'manual job: bills only while an execution runs'
+            'Microsoft.ManagedIdentity/userAssignedIdentities'                              = 'managed identities are free'
+            'Microsoft.ManagedIdentity/userAssignedIdentities/federatedIdentityCredentials' = 'no charge'
+            'Microsoft.Authorization/roleAssignments'                                       = 'no charge'
+            'Microsoft.Authorization/locks'                                                 = 'no charge'
+            'Microsoft.Sql/servers'                                                         = 'logical server: no charge on its own'
+            'Microsoft.Sql/servers/administrators'                                          = 'no charge'
+            'Microsoft.Sql/servers/azureADOnlyAuthentications'                              = 'no charge'
+            'Microsoft.Sql/servers/auditingSettings'                                        = 'Azure Monitor target only (no storage account); ingestion capped, see workspace'
+            'Microsoft.Sql/servers/databases'                                               = 'free offer (useFreeLimit) with AutoPause on exhaustion: asserted in the INFRA-10 test'
+            'Microsoft.Sql/servers/databases/backupShortTermRetentionPolicies'              = 'included with the database'
+            'Microsoft.OperationalInsights/workspaces'                                      = 'no cost to hold; billed per GB ingested, capped at 0.1 GB a day (3 GB a month, inside the 5 GB free grant), retention 30-31 days included'
+            'Microsoft.Insights/diagnosticSettings'                                         = 'no charge itself; the data it sends is the capped ingestion above'
+            'Microsoft.Consumption/budgets'                                                 = 'alerts only'
+        }
+    }
+
+    It 'contains only resource types on the reviewed list' {
+        $actual = @($script:Resources | ForEach-Object { $_.type } | Sort-Object -Unique)
+        $unlisted = @($actual | Where-Object { -not $script:IdleFree.Contains($_) })
+        $unlisted | Should -BeNullOrEmpty -Because "these types are not reviewed as free at idle: $($unlisted -join ', ')"
+    }
+
+    It 'has no reviewed type that the template no longer uses (keep the list honest)' {
+        $actual = @($script:Resources | ForEach-Object { $_.type } | Sort-Object -Unique)
+        @($script:IdleFree.Keys | Where-Object { $_ -notin $actual }) | Should -BeNullOrEmpty
+    }
+
+    It 'caps the audit workspace ingestion so the free grant cannot be exceeded' {
+        $ws = @($script:Resources | Where-Object type -eq 'Microsoft.OperationalInsights/workspaces')[0]
+        [double]("$($ws.properties.workspaceCapping.dailyQuotaGb)" -replace '[^0-9.]', '') | Should -BeLessOrEqual 0.1
+        $ws.properties.sku.name | Should -Be 'PerGB2018'
+        $ws.properties.retentionInDays | Should -BeLessOrEqual 31
+    }
+
+    It 'keeps the environment without a VNet and the app at zero minimum replicas' {
+        $env = @($script:Resources | Where-Object type -eq 'Microsoft.App/managedEnvironments')[0]
+        $env.properties.PSObject.Properties.Name | Should -Not -Contain 'vnetConfiguration'
+        $env.properties.appLogsConfiguration.destination | Should -Be 'none'
+        @($env.properties.workloadProfiles | Where-Object workloadProfileType -ne 'Consumption') | Should -BeNullOrEmpty
+        @($script:Resources | Where-Object type -eq 'Microsoft.App/containerApps')[0].properties.template.scale.minReplicas | Should -Be 0
     }
 }
 

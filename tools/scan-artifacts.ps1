@@ -45,13 +45,22 @@ $archiveExtensions = '.zip', '.nupkg', '.vsix', '.msix', '.appx', '.jar', '.whl'
 # "Password = " is followed by the next table entry, whose first UTF-16 unit is U+0100 or higher, so a record that merely has a
 # Password property is not a hit, while real UTF-16 credentials (ASCII and Latin-1 values) still are.
 $printable = '\x21\x23-\x26\x28-\x2B\x2D-\x3A\x3D\x3F-\x7E\xA1-\xFF'   # printable minus the delimiters  "  '  ,  ;  <  >
-$value = "(?:`"(?![{`$%<*])[\x20\x21\x23-\x7E\xA1-\xFF]{1,200}`"|'(?![{`$%<*])[\x20-\x26\x28-\x7E\xA1-\xFF]{1,200}'|(?![{`$%<*])[$printable]{1,200})"
+# The only values that are not credentials are complete placeholders: {0} {name} ${NAME} $(NAME) %NAME% <your password>, followed by
+# something that cannot continue a value. A value that merely STARTS with { $ % < * (a real password can) is a hit.
+$placeholder = '(?:\{[\w.:,\-]{0,40}\}|\$\{[^}\s;"'']{1,60}\}|\$\([^)\s;"'']{1,60}\)|%[A-Za-z_]\w{0,60}%|<[A-Za-z][\w \-]{0,40}>)(?!\w)'
+$value = '(?:"(?!' + $placeholder + ')[\x20\x21\x23-\x7E\xA1-\xFF]{1,200}"|''(?!' + $placeholder + ')[\x20-\x26\x28-\x7E\xA1-\xFF]{1,200}''|(?!' + $placeholder + ')[' + $printable + '<][' + $printable + ']{0,199})'
 $ci = [Text.RegularExpressions.RegexOptions]::IgnoreCase -bor [Text.RegularExpressions.RegexOptions]::CultureInvariant
+# A keyword is a whole word: it must not follow a word character, $ @ % . or - (so perl's $pwd, $newpwd, the help key id-help-password
+# and a dotted property such as request.Password are not keywords).
+$notAfter = '(?<![\w$@%.\-])'
 $rules = @(
-    @{ Name = 'PasswordValue'; Regex = [regex]::new("\b(?:password|pwd)\s*=\s*$value", $ci) },
+    @{ Name = 'PasswordValue'; Regex = [regex]::new($notAfter + '(?:password|pwd)\s*=\s*' + $value, $ci) },
+    # Prefixed keys (DbPassword=..., MSSQL_SA_PASSWORD=..., AdminPwd=...) in the tight key=value form only, so C# "NewPassword = x;" and
+    # Configure's i_pwd='define' are not hits.
+    @{ Name = 'PasswordValue'; Regex = [regex]::new($notAfter + '(?:\w+password|(?:db|sql|sa|admin|app)_?pwd)=' + $value, $ci) },
     # "User ID" (any case, with a space) and the exact synonym "UserID". Identifier-style userId=value (library messages, code) is not a keyword.
-    @{ Name = 'UserIdValue'; Regex = [regex]::new("\b(?:(?i:user\s+id)|UserID)\s*=\s*$value", [Text.RegularExpressions.RegexOptions]::CultureInvariant) },
-    @{ Name = 'SqlHostCreds'; Regex = [regex]::new("database\.windows\.net[^\r\n]{0,400}?\b(?:password|pwd|user\s*id|uid)\s*=\s*$value", $ci) },
+    @{ Name = 'UserIdValue'; Regex = [regex]::new($notAfter + '(?:(?i:user\s+id)|UserID)\s*=\s*' + $value, [Text.RegularExpressions.RegexOptions]::CultureInvariant) },
+    @{ Name = 'SqlHostCreds'; Regex = [regex]::new('database\.windows\.net[^\r\n]{0,400}?' + $notAfter + '(?:password|pwd|user\s*id|uid)\s*=\s*' + $value, $ci) },
     @{ Name = 'SqlHostCreds'; Regex = [regex]::new('://[^/\s:@]{1,100}:[^/\s@]{1,200}@[^\s/]*database\.windows\.net', $ci) },
     @{ Name = 'Jwt'; Regex = [regex]::new('\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{10,}', [Text.RegularExpressions.RegexOptions]::CultureInvariant) },
     @{ Name = 'PrivateKey'; Regex = [regex]::new('-----BEGIN [A-Z ]{0,30}PRIVATE KEY-----\s*[A-Za-z0-9+/=]{16}', [Text.RegularExpressions.RegexOptions]::CultureInvariant) }

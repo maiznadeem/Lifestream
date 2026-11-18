@@ -1,15 +1,19 @@
 // Lifestream 2.0 infrastructure. Resource-group scope: deploy into resource group "Lifestream".
 //
-// Costs nothing while idle: Container Apps Consumption with minimum replicas 0, no registry (images come from GHCR),
+// Costs nothing while idle: a plain Container Apps Consumption environment (no custom virtual network, because a VNet
+// environment bills a public IP and a load balancer around the clock), minimum replicas 0, no registry (images come from GHCR),
 // no Key Vault, no gateway, no private endpoint, no container log destination. The SQL server and the BloodBank database
-// already exist (serverless free offer); they are declared here so the firewall, Entra-only switch, audit, locks and
-// backup settings are code. Nothing in this file is applied by the infra builder; see infra/README.md for the order.
+// already exist (serverless free offer); they are declared here so the Entra-only switch, audit, locks and backup settings
+// are code. The SQL firewall is NOT declared here: infra/sync-sql-firewall.ps1 keeps it equal to the environment's outbound
+// addresses (a template cannot delete rules it does not declare). tests/infra/BicepTests.ps1 holds an allow-list of resource
+// types that cost nothing at idle; a type outside it fails the build. Nothing in this file is applied by the infra builder;
+// see infra/README.md for the order.
 
 targetScope = 'resourceGroup'
 
 // ---------------------------------------------------------------- parameters
 
-@description('Region of the VNet, the Container Apps environment and the SQL server. Azure SQL virtual network rules only work inside the server\'s own region, so this must equal the region of lifestream-server (currently eastus), not the resource group\'s region.')
+@description('Region of the Container Apps environment and the SQL server (currently eastus). The API runs next to the database to keep latency low; the resource group\'s own region is not used.')
 param location string = 'eastus'
 
 @description('Existing logical SQL server.')
@@ -44,8 +48,8 @@ param backupRetentionDays int = 7
 @description('Email address that receives the budget alerts.')
 param ownerEmail string
 
-@description('First day of the month the budget starts in (yyyy-MM-01). Azure requires the first of a month.')
-param budgetStartDate string = utcNow('yyyy-MM-01')
+@description('First day of the month the budget starts in (yyyy-MM-01). A fixed value on purpose: a default computed at deployment time would change the start date of the existing budget on every re-apply in a later month, which Azure rejects. Never change it after the first apply.')
+param budgetStartDate string = '2026-11-01'
 
 @description('Monthly budget in the billing currency. The design budget is 1.')
 param budgetAmount int = 1
@@ -71,40 +75,8 @@ param auditRetentionDays int = 30
 
 // ---------------------------------------------------------------- names and constants
 
-var acaSubnetName = 'aca'
 var sqlFqdn = '${sqlServerName}${environment().suffixes.sqlServerHostname}'
 var contributorRoleId = 'b24988ac-6180-42a0-ab88-20f7382dd24c'
-
-// ---------------------------------------------------------------- network
-
-resource vnet 'Microsoft.Network/virtualNetworks@2024-05-01' = {
-  name: 'lifestream-vnet'
-  location: location
-  properties: {
-    addressSpace: { addressPrefixes: [ '10.40.0.0/16' ] }
-    subnets: [
-      {
-        name: acaSubnetName
-        properties: {
-          addressPrefix: '10.40.0.0/23'
-          // Workload-profile environments need the delegation; the Microsoft.Sql endpoint is what lets the SQL
-          // firewall admit this subnet instead of internet addresses.
-          delegations: [
-            {
-              name: 'aca-environments'
-              properties: { serviceName: 'Microsoft.App/environments' }
-            }
-          ]
-          serviceEndpoints: [
-            { service: 'Microsoft.Sql', locations: [ location ] }
-          ]
-        }
-      }
-    ]
-  }
-}
-
-var acaSubnetId = resourceId('Microsoft.Network/virtualNetworks/subnets', vnet.name, acaSubnetName)
 
 // ---------------------------------------------------------------- identities
 
@@ -147,7 +119,7 @@ resource sqlServer 'Microsoft.Sql/servers@2023-08-01' = {
   properties: {
     version: '12.0'
     minimalTlsVersion: '1.2'
-    publicNetworkAccess: 'Enabled' // a virtual network rule needs the public endpoint; the firewall below admits only the subnet
+    publicNetworkAccess: 'Enabled' // reached over the public endpoint; the firewall holds only the environment's outbound addresses (infra/sync-sql-firewall.ps1)
     restrictOutboundNetworkAccess: 'Disabled'
   }
 }
@@ -173,17 +145,9 @@ resource sqlEntraOnly 'Microsoft.Sql/servers/azureADOnlyAuthentications@2023-08-
   }
 }
 
-// The only network rule. No firewallRules resource is declared on purpose: the legacy "Allow anyone"
-// (0.0.0.0-255.255.255.255) and "AllowAllWindowsAzureIps" rules are deleted by infra/README.md step 4, and nothing
-// recreates them (a template cannot delete a resource it does not declare).
-resource sqlVnetRule 'Microsoft.Sql/servers/virtualNetworkRules@2023-08-01' = {
-  parent: sqlServer
-  name: 'lifestream-aca'
-  properties: {
-    virtualNetworkSubnetId: acaSubnetId
-    ignoreMissingVnetServiceEndpoint: false
-  }
-}
+// No firewallRules resource is declared on purpose. infra/sync-sql-firewall.ps1 (run by deploy-api.yml after every app update
+// and weekly by sync-sql-firewall.yml) makes the rules exactly the environment's outbound addresses, named aca-outbound-<n>, and
+// deletes everything else, including the legacy "Allow anyone" (0.0.0.0-255.255.255.255) and "AllowAllWindowsAzureIps" rules.
 
 resource sqlDatabase 'Microsoft.Sql/servers/databases@2023-08-01' = {
   parent: sqlServer
@@ -294,11 +258,7 @@ resource acaEnvironment 'Microsoft.App/managedEnvironments@2024-03-01' = {
   name: 'lifestream-env'
   location: location
   properties: {
-    appLogsConfiguration: { destination: 'none' } // no log destination, so nothing is ingested or billed
-    vnetConfiguration: {
-      infrastructureSubnetId: acaSubnetId
-      internal: false
-    }
+    appLogsConfiguration: { destination: 'none' } // no log destination, so nothing is ingested or billed; no vnetConfiguration, so no public IP or load balancer is billed
     workloadProfiles: [
       { name: 'Consumption', workloadProfileType: 'Consumption' }
     ]
