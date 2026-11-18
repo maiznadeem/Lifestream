@@ -217,9 +217,18 @@ public sealed class ListQueryPlanTests(ScaleDatabaseFixture fixture) : IClassFix
         return q;
     }
 
-    private static IQueryable<Receipt> ReceiptFilter(IQueryable<Receipt> q, string[] f, LifestreamDbContext db, Sample s)
+    // The receipt name search is the one the API runs (SearchQueries.ReceiptsMatching): the matches, filtered and ordered, then the page's rows.
+    private static IQueryable<ReceiptHit> HitFilter(IQueryable<ReceiptHit> q, string[] f, Sample s)
     {
-        if (f.Contains("Search")) { q = q.PartyNameStartsWith(db, s.DonorPrefix); }
+        if (f.Contains("Kind")) { q = q.Where(h => h.Kind == ReceiptKind.Donation); }
+        if (f.Contains("BloodType")) { q = q.Where(h => h.BloodType == s.BloodType); }
+        if (f.Contains("FromUtc")) { var from = s.From; q = q.Where(h => h.CreatedAtUtc >= from); }
+        if (f.Contains("ToUtc")) { var to = s.To; q = q.Where(h => h.CreatedAtUtc < to); }
+        return q;
+    }
+
+    private static IQueryable<Receipt> ReceiptFilter(IQueryable<Receipt> q, string[] f, Sample s)
+    {
         if (f.Contains("Kind")) { q = q.Where(r => r.Kind == ReceiptKind.Donation); }
         if (f.Contains("BloodType")) { q = q.Where(r => r.BloodType == s.BloodType); }
         if (f.Contains("FromUtc")) { var from = s.From; q = q.Where(r => r.CreatedAtUtc >= from); }
@@ -240,7 +249,9 @@ public sealed class ListQueryPlanTests(ScaleDatabaseFixture fixture) : IClassFix
         "Patients" => PatientFilter(db.Patients, f, s).CountAsync(Ct),
         "Appointments" => AppointmentFilter(db.Appointments, f, await DonorIds(db, f, s), s).CountAsync(Ct),
         "Requests" => RequestFilter(db.Requests, f, await PatientIds(db, f, s), s).CountAsync(Ct),
-        "Receipts" => ReceiptFilter(db.Receipts, f, db, s).CountAsync(Ct),
+        "Receipts" => f.Contains("Search")
+            ? HitFilter(SearchQueries.ReceiptsMatching(db, s.DonorPrefix, null), f, s).CountAsync(Ct)
+            : ReceiptFilter(db.Receipts, f, s).CountAsync(Ct),
         "Staff" => (f.Contains("Search") ? db.Staff.NameStartsWith(s.StaffPrefix) : db.Staff).CountAsync(Ct),
         _ => throw new InvalidOperationException(list),
     });
@@ -308,9 +319,20 @@ public sealed class ListQueryPlanTests(ScaleDatabaseFixture fixture) : IClassFix
 
     private static async Task Receipts(string[] f, string sort, int page, LifestreamDbContext db, Sample s)
     {
-        var q = ReceiptFilter(db.Receipts.AsNoTracking(), f, db, s);
-        var ordered = sort == "date" ? q.OrderBy(r => r.CreatedAtUtc).ThenBy(r => r.Id) : q.OrderByDescending(r => r.CreatedAtUtc).ThenByDescending(r => r.Id);
-        var ids = await ListPaging.PageIdsAsync(ordered, page, PageSize, Ct);
+        List<int> ids;
+        if (f.Contains("Search"))
+        {
+            var hits = HitFilter(SearchQueries.ReceiptsMatching(db, s.DonorPrefix, null), f, s);
+            var orderedHits = sort == "date" ? hits.OrderBy(h => h.CreatedAtUtc).ThenBy(h => h.Id) : hits.OrderByDescending(h => h.CreatedAtUtc).ThenByDescending(h => h.Id);
+            ids = await orderedHits.Select(h => h.Id).Skip((page - 1) * PageSize).Take(PageSize).ToListAsync(Ct);
+        }
+        else
+        {
+            var q = ReceiptFilter(db.Receipts.AsNoTracking(), f, s);
+            var ordered = sort == "date" ? q.OrderBy(r => r.CreatedAtUtc).ThenBy(r => r.Id) : q.OrderByDescending(r => r.CreatedAtUtc).ThenByDescending(r => r.Id);
+            ids = await ListPaging.PageIdsAsync(ordered, page, PageSize, Ct);
+        }
+
         _ = await db.Receipts.AsNoTracking().WithIds(ids)
             .Select(r => new ReceiptListItem(
                 r.Id, r.CreatedAtUtc, r.Kind, r.BloodType, r.Units, r.StaffId, r.Staff!.DisplayName,
