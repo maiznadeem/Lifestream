@@ -227,24 +227,34 @@ public sealed class AuthService(
     private static ApiException Unauthorized() => new(StatusCodes.Status401Unauthorized, ExtraProblemCodes.Unauthorized, "The session has ended. Sign in again.");
 }
 
-/// <summary>Short-lived memory of "this session is still active", so an access token check does not hit the database on every request.</summary>
+/// <summary>What the database says about a session right now.</summary>
+public sealed record SessionState(bool Active, Role Role);
+
+/// <summary>
+/// Short-lived memory of "this session is still active and this is the person's role", so an access token check does not hit the
+/// database on every request. The role in the database wins over the role written in the token, so a demotion applies at once.
+/// </summary>
 public static class RevocationCache
 {
     private static int _version;
 
     public static void Clear() => Interlocked.Increment(ref _version);
 
-    public static async Task<bool> IsActiveAsync(IMemoryCache cache, LifestreamDbContext db, TimeProvider time, Guid family, CancellationToken ct)
+    public static async Task<SessionState> StateAsync(IMemoryCache cache, LifestreamDbContext db, TimeProvider time, Guid family, CancellationToken ct)
     {
         var key = (Volatile.Read(ref _version), family);
-        if (cache.TryGetValue(key, out bool active))
+        if (cache.TryGetValue(key, out SessionState? cached) && cached is not null)
         {
-            return active;
+            return cached;
         }
 
         var now = time.GetUtcNow().UtcDateTime;
-        active = await db.RefreshTokens.AnyAsync(t => t.FamilyId == family && t.RevokedAtUtc == null && t.ExpiresAtUtc > now, ct);
-        cache.Set(key, active, TimeSpan.FromSeconds(20));
-        return active;
+        var role = await db.RefreshTokens
+            .Where(t => t.FamilyId == family && t.RevokedAtUtc == null && t.ExpiresAtUtc > now)
+            .Select(t => (Role?)t.Staff!.Role)
+            .FirstOrDefaultAsync(ct);
+        var state = new SessionState(role is not null, role ?? Role.Staff);
+        cache.Set(key, state, TimeSpan.FromSeconds(20));
+        return state;
     }
 }

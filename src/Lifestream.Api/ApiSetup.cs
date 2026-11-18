@@ -37,6 +37,8 @@ internal sealed class SqlDatabaseProbe(IConfiguration configuration, IOptions<Da
 
 public static class ApiSetup
 {
+    private static readonly string[] DefaultTrustedNetworks = ["10.40.0.0/23", "127.0.0.0/8", "::1/128"];
+
     public static WebApplicationBuilder AddLifestreamApi(this WebApplicationBuilder builder)
     {
         var services = builder.Services;
@@ -69,12 +71,21 @@ public static class ApiSetup
             o.SerializerOptions.DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull;
         });
 
-        services.Configure<ForwardedHeadersOptions>(o =>
+        // Only a proxy on a trusted network may set X-Forwarded-For; anything else is judged by its real address.
+        // ForwardedHeaders:KnownNetworks (CIDR list) defaults to the Container Apps subnet from infra/main.bicep plus loopback.
+        services.AddOptions<ForwardedHeadersOptions>().Configure<IConfiguration>((o, configuration) =>
         {
             o.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
             o.ForwardLimit = 1;
             o.KnownIPNetworks.Clear();
             o.KnownProxies.Clear();
+            var networks = configuration.GetSection("ForwardedHeaders:KnownNetworks").Get<string[]>() is { Length: > 0 } configured
+                ? configured
+                : DefaultTrustedNetworks;
+            foreach (var network in networks)
+            {
+                o.KnownIPNetworks.Add(System.Net.IPNetwork.Parse(network));
+            }
         });
         services.AddResponseCompression(o => o.EnableForHttps = true);
 
@@ -115,9 +126,22 @@ public static class ApiSetup
 
                         var db = context.HttpContext.RequestServices.GetRequiredService<LifestreamDbContext>();
                         var family = Guid.TryParseExact(principal.FindFirst(Claims.Family)?.Value, "N", out var f) ? f : Guid.Empty;
-                        if (family == Guid.Empty || !await RevocationCache.IsActiveAsync(cache, db, time, family, context.HttpContext.RequestAborted))
+                        var state = family == Guid.Empty ? null : await RevocationCache.StateAsync(cache, db, time, family, context.HttpContext.RequestAborted);
+                        if (state is not { Active: true })
                         {
                             context.Fail("The session has ended.");
+                            return;
+                        }
+
+                        // The database decides the role, whatever the token says.
+                        if (principal.Identity is System.Security.Claims.ClaimsIdentity identity && !principal.HasClaim(Claims.Role, state.Role.ToString()))
+                        {
+                            foreach (var stale in identity.FindAll(Claims.Role).ToList())
+                            {
+                                identity.RemoveClaim(stale);
+                            }
+
+                            identity.AddClaim(new System.Security.Claims.Claim(Claims.Role, state.Role.ToString()));
                         }
                     },
                 };

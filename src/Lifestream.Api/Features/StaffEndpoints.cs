@@ -175,8 +175,14 @@ public static class StaffEndpoints
         return await staff.PhotoAsync(id, ct);
     }
 
-    private static async Task<NoContent> UploadPhotoAsync(int id, HttpRequest http, PhotoProcessor photos, StaffService staff, CancellationToken ct)
+    private static async Task<NoContent> UploadPhotoAsync(int id, HttpRequest http, PhotoProcessor photos, StaffService staff, LifestreamDbContext db, CurrentUser user, CancellationToken ct)
     {
+        // Same gate as edit and reset: the owner's own record can be changed only by the owner.
+        if (id != user.TokenStaffId && await db.Staff.AnyAsync(s => s.Id == id && s.IsProtected, ct))
+        {
+            throw ApiException.Forbidden("The owner account can only be changed by the owner.");
+        }
+
         await staff.SavePhotoAsync(id, await photos.ReadAsync(http, ct), ct);
         return TypedResults.NoContent();
     }
@@ -340,6 +346,9 @@ public static class StaffEndpoints
             await db.SaveChangesAsync(token);
             return entity;
         }, ct);
+
+        // The role in the database is authoritative on every request; forget what was cached so a demotion applies at once.
+        RevocationCache.Clear();
         return ToDetail(staff);
     }
 
