@@ -26,14 +26,16 @@ public sealed class ClinicSchedule(IOptions<ClinicSettings> options)
     {
         var local = TimeZoneInfo.ConvertTimeFromUtc(slotUtc, Zone);
         var (open, close) = Hours;
-        var time = TimeOnly.FromDateTime(local);
-        var minutesFromOpen = (time - open).TotalMinutes;
-        if (local.Second != 0 || local.Millisecond != 0 || minutesFromOpen < 0 || minutesFromOpen % SlotMinutes != 0)
+
+        // TimeSpan arithmetic on purpose: TimeOnly subtraction wraps around midnight and would accept 08:00 for a 09:00 opening.
+        var sinceOpen = local.TimeOfDay - open.ToTimeSpan();
+        var end = local.TimeOfDay + TimeSpan.FromMinutes(SlotMinutes);
+        if (local.Second != 0 || local.Millisecond != 0 || sinceOpen < TimeSpan.Zero || sinceOpen.TotalMinutes % SlotMinutes != 0)
         {
             return $"must start on a {SlotMinutes}-minute slot between {open:HH:mm} and {close:HH:mm}";
         }
 
-        return time.AddMinutes(SlotMinutes) > close && time.AddMinutes(SlotMinutes) != TimeOnly.MinValue ? $"must end by {close:HH:mm}" : null;
+        return end > close.ToTimeSpan() ? $"must end by {close:HH:mm}" : null;
     }
 
     /// <summary>Every slot start (UTC) on a clinic-local calendar day.</summary>
@@ -41,18 +43,12 @@ public sealed class ClinicSchedule(IOptions<ClinicSettings> options)
     {
         var (open, close) = Hours;
         var zone = Zone;
-        for (var t = open; t.AddMinutes(SlotMinutes) <= close && t >= open; t = t.AddMinutes(SlotMinutes))
+        for (var t = open.ToTimeSpan(); t + TimeSpan.FromMinutes(SlotMinutes) <= close.ToTimeSpan(); t += TimeSpan.FromMinutes(SlotMinutes))
         {
-            var local = localDate.ToDateTime(t, DateTimeKind.Unspecified);
-            if (zone.IsInvalidTime(local))
+            var local = DateTime.SpecifyKind(localDate.ToDateTime(TimeOnly.MinValue) + t, DateTimeKind.Unspecified);
+            if (!zone.IsInvalidTime(local))
             {
-                continue;
-            }
-
-            yield return TimeZoneInfo.ConvertTimeToUtc(local, zone);
-            if (t.AddMinutes(SlotMinutes) <= t)
-            {
-                yield break;
+                yield return TimeZoneInfo.ConvertTimeToUtc(local, zone);
             }
         }
     }
