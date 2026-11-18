@@ -16,7 +16,7 @@ partial class LifestreamDbContextModelSnapshot : ModelSnapshot
     // If you encounter a merge conflict in the line below, it means you need to
     // discard one of the migration branches and recreate its migrations on top of
     // the other branch. See https://aka.ms/efcore-docs-migrations-conflicts for more info.
-    public override string LastMigrationId => "20261118212125_InitialSchema";
+    public override string LastMigrationId => "20261118220716_HardenHashCheckAndListIndexes";
 
     protected override void BuildModel(ModelBuilder modelBuilder)
     {
@@ -34,6 +34,12 @@ partial class LifestreamDbContextModelSnapshot : ModelSnapshot
                     .HasColumnType("int");
 
                 SqlServerPropertyBuilderExtensions.UseIdentityColumn(id);
+
+                b.Property<string>("DonorBloodType")
+                    .IsRequired()
+                    .HasMaxLength(5)
+                    .IsUnicode(false)
+                    .HasColumnType("varchar(5)");
 
                 b.Property<int>("DonorId")
                     .HasColumnType("int");
@@ -64,16 +70,30 @@ partial class LifestreamDbContextModelSnapshot : ModelSnapshot
 
                 b.HasKey("Id");
 
-                b.HasIndex("DonorId");
+                var index = b.HasIndex("PlacedAtUtc");
 
-                b.HasIndex("PlacedAtUtc");
+                SqlServerIndexBuilderExtensions.IncludeProperties(index, new[] { "SlotStartUtc", "Status" });
 
-                b.HasIndex("SlotStartUtc");
+                var index0 = b.HasIndex("SlotStartUtc");
+
+                SqlServerIndexBuilderExtensions.IncludeProperties(index0, new[] { "PlacedAtUtc", "Status" });
+
+                b.HasIndex("DonorBloodType", "PlacedAtUtc");
+
+                b.HasIndex("DonorBloodType", "SlotStartUtc");
+
+                var index1 = b.HasIndex("DonorId", "SlotStartUtc");
+
+                SqlServerIndexBuilderExtensions.IncludeProperties(index1, new[] { "PlacedAtUtc", "Status" });
+
+                b.HasIndex("Status", "PlacedAtUtc");
 
                 b.HasIndex("Status", "SlotStartUtc");
 
                 b.ToTable("Appointment", t =>
                     {
+                        t.HasCheckConstraint("CK_Appointment_DonorBloodType", "[DonorBloodType] IN ('APos', 'ANeg', 'BPos', 'BNeg', 'ABPos', 'ABNeg', 'OPos', 'ONeg')");
+
                         t.HasCheckConstraint("CK_Appointment_Status", "[Status] IN ('Pending', 'Completed', 'Cancelled', 'NoShow')");
                     });
             });
@@ -252,13 +272,13 @@ partial class LifestreamDbContextModelSnapshot : ModelSnapshot
 
                 b.HasKey("Id");
 
-                b.HasIndex("BloodType");
-
                 b.HasIndex("Gender");
 
                 b.HasIndex("LastDonated");
 
                 b.HasIndex("Name");
+
+                b.HasIndex("BloodType", "Name");
 
                 b.ToTable("Donor", t =>
                     {
@@ -316,11 +336,11 @@ partial class LifestreamDbContextModelSnapshot : ModelSnapshot
 
                 b.HasKey("Id");
 
-                b.HasIndex("BloodType");
-
                 b.HasIndex("Gender");
 
                 b.HasIndex("Name");
+
+                b.HasIndex("BloodType", "Name");
 
                 b.ToTable("Patient", t =>
                     {
@@ -488,11 +508,17 @@ partial class LifestreamDbContextModelSnapshot : ModelSnapshot
 
                 b.HasKey("Id");
 
-                b.HasIndex("PatientId");
-
                 b.HasIndex("PlacedAtUtc");
 
                 b.HasIndex("RequiredBy");
+
+                b.HasIndex("BloodType", "PlacedAtUtc");
+
+                b.HasIndex("BloodType", "RequiredBy");
+
+                var index = b.HasIndex("PatientId", "PlacedAtUtc");
+
+                SqlServerIndexBuilderExtensions.IncludeProperties(index, new[] { "RequiredBy" });
 
                 b.HasIndex("Status", "PlacedAtUtc");
 
@@ -605,7 +631,7 @@ partial class LifestreamDbContextModelSnapshot : ModelSnapshot
 
                         t.HasCheckConstraint("CK_Staff_Gender", "[Gender] IN ('Male', 'Female', 'Other')");
 
-                        t.HasCheckConstraint("CK_Staff_PasswordHash", "LEN([PasswordHash]) BETWEEN 80 AND 256 AND [PasswordHash] LIKE 'AQAAAAI%' COLLATE Latin1_General_100_BIN2");
+                        t.HasCheckConstraint("CK_Staff_PasswordHash", "LEN([PasswordHash]) BETWEEN 84 AND 256 AND LEN([PasswordHash]) % 4 = 0 AND [PasswordHash] NOT LIKE '%[^A-Za-z0-9+/=]%' COLLATE Latin1_General_100_BIN2 AND [PasswordHash] NOT LIKE '%=%[^=]%' COLLATE Latin1_General_100_BIN2 AND [PasswordHash] NOT LIKE '%===%' COLLATE Latin1_General_100_BIN2 AND [PasswordHash] LIKE 'AQAAAAIA____AAAAE%' COLLATE Latin1_General_100_BIN2");
 
                         t.HasCheckConstraint("CK_Staff_Role", "[Role] IN ('Admin', 'Staff')");
 

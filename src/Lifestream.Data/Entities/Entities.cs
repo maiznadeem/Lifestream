@@ -90,6 +90,13 @@ public sealed class Appointment : IEntity
     public int DonorId { get; set; }
     public Donor? Donor { get; set; }
 
+    /// <summary>
+    /// A copy of the donor's blood type, so "appointments of donors with blood type X, by date" is one index seek instead of a
+    /// join. Never set it by hand: <see cref="LifestreamDbContext"/> fills it when the appointment is added and rewrites it when
+    /// the donor's blood type changes.
+    /// </summary>
+    public BloodType DonorBloodType { get; set; }
+
     /// <summary>Server time (default <c>SYSUTCDATETIME()</c>) unless a generator sets history.</summary>
     public DateTime PlacedAtUtc { get; set; }
 

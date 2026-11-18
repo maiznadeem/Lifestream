@@ -1,0 +1,220 @@
+name: Deploy API
+
+# Separate from the PR build (ci.yml). Runs on a push to master that touches the API, its libraries or the
+# infrastructure, after its own build-and-test gate. Signs in to Azure with GitHub OIDC (no stored cloud secret; the
+# only secret used is the built-in GITHUB_TOKEN). Order: gate, image (built, scanned, then pushed), migrate job, app
+# update, health check, prune old image versions.
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'src/Lifestream.Api/**'
+      - 'src/Lifestream.Data/**'
+      - 'src/Lifestream.Contracts/**'
+      - 'src/Lifestream.Domain/**'
+      - 'infra/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-api
+  cancel-in-progress: false
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  IMAGE: ghcr.io/maiznadeem/lifestream-api
+  AZURE_RESOURCE_GROUP: Lifestream
+  CONTAINER_APP: lifestream-api
+  MIGRATE_JOB: lifestream-migrate
+
+jobs:
+  gate:
+    name: gate (build and tests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Start SQL Server 2025
+        run: |
+          password="Aa1!$(openssl rand -hex 16)"
+          echo "::add-mask::$password"
+          docker run -d --name lifestream-sql -p 1433:1433 \
+            -e ACCEPT_EULA=Y -e "MSSQL_SA_PASSWORD=$password" \
+            mcr.microsoft.com/mssql/server:2025-latest
+          echo "LIFESTREAM_TEST_SQL=Server=localhost,1433;User Id=sa;Password=$password;TrustServerCertificate=true" >> "$GITHUB_ENV"
+          for attempt in $(seq 1 60); do
+            if docker logs lifestream-sql 2>&1 | grep -q "SQL Server is now ready for client connections"; then
+              echo "SQL Server ready after $attempt checks"
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs lifestream-sql | tail -50
+          echo "SQL Server did not become ready" >&2
+          exit 1
+
+      - name: Build (warnings are errors)
+        run: >
+          dotnet build tests/Lifestream.Domain.Tests tests/Lifestream.Client.Tests tests/Lifestream.Api.Tests
+          -c Release
+
+      - name: Test
+        run: |
+          dotnet test tests/Lifestream.Domain.Tests -c Release --no-build
+          dotnet test tests/Lifestream.Client.Tests -c Release --no-build
+          dotnet test tests/Lifestream.Api.Tests -c Release --no-build
+
+  image:
+    name: image (build, scan, push)
+    needs: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sign in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Single architecture, no provenance or SBOM attestation: each version is exactly one manifest, so pruning the old
+      # versions can never orphan a manifest list.
+      - name: Build image (not pushed yet)
+        run: >
+          docker buildx build --provenance=false --sbom=false --platform linux/amd64 --load
+          -f src/Lifestream.Api/Dockerfile -t "$IMAGE:$GITHUB_SHA" .
+
+      # A credential in the image would be public the moment the package is pushed, so the scan comes first.
+      - name: Scan the image filesystem and configuration for credentials
+        run: tools/scan-image.sh "$IMAGE:$GITHUB_SHA" "$RUNNER_TEMP/image-scan-report.json"
+
+      - name: Push image
+        run: docker push "$IMAGE:$GITHUB_SHA"
+
+      - name: Upload scan report (no values, only file, rule and offset)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-scan-report
+          path: ${{ runner.temp }}/image-scan-report.json
+          if-no-files-found: ignore
+
+  deploy:
+    name: deploy (migrate, update, health check, prune)
+    needs: image
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      id-token: write # OIDC token for azure/login
+      contents: read
+      packages: write # prune old image versions
+    steps:
+      - uses: actions/checkout@v4
+
+      # Client, tenant and subscription ids are identifiers, not secrets: repository variables.
+      - name: Sign in to Azure (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Install the Container Apps CLI extension
+        run: az extension add --name containerapp --upgrade --only-show-errors
+
+      - name: Run the migration job
+        run: |
+          set -euo pipefail
+          az containerapp job update --name "$MIGRATE_JOB" --resource-group "$AZURE_RESOURCE_GROUP" \
+            --image "$IMAGE:$GITHUB_SHA" --only-show-errors --output none
+          execution="$(az containerapp job start --name "$MIGRATE_JOB" --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query name --output tsv)"
+          echo "Started job execution: $execution"
+          # Proof of life: the execution must report a status within 5 minutes, otherwise the watcher exits NO SIGNAL.
+          # The job's own timeout is 15 minutes (replicaTimeout 900), so the deadline is that plus a margin.
+          started=$(date +%s); first_status=""; failures=0
+          while true; do
+            now=$(date +%s); elapsed=$((now - started))
+            if status="$(az containerapp job execution show --name "$MIGRATE_JOB" --resource-group "$AZURE_RESOURCE_GROUP" \
+                --job-execution-name "$execution" --query properties.status --output tsv 2>/dev/null)"; then
+              failures=0
+            else
+              failures=$((failures + 1)); status=""
+              if [ "$failures" -ge 10 ]; then echo "WATCHER BROKEN: status query failed 10 times in a row" >&2; exit 1; fi
+            fi
+            if [ -n "$status" ] && [ -z "$first_status" ]; then first_status="$status"; echo "Execution status first seen after ${elapsed}s: $status"; fi
+            case "$status" in
+              Succeeded) echo "MIGRATION SUCCEEDED after ${elapsed}s"; exit 0 ;;
+              Failed|Degraded|Stopped) echo "MIGRATION FAILED (status $status) after ${elapsed}s" >&2; exit 1 ;;
+            esac
+            if [ -z "$first_status" ] && [ "$elapsed" -ge 300 ]; then echo "NO SIGNAL: execution $execution reported no status in 5 minutes" >&2; exit 1; fi
+            if [ "$elapsed" -ge 1080 ]; then echo "TIMEOUT: execution still '$status' after ${elapsed}s" >&2; exit 1; fi
+            sleep 10
+          done
+
+      - name: Update the container app
+        run: |
+          az containerapp update --name "$CONTAINER_APP" --resource-group "$AZURE_RESOURCE_GROUP" \
+            --image "$IMAGE:$GITHUB_SHA" --only-show-errors --output none
+
+      - name: Wait for /healthz to return 200 (up to 5 minutes)
+        run: |
+          set -euo pipefail
+          fqdn="$(az containerapp show --name "$CONTAINER_APP" --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query properties.configuration.ingress.fqdn --output tsv)"
+          [ -n "$fqdn" ] || { echo "NO SIGNAL: the container app has no ingress address" >&2; exit 1; }
+          url="https://$fqdn/healthz"
+          started=$(date +%s)
+          while true; do
+            code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$url" || true)"
+            elapsed=$(( $(date +%s) - started ))
+            echo "GET $url -> ${code:-000} (${elapsed}s)"
+            if [ "$code" = "200" ]; then echo "HEALTHY after ${elapsed}s"; exit 0; fi
+            if [ "$elapsed" -ge 300 ]; then echo "TIMEOUT: /healthz did not return 200 within 5 minutes (last status ${code:-000})" >&2; exit 1; fi
+            sleep 5
+          done
+
+      # Runs only after a green health check, so the image that was just deployed is the newest and can never be
+      # among the deleted versions.
+      - name: Prune old image versions (keep the newest 3)
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: lifestream-api
+          package-type: container
+          min-versions-to-keep: 3
+          owner: ${{ github.repository_owner }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Sign in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify exactly the newest 3 versions remain and the deployed tag resolves
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          versions="$(gh api --paginate "/users/${GITHUB_REPOSITORY_OWNER}/packages/container/lifestream-api/versions" --jq '.[] | [.id, (.metadata.container.tags | join(","))] | @tsv')"
+          echo "Remaining package versions (id, tags):"
+          echo "$versions"
+          count="$(printf '%s\n' "$versions" | grep -c . || true)"
+          if [ "$count" -gt 3 ]; then echo "FAILED: $count versions remain, expected at most 3" >&2; exit 1; fi
+          if ! printf '%s\n' "$versions" | grep -q "$GITHUB_SHA"; then echo "FAILED: the deployed tag $GITHUB_SHA is not among the remaining versions" >&2; exit 1; fi
+          docker manifest inspect "$IMAGE:$GITHUB_SHA" > /dev/null
+          echo "OK: $count version(s) remain and $IMAGE:$GITHUB_SHA passes docker manifest inspect"

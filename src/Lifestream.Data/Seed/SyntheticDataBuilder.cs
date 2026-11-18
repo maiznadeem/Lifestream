@@ -157,9 +157,11 @@ internal static class SyntheticDataBuilder
                 : i < (SeedSizes.CompletedAppointments + SeedSizes.CancelledAppointments) * factor ? AppointmentStatus.Cancelled
                 : AppointmentStatus.NoShow;
             var slot = SlotTime(todayStart.AddDays(-pastDays), pastSlots[i]);
+            var donor = rng.Pick(set.Donors);
             var appointment = new Appointment
             {
-                Donor = rng.Pick(set.Donors),
+                Donor = donor,
+                DonorBloodType = donor.BloodType,
                 SlotStartUtc = slot,
                 PlacedAtUtc = slot.AddDays(-rng.Between(1, 14)).AddMinutes(rng.Between(-120, 120)),
                 Status = status,
@@ -176,9 +178,11 @@ internal static class SyntheticDataBuilder
         var futureSlots = Shuffled(pendingCount, rng, modulus: futureDays * SlotsPerDay);
         for (var i = 0; i < pendingCount; i++)
         {
+            var donor = rng.Pick(set.Donors);
             set.Appointments.Add(new Appointment
             {
-                Donor = rng.Pick(set.Donors),
+                Donor = donor,
+                DonorBloodType = donor.BloodType,
                 SlotStartUtc = SlotTime(todayStart.AddDays(1), futureSlots[i]),
                 PlacedAtUtc = todayStart.AddDays(-rng.Between(0, 6)).AddMinutes(rng.Between(0, 59)),
                 Status = AppointmentStatus.Pending,

@@ -12,7 +12,7 @@
       </ResourceDictionary.MergedDictionaries>
     </ResourceDictionary>
   </UserControl.Resources>
-  <Grid Background="#1E1E1E">
+  <Grid Background="{DynamicResource ApplicationBackgroundBrush}">
     <Grid.RowDefinitions>
       <RowDefinition Height="Auto" />
       <RowDefinition Height="*" />

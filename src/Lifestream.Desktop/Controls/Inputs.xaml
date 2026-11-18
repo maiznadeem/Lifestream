@@ -1,0 +1,242 @@
+<ResourceDictionary xmlns:controls="clr-namespace:Lifestream.Desktop.Controls" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:assist="clr-namespace:Lifestream.Desktop.Controls">
+  <ResourceDictionary.MergedDictionaries>
+    <ResourceDictionary Source="/Lifestream;component/Theme/Tokens.xaml" />
+    <ResourceDictionary Source="/Lifestream;component/Theme/Motion.xaml" />
+    <ResourceDictionary Source="/Lifestream;component/Theme/Typography.xaml" />
+  </ResourceDictionary.MergedDictionaries>
+
+  <!-- Text input: the label lives above the field (FormField), never inside it. The border thickens to the 2 px focus ring
+       colour on focus. A watermark is not part of the value: there is no Text trick, the hint is a separate element. -->
+  <Style x:Key="Input.Base" TargetType="Control">
+    <Setter Property="FontFamily" Value="{StaticResource Font.Family}" />
+    <Setter Property="FontSize" Value="{StaticResource FontSize.Body}" />
+    <Setter Property="Foreground" Value="{DynamicResource Brush.TextPrimary}" />
+    <Setter Property="Background" Value="{DynamicResource Brush.SurfaceRaised}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Brush.BorderInput}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="MinHeight" Value="{StaticResource Height.Control}" />
+    <Setter Property="Padding" Value="12,0" />
+    <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+  </Style>
+
+  <Style x:Key="TextBox.Lifestream" TargetType="TextBox" BasedOn="{StaticResource Input.Base}">
+    <Setter Property="CaretBrush" Value="{DynamicResource Brush.TextPrimary}" />
+    <Setter Property="SelectionBrush" Value="{DynamicResource Brush.Primary}" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="TextBox">
+          <Border x:Name="Box" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="{StaticResource Radius.Control}" SnapsToDevicePixels="True">
+            <ScrollViewer x:Name="PART_ContentHost" VerticalAlignment="Center"
+                          Focusable="False" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden" />
+          </Border>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsKeyboardFocusWithin" Value="True">
+              <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brush.FocusRing}" />
+              <Setter TargetName="Box" Property="BorderThickness" Value="2" />
+            </Trigger>
+            <Trigger Property="IsReadOnly" Value="True">
+              <Setter TargetName="Box" Property="Background" Value="{DynamicResource Brush.SurfaceCanvas}" />
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter Property="Foreground" Value="{DynamicResource Brush.TextDisabled}" />
+              <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brush.BorderSubtle}" />
+            </Trigger>
+            <Trigger Property="Validation.HasError" Value="True">
+              <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brush.StatusDanger}" />
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+    <!-- The error is shown by FormField under the field, so the built-in red adorner is switched off. -->
+    <Setter Property="Validation.ErrorTemplate" Value="{x:Null}" />
+  </Style>
+
+  <Style x:Key="PasswordBox.Lifestream" TargetType="PasswordBox" BasedOn="{StaticResource Input.Base}">
+    <Setter Property="CaretBrush" Value="{DynamicResource Brush.TextPrimary}" />
+    <Setter Property="SelectionBrush" Value="{DynamicResource Brush.Primary}" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="PasswordBox">
+          <Border x:Name="Box" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="{StaticResource Radius.Control}" SnapsToDevicePixels="True">
+            <ScrollViewer x:Name="PART_ContentHost" VerticalAlignment="Center" Focusable="False" />
+          </Border>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsKeyboardFocusWithin" Value="True">
+              <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brush.FocusRing}" />
+              <Setter TargetName="Box" Property="BorderThickness" Value="2" />
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter Property="Foreground" Value="{DynamicResource Brush.TextDisabled}" />
+              <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brush.BorderSubtle}" />
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <!-- Combo box: keyboard focusable, typed items, the popup lists items bound to the ItemsSource. -->
+  <Style x:Key="ComboBoxItem.Lifestream" TargetType="ComboBoxItem">
+    <Setter Property="FontFamily" Value="{StaticResource Font.Family}" />
+    <Setter Property="FontSize" Value="{StaticResource FontSize.Body}" />
+    <Setter Property="Foreground" Value="{DynamicResource Brush.TextPrimary}" />
+    <Setter Property="MinHeight" Value="{StaticResource Height.Compact}" />
+    <Setter Property="Padding" Value="12,4" />
+    <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="ComboBoxItem">
+          <Border x:Name="Bd" Background="Transparent" Padding="{TemplateBinding Padding}">
+            <ContentPresenter VerticalAlignment="Center" />
+          </Border>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsHighlighted" Value="True">
+              <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.SurfaceHover}" />
+            </Trigger>
+            <Trigger Property="IsSelected" Value="True">
+              <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.SurfaceSelected}" />
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style x:Key="ComboBox.Lifestream" TargetType="ComboBox" BasedOn="{StaticResource Input.Base}">
+    <Setter Property="ItemContainerStyle" Value="{StaticResource ComboBoxItem.Lifestream}" />
+    <Setter Property="IsTabStop" Value="True" />
+    <Setter Property="Focusable" Value="True" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="ComboBox">
+          <Grid>
+            <ToggleButton x:Name="Toggle" Focusable="False" ClickMode="Press" IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+              <ToggleButton.Template>
+                <ControlTemplate TargetType="ToggleButton">
+                  <Border x:Name="Box" Background="{Binding Background, RelativeSource={RelativeSource AncestorType=ComboBox}}"
+                          BorderBrush="{Binding BorderBrush, RelativeSource={RelativeSource AncestorType=ComboBox}}"
+                          BorderThickness="1" CornerRadius="{StaticResource Radius.Control}" />
+                  <ControlTemplate.Triggers>
+                    <DataTrigger Binding="{Binding IsKeyboardFocusWithin, RelativeSource={RelativeSource AncestorType=ComboBox}}" Value="True">
+                      <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brush.FocusRing}" />
+                      <Setter TargetName="Box" Property="BorderThickness" Value="2" />
+                    </DataTrigger>
+                  </ControlTemplate.Triggers>
+                </ControlTemplate>
+              </ToggleButton.Template>
+            </ToggleButton>
+            <Grid IsHitTestVisible="False" Margin="{TemplateBinding Padding}">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+              </Grid.ColumnDefinitions>
+              <ContentPresenter Content="{TemplateBinding SelectionBoxItem}" ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                VerticalAlignment="Center" TextElement.Foreground="{TemplateBinding Foreground}" />
+              <controls:IconText Grid.Column="1" Style="{StaticResource Text.Icon}" Text="&#xE70D;" Foreground="{DynamicResource Brush.TextSecondary}" VerticalAlignment="Center" />
+            </Grid>
+            <Popup x:Name="PART_Popup" IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom" AllowsTransparency="True" Focusable="False"
+                   PopupAnimation="None" StaysOpen="False">
+              <Border MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}" MaxHeight="{TemplateBinding MaxDropDownHeight}"
+                      Background="{DynamicResource Brush.SurfaceRaised}" BorderBrush="{DynamicResource Brush.BorderInput}" BorderThickness="1"
+                      CornerRadius="{StaticResource Radius.Control}" Margin="0,4,0,8">
+                <ScrollViewer>
+                  <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained" />
+                </ScrollViewer>
+              </Border>
+            </Popup>
+          </Grid>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter Property="Foreground" Value="{DynamicResource Brush.TextDisabled}" />
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style x:Key="CheckBox.Lifestream" TargetType="CheckBox">
+    <Setter Property="FontFamily" Value="{StaticResource Font.Family}" />
+    <Setter Property="FontSize" Value="{StaticResource FontSize.Body}" />
+    <Setter Property="Foreground" Value="{DynamicResource Brush.TextPrimary}" />
+    <Setter Property="MinHeight" Value="{StaticResource Height.Compact}" />
+    <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="CheckBox">
+          <Grid Background="Transparent">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="Auto" />
+              <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Border x:Name="Box" Width="20" Height="20" BorderThickness="1" BorderBrush="{DynamicResource Brush.BorderInput}"
+                    Background="{DynamicResource Brush.SurfaceRaised}" CornerRadius="{StaticResource Radius.Control}" VerticalAlignment="Center">
+              <controls:IconText x:Name="Mark" Style="{StaticResource Text.Icon}" Text="&#xE73E;" FontSize="{StaticResource FontSize.Body}"
+                         Foreground="{DynamicResource Brush.TextOnPrimary}" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed" />
+            </Border>
+            <ContentPresenter Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Center" RecognizesAccessKey="True" />
+          </Grid>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsChecked" Value="True">
+              <Setter TargetName="Box" Property="Background" Value="{DynamicResource Brush.Primary}" />
+              <Setter TargetName="Mark" Property="Visibility" Value="Visible" />
+            </Trigger>
+            <Trigger Property="IsKeyboardFocused" Value="True">
+              <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brush.FocusRing}" />
+              <Setter TargetName="Box" Property="BorderThickness" Value="2" />
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter Property="Foreground" Value="{DynamicResource Brush.TextDisabled}" />
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style x:Key="ToolTip.Lifestream" TargetType="ToolTip">
+    <Setter Property="FontFamily" Value="{StaticResource Font.Family}" />
+    <Setter Property="FontSize" Value="{StaticResource FontSize.Caption}" />
+    <Setter Property="Foreground" Value="{DynamicResource Brush.TextPrimary}" />
+    <Setter Property="Background" Value="{DynamicResource Brush.SurfacePressed}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Brush.BorderInput}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="Padding" Value="8,4" />
+    <Setter Property="MaxWidth" Value="360" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="ToolTip">
+          <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
+                  CornerRadius="{StaticResource Radius.Control}" Padding="{TemplateBinding Padding}">
+            <ContentPresenter TextElement.Foreground="{TemplateBinding Foreground}" />
+          </Border>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style TargetType="TextBox" BasedOn="{StaticResource TextBox.Lifestream}" />
+  <Style TargetType="PasswordBox" BasedOn="{StaticResource PasswordBox.Lifestream}" />
+  <Style TargetType="ComboBox" BasedOn="{StaticResource ComboBox.Lifestream}" />
+  <Style TargetType="CheckBox" BasedOn="{StaticResource CheckBox.Lifestream}" />
+  <Style TargetType="ToolTip" BasedOn="{StaticResource ToolTip.Lifestream}" />
+
+  <!-- Any other control that takes keyboard focus gets the same 2 px ring, drawn only for keyboard focus (WPF shows the
+       focus visual only after keyboard input). -->
+  <Style x:Key="{x:Static SystemParameters.FocusVisualStyleKey}">
+    <Setter Property="Control.Template">
+      <Setter.Value>
+        <ControlTemplate>
+          <Rectangle Margin="-3" RadiusX="6" RadiusY="6" StrokeThickness="{StaticResource Size.FocusRing}"
+                     Stroke="{DynamicResource Brush.FocusRing}" SnapsToDevicePixels="True" IsHitTestVisible="False" />
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+</ResourceDictionary>

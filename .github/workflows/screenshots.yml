@@ -1,0 +1,44 @@
+name: Screenshots
+
+# Regenerates the README and Microsoft Store screenshots from the demo dataset only, off-screen (no window is shown), and
+# uploads them with their manifest as a workflow artifact. The owner copies them into the repository or the Store listing.
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - 'src/Lifestream.Desktop/**'
+      - 'src/Lifestream.Client/**'
+      - 'tools/generate-screenshots.ps1'
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  screenshots:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Build
+        run: dotnet build tests/Lifestream.Desktop.Tests -c Release
+
+      - name: Generate screenshots (demo dataset only)
+        shell: pwsh
+        run: ./tools/generate-screenshots.ps1 -OutputDir "$env:RUNNER_TEMP/screenshots/readme" -StoreDir "$env:RUNNER_TEMP/screenshots/store"
+
+      - name: Upload screenshots
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: ${{ runner.temp }}/screenshots
+          if-no-files-found: error
