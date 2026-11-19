@@ -1,8 +1,12 @@
 namespace Lifestream.Client.Api;
 
 /// <summary>A failed call, in the shape of the API's RFC 7807 response (or synthesised by the client when no response arrived).</summary>
-public sealed record ApiProblem(int Status, string Code, string Title, string? CorrelationId = null, string? Detail = null)
+public sealed record ApiProblem(int Status, string Code, string Title, string? CorrelationId = null, string? Detail = null, IReadOnlyDictionary<string, string[]>? Errors = null)
 {
+    /// <summary>The messages for one field (the problem's <c>errors</c> object), or none.</summary>
+    public IReadOnlyList<string> ErrorsFor(string field) =>
+        Errors is not null && Errors.TryGetValue(field, out var messages) ? messages : [];
+
     /// <summary>True when the server or database is starting up (or the call gave up waiting for it).</summary>
     public bool IsWaking => Code == Contracts.ProblemCodes.DatabaseWaking;
 

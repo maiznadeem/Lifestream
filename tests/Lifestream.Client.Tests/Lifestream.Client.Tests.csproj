@@ -3,5 +3,7 @@
     <!-- Hosts a loopback Kestrel server for the one-HTTP/2-connection test; the Client assembly itself stays free of it. -->
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="..\..\src\Lifestream.Client\Lifestream.Client.csproj" />
+    <!-- The sort-key tests ask the API's own sort validator (SortMap) whether a column's key is accepted; nothing else of the API is used. -->
+    <ProjectReference Include="..\..\src\Lifestream.Api\Lifestream.Api.csproj" />
   </ItemGroup>
 </Project>

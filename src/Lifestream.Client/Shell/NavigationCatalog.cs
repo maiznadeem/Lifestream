@@ -36,21 +36,21 @@ public static class NavigationCatalog
     [
         new("Dashboard", "Overview", "", typeof(Features.Dashboard.DashboardViewModel)),
         new("Donors", "Donations", "", typeof(Features.Donors.DonorsViewModel)),
-        new("Appointments", "Donations", "", typeof(Placeholders.AppointmentsPlaceholderViewModel)),
+        new("Appointments", "Donations", "", typeof(Features.Appointments.AppointmentsViewModel)),
         new("Patients", "Transfusions", "", typeof(Features.Patients.PatientsViewModel)),
-        new("Requests", "Transfusions", "", typeof(Placeholders.RequestsPlaceholderViewModel)),
+        new("Requests", "Transfusions", "", typeof(Features.Requests.RequestsViewModel)),
         new("Stock", "Inventory", "", typeof(Features.Stock.StockViewModel)),
-        new("Receipts", "Inventory", "", typeof(Placeholders.ReceiptsPlaceholderViewModel)),
-        new("Staff", "Administration", "", typeof(Placeholders.StaffPlaceholderViewModel), Audience.AdminOrDemo),
+        new("Receipts", "Inventory", "", typeof(Features.Receipts.ReceiptsViewModel)),
+        new("Staff", "Administration", "", typeof(Features.Staff.StaffViewModel), Audience.AdminOrDemo),
     ];
 
     /// <summary>Where "Profile" in the account menu goes.</summary>
-    public static Type ProfileViewModelType { get; set; } = typeof(Placeholders.ProfilePlaceholderViewModel);
+    public static Type ProfileViewModelType { get; set; } = typeof(Features.Profile.ProfileViewModel);
 }
 
 /// <summary>Shown instead of a screen the user's role cannot use. The primary action goes back to the Dashboard; it never signs out (SHELL-22).</summary>
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "Bound from XAML, which needs instance properties.")]
-public sealed class AccessDeniedViewModel : ViewModelBase
+public sealed partial class AccessDeniedViewModel : ViewModelBase, INavigationParameterReceiver
 {
     public AccessDeniedViewModel()
         : base(LoadState.Ready)
@@ -63,6 +63,15 @@ public sealed class AccessDeniedViewModel : ViewModelBase
 
     public string PrimaryActionText => "Back to Dashboard";
 
-    /// <summary>Set by the shell: navigates to the Dashboard.</summary>
-    public AsyncRelayCommand? BackToDashboardCommand { get; set; }
+    /// <summary>Navigates to the Dashboard. The shell hands it over as the navigation parameter, before the page is shown; the property also notifies, so a later change reaches the bound button.</summary>
+    [CommunityToolkit.Mvvm.ComponentModel.ObservableProperty]
+    public partial AsyncRelayCommand? BackToDashboardCommand { get; set; }
+
+    public void ReceiveParameter(object parameter)
+    {
+        if (parameter is AsyncRelayCommand command)
+        {
+            BackToDashboardCommand = command;
+        }
+    }
 }

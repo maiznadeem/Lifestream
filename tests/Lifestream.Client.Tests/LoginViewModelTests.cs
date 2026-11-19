@@ -7,6 +7,7 @@ using Lifestream.Contracts.Auth;
 
 namespace Lifestream.Client.Tests;
 
+[Collection("GlobalErrorHandler")]
 public sealed class LoginViewModelTests
 {
     private static LoginViewModel Create(Rig rig) => rig.Get<LoginViewModel>();

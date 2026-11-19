@@ -48,10 +48,12 @@ public static class DonorEndpoints
     {
         var (page, size) = Lists.Normalize(q.Page, q.PageSize);
         var filtered = Filter(db.Donors.AsNoTracking(), q.Search, q.BloodType);
-        var rows = await Sorts.Apply(filtered, q.Sort).Skip((page - 1) * size).Take(size)
-            .Select(d => new ListRow<DonorListItem>(
-                new DonorListItem(d.Id, d.Name, d.DateOfBirth, d.Gender, d.BloodType, d.Phone, d.Frequency, d.LastDonated),
-                filtered.Count()))
+        var total = Lists.Total(filtered);
+        var rows = await (from d in Sorts.Apply(filtered, q.Sort).Skip((page - 1) * size).Take(size).ForSearch(q.Search)
+                          from t in total
+                          select new ListRow<DonorListItem>(
+                              new DonorListItem(d.Id, d.Name, d.DateOfBirth, d.Gender, d.BloodType, d.Phone, d.Frequency, d.LastDonated) { MedicalHold = d.MedicalHold },
+                              t))
             .ToListAsync(ct);
         return await Lists.BuildAsync(rows, page, size, () => filtered.CountAsync(ct));
     }
@@ -61,9 +63,9 @@ public static class DonorEndpoints
 
     private static async Task<DonorEligibility> EligibilityAsync(int id, LifestreamDbContext db, TimeProvider time, CancellationToken ct)
     {
-        var donor = await db.Donors.AsNoTracking().Where(d => d.Id == id).Select(d => new { d.DateOfBirth, d.LastDonated }).FirstOrDefaultAsync(ct)
+        var donor = await db.Donors.AsNoTracking().Where(d => d.Id == id).Select(d => new { d.DateOfBirth, d.LastDonated, d.MedicalHold }).FirstOrDefaultAsync(ct)
             ?? throw ApiException.NotFound("The donor");
-        var result = Eligibility.Evaluate(donor.DateOfBirth, donor.LastDonated, Dates.Today(time));
+        var result = Eligibility.Evaluate(donor.DateOfBirth, donor.LastDonated, Dates.Today(time), donor.MedicalHold);
         return new DonorEligibility(result.IsEligible, result.Reasons, result.NextEligibleDate);
     }
 
@@ -86,6 +88,7 @@ public static class DonorEndpoints
                 Phone = Blank(r.Phone),
                 Address = Blank(r.Address),
                 Frequency = r.Frequency,
+                MedicalHold = r.MedicalHold,
             };
             db.Donors.Add(entity);
             await db.SaveChangesAsync(token);
@@ -175,6 +178,11 @@ public static class DonorEndpoints
                 entity.Address = Blank(r.Address.Value);
             }
 
+            if (r.MedicalHold.HasValue)
+            {
+                entity.MedicalHold = r.MedicalHold.Value;
+            }
+
             await db.SaveChangesAsync(token);
             return entity;
         }, ct);
@@ -196,5 +204,5 @@ public static class DonorEndpoints
     internal static string? Blank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     internal static DonorDetail ToDetail(Donor d) =>
-        new(d.Id, d.Name, d.DateOfBirth, d.Gender, d.BloodType, d.Phone, d.Address, d.Frequency, d.LastDonated, RowVersions.ToText(d.RowVersion));
+        new(d.Id, d.Name, d.DateOfBirth, d.Gender, d.BloodType, d.Phone, d.Address, d.Frequency, d.LastDonated, RowVersions.ToText(d.RowVersion)) { MedicalHold = d.MedicalHold };
 }

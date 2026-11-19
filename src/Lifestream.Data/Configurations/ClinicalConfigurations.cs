@@ -16,16 +16,19 @@ internal sealed class AppointmentConfiguration : IEntityTypeConfiguration<Appoin
         b.Property(x => x.RowVersion).IsRowVersion();
         b.HasOne(x => x.Donor).WithMany().HasForeignKey(x => x.DonorId).OnDelete(DeleteBehavior.Restrict);
 
-        // A donor's appointments (and the appointments of the donors a name search found) in date order, without lookups.
+        // The list screen filters by donor, status, donor blood type and a date range, and sorts by slot or by placed date. Every
+        // index below ends in the sort column (after the equality filters) and INCLUDEs the columns the list shows, so a page is read
+        // from one narrow index in order and stops after 50 rows: no table scan, no key lookups for the page.
+        b.HasIndex(x => x.DonorId); // the narrowest index: counts and joins by donor read this, never the wide ones
         b.HasIndex(x => new { x.DonorId, x.SlotStartUtc }).IncludeProperties(x => new { x.PlacedAtUtc, x.Status });
-        b.HasIndex(x => new { x.Status, x.SlotStartUtc });
-        b.HasIndex(x => new { x.Status, x.PlacedAtUtc });
-
-        // A date range on one of the two dates with the list sorted by the other reads only these narrow indexes, never the table.
-        b.HasIndex(x => x.SlotStartUtc).IncludeProperties(x => new { x.PlacedAtUtc, x.Status });
-        b.HasIndex(x => x.PlacedAtUtc).IncludeProperties(x => new { x.SlotStartUtc, x.Status });
-        b.HasIndex(x => new { x.DonorBloodType, x.SlotStartUtc });
-        b.HasIndex(x => new { x.DonorBloodType, x.PlacedAtUtc });
+        b.HasIndex(x => x.SlotStartUtc).IncludeProperties(x => new { x.PlacedAtUtc, x.Status, x.DonorId });
+        b.HasIndex(x => x.PlacedAtUtc).IncludeProperties(x => new { x.SlotStartUtc, x.Status, x.DonorId });
+        b.HasIndex(x => new { x.Status, x.SlotStartUtc }).IncludeProperties(x => new { x.PlacedAtUtc, x.DonorId });
+        b.HasIndex(x => new { x.Status, x.PlacedAtUtc }).IncludeProperties(x => new { x.SlotStartUtc, x.DonorId });
+        b.HasIndex(x => new { x.DonorBloodType, x.SlotStartUtc }).IncludeProperties(x => new { x.PlacedAtUtc, x.Status, x.DonorId });
+        b.HasIndex(x => new { x.DonorBloodType, x.PlacedAtUtc }).IncludeProperties(x => new { x.SlotStartUtc, x.Status, x.DonorId });
+        b.HasIndex(x => new { x.Status, x.DonorBloodType, x.SlotStartUtc }).IncludeProperties(x => new { x.PlacedAtUtc, x.DonorId });
+        b.HasIndex(x => new { x.Status, x.DonorBloodType, x.PlacedAtUtc }).IncludeProperties(x => new { x.SlotStartUtc, x.DonorId });
     }
 }
 
@@ -41,14 +44,18 @@ internal sealed class RequestConfiguration : IEntityTypeConfiguration<Request>
         b.Property(x => x.PlacedAtUtc).HasDefaultValueSql(UtcNow);
         b.Property(x => x.RowVersion).IsRowVersion();
         b.HasOne(x => x.Patient).WithMany().HasForeignKey(x => x.PatientId).OnDelete(DeleteBehavior.Restrict);
-        b.HasIndex(x => new { x.PatientId, x.PlacedAtUtc }).IncludeProperties(x => x.RequiredBy);
-        b.HasIndex(x => new { x.Status, x.PlacedAtUtc });
-        b.HasIndex(x => new { x.BloodType, x.Status, x.PlacedAtUtc });
-        b.HasIndex(x => new { x.BloodType, x.PlacedAtUtc });
-        b.HasIndex(x => new { x.BloodType, x.RequiredBy });
-        b.HasIndex(x => new { x.Status, x.RequiredBy });
-        b.HasIndex(x => x.PlacedAtUtc);
-        b.HasIndex(x => x.RequiredBy);
+
+        // Same idea as the appointment indexes: filters first, then the sort column, then what the list shows.
+        b.HasIndex(x => x.PatientId); // the narrowest index: counts and joins by patient read this, never the wide ones
+        b.HasIndex(x => new { x.PatientId, x.PlacedAtUtc }).IncludeProperties(x => new { x.RequiredBy, x.Status, x.BloodType, x.Units });
+        b.HasIndex(x => x.PlacedAtUtc).IncludeProperties(x => new { x.PatientId, x.BloodType, x.Units, x.RequiredBy, x.Status });
+        b.HasIndex(x => x.RequiredBy).IncludeProperties(x => new { x.PatientId, x.BloodType, x.Units, x.PlacedAtUtc, x.Status });
+        b.HasIndex(x => new { x.Status, x.PlacedAtUtc }).IncludeProperties(x => new { x.PatientId, x.BloodType, x.Units, x.RequiredBy });
+        b.HasIndex(x => new { x.Status, x.RequiredBy }).IncludeProperties(x => new { x.PatientId, x.BloodType, x.Units, x.PlacedAtUtc });
+        b.HasIndex(x => new { x.BloodType, x.PlacedAtUtc }).IncludeProperties(x => new { x.PatientId, x.Units, x.RequiredBy, x.Status });
+        b.HasIndex(x => new { x.BloodType, x.RequiredBy }).IncludeProperties(x => new { x.PatientId, x.Units, x.PlacedAtUtc, x.Status });
+        b.HasIndex(x => new { x.BloodType, x.Status, x.PlacedAtUtc }).IncludeProperties(x => new { x.PatientId, x.Units, x.RequiredBy });
+        b.HasIndex(x => new { x.BloodType, x.Status, x.RequiredBy }).IncludeProperties(x => new { x.PatientId, x.Units, x.PlacedAtUtc });
     }
 }
 
@@ -72,12 +79,17 @@ internal sealed class ReceiptConfiguration : IEntityTypeConfiguration<Receipt>
         b.HasOne(x => x.Request).WithMany().HasForeignKey(x => x.RequestId).OnDelete(DeleteBehavior.Restrict);
 
         // An appointment can be receipted once. The filtered unique index also supports the foreign key.
-        b.HasIndex(x => x.AppointmentId).IsUnique().HasFilter("[AppointmentId] IS NOT NULL");
-        b.HasIndex(x => x.RequestId);
-        b.HasIndex(x => x.StaffId);
-        b.HasIndex(x => new { x.Kind, x.CreatedAtUtc }).IncludeProperties(x => new { x.BloodType, x.Units });
-        b.HasIndex(x => x.CreatedAtUtc);
-        b.HasIndex(x => new { x.BloodType, x.CreatedAtUtc });
+        // The three foreign keys also carry date, kind and blood type: the receipt search finds, filters and orders its matches from them.
+        b.HasIndex(x => x.AppointmentId).IsUnique().HasFilter("[AppointmentId] IS NOT NULL").IncludeProperties(x => new { x.CreatedAtUtc, x.Kind, x.BloodType });
+        b.HasIndex(x => x.RequestId).HasFilter("[RequestId] IS NOT NULL").IncludeProperties(x => new { x.CreatedAtUtc, x.Kind, x.BloodType });
+        b.HasIndex(x => x.StaffId); // the narrowest index of the table: COUNT(*) reads this
+        b.HasIndex(x => new { x.StaffId, x.CreatedAtUtc }).IncludeProperties(x => new { x.Kind, x.BloodType });
+
+        // Receipt list (and the dashboard series, which reads kind, blood type, units and date): narrow, ordered, covering.
+        b.HasIndex(x => new { x.Kind, x.CreatedAtUtc }).IncludeProperties(x => new { x.BloodType, x.Units, x.StaffId, x.AppointmentId, x.RequestId });
+        b.HasIndex(x => x.CreatedAtUtc).IncludeProperties(x => new { x.Kind, x.BloodType, x.Units, x.StaffId, x.AppointmentId, x.RequestId });
+        b.HasIndex(x => new { x.BloodType, x.CreatedAtUtc }).IncludeProperties(x => new { x.Kind, x.Units, x.StaffId, x.AppointmentId, x.RequestId });
+        b.HasIndex(x => new { x.Kind, x.BloodType, x.CreatedAtUtc }).IncludeProperties(x => new { x.Units, x.StaffId, x.AppointmentId, x.RequestId });
     }
 }
 

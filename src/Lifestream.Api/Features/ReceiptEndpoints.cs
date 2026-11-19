@@ -21,58 +21,91 @@ public static class ReceiptEndpoints
         api.MapGet(ApiRoutes.ReceiptById, async (int id, LifestreamDbContext db, CancellationToken ct) => await LoadDetailAsync(db, id, ct));
     }
 
+    private static readonly SortMap<ReceiptHit> HitSorts = new SortMap<ReceiptHit>(h => h.Id, "date", defaultDescending: true)
+        .Add("date", h => h.CreatedAtUtc);
+
     private static async Task<PagedResult<ReceiptListItem>> ListAsync([AsParameters] ReceiptQuery q, LifestreamDbContext db, CancellationToken ct)
     {
         var (page, size) = Lists.Normalize(q.Page, q.PageSize);
-        IQueryable<Receipt> filtered = db.Receipts.AsNoTracking();
-        if (q.Kind is { } kind)
-        {
-            filtered = filtered.Where(r => r.Kind == kind);
-        }
-
-        if (q.BloodType is { } type)
-        {
-            filtered = filtered.Where(r => r.BloodType == type);
-        }
-
         var (start, end) = Lists.DayRange(q.FromUtc, q.ToUtc);
-        if (start is { } s)
-        {
-            filtered = filtered.Where(r => r.CreatedAtUtc >= s);
-        }
-
-        if (end is { } e)
-        {
-            filtered = filtered.Where(r => r.CreatedAtUtc < e);
-        }
-
+        IQueryable<Receipt> pageOfReceipts;
+        IQueryable<int> total;
+        Func<Task<int>> countWhenEmpty;
         if (Lists.CleanSearch(q.Search) is { } term)
         {
-            var id = int.TryParse(term, out var parsed) ? parsed : -1;
-            // Receipt ids from three seek paths joined by UNION (an OR across them would scan): the id, the staff member's name, and
-            // the party's name (donor of a donation, patient of an issue; see SearchQueries.PartyNameStartsWith).
-            var byParty = db.Receipts.PartyNameStartsWith(db, term).Select(r => r.Id);
-            var byStaff = db.Receipts.Where(r => db.Staff.NameStartsWith(term).Select(s => s.Id).Contains(r.StaffId)).Select(r => r.Id);
-            var matching = byParty.Union(byStaff).Union(db.Receipts.Where(r => r.Id == id).Select(r => r.Id));
-            filtered = filtered.Where(r => matching.Contains(r.Id));
+            // A name search: the matches come from SearchQueries.ReceiptsMatching (index seeks that end in narrow indexes holding the
+            // date, kind and blood type), are filtered, counted and paged there, and only the page's receipts are then read by id.
+            var hits = SearchQueries.ReceiptsMatching(db, term, int.TryParse(term, out var id) ? id : null);
+            if (q.Kind is { } hitKind)
+            {
+                hits = hits.Where(h => h.Kind == hitKind);
+            }
+
+            if (q.BloodType is { } hitType)
+            {
+                hits = hits.Where(h => h.BloodType == hitType);
+            }
+
+            if (start is { } hitStart)
+            {
+                hits = hits.Where(h => h.CreatedAtUtc >= hitStart);
+            }
+
+            if (end is { } hitEnd)
+            {
+                hits = hits.Where(h => h.CreatedAtUtc < hitEnd);
+            }
+
+            var pageOfHits = HitSorts.Apply(hits, q.Sort).Skip((page - 1) * size).Take(size);
+            pageOfReceipts = Sorts.Apply(db.Receipts.AsNoTracking().Join(pageOfHits, r => r.Id, h => h.Id, (r, _) => r), q.Sort);
+            total = Lists.Total(hits);
+            countWhenEmpty = () => hits.CountAsync(ct);
+        }
+        else
+        {
+            IQueryable<Receipt> filtered = db.Receipts.AsNoTracking();
+            if (q.Kind is { } kind)
+            {
+                filtered = filtered.Where(r => r.Kind == kind);
+            }
+
+            if (q.BloodType is { } type)
+            {
+                filtered = filtered.Where(r => r.BloodType == type);
+            }
+
+            if (start is { } s)
+            {
+                filtered = filtered.Where(r => r.CreatedAtUtc >= s);
+            }
+
+            if (end is { } e)
+            {
+                filtered = filtered.Where(r => r.CreatedAtUtc < e);
+            }
+
+            pageOfReceipts = Sorts.Apply(filtered, q.Sort).Skip((page - 1) * size).Take(size);
+            total = Lists.Total(filtered);
+            countWhenEmpty = () => filtered.CountAsync(ct);
         }
 
-        var rows = await Sorts.Apply(filtered, q.Sort).Skip((page - 1) * size).Take(size)
-            .Select(r => new ListRow<ReceiptListItem>(
-                new ReceiptListItem(
-                    r.Id,
-                    r.CreatedAtUtc,
-                    r.Kind,
-                    r.BloodType,
-                    r.Units,
-                    r.StaffId,
-                    r.Staff!.DisplayName,
-                    r.Kind == ReceiptKind.Donation ? r.Appointment!.Donor!.Name : r.Request!.Patient!.Name,
-                    r.AppointmentId,
-                    r.RequestId),
-                filtered.Count()))
+        var rows = await (from r in pageOfReceipts
+                          from t in total
+                          select new ListRow<ReceiptListItem>(
+                              new ReceiptListItem(
+                                  r.Id,
+                                  r.CreatedAtUtc,
+                                  r.Kind,
+                                  r.BloodType,
+                                  r.Units,
+                                  r.StaffId,
+                                  r.Staff!.DisplayName,
+                                  r.Kind == ReceiptKind.Donation ? r.Appointment!.Donor!.Name : r.Request!.Patient!.Name,
+                                  r.AppointmentId,
+                                  r.RequestId),
+                              t))
             .ToListAsync(ct);
-        return await Lists.BuildAsync(rows, page, size, () => filtered.CountAsync(ct));
+        return await Lists.BuildAsync(rows, page, size, countWhenEmpty);
     }
 
     internal static async Task<ReceiptDetail> LoadDetailAsync(LifestreamDbContext db, int id, CancellationToken ct)

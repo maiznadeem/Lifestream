@@ -79,6 +79,37 @@ public sealed class ComponentModelTests
     }
 
     [Fact]
+    public void Toast_WithAnUndoAction_StaysTenSeconds_AndTheLifetimeIsPerToastWithinSixToTen()
+    {
+        var clock = new ManualTimeProvider();
+        var toasts = new ToastService(new InlineUiDispatcher(), clock);
+
+        var undo = toasts.ShowForRecord(ToastKind.Success, "Donor", "Ayşe", "deleted", "Undo", () => Task.CompletedTask);
+        var plain = toasts.Show(ToastKind.Info, "Plain");
+        var short1 = toasts.Show(ToastKind.Info, "Too short", lifetime: TimeSpan.FromSeconds(2));
+        var long1 = toasts.Show(ToastKind.Info, "Too long", lifetime: TimeSpan.FromSeconds(30));
+        var seven = toasts.Show(ToastKind.Info, "Seven", lifetime: TimeSpan.FromSeconds(7));
+
+        clock.Advance(TimeSpan.FromSeconds(5.9));
+        Assert.Equal(5, toasts.Toasts.Count); // nothing dismissed before 6 s, whatever was asked for
+        clock.Advance(TimeSpan.FromSeconds(0.2)); // 6.1 s: the 2 s request was raised to 6
+        Assert.True(short1.IsDismissed);
+        Assert.False(seven.IsDismissed);
+        clock.Advance(TimeSpan.FromSeconds(1)); // 7.1 s
+        Assert.True(seven.IsDismissed);
+        Assert.False(plain.IsDismissed);
+        clock.Advance(TimeSpan.FromSeconds(1)); // 8.1 s
+        Assert.True(plain.IsDismissed);
+        Assert.False(undo.IsDismissed, "a toast with Undo must outlive the 8 s default");
+        clock.Advance(TimeSpan.FromSeconds(1.8)); // 9.9 s
+        Assert.False(undo.IsDismissed);
+        Assert.False(long1.IsDismissed);
+        clock.Advance(TimeSpan.FromSeconds(0.2)); // 10.1 s: the 30 s request was cut to 10
+        Assert.True(undo.IsDismissed);
+        Assert.True(long1.IsDismissed);
+    }
+
+    [Fact]
     public void Toast_PausesOnHoverOrFocus_AndResumesWithTheRemainingTime()
     {
         var clock = new ManualTimeProvider();

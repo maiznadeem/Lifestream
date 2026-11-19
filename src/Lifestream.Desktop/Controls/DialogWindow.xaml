@@ -7,7 +7,7 @@
   <chrome:ChromeWindow.Resources>
     <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
   </chrome:ChromeWindow.Resources>
-  <Grid Margin="24,16,24,24">
+  <Grid Margin="{DynamicResource Inset.L24T16R24B24}">
     <Grid.RowDefinitions>
       <RowDefinition Height="Auto" />
       <RowDefinition Height="Auto" />
@@ -15,12 +15,12 @@
       <RowDefinition Height="Auto" />
     </Grid.RowDefinitions>
     <TextBlock x:Name="HeadingText" Style="{DynamicResource Text.Heading}" AutomationProperties.HeadingLevel="Level1" />
-    <TextBlock x:Name="BodyText" Grid.Row="1" Style="{DynamicResource Text.Body}" Foreground="{DynamicResource Brush.TextSecondary}" Margin="0,8,0,0" />
-    <StackPanel x:Name="DetailsPanel" Grid.Row="2" Margin="0,16,0,0" Visibility="Collapsed">
+    <TextBlock x:Name="BodyText" Grid.Row="1" Style="{DynamicResource Text.Body}" Foreground="{DynamicResource Brush.TextSecondary}" Margin="{DynamicResource Inset.T8}" />
+    <StackPanel x:Name="DetailsPanel" Grid.Row="2" Margin="{DynamicResource Inset.T16}" Visibility="Collapsed">
       <ToggleButton x:Name="DetailsToggle" Content="Details" HorizontalAlignment="Left" AutomationProperties.Name="Details">
         <ToggleButton.Template>
           <ControlTemplate TargetType="ToggleButton">
-            <Border x:Name="Bd" MinHeight="32" Padding="12,0" CornerRadius="{DynamicResource Radius.Control}" Background="Transparent" BorderBrush="{DynamicResource Brush.BorderInput}"
+            <Border x:Name="Bd" MinHeight="32" Padding="{DynamicResource Inset.H12}" CornerRadius="{DynamicResource Radius.Control}" Background="Transparent" BorderBrush="{DynamicResource Brush.BorderInput}"
                     BorderThickness="1">
               <TextBlock Text="{TemplateBinding Content}" Style="{DynamicResource Text.Label}" Foreground="{DynamicResource Brush.TextPrimary}" VerticalAlignment="Center" />
             </Border>
@@ -36,11 +36,11 @@
           </ControlTemplate>
         </ToggleButton.Template>
       </ToggleButton>
-      <TextBox x:Name="DetailsBox" IsReadOnly="True" TextWrapping="Wrap" Margin="0,8,0,0" Padding="8" MinHeight="0" AutomationProperties.Name="Technical details"
+      <TextBox x:Name="DetailsBox" IsReadOnly="True" TextWrapping="Wrap" Margin="{DynamicResource Inset.T8}" Padding="{DynamicResource Pad.8}" MinHeight="0" AutomationProperties.Name="Technical details"
                Visibility="{Binding IsChecked, ElementName=DetailsToggle, Converter={StaticResource BoolToVisibility}}" />
     </StackPanel>
-    <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,24,0,0">
-      <Button x:Name="CancelButton" Style="{DynamicResource Button.Secondary}" Content="Cancel" IsCancel="True" Margin="0,0,8,0" />
+    <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="{DynamicResource Inset.T24}">
+      <Button x:Name="CancelButton" Style="{DynamicResource Button.Secondary}" Content="Cancel" IsCancel="True" Margin="{DynamicResource Inset.R8}" />
       <Button x:Name="PrimaryButton" Style="{DynamicResource Button.Danger}" Content="Delete" Click="OnPrimaryClick" />
     </StackPanel>
   </Grid>

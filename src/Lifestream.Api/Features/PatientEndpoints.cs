@@ -36,8 +36,9 @@ public static class PatientEndpoints
         if (Lists.CleanSearch(search) is { } term)
         {
             var like = Lists.PrefixPattern(term);
-            var id = int.TryParse(term, out var parsed) ? parsed : -1;
-            patients = patients.Where(p => EF.Functions.Like(p.Name, like, "\\") || EF.Functions.Like(p.Phone!, like, "\\") || p.Id == id);
+            patients = int.TryParse(term, out var id)
+                ? patients.Where(p => p.Id == id || EF.Functions.Like(p.Name, like, "\\") || EF.Functions.Like(p.Phone!, like, "\\"))
+                : patients.Where(p => EF.Functions.Like(p.Name, like, "\\") || EF.Functions.Like(p.Phone!, like, "\\"));
         }
 
         return patients;
@@ -47,11 +48,17 @@ public static class PatientEndpoints
     {
         var (page, size) = Lists.Normalize(q.Page, q.PageSize);
         var filtered = Filter(db.Patients.AsNoTracking(), q.Search, q.BloodType);
-        var rows = await Sorts.Apply(filtered, q.Sort).Skip((page - 1) * size).Take(size)
-            .Select(p => new ListRow<PatientListItem>(
-                new PatientListItem(p.Id, p.Name, p.DateOfBirth, p.Gender, p.BloodType, p.Phone,
-                    db.Requests.Count(r => r.PatientId == p.Id && r.Status == RequestStatus.Pending)),
-                filtered.Count()))
+        // The page of patients first, then the pending-request count of just those rows (joined back by id): a count written in the
+        // same select would be worked out for every row the OFFSET skips as well.
+        var pageOfPatients = Sorts.Apply(filtered, q.Sort).Skip((page - 1) * size).Take(size).ForSearch(q.Search);
+        var joined = db.Patients.AsNoTracking().Join(pageOfPatients, p => p.Id, k => k.Id, (p, _) => p);
+        var total = Lists.Total(filtered);
+        var rows = await (from p in Sorts.Apply(joined, q.Sort)
+                          from t in total
+                          select new ListRow<PatientListItem>(
+                              new PatientListItem(p.Id, p.Name, p.DateOfBirth, p.Gender, p.BloodType, p.Phone,
+                                  db.Requests.Count(r => r.PatientId == p.Id && r.Status == RequestStatus.Pending)),
+                              t))
             .ToListAsync(ct);
         return await Lists.BuildAsync(rows, page, size, () => filtered.CountAsync(ct));
     }

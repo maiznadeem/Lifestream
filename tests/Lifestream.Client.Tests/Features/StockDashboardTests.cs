@@ -273,7 +273,7 @@ public sealed class StockDashboardTests
         await vm.OpenCardCommand.ExecuteAsync(vm.Cards.Single(c => c.Title == "Expiring within 7 days"));
 
         Assert.Equal(typeof(DonorsViewModel), navigation.Visits[0].ViewModel);
-        Assert.Equal(typeof(Shell.Placeholders.AppointmentsPlaceholderViewModel), navigation.Visits[1].ViewModel); // part 2 replaces the placeholder
+        Assert.Equal(typeof(Lifestream.Client.Features.Appointments.AppointmentsViewModel), navigation.Visits[1].ViewModel); // part 2 replaced the placeholder
         Assert.Equal("Pending", ((ListPrefilter)navigation.Visits[1].Parameter!).Status);
         Assert.Equal(typeof(StockViewModel), navigation.Visits[2].ViewModel);
         Assert.Equal(StockFilter.ExpiringSoon, ((ListPrefilter)navigation.Visits[2].Parameter!).StockView);

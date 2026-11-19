@@ -247,6 +247,7 @@ public sealed class LoginEnumerationTests(ApiFixture fx) : IClassFixture<ApiFixt
     }
 
     [Fact]
+    [Trait("Category", "Perf")] // a timing comparison: run in the perf pass, not in the loaded default run
     public async Task Login_ResponseTime_DoesNotTellAKnownUsernameFromAnUnknownOne_InEitherState()
     {
         var user = await fx.AddStaffAsync(Role.Staff);

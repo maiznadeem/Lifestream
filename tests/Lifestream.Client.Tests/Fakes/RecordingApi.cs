@@ -103,6 +103,10 @@ public sealed class FakeNavigation : INavigationService
         return Task.FromResult(true);
     }
 
+    public bool HasUnsavedChanges => false;
+
+    public Task<bool> ConfirmDiscardAsync() => Task.FromResult(true);
+
     public Task ReloadCurrentAsync() => Task.CompletedTask;
 
     public void Reset()

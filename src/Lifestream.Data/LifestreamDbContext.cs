@@ -149,15 +149,34 @@ public sealed class LifestreamDbContext(DbContextOptions<LifestreamDbContext> op
                 return 0;
             }
 
+            // Donor blood types before the update: the appointments' copy of a changed one is rewritten below (DB-16).
+            var donorTypesBefore = action == AuditActions.Update && typeof(T) == typeof(Donor)
+                ? await Donors.AsNoTracking().Where(d => ids.Contains(d.Id)).Select(d => new { d.Id, d.BloodType }).ToDictionaryAsync(d => d.Id, d => d.BloodType, ct)
+                : null;
+
             var changed = await run(ids, ct);
             if (changed != ids.Count)
             {
                 throw new InvalidOperationException($"Bulk {action} changed {changed} rows but {ids.Count} were selected; nothing was kept.");
             }
 
-            if (AuditEnabled && IsAudited(typeof(T)))
+            var audit = AuditEnabled && IsAudited(typeof(T)) ? ids.Select(id => (action, typeof(T).Name, id)).ToList() : [];
+            if (donorTypesBefore is not null)
             {
-                await WriteAuditAsync(ids.Select(id => (action, typeof(T).Name, id)).ToList(), ct);
+                var donorTypesAfter = await Donors.AsNoTracking().Where(d => ids.Contains(d.Id)).Select(d => new { d.Id, d.BloodType }).ToListAsync(ct);
+                foreach (var group in donorTypesAfter.Where(d => donorTypesBefore[d.Id] != d.BloodType).GroupBy(d => d.BloodType))
+                {
+                    var rewrite = await RewriteAppointmentBloodTypesAsync(group.Select(d => d.Id).ToList(), group.Key, ct);
+                    if (AuditEnabled)
+                    {
+                        audit.AddRange(rewrite.Audit);
+                    }
+                }
+            }
+
+            if (audit.Count > 0)
+            {
+                await WriteAuditAsync(audit, ct);
             }
 
             return changed;
@@ -180,7 +199,7 @@ public sealed class LifestreamDbContext(DbContextOptions<LifestreamDbContext> op
 
     private int SaveAndAudit(bool acceptAllChangesOnSuccess)
     {
-        SyncDonorBloodType();
+        var rewrite = SyncDonorBloodType();
         var pending = PendingAudit();
         var temporaryIds = TemporaryIds();
 
@@ -189,9 +208,9 @@ public sealed class LifestreamDbContext(DbContextOptions<LifestreamDbContext> op
         try
         {
             var rows = base.SaveChanges(acceptAllChangesOnSuccess: false);
-            if (pending.Count > 0)
+            if (pending.Count > 0 || rewrite.Audit.Count > 0)
             {
-                WriteAudit(AuditRowsFor(pending));
+                WriteAudit([.. AuditRowsFor(pending), .. rewrite.Audit]);
             }
 
             if (acceptAllChangesOnSuccess)
@@ -203,6 +222,7 @@ public sealed class LifestreamDbContext(DbContextOptions<LifestreamDbContext> op
         }
         catch
         {
+            rewrite.Undo();
             RestoreTemporaryIds(temporaryIds);
             throw;
         }
@@ -210,15 +230,15 @@ public sealed class LifestreamDbContext(DbContextOptions<LifestreamDbContext> op
 
     private async Task<int> SaveAndAuditAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken)
     {
-        await SyncDonorBloodTypeAsync(cancellationToken);
+        var rewrite = await SyncDonorBloodTypeAsync(cancellationToken);
         var pending = PendingAudit();
         var temporaryIds = TemporaryIds();
         try
         {
             var rows = await base.SaveChangesAsync(acceptAllChangesOnSuccess: false, cancellationToken);
-            if (pending.Count > 0)
+            if (pending.Count > 0 || rewrite.Audit.Count > 0)
             {
-                await WriteAuditAsync(AuditRowsFor(pending), cancellationToken);
+                await WriteAuditAsync([.. AuditRowsFor(pending), .. rewrite.Audit], cancellationToken);
             }
 
             if (acceptAllChangesOnSuccess)
@@ -230,6 +250,7 @@ public sealed class LifestreamDbContext(DbContextOptions<LifestreamDbContext> op
         }
         catch
         {
+            rewrite.Undo();
             RestoreTemporaryIds(temporaryIds);
             throw;
         }
@@ -237,21 +258,37 @@ public sealed class LifestreamDbContext(DbContextOptions<LifestreamDbContext> op
 
     // Appointment.DonorBloodType is a copy of the donor's blood type that makes "appointments by donor blood type" an index
     // seek. It is kept right here: set when an appointment is added, rewritten (one UPDATE, same transaction) when a donor's
-    // blood type changes.
-    private void SyncDonorBloodType()
+    // blood type changes. The rewrite changes appointment rows, so it is audited like any other update of an appointment
+    // (DB-16: an Update audit row per rewritten appointment, in the same transaction), and appointments that are tracked by this
+    // context are brought up to date (new blood type, new row version), so editing one afterwards is not a concurrency error.
+    private AppointmentRewrite SyncDonorBloodType()
     {
         foreach (var (appointment, donorId) in AddedAppointmentsNeedingBloodType())
         {
             appointment.DonorBloodType = Donors.AsNoTracking().Where(d => d.Id == donorId).Select(d => (BloodType?)d.BloodType).SingleOrDefault() ?? appointment.DonorBloodType;
         }
 
-        foreach (var (donorId, bloodType) in DonorsWithNewBloodType())
+        var rewrite = new AppointmentRewrite();
+        foreach (var group in DonorsWithNewBloodType().GroupBy(d => d.BloodType))
         {
-            Appointments.Where(a => a.DonorId == donorId).ExecuteUpdate(s => s.SetProperty(a => a.DonorBloodType, bloodType));
+            var donorIds = group.Select(d => d.DonorId).ToList();
+            var type = group.Key;
+            var before = Appointments.AsNoTracking().Where(a => donorIds.Contains(a.DonorId) && a.DonorBloodType != type).Select(a => new AppointmentVersion(a.Id, a.RowVersion)).ToList();
+            if (before.Count == 0)
+            {
+                continue;
+            }
+
+            var ids = before.Select(v => v.Id).ToList();
+            Appointments.Where(a => ids.Contains(a.Id)).ExecuteUpdate(s => s.SetProperty(a => a.DonorBloodType, type));
+            var after = Appointments.AsNoTracking().Where(a => ids.Contains(a.Id)).Select(a => new AppointmentVersion(a.Id, a.RowVersion)).ToList();
+            rewrite.Add(ids, RefreshTrackedAppointments(before, after, type));
         }
+
+        return rewrite;
     }
 
-    private async Task SyncDonorBloodTypeAsync(CancellationToken cancellationToken)
+    private async Task<AppointmentRewrite> SyncDonorBloodTypeAsync(CancellationToken cancellationToken)
     {
         foreach (var (appointment, donorId) in AddedAppointmentsNeedingBloodType())
         {
@@ -260,10 +297,114 @@ public sealed class LifestreamDbContext(DbContextOptions<LifestreamDbContext> op
                 ?? appointment.DonorBloodType;
         }
 
-        foreach (var (donorId, bloodType) in DonorsWithNewBloodType())
+        var rewrite = new AppointmentRewrite();
+        foreach (var group in DonorsWithNewBloodType().GroupBy(d => d.BloodType))
         {
-            await Appointments.Where(a => a.DonorId == donorId).ExecuteUpdateAsync(s => s.SetProperty(a => a.DonorBloodType, bloodType), cancellationToken);
+            rewrite.Merge(await RewriteAppointmentBloodTypesAsync(group.Select(d => d.DonorId).ToList(), group.Key, cancellationToken));
         }
+
+        return rewrite;
+    }
+
+    /// <summary>
+    /// Sets <c>DonorBloodType</c> of every appointment of <paramref name="donorIds"/> that does not have <paramref name="type"/> yet, in one
+    /// UPDATE, and returns what must be audited and how to undo the in-memory refresh of tracked appointments.
+    /// </summary>
+    private async Task<AppointmentRewrite> RewriteAppointmentBloodTypesAsync(List<int> donorIds, BloodType type, CancellationToken cancellationToken)
+    {
+        var rewrite = new AppointmentRewrite();
+        var before = await Appointments.AsNoTracking().Where(a => donorIds.Contains(a.DonorId) && a.DonorBloodType != type).Select(a => new AppointmentVersion(a.Id, a.RowVersion)).ToListAsync(cancellationToken);
+        if (before.Count == 0)
+        {
+            return rewrite;
+        }
+
+        var ids = before.Select(v => v.Id).ToList();
+        await Appointments.Where(a => ids.Contains(a.Id)).ExecuteUpdateAsync(s => s.SetProperty(a => a.DonorBloodType, type), cancellationToken);
+        var after = await Appointments.AsNoTracking().Where(a => ids.Contains(a.Id)).Select(a => new AppointmentVersion(a.Id, a.RowVersion)).ToListAsync(cancellationToken);
+        rewrite.Add(ids, RefreshTrackedAppointments(before, after, type));
+        return rewrite;
+    }
+
+    /// <summary>The appointments a donor's blood-type change rewrote: their audit rows, and the way back for the tracked entities.</summary>
+    private sealed class AppointmentRewrite
+    {
+        private readonly List<Action> _undo = [];
+
+        public List<(string Action, string Entity, int EntityId)> Audit { get; } = [];
+
+        public void Add(List<int> appointmentIds, Action undo)
+        {
+            Audit.AddRange(appointmentIds.Select(id => (AuditActions.Update, nameof(Appointment), id)));
+            _undo.Add(undo);
+        }
+
+        public void Merge(AppointmentRewrite other)
+        {
+            Audit.AddRange(other.Audit);
+            _undo.AddRange(other._undo);
+        }
+
+        /// <summary>After a failed save the database rolled the rewrite back, so the tracked entities go back to what they were.</summary>
+        public void Undo()
+        {
+            foreach (var undo in _undo)
+            {
+                undo();
+            }
+        }
+    }
+
+    private sealed record AppointmentVersion(int Id, byte[] RowVersion);
+
+    /// <summary>
+    /// Appointments that this context tracks and that were just rewritten get the new blood type and the new row version (only when
+    /// their row version was still the one the rewrite replaced, so a real concurrent change still fails its own save).
+    /// </summary>
+    private Action RefreshTrackedAppointments(List<AppointmentVersion> before, List<AppointmentVersion> after, BloodType type)
+    {
+        var undo = new List<Action>();
+        var oldVersions = before.ToDictionary(v => v.Id, v => v.RowVersion);
+        var newVersions = after.ToDictionary(v => v.Id, v => v.RowVersion);
+        foreach (var entry in ChangeTracker.Entries<Appointment>().Where(e => e.State is EntityState.Unchanged or EntityState.Modified && oldVersions.ContainsKey(e.Entity.Id)).ToList())
+        {
+            var id = entry.Entity.Id;
+            var version = entry.Property(a => a.RowVersion);
+            var blood = entry.Property(a => a.DonorBloodType);
+            var oldOriginalVersion = version.OriginalValue;
+            var oldCurrentBlood = blood.CurrentValue;
+            var oldOriginalBlood = blood.OriginalValue;
+            var oldBloodModified = blood.IsModified;
+            var oldState = entry.State;
+
+            blood.OriginalValue = type;
+            blood.CurrentValue = type;
+            blood.IsModified = false;
+            if (version.OriginalValue is byte[] original && original.AsSpan().SequenceEqual(oldVersions[id]) && newVersions.TryGetValue(id, out var fresh))
+            {
+                version.OriginalValue = fresh;
+                version.CurrentValue = fresh;
+            }
+
+            if (oldState == EntityState.Unchanged)
+            {
+                entry.State = EntityState.Unchanged;
+            }
+
+            undo.Add(() =>
+            {
+                version.OriginalValue = oldOriginalVersion;
+                blood.OriginalValue = oldOriginalBlood;
+                blood.CurrentValue = oldCurrentBlood;
+                blood.IsModified = oldBloodModified;
+                if (oldState == EntityState.Unchanged)
+                {
+                    entry.State = EntityState.Unchanged;
+                }
+            });
+        }
+
+        return () => undo.ForEach(u => u());
     }
 
     /// <summary>New appointments: those whose donor is already loaded or new get the type directly; the rest need a lookup.</summary>

@@ -37,6 +37,8 @@ public sealed partial class RecordPickerViewModel : ObservableObject, IDisposabl
             Selected = null;
             return Task.CompletedTask;
         });
+        ChangeCommand.PropertyChanged += (_, _) => OnPropertyChanged(nameof(IsBusy));
+        ClearCommand.PropertyChanged += (_, _) => OnPropertyChanged(nameof(IsBusy));
     }
 
     public RecordKind Kind { get; }
@@ -59,7 +61,14 @@ public sealed partial class RecordPickerViewModel : ObservableObject, IDisposabl
 
     /// <summary>True while the search is running: the control shows three skeleton rows.</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsLoading))]
     public partial bool IsSearching { get; set; }
+
+    /// <summary>Same state as <see cref="IsSearching"/>, under the name every view model uses (SHELL-11).</summary>
+    public bool IsLoading => IsSearching;
+
+    /// <summary>True while "Change" or "Clear" is running.</summary>
+    public bool IsBusy => ChangeCommand.IsRunning || ClearCommand.IsRunning;
 
     [ObservableProperty]
     public partial string? SearchError { get; set; }

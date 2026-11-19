@@ -24,9 +24,9 @@
         <RowDefinition Height="Auto" />
         <RowDefinition Height="*" />
       </Grid.RowDefinitions>
-      <StackPanel x:Name="LogoRow" Orientation="Horizontal" Margin="20,16,20,8" Height="40">
+      <StackPanel x:Name="LogoRow" Orientation="Horizontal" Margin="{DynamicResource Inset.L20T16R20B8}" Height="40">
         <Image Source="{DynamicResource Image.Logo}" Width="28" Height="28" />
-        <TextBlock Style="{DynamicResource Text.Heading}" Text="Lifestream" VerticalAlignment="Center" Margin="12,0,0,0" TextWrapping="NoWrap" />
+        <TextBlock Style="{DynamicResource Text.Heading}" Text="Lifestream" VerticalAlignment="Center" Margin="{DynamicResource Inset.L12}" TextWrapping="NoWrap" />
       </StackPanel>
       <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Focusable="False" x:Name="NavScroll">
         <ItemsControl ItemsSource="{Binding Groups}" Focusable="False">
@@ -59,7 +59,7 @@
       </Grid.RowDefinitions>
 
       <!-- Header: page title and the account control -->
-      <Grid Margin="24,0,16,0">
+      <Grid Margin="{DynamicResource Inset.L24R16}">
         <Grid.ColumnDefinitions>
           <ColumnDefinition Width="*" />
           <ColumnDefinition Width="Auto" />
@@ -69,11 +69,11 @@
         <Button x:Name="AccountButton" Grid.Column="1" Style="{DynamicResource AccountButton}" VerticalAlignment="Center" Click="OnAccountClick"
                 AutomationProperties.Name="Account menu" AutomationProperties.HelpText="{Binding DisplayName}" ToolTip="Account menu">
           <StackPanel Orientation="Horizontal">
-            <Border Width="28" Height="28" CornerRadius="14" ClipToBounds="True" Margin="0,0,8,0">
+            <Border Width="28" Height="28" CornerRadius="{DynamicResource Radius.14}" ClipToBounds="True" Margin="{DynamicResource Inset.R8}">
               <Image Source="{Binding Converter={StaticResource Avatar}}" Stretch="UniformToFill" />
             </Border>
             <TextBlock Style="{DynamicResource Text.Body}" Text="{Binding DisplayName}" VerticalAlignment="Center" TextWrapping="NoWrap" MaxWidth="180" TextTrimming="CharacterEllipsis" />
-            <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE70D;" FontSize="12" VerticalAlignment="Center" Margin="8,0,0,0" />
+            <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE70D;" FontSize="12" VerticalAlignment="Center" Margin="{DynamicResource Inset.L8}" />
           </StackPanel>
           <Button.ContextMenu>
             <ContextMenu Style="{DynamicResource ContextMenu.Lifestream}" PlacementTarget="{Binding RelativeSource={RelativeSource Self}}" Placement="Bottom">
@@ -89,7 +89,7 @@
       </Grid>
 
       <!-- Update prompt -->
-      <Border Grid.Row="1" Margin="24,0,24,8" Padding="16,8" Background="{DynamicResource Brush.SurfaceRaised}" BorderBrush="{DynamicResource Brush.StatusInfo}" BorderThickness="1"
+      <Border Grid.Row="1" Margin="{DynamicResource Inset.L24R24B8}" Padding="{DynamicResource Inset.H16V8}" Background="{DynamicResource Brush.SurfaceRaised}" BorderBrush="{DynamicResource Brush.StatusInfo}" BorderThickness="1"
               CornerRadius="{DynamicResource Radius.Card}" Visibility="{Binding UpdatePrompt, Converter={StaticResource HasText}}" AutomationProperties.LiveSetting="Polite">
         <Grid>
           <Grid.ColumnDefinitions>
@@ -97,7 +97,7 @@
             <ColumnDefinition Width="Auto" />
           </Grid.ColumnDefinitions>
           <StackPanel Orientation="Horizontal">
-            <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE895;" Foreground="{DynamicResource Brush.StatusInfo}" VerticalAlignment="Center" Margin="0,0,12,0" />
+            <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE895;" Foreground="{DynamicResource Brush.StatusInfo}" VerticalAlignment="Center" Margin="{DynamicResource Inset.R12}" />
             <TextBlock Style="{DynamicResource Text.Body}" Text="{Binding UpdatePrompt}" VerticalAlignment="Center" AutomationProperties.Name="Update ready" />
           </StackPanel>
           <Button Grid.Column="1" Style="{DynamicResource Button.Primary}" Content="Restart and update" Command="{Binding ApplyUpdateCommand}"
@@ -106,7 +106,7 @@
       </Border>
 
       <!-- The page: one view per visit, created from the view model by the locator and given that view model as its DataContext. -->
-      <Grid Grid.Row="2" Margin="24,0,24,24">
+      <Grid Grid.Row="2" Margin="{DynamicResource Inset.L24R24B24}">
         <ContentControl x:Name="PageHost" Content="{Binding CurrentPage}" ContentTemplateSelector="{x:Static services:ViewLocator.Instance}" IsTabStop="False" Focusable="False"
                         HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" />
       </Grid>

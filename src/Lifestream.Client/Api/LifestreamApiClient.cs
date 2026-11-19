@@ -234,7 +234,7 @@ public sealed class LifestreamApiClient(HttpClient http, ISessionService session
         SendAsync<ProfileResponse>(HttpMethod.Patch, ApiRoutes.Path(ApiRoutes.Me), request, ct: ct);
 
     public Task<ApiResult> ChangePasswordAsync(ChangePasswordRequest request, CancellationToken ct = default) =>
-        SendAsync(HttpMethod.Post, ApiRoutes.Path(ApiRoutes.MePassword), request, ct);
+        SendAsync(HttpMethod.Put, ApiRoutes.Path(ApiRoutes.MePassword), request, ct);
 
     public Task<ApiResult<byte[]>> GetMyPhotoAsync(CancellationToken ct = default) =>
         GetBytesAsync(ApiRoutes.Path(ApiRoutes.MePhoto), ct);
@@ -526,15 +526,17 @@ public sealed class LifestreamApiClient(HttpClient http, ISessionService session
         string? title = null;
         string? detail = null;
         string? text = null;
+        IReadOnlyDictionary<string, string[]>? errors = null;
         try
         {
             text = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
             using var doc = JsonDocument.Parse(text);
             var root = doc.RootElement;
-            code = root.TryGetProperty("code", out var c) ? c.GetString() : null;
-            title = root.TryGetProperty("title", out var t) ? t.GetString() : null;
-            detail = root.TryGetProperty("detail", out var d) ? d.GetString() : null;
-            correlation ??= root.TryGetProperty("correlationId", out var cid) ? cid.GetString() : null;
+            code = JsonText.Property(root, "code");
+            title = JsonText.Property(root, "title");
+            detail = JsonText.Property(root, "detail");
+            correlation ??= JsonText.Property(root, "correlationId");
+            errors = JsonText.Errors(root);
         }
         catch (JsonException)
         {
@@ -552,6 +554,6 @@ public sealed class LifestreamApiClient(HttpClient http, ISessionService session
             502 or 503 or 504 => ProblemCodes.DatabaseWaking,
             _ => "error",
         };
-        return new ApiProblem(status, code, title ?? response.ReasonPhrase ?? "The request failed.", correlation, detail);
+        return new ApiProblem(status, code, title ?? response.ReasonPhrase ?? "The request failed.", correlation, detail, errors);
     }
 }

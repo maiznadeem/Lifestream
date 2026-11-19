@@ -63,15 +63,20 @@ public static class AppointmentEndpoints
 
         if (Lists.CleanSearch(q.Search) is { } term)
         {
+            // Donor ids by name or contact (two prefix seeks), then the appointments of those donors; a numeric term also matches the id.
             var like = Lists.PrefixPattern(term);
-            var id = int.TryParse(term, out var parsed) ? parsed : -1;
-            filtered = filtered.Where(a => a.Id == id || EF.Functions.Like(a.Donor!.Name, like, "\\") || EF.Functions.Like(a.Donor.Phone!, like, "\\"));
+            var donorIds = db.Donors.Where(d => EF.Functions.Like(d.Name, like, "\\") || EF.Functions.Like(d.Phone!, like, "\\")).Select(d => d.Id);
+            filtered = int.TryParse(term, out var id)
+                ? filtered.Where(a => a.Id == id || donorIds.Contains(a.DonorId))
+                : filtered.Where(a => donorIds.Contains(a.DonorId));
         }
 
-        var rows = await Sorts.Apply(filtered, q.Sort).Skip((page - 1) * size).Take(size)
-            .Select(a => new ListRow<AppointmentListItem>(
-                new AppointmentListItem(a.Id, a.DonorId, a.Donor!.Name, a.Donor.BloodType, a.PlacedAtUtc, a.SlotStartUtc, a.Status),
-                filtered.Count()))
+        var total = Lists.Total(filtered);
+        var rows = await (from a in Sorts.Apply(filtered, q.Sort).Skip((page - 1) * size).Take(size).ForSearch(q.Search)
+                          from t in total
+                          select new ListRow<AppointmentListItem>(
+                              new AppointmentListItem(a.Id, a.DonorId, a.Donor!.Name, a.Donor.BloodType, a.PlacedAtUtc, a.SlotStartUtc, a.Status),
+                              t))
             .ToListAsync(ct);
         return await Lists.BuildAsync(rows, page, size, () => filtered.CountAsync(ct));
     }
@@ -136,6 +141,19 @@ public static class AppointmentEndpoints
         }
     }
 
+    /// <summary>An ineligible donor can be given a slot only with an override reason (stored on the appointment); without one it is a 409 listing the reasons.</summary>
+    private static void RequireReasonWhenIneligible(EligibilityResult eligibility, string? reason)
+    {
+        if (!eligibility.IsEligible && reason is null)
+        {
+            throw new ApiException(
+                StatusCodes.Status409Conflict,
+                ProblemCodes.Ineligible,
+                "The donor is not eligible on that day. Give an override reason to book anyway.",
+                new Dictionary<string, string[]> { ["reasons"] = [.. eligibility.Reasons] });
+        }
+    }
+
     private static async Task<Created<AppointmentDetail>> BookAsync(HttpRequest http, LifestreamDbContext db, ClinicSchedule clinic, TimeProvider time, CurrentUser user, IOptions<DemoSettings> demo, CancellationToken ct)
     {
         var r = await http.ReadBodyAsync<BookAppointmentRequest>(ct);
@@ -148,20 +166,13 @@ public static class AppointmentEndpoints
         var id = await db.RunAsync(async token =>
         {
             await DemoLimits.EnsureRoomAsync(db, user, demo, DemoTable.Appointments, token);
-            var donor = await db.Donors.AsNoTracking().Where(d => d.Id == r.DonorId).Select(d => new { d.DateOfBirth, d.LastDonated }).FirstOrDefaultAsync(token)
+            var donor = await db.Donors.AsNoTracking().Where(d => d.Id == r.DonorId).Select(d => new { d.DateOfBirth, d.LastDonated, d.MedicalHold }).FirstOrDefaultAsync(token)
                 ?? throw ApiException.Validation("donorId", "does not exist");
 
             // Eligibility is judged on the appointment day, so a donor who becomes eligible by then can book it.
-            var eligibility = Eligibility.Evaluate(donor.DateOfBirth, donor.LastDonated, DateOnly.FromDateTime(slot));
+            var eligibility = Eligibility.Evaluate(donor.DateOfBirth, donor.LastDonated, DateOnly.FromDateTime(slot), donor.MedicalHold);
             var reason = DonorEndpoints.Blank(r.OverrideReason);
-            if (!eligibility.IsEligible && reason is null)
-            {
-                throw new ApiException(
-                    StatusCodes.Status409Conflict,
-                    ProblemCodes.Ineligible,
-                    "The donor is not eligible on that day. Give an override reason to book anyway.",
-                    new Dictionary<string, string[]> { ["reasons"] = [.. eligibility.Reasons] });
-            }
+            RequireReasonWhenIneligible(eligibility, reason);
 
             await db.LockAsync($"slot:{slot.Ticks}", token);
             var taken = await db.Appointments.AnyAsync(a => a.SlotStartUtc == slot && (a.Status == AppointmentStatus.Pending || a.Status == AppointmentStatus.Completed), token);
@@ -212,6 +223,13 @@ public static class AppointmentEndpoints
             var check = new Check();
             CheckSlot(check, clinic, slot, time.GetUtcNow().UtcDateTime);
             check.ThrowIfInvalid();
+
+            // The new day is judged like a booking: a donor who is ineligible on it needs the override reason the appointment already
+            // carries (a reschedule request has no field for a new one).
+            var donor = await db.Donors.AsNoTracking().Where(d => d.Id == appointment.DonorId).Select(d => new { d.DateOfBirth, d.LastDonated, d.MedicalHold }).FirstAsync(token);
+            RequireReasonWhenIneligible(
+                Eligibility.Evaluate(donor.DateOfBirth, donor.LastDonated, DateOnly.FromDateTime(slot), donor.MedicalHold),
+                DonorEndpoints.Blank(appointment.OverrideReason));
 
             await db.LockAsync($"slot:{slot.Ticks}", token);
             var taken = await db.Appointments.AnyAsync(

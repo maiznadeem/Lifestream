@@ -278,7 +278,7 @@ public sealed class ShellViewTests
 
         Assert.Equal([1, 1, 1], contextChanges); // each page's DataContext is its view model, set by navigation
         Assert.Equal(3, views); // one view per visit
-        Assert.Equal(["GetDonorsAsync", "GetStockAsync"], calls); // Donors and Stock are real screens (one load each); the Receipts placeholder makes no call
+        Assert.Equal(["GetDonorsAsync", "GetStockAsync", "GetReceiptsAsync"], calls); // Donors, Stock and Receipts are real screens now: exactly one load each (part 2 replaced the Receipts placeholder)
         Assert.Equal("Receipts", titles);
     }
 

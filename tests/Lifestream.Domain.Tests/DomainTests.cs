@@ -41,6 +41,26 @@ public sealed class DomainTests
     }
 
     [Fact]
+    public void Eligibility_MedicalHold_NotEligible_WithTheHoldAsTheReason_EvenWhenAgeAndDonationAreFine()
+    {
+        var result = Eligibility.Evaluate(Adult, null, Today, medicalHold: true);
+
+        Assert.False(result.IsEligible);
+        Assert.Equal([Eligibility.MedicalHoldReason], result.Reasons);
+        Assert.True(Eligibility.Evaluate(Adult, null, Today, medicalHold: false).IsEligible);
+    }
+
+    [Fact]
+    public void Eligibility_MedicalHoldAndRecentDonation_ListsBothReasons()
+    {
+        var result = Eligibility.Evaluate(Adult, Today.AddDays(-10), Today, medicalHold: true);
+
+        Assert.False(result.IsEligible);
+        Assert.Equal(2, result.Reasons.Count);
+        Assert.Equal(Today.AddDays(80), result.NextEligibleDate);
+    }
+
+    [Fact]
     public void Eligibility_Age18Today_Eligible()
     {
         Assert.True(Eligibility.Evaluate(Today.AddYears(-18), null, Today).IsEligible);
