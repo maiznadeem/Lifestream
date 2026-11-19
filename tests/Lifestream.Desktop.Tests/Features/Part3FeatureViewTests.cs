@@ -1,12 +1,18 @@
 using System.Text.RegularExpressions;
 using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Media;
 using Lifestream.Client.Features.Appointments;
 using Lifestream.Client.Features.Donors;
 using Lifestream.Client.Features.Patients;
 using Lifestream.Client.Features.Receipts;
 using Lifestream.Client.Features.Requests;
+using Lifestream.Client.Api;
+using Lifestream.Client.Features.Profile;
 using Lifestream.Client.Navigation;
+using Lifestream.Contracts.Profile;
+using Lifestream.Desktop.Features.Profile;
+using Lifestream.Desktop.Theme;
 using Lifestream.Desktop.Features.Receipts;
 using Lifestream.Desktop.Features.Requests;
 
@@ -130,5 +136,52 @@ public sealed class Part3FeatureViewTests
         Assert.Empty(facts.ReceiptTrimmed);
         Assert.True(facts.NeededByDates >= 5, $"expected the 'Needed by' dates to be rendered, found {facts.NeededByDates}");
         Assert.Empty(facts.NeededByTrimmed);
+    }
+
+    private static double Luminance(Color c)
+    {
+        static double Channel(byte v)
+        {
+            var x = v / 255.0;
+            return x <= 0.03928 ? x / 12.92 : Math.Pow((x + 0.055) / 1.055, 2.4);
+        }
+
+        return (0.2126 * Channel(c.R)) + (0.7152 * Channel(c.G)) + (0.0722 * Channel(c.B));
+    }
+
+    private static double Contrast(Color a, Color b) => (Math.Max(Luminance(a), Luminance(b)) + 0.05) / (Math.Min(Luminance(a), Luminance(b)) + 0.05);
+
+    [Fact]
+    public void ProfileView_ShowsDateOfBirthAndMemberSince_AsReadOnlyText_With4Point5Contrast_FakeApi()
+    {
+        var facts = StaHost.Run(() =>
+        {
+            using var rig = Part2Harness.NewRig();
+            rig.Api.On("GetProfileAsync", ApiResult<ProfileResponse>.Ok(DemoData2.Profile() with { DateOfBirth = new DateOnly(1990, 5, 17), MemberSince = new DateTime(2026, 3, 2, 12, 0, 0, DateTimeKind.Utc) }));
+            var vm = Part2Harness.Create<ProfileViewModel>(rig);
+            using var host = Hosted.Create(Part2Harness.OnCanvas(new ProfileView(), vm), Width, Height);
+            Hosted.Await(() => vm.LoadAsync());
+            host.Settle(500);
+            FeatureHarness.Save(host, "ProfileView_Dates.png");
+
+            var birth = host.Find<TextBlock>("DateOfBirthValue");
+            var since = host.Find<TextBlock>("MemberSinceValue");
+            var labels = host.All<TextBlock>().Where(t => t.IsVisible && t.Text is "Date of birth" or "Member since").ToList();
+            var raised = (Color)ThemeLoader.Resources["Color.SurfaceRaised"];
+            return (
+                Birth: birth.Text,
+                Since: since.Text,
+                AreTextBoxes: host.All<TextBox>().Any(t => t.Name is "DateOfBirthValue" or "MemberSinceValue"),
+                ValueContrast: Math.Min(Contrast(((SolidColorBrush)birth.Foreground).Color, raised), Contrast(((SolidColorBrush)since.Foreground).Color, raised)),
+                LabelContrast: labels.Select(l => Contrast(((SolidColorBrush)l.Foreground).Color, raised)).DefaultIfEmpty(0).Min(),
+                LabelCount: labels.Count);
+        });
+
+        Assert.Equal("17 May 1990", facts.Birth);
+        Assert.Equal("02 Mar 2026", facts.Since);
+        Assert.False(facts.AreTextBoxes); // label and value text, not disabled inputs
+        Assert.True(facts.ValueContrast >= 4.5, $"value contrast {facts.ValueContrast:F2}");
+        Assert.Equal(2, facts.LabelCount);
+        Assert.True(facts.LabelContrast >= 4.5, $"label contrast {facts.LabelContrast:F2}");
     }
 }

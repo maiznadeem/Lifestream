@@ -99,6 +99,8 @@ public sealed partial class ProfileViewModel : FormViewModelBase, INavigationPar
 
     public string SaveBusyText => "Saving...";
 
+    private const string NotRecorded = "Not recorded";
+
     // Read-only data, shown as label and value text.
     [ObservableProperty]
     public partial string Username { get; set; } = string.Empty;
@@ -108,6 +110,14 @@ public sealed partial class ProfileViewModel : FormViewModelBase, INavigationPar
 
     [ObservableProperty]
     public partial string ShiftText { get; set; } = string.Empty;
+
+    /// <summary>The person's date of birth, in the app's date format ("17 May 1990").</summary>
+    [ObservableProperty]
+    public partial string DateOfBirthText { get; set; } = string.Empty;
+
+    /// <summary>The day the account was created ("Member since"), in the app's date format and the user's own time zone.</summary>
+    [ObservableProperty]
+    public partial string MemberSinceText { get; set; } = string.Empty;
 
     [ObservableProperty]
     public partial string DisplayName { get; set; } = string.Empty;
@@ -172,6 +182,8 @@ public sealed partial class ProfileViewModel : FormViewModelBase, INavigationPar
         Username = profile.Username;
         DesignationText = profile.Designation.ToString();
         ShiftText = StaffText.Shift(profile.Shift);
+        DateOfBirthText = profile.DateOfBirth == default ? NotRecorded : Formatting.Date(profile.DateOfBirth);
+        MemberSinceText = profile.MemberSince == default ? NotRecorded : Formatting.Date(DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(profile.MemberSince, DateTimeKind.Utc), TimeZoneInfo.Local)));
         _baselineName = profile.DisplayName.Trim();
         _baselinePhone = profile.Phone?.Trim() ?? string.Empty;
         DisplayName = _baselineName;

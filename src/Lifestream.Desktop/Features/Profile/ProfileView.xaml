@@ -54,6 +54,21 @@
               <TextBlock x:Name="ShiftValue" Style="{DynamicResource Text.Body}" Text="{Binding ShiftText}" TextWrapping="Wrap" />
             </StackPanel>
           </Grid>
+          <Grid feat:Edge.Bottom="{DynamicResource Space.16}">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <StackPanel AutomationProperties.Name="Date of birth">
+              <TextBlock Style="{DynamicResource Text.Caption}" Foreground="{DynamicResource Brush.TextMuted}" Text="Date of birth" />
+              <TextBlock x:Name="DateOfBirthValue" Style="{DynamicResource Text.Body}" Text="{Binding DateOfBirthText}" TextWrapping="Wrap" />
+            </StackPanel>
+            <StackPanel Grid.Column="1" AutomationProperties.Name="Member since">
+              <TextBlock Style="{DynamicResource Text.Caption}" Foreground="{DynamicResource Brush.TextMuted}" Text="Member since" />
+              <TextBlock x:Name="MemberSinceValue" Style="{DynamicResource Text.Body}" Text="{Binding MemberSinceText}" TextWrapping="Wrap" />
+            </StackPanel>
+          </Grid>
 
           <TextBlock Style="{DynamicResource Text.Heading}" Text="Your details" feat:Edge.Top="{DynamicResource Space.8}" feat:Edge.Bottom="{DynamicResource Space.12}" AutomationProperties.HeadingLevel="Level2" />
           <controls:FormField Label="Full name (required)" IsRequired="True" controls:FormFocus.FieldName="DisplayName" Error="{Binding [DisplayName]}">
