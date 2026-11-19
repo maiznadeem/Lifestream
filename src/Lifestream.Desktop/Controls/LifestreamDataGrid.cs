@@ -1,6 +1,8 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
+using Lifestream.Client.Common;
 
 namespace Lifestream.Desktop.Controls;
 
@@ -43,7 +45,17 @@ public sealed class LifestreamDataGrid : DataGrid
         VirtualizingPanel.SetIsVirtualizing(this, true);
         VirtualizingPanel.SetVirtualizationMode(this, VirtualizationMode.Recycling);
         ScrollViewer.SetCanContentScroll(this, true);
-        Loaded += (_, _) => ApplyColumnDefaults();
+        Loaded += (_, _) =>
+        {
+            ApplyColumnDefaults();
+            BeginScrollRestore();
+        };
+        DataContextChanged += (_, _) => BeginScrollRestore();
+        AddHandler(ScrollViewer.ScrollChangedEvent, new ScrollChangedEventHandler(OnScrollChanged));
+        // Once the user scrolls themselves, a pending restore is abandoned.
+        PreviewMouseWheel += (_, _) => _restoreTarget = null;
+        PreviewKeyDown += (_, _) => _restoreTarget = null;
+        PreviewMouseLeftButtonDown += (_, _) => _restoreTarget = null;
         Sorting += (_, e) =>
         {
             // Server-side sort: remember the request, show the indicator, and let the view model fetch the sorted page.
@@ -82,6 +94,65 @@ public sealed class LifestreamDataGrid : DataGrid
     }
 
     private bool _defaultsApplied;
+    private double? _restoreTarget;
+    private ScrollViewer? _viewer;
+
+    /// <summary>A list screen whose view model remembers the scroll position (<see cref="IScrollMemory"/>) gets it back here (SHELL-24).</summary>
+    private void BeginScrollRestore()
+    {
+        _restoreTarget = DataContext is IScrollMemory { ScrollOffset: > 0 } memory ? memory.ScrollOffset : null;
+        TryRestoreScroll();
+    }
+
+    private ScrollViewer? Viewer => _viewer ??= FindViewer(this);
+
+    private static ScrollViewer? FindViewer(DependencyObject root)
+    {
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is ScrollViewer viewer)
+            {
+                return viewer;
+            }
+
+            if (FindViewer(child) is { } found)
+            {
+                return found;
+            }
+        }
+
+        return null;
+    }
+
+    private void TryRestoreScroll()
+    {
+        if (_restoreTarget is { } target && Viewer is { } viewer && viewer.ScrollableHeight >= target)
+        {
+            _restoreTarget = null;
+            viewer.ScrollToVerticalOffset(target);
+        }
+    }
+
+    private void OnScrollChanged(object sender, ScrollChangedEventArgs e)
+    {
+        if (e.OriginalSource is not ScrollViewer viewer || !ReferenceEquals(viewer, Viewer))
+        {
+            return;
+        }
+
+        if (_restoreTarget is not null)
+        {
+            // The rows of this visit are still arriving: wait until the old position exists instead of recording the top.
+            TryRestoreScroll();
+            return;
+        }
+
+        if (DataContext is IScrollMemory memory)
+        {
+            memory.ScrollOffset = viewer.VerticalOffset;
+        }
+    }
 
     private void ApplyColumnDefaults()
     {

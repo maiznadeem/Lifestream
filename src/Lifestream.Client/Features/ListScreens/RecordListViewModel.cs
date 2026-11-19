@@ -27,7 +27,7 @@ public enum StockFilter
 /// the selected record. The editor opens in a side drawer. Delete asks first, names the record, changes the list only after the API
 /// confirms, shows a plain message on failure and offers Undo after success (FEAT-06).
 /// </summary>
-public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListViewModel<TItem>, INavigationParameterReceiver, IDirtyTracking
+public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListViewModel<TItem>, INavigationParameterReceiver, IDirtyTracking, IScrollMemory
     where TItem : class
     where TDetail : class
 {
@@ -58,6 +58,13 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
         }, () => Detail is not null && !IsEditing);
         DeleteCommand = new AsyncRelayCommand(_ => DeleteSelectedAsync(), () => Detail is { } record && !IsEditing && CanDelete(record));
         RetryDetailCommand = new AsyncRelayCommand(_ => LoadDetailAsync(_selectedId));
+    }
+
+    /// <summary>The list's scroll position, kept in the session's <see cref="ListViewState"/> (SHELL-24).</summary>
+    double IScrollMemory.ScrollOffset
+    {
+        get => ViewState.ScrollOffset;
+        set => ViewState.ScrollOffset = value;
     }
 
     /// <summary>For the editors this screen opens.</summary>
