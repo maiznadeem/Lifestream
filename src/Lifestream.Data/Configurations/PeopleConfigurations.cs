@@ -50,7 +50,7 @@ internal sealed class PatientConfiguration : IEntityTypeConfiguration<Patient>
     }
 }
 
-internal sealed class StaffConfiguration : IEntityTypeConfiguration<Staff>
+internal sealed class StaffCredentialConfiguration : IEntityTypeConfiguration<StaffCredential>
 {
     /// <summary>
     /// The most of an ASP.NET Core Identity v3 hash that a T-SQL CHECK can verify (no function may be created, and XML methods
@@ -73,6 +73,44 @@ internal sealed class StaffConfiguration : IEntityTypeConfiguration<Staff>
         "AND [PasswordHash] NOT LIKE '%===%' COLLATE Latin1_General_100_BIN2 " +
         "AND [PasswordHash] LIKE 'AQAAAAIA____AAAAE%' COLLATE Latin1_General_100_BIN2";
 
+    public void Configure(EntityTypeBuilder<StaffCredential> b)
+    {
+        b.Table("StaffCredential", ("PasswordHash", HashCheck));
+        b.HasKey(x => x.StaffId);
+        b.Property(x => x.PasswordHash).HasMaxLength(256).IsUnicode(false);
+        b.Property(x => x.MustChangePassword).HasDefaultValue(false);
+        b.Property(x => x.SecurityStamp).HasDefaultValueSql("NEWID()");
+        b.Property(x => x.RowVersion).IsRowVersion();
+        b.HasOne(x => x.Staff).WithOne(s => s.Credential).HasForeignKey<StaffCredential>(x => x.StaffId).OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+internal sealed class UnknownLoginConfiguration : IEntityTypeConfiguration<UnknownLogin>
+{
+    public void Configure(EntityTypeBuilder<UnknownLogin> b)
+    {
+        b.Table("UnknownLogin");
+
+        // The same collation as Staff.Username: two spellings the database treats as one user name are one row here too.
+        b.Property(x => x.Name).HasMaxLength(UnknownLogin.MaxNameLength).UseCollation(UsernameCollation);
+        b.HasIndex(x => x.Name).IsUnique();
+        b.HasIndex(x => x.ExpiresAtUtc);
+    }
+}
+
+internal sealed class DemoRevocationConfiguration : IEntityTypeConfiguration<DemoRevocation>
+{
+    public void Configure(EntityTypeBuilder<DemoRevocation> b)
+    {
+        b.Table("DemoRevocation");
+        b.HasKey(x => x.Key);
+        b.Property(x => x.Key).HasMaxLength(40).IsUnicode(false).UseCollation("Latin1_General_100_BIN2");
+        b.HasIndex(x => x.ExpiresAtUtc);
+    }
+}
+
+internal sealed class StaffConfiguration : IEntityTypeConfiguration<Staff>
+{
     public void Configure(EntityTypeBuilder<Staff> b)
     {
         b.Table(
@@ -81,13 +119,10 @@ internal sealed class StaffConfiguration : IEntityTypeConfiguration<Staff>
             ("Designation", InList<Designation>("Designation")),
             ("Shift", InList<Shift>("Shift")),
             ("Role", InList<Role>("Role")),
-            ("PasswordHash", HashCheck),
             ("Salary", "[Salary] IS NULL OR [Salary] >= 0"));
         b.Property(x => x.DisplayName).HasMaxLength(100).UseCollation(NameCollation);
         b.Property(x => x.Username).HasMaxLength(50).UseCollation(UsernameCollation);
-        b.Property(x => x.PasswordHash).HasMaxLength(256).IsUnicode(false);
         b.Property(x => x.Phone).HasMaxLength(20).IsUnicode(false);
-        b.Property(x => x.MustChangePassword).HasDefaultValue(false);
         b.Property(x => x.CreatedAtUtc).HasDefaultValueSql(UtcNow);
         b.Property(x => x.RowVersion).IsRowVersion();
         b.HasIndex(x => x.Username).IsUnique();

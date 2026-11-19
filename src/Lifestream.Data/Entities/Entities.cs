@@ -42,13 +42,12 @@ public sealed class Patient : IEntity
     public byte[] RowVersion { get; set; } = [];
 }
 
-/// <summary>A staff login. The password column holds only a salted PBKDF2 hash; the photo lives in <see cref="StaffPhoto"/>.</summary>
+/// <summary>A staff member. The profile fields live here; the password hash and lockout state live in <see cref="StaffCredential"/> and the photo in <see cref="StaffPhoto"/>, so a login or password write never invalidates an open record.</summary>
 public sealed class Staff : IEntity
 {
     public int Id { get; set; }
     public string DisplayName { get; set; } = "";
     public string Username { get; set; } = "";
-    public string PasswordHash { get; set; } = "";
     public Gender Gender { get; set; }
     public DateOnly DateOfBirth { get; set; }
     public Designation Designation { get; set; }
@@ -66,16 +65,59 @@ public sealed class Staff : IEntity
     /// <summary>True when a <see cref="StaffPhoto"/> row exists. Kept here so a Staff query never reads the photo table.</summary>
     public bool HasPhoto { get; set; }
 
-    public int FailedLoginCount { get; set; }
-    public DateTime? LockoutEndUtc { get; set; }
-
-    /// <summary>Set when an administrator resets the password: the person must choose their own before anything else is allowed.</summary>
-    public bool MustChangePassword { get; set; }
+    /// <summary>The password hash and sign-in security state. Lives in its own row so its writes never change this row's <see cref="RowVersion"/>.</summary>
+    public StaffCredential? Credential { get; set; }
 
     /// <summary>When the account was created (server time, default <c>SYSUTCDATETIME()</c>); the profile shows it as "Member since" (FEAT-24).</summary>
     public DateTime CreatedAtUtc { get; set; }
 
     public byte[] RowVersion { get; set; } = [];
+}
+
+/// <summary>
+/// Sign-in state of one staff member (1:1 with <see cref="Staff"/>), with its own row version: failed logins, lockouts, password changes
+/// and resets change this row and never the <see cref="Staff"/> row. The password column holds only a salted PBKDF2 hash.
+/// </summary>
+public sealed class StaffCredential
+{
+    public int StaffId { get; set; }
+    public Staff? Staff { get; set; }
+    public string PasswordHash { get; set; } = "";
+    public int FailedCount { get; set; }
+    public DateTime? LockoutEndUtc { get; set; }
+
+    /// <summary>Set when an administrator resets the password: the person must choose their own before anything else is allowed.</summary>
+    public bool MustChangePassword { get; set; }
+
+    /// <summary>Replaced whenever the password changes or is reset.</summary>
+    public Guid SecurityStamp { get; set; } = Guid.NewGuid();
+
+    public byte[] RowVersion { get; set; } = [];
+}
+
+/// <summary>
+/// One counter of wrong guesses for a login name that has no password account (or belongs to the demo account), so such a name locks
+/// exactly like a real one. <see cref="Name"/> is stored under the same collation as <c>Staff.Username</c>, so every spelling the database
+/// treats as one name shares one row. Rows expire <see cref="ExpiresAtUtc"/> and are purged when the table is queried.
+/// </summary>
+public sealed class UnknownLogin : IEntity
+{
+    public const int MaxNameLength = 200;
+    public static readonly TimeSpan Retention = TimeSpan.FromDays(30);
+
+    public int Id { get; set; }
+    public string Name { get; set; } = "";
+    public int FailedCount { get; set; }
+    public DateTime? LockoutEndUtc { get; set; }
+    public DateTime ExpiresAtUtc { get; set; }
+}
+
+/// <summary>A demo session or a demo refresh token that must stay ended, kept until the longest token it could affect has expired. Not touched by the daily demo reset.</summary>
+public sealed class DemoRevocation
+{
+    /// <summary>"f:" + family id (a signed-out session) or "t:" + token id (a refresh token already used).</summary>
+    public string Key { get; set; } = "";
+    public DateTime ExpiresAtUtc { get; set; }
 }
 
 /// <summary>Photo thumbnail, at most 30 KB and 256 px, outside the Staff row.</summary>

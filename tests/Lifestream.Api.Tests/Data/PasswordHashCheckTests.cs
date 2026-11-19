@@ -49,7 +49,7 @@ public sealed class PasswordHashCheckTests(SqlServerDatabaseFixture fixture) : I
         var error = await Assert.ThrowsAsync<SqlException>(() => InsertStaffAsync(value));
 
         Assert.True(error.Number == 547, $"{why}: expected a CHECK violation (547) but got {error.Number}: {error.Message}");
-        Assert.Contains("CK_Staff_PasswordHash", error.Message, StringComparison.Ordinal);
+        Assert.Contains("CK_StaffCredential_PasswordHash", error.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -81,13 +81,13 @@ public sealed class PasswordHashCheckTests(SqlServerDatabaseFixture fixture) : I
         {
             await DemoReset.ForceAsync(seeding, DateOnly.FromDateTime(DateTime.UtcNow), Ct);
             var known = TestRows.Staff("knownpassword");
-            known.PasswordHash = PasswordHashing.Hash("known password 1");
+            known.Credential!.PasswordHash = PasswordHashing.Hash("known password 1");
             seeding.AuditEnabled = false;
             seeding.Staff.Add(known);
             await seeding.SaveChangesAsync(Ct);
         }
 
-        var rows = await fixture.RowsAsync("SELECT Username, PasswordHash FROM Staff", Ct);
+        var rows = await fixture.RowsAsync("SELECT s.Username, c.PasswordHash FROM Staff s JOIN StaffCredential c ON c.StaffId = s.Id", Ct);
         Assert.True(rows.Count >= 12, $"Only {rows.Count} staff rows; the seed did not run.");
         var hasher = new PasswordHasher<Staff>();
         foreach (var row in rows)
@@ -113,15 +113,16 @@ public sealed class PasswordHashCheckTests(SqlServerDatabaseFixture fixture) : I
         // Proof that the scan in the test above can fail: in a scratch database with the CHECK switched off, a plain-text row is found.
         await using var scratch = new SqlServerDatabaseFixture();
         await scratch.InitializeAsync();
-        await scratch.ExecuteAsync("ALTER TABLE Staff NOCHECK CONSTRAINT CK_Staff_PasswordHash", Ct);
+        await scratch.ExecuteAsync("ALTER TABLE StaffCredential NOCHECK CONSTRAINT CK_StaffCredential_PasswordHash", Ct);
         await scratch.ExecuteAsync(
             """
-            INSERT INTO Staff (DisplayName, Username, PasswordHash, Gender, DateOfBirth, Designation, Shift, Role, IsProtected, IsDemo, HasPhoto, FailedLoginCount)
-            VALUES (N'Raw', N'plain', 'AQAAAAIthis-is-plain-text-not-a-hash-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx', 'Male', '1990-01-01', 'Doctor', 'Morning', 'Staff', 0, 0, 0, 0)
+            INSERT INTO Staff (DisplayName, Username, Gender, DateOfBirth, Designation, Shift, Role, IsProtected, IsDemo, HasPhoto)
+            VALUES (N'Raw', N'plain', 'Male', '1990-01-01', 'Doctor', 'Morning', 'Staff', 0, 0, 0);
+            INSERT INTO StaffCredential (StaffId, PasswordHash) VALUES (SCOPE_IDENTITY(), 'AQAAAAIthis-is-plain-text-not-a-hash-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx');
             """,
             Ct);
 
-        var rows = await scratch.RowsAsync("SELECT Username, PasswordHash FROM Staff", Ct);
+        var rows = await scratch.RowsAsync("SELECT s.Username, c.PasswordHash FROM Staff s JOIN StaffCredential c ON c.StaffId = s.Id", Ct);
 
         Assert.Single(rows, r => !PasswordHashing.IsValidHash((string)r[1]!));
     }
@@ -134,8 +135,12 @@ public sealed class PasswordHashCheckTests(SqlServerDatabaseFixture fixture) : I
         await connection.OpenAsync(Ct);
         await using var command = new SqlCommand(
             """
-            INSERT INTO Staff (DisplayName, Username, PasswordHash, Gender, DateOfBirth, Designation, Shift, Role, IsProtected, IsDemo, HasPhoto, FailedLoginCount)
-            VALUES (N'Raw', @u, @h, 'Male', '1990-01-01', 'Doctor', 'Morning', 'Staff', 0, 0, 0, 0)
+            SET XACT_ABORT ON;
+            BEGIN TRAN;
+            INSERT INTO Staff (DisplayName, Username, Gender, DateOfBirth, Designation, Shift, Role, IsProtected, IsDemo, HasPhoto)
+            VALUES (N'Raw', @u, 'Male', '1990-01-01', 'Doctor', 'Morning', 'Staff', 0, 0, 0);
+            INSERT INTO StaffCredential (StaffId, PasswordHash) VALUES (SCOPE_IDENTITY(), @h);
+            COMMIT;
             """,
             connection);
         command.Parameters.AddWithValue("@u", Tag + Guid.NewGuid().ToString("N")[..10]);

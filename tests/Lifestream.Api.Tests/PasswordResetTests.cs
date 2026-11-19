@@ -44,12 +44,12 @@ public sealed partial class PasswordResetTests(ApiFixture fx) : IClassFixture<Ap
     {
         var admin = await fx.AddStaffAsync(Role.Admin);
         var worker = await fx.AddStaffAsync(Role.Staff);
-        var before = await fx.Db.ScalarAsync<string>($"SELECT PasswordHash FROM Staff WHERE Id = {worker.Id}", Ct);
+        var before = await fx.Db.ScalarAsync<string>($"SELECT PasswordHash FROM StaffCredential WHERE StaffId = {worker.Id}", Ct);
 
         using var response = await admin.Client.PostApi(ApiRoutes.StaffResetPassword, new ResetPasswordRequest(temporary), worker.Id);
         using var problem = await response.Problem(400, ProblemCodes.Validation);
         Assert.True(problem.RootElement.GetProperty("errors").TryGetProperty("temporaryPassword", out _));
-        Assert.Equal(before, await fx.Db.ScalarAsync<string>($"SELECT PasswordHash FROM Staff WHERE Id = {worker.Id}", Ct));
+        Assert.Equal(before, await fx.Db.ScalarAsync<string>($"SELECT PasswordHash FROM StaffCredential WHERE StaffId = {worker.Id}", Ct));
         Assert.Equal(HttpStatusCode.OK, (await worker.Client.GetApi(ApiRoutes.Me)).StatusCode);
     }
 
@@ -100,7 +100,7 @@ public sealed partial class PasswordResetTests(ApiFixture fx) : IClassFixture<Ap
         using var p = await wrongCurrent.Problem(400, ProblemCodes.Validation);
         using var changed = await client2.PutApi(ApiRoutes.MePassword, new ChangePasswordRequest(Temporary, "a-brand-new-password-1"));
         Assert.Equal(HttpStatusCode.NoContent, changed.StatusCode);
-        Assert.Equal(0, await fx.Db.ScalarAsync<int>($"SELECT MustChangePassword FROM Staff WHERE Id = {worker.Id}", Ct));
+        Assert.Equal(0, await fx.Db.ScalarAsync<int>($"SELECT MustChangePassword FROM StaffCredential WHERE StaffId = {worker.Id}", Ct));
 
         // The same session now works everywhere, and a new sign-in no longer says it.
         Assert.Equal(HttpStatusCode.OK, (await client2.GetApi(ApiRoutes.Donors)).StatusCode);

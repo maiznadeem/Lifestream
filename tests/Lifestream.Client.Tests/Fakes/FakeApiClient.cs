@@ -186,6 +186,8 @@ public sealed class FakeApiClient : ILifestreamApiClient
 
     public Task<ApiResult> DeleteStaffAsync(int id, CancellationToken ct = default) => RunVoid(nameof(DeleteStaffAsync), ct);
 
+    public Task<ApiResult<StaffDetail>> RestoreStaffAsync(int id, CancellationToken ct = default) => Run<StaffDetail>(nameof(RestoreStaffAsync), ct);
+
     public Task<ApiResult> ResetStaffPasswordAsync(int id, ResetPasswordRequest request, CancellationToken ct = default) => RunVoid(nameof(ResetStaffPasswordAsync), ct);
 
     public Task<ApiResult<byte[]>> GetStaffPhotoAsync(int id, CancellationToken ct = default) => Run<byte[]>(nameof(GetStaffPhotoAsync), ct);

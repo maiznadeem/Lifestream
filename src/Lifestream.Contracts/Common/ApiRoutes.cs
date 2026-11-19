@@ -61,6 +61,7 @@ public static class ApiRoutes
     // Staff
     public const string Staff = "staff";
     public const string StaffById = "staff/{id}";
+    public const string StaffRestore = "staff/{id}/restore";
     public const string StaffPhoto = "staff/{id}/photo";
     public const string StaffResetPassword = "staff/{id}/reset-password";
 

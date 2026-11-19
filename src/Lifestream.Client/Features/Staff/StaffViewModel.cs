@@ -62,8 +62,6 @@ public sealed partial class StaffViewModel : SortedRecordListViewModel<StaffRow,
 
     public override AsyncRelayCommand? NewCommand => CanManageStaff ? AddCommand : null;
 
-    protected override bool SupportsUndo => false;
-
     /// <summary>Why Delete is disabled for the selected record (shown as its tooltip), or null when it is enabled.</summary>
     public string? DeleteDisabledReason => Detail is { } staff ? WhyNotDeletable(staff) : null;
 
@@ -225,8 +223,8 @@ public sealed partial class StaffViewModel : SortedRecordListViewModel<StaffRow,
 
     protected override Task<ApiResult> DeleteRecordAsync(int id, CancellationToken ct) => _api.DeleteStaffAsync(id, ct);
 
-    protected override Task<ApiResult<StaffDetail>> RestoreAsync(StaffDetail deleted, CancellationToken ct) =>
-        Task.FromResult(ApiResult<StaffDetail>.Fail(new ApiProblem(409, ProblemCodes.Conflict, "A deleted staff member can't be restored. Add them again.")));
+    // The API keeps the deleted person for a few seconds and puts them back as they were (same id, password hash, lock state, photo), so Undo restores rather than re-creates.
+    protected override Task<ApiResult<StaffDetail>> RestoreAsync(StaffDetail deleted, CancellationToken ct) => _api.RestoreStaffAsync(deleted.Id, ct);
 
     protected override RecordEditorViewModel CreateEditor(StaffDetail? existing) =>
         existing is null ? StaffEditorViewModel.ForNew(_api, Toasts, Dialogs, Clock) : StaffEditorViewModel.ForEdit(_api, Toasts, Dialogs, existing, Clock);

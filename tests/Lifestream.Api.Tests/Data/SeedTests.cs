@@ -64,10 +64,10 @@ public sealed partial class SeedTests
     {
         var set = new DemoDataGenerator().Generate(Day);
 
-        Assert.All(set.Staff, s => Assert.True(PasswordHashing.IsValidHash(s.PasswordHash), $"{s.Username} does not hold a valid salted hash."));
+        Assert.All(set.Staff, s => Assert.True(PasswordHashing.IsValidHash(s.Credential!.PasswordHash), $"{s.Username} does not hold a valid salted hash."));
         // The seed hash belongs to a password that was generated at random and discarded: nothing common verifies against it.
-        Assert.False(PasswordHashing.Verify(set.Staff[0].PasswordHash, "demo"));
-        Assert.False(PasswordHashing.Verify(set.Staff[0].PasswordHash, "Password123"));
+        Assert.False(PasswordHashing.Verify(set.Staff[0].Credential!.PasswordHash, "demo"));
+        Assert.False(PasswordHashing.Verify(set.Staff[0].Credential!.PasswordHash, "Password123"));
     }
 
     [Fact]
@@ -131,7 +131,7 @@ public sealed partial class SeedTests
         Assert.Equal(100 * SeedSizes.Requests, first.Requests.Count);
         Assert.Equal(100 * SeedSizes.Donors, first.Donors.Count);
         Assert.Equal(100 * SeedSizes.Staff, first.Staff.Count);
-        Assert.All(first.Staff, s => Assert.True(PasswordHashing.IsValidHash(s.PasswordHash)));
+        Assert.All(first.Staff, s => Assert.True(PasswordHashing.IsValidHash(s.Credential!.PasswordHash)));
         Assert.Equal(Canonical(first), Canonical(ScaleDataGenerator.Generate(100, Day)));
     }
 
@@ -189,7 +189,7 @@ public sealed partial class SeedTests
     internal static string Canonical(DemoDataSet s)
     {
         var lines = new List<string>();
-        lines.AddRange(s.Staff.Select(x => $"S|{x.Username}|{x.DisplayName}|{x.Gender}|{x.DateOfBirth:O}|{x.Designation}|{x.Shift}|{x.Role}|{x.Salary}|{x.Phone}|{x.IsDemo}|{x.PasswordHash}"));
+        lines.AddRange(s.Staff.Select(x => $"S|{x.Username}|{x.DisplayName}|{x.Gender}|{x.DateOfBirth:O}|{x.Designation}|{x.Shift}|{x.Role}|{x.Salary}|{x.Phone}|{x.IsDemo}|{x.Credential!.PasswordHash}"));
         lines.AddRange(s.Donors.Select(x => $"D|{x.Name}|{x.DateOfBirth:O}|{x.Gender}|{x.BloodType}|{x.Phone}|{x.Address}|{x.Frequency}|{x.LastDonated:O}"));
         lines.AddRange(s.Patients.Select(x => $"P|{x.Name}|{x.DateOfBirth:O}|{x.Gender}|{x.BloodType}|{x.Phone}|{x.Address}"));
         lines.AddRange(s.Appointments.Select(x => $"A|{x.Donor!.Name}|{x.SlotStartUtc:O}|{x.PlacedAtUtc:O}|{x.Status}|{x.OverrideReason}"));

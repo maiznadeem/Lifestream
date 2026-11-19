@@ -15,7 +15,7 @@ internal static class TestRows
     {
         DisplayName = "Test Staff",
         Username = username,
-        PasswordHash = ValidHash,
+        Credential = new StaffCredential { PasswordHash = ValidHash },
         Gender = Gender.Female,
         DateOfBirth = new DateOnly(1990, 1, 1),
         Designation = Designation.Doctor,

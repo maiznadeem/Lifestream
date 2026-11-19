@@ -86,29 +86,32 @@ public sealed class DemoSessionRevocationTests(ApiFixture fx) : IClassFixture<Ap
     }
 
     [Fact]
-    public void Denylist_EntriesExpire_AndAUsedTokenIdCanOnlyBeUsedOnceWhileItLives()
+    public async Task Denylist_EntriesExpire_AndAUsedTokenIdCanOnlyBeUsedOnceWhileItLives()
     {
-        var denylist = fx.Factory.Services.GetRequiredService<DemoSessionDenylist>();
+        using var scope = fx.Factory.Services.CreateScope();
+        var denylist = scope.ServiceProvider.GetRequiredService<DemoSessionDenylist>();
         var clock = fx.Clock;
         var family = Guid.NewGuid();
         var token = Guid.NewGuid();
         var until = clock.GetUtcNow().UtcDateTime.AddMinutes(10);
 
-        Assert.False(denylist.IsRevoked(family));
-        denylist.RevokeFamily(family, until);
-        Assert.True(denylist.IsRevoked(family));
-        Assert.True(denylist.TryUse(token, until));
-        Assert.False(denylist.TryUse(token, until));
+        Assert.False(await denylist.IsRevokedAsync(family, Ct));
+        await denylist.RevokeFamilyAsync(family, until, Ct);
+        Assert.True(await denylist.IsRevokedAsync(family, Ct));
+        Assert.True(await denylist.TryUseAsync(token, until, Ct));
+        Assert.False(await denylist.TryUseAsync(token, until, Ct));
 
         clock.Advance(TimeSpan.FromMinutes(11));
         try
         {
-            Assert.False(denylist.IsRevoked(family));
-            Assert.True(denylist.TryUse(token, clock.GetUtcNow().UtcDateTime.AddMinutes(10)));
+            Assert.False(await denylist.IsRevokedAsync(family, Ct));
+            Assert.True(await denylist.TryUseAsync(token, clock.GetUtcNow().UtcDateTime.AddMinutes(10), Ct));
         }
         finally
         {
             clock.Advance(TimeSpan.FromMinutes(-11));
         }
     }
+
+    private static CancellationToken Ct => TestContext.Current.CancellationToken;
 }

@@ -29,9 +29,10 @@ public sealed class ConstraintTests(SqlServerDatabaseFixture fixture) : IClassFi
     public async Task Staff_PasswordHashColumn_Length256()
     {
         var length = await fixture.ScalarAsync<int>(
-            "SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'Staff' AND COLUMN_NAME = 'PasswordHash'", Ct);
+            "SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'StaffCredential' AND COLUMN_NAME = 'PasswordHash'", Ct);
         Assert.Equal(256, length);
         Assert.False(await HasColumn("Staff", "Password"), "The old plain-text 'password' column must not exist.");
+        Assert.False(await HasColumn("Staff", "PasswordHash"), "The hash lives in StaffCredential, not in the Staff row.");
     }
 
     [Fact]
@@ -39,13 +40,13 @@ public sealed class ConstraintTests(SqlServerDatabaseFixture fixture) : IClassFi
     {
         await using var db = fixture.NewContext();
         var staff = TestRows.Staff(Unique("hash"));
-        staff.PasswordHash = PasswordHashing.Hash("correct horse battery staple");
+        staff.Credential!.PasswordHash = PasswordHashing.Hash("correct horse battery staple");
         db.Staff.Add(staff);
         await db.SaveChangesAsync(Ct);
 
-        Assert.True(PasswordHashing.IsValidHash(staff.PasswordHash));
-        Assert.True(PasswordHashing.Verify(staff.PasswordHash, "correct horse battery staple"));
-        Assert.False(PasswordHashing.Verify(staff.PasswordHash, "wrong"));
+        Assert.True(PasswordHashing.IsValidHash(staff.Credential!.PasswordHash));
+        Assert.True(PasswordHashing.Verify(staff.Credential!.PasswordHash, "correct horse battery staple"));
+        Assert.False(PasswordHashing.Verify(staff.Credential!.PasswordHash, "wrong"));
     }
 
     [Theory]
@@ -57,13 +58,13 @@ public sealed class ConstraintTests(SqlServerDatabaseFixture fixture) : IClassFi
     {
         await using var db = fixture.NewContext();
         var staff = TestRows.Staff(Unique("plain"));
-        staff.PasswordHash = notAHash;
+        staff.Credential!.PasswordHash = notAHash;
         db.Staff.Add(staff);
 
         var error = await Rejected(() => db.SaveChangesAsync(Ct));
 
         Assert.Equal(547, error.Number);
-        Assert.Contains("CK_Staff_PasswordHash", error.Message, StringComparison.Ordinal);
+        Assert.Contains("CK_StaffCredential_PasswordHash", error.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -71,7 +72,7 @@ public sealed class ConstraintTests(SqlServerDatabaseFixture fixture) : IClassFi
     {
         await using var db = fixture.NewContext();
         var staff = TestRows.Staff(Unique("case"));
-        staff.PasswordHash = TestRows.ValidHash.ToLowerInvariant();
+        staff.Credential!.PasswordHash = TestRows.ValidHash.ToLowerInvariant();
         db.Staff.Add(staff);
 
         Assert.Equal(547, (await Rejected(() => db.SaveChangesAsync(Ct))).Number);

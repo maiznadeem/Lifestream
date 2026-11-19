@@ -30,7 +30,7 @@ public sealed class AuthTests(ApiFixture fx) : IClassFixture<ApiFixture>
     {
         var user = await fx.AddStaffAsync(Role.Staff);
         await using var db = fx.Db.NewContext();
-        var hash = await db.Staff.Where(s => s.Id == user.Id).Select(s => s.PasswordHash).SingleAsync(Ct);
+        var hash = await db.Staff.Where(s => s.Id == user.Id).Select(s => s.Credential!.PasswordHash).SingleAsync(Ct);
         Assert.True(PasswordHashing.IsValidHash(hash));
 
         using var ok = await LoginAsync(user.Username, ApiFixture.Password);

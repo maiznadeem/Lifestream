@@ -1326,3 +1326,154 @@ END;
 COMMIT;
 GO
 
+BEGIN TRANSACTION;
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261119150000_StaffCredentialAndSecurityState'
+)
+BEGIN
+    CREATE TABLE [DemoRevocation] (
+        [Key] varchar(40) COLLATE Latin1_General_100_BIN2 NOT NULL,
+        [ExpiresAtUtc] datetime2(3) NOT NULL,
+        CONSTRAINT [PK_DemoRevocation] PRIMARY KEY ([Key])
+    );
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261119150000_StaffCredentialAndSecurityState'
+)
+BEGIN
+    CREATE TABLE [StaffCredential] (
+        [StaffId] int NOT NULL,
+        [PasswordHash] varchar(256) NOT NULL,
+        [FailedCount] int NOT NULL,
+        [LockoutEndUtc] datetime2(3) NULL,
+        [MustChangePassword] bit NOT NULL DEFAULT CAST(0 AS bit),
+        [SecurityStamp] uniqueidentifier NOT NULL DEFAULT (NEWID()),
+        [RowVersion] rowversion NOT NULL,
+        CONSTRAINT [PK_StaffCredential] PRIMARY KEY ([StaffId]),
+        CONSTRAINT [CK_StaffCredential_PasswordHash] CHECK (LEN([PasswordHash]) BETWEEN 84 AND 256 AND LEN([PasswordHash]) % 4 = 0 AND [PasswordHash] NOT LIKE '%[^A-Za-z0-9+/=]%' COLLATE Latin1_General_100_BIN2 AND [PasswordHash] NOT LIKE '%=%[^=]%' COLLATE Latin1_General_100_BIN2 AND [PasswordHash] NOT LIKE '%===%' COLLATE Latin1_General_100_BIN2 AND [PasswordHash] LIKE 'AQAAAAIA____AAAAE%' COLLATE Latin1_General_100_BIN2),
+        CONSTRAINT [FK_StaffCredential_Staff_StaffId] FOREIGN KEY ([StaffId]) REFERENCES [Staff] ([Id]) ON DELETE CASCADE
+    );
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261119150000_StaffCredentialAndSecurityState'
+)
+BEGIN
+    CREATE TABLE [UnknownLogin] (
+        [Id] int NOT NULL IDENTITY,
+        [Name] nvarchar(200) COLLATE Latin1_General_100_CI_AS NOT NULL,
+        [FailedCount] int NOT NULL,
+        [LockoutEndUtc] datetime2(3) NULL,
+        [ExpiresAtUtc] datetime2(3) NOT NULL,
+        CONSTRAINT [PK_UnknownLogin] PRIMARY KEY ([Id])
+    );
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261119150000_StaffCredentialAndSecurityState'
+)
+BEGIN
+    EXEC(N'INSERT INTO [StaffCredential] ([StaffId], [PasswordHash], [FailedCount], [LockoutEndUtc], [MustChangePassword]) SELECT [Id], [PasswordHash], [FailedLoginCount], [LockoutEndUtc], [MustChangePassword] FROM [Staff]');
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261119150000_StaffCredentialAndSecurityState'
+)
+BEGIN
+    ALTER TABLE [Staff] DROP CONSTRAINT [CK_Staff_PasswordHash];
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261119150000_StaffCredentialAndSecurityState'
+)
+BEGIN
+    DECLARE @var nvarchar(max);
+    SELECT @var = QUOTENAME(OBJECT_NAME([c].[default_object_id]))
+    FROM [sys].[columns] [c]
+    WHERE [c].[object_id] = OBJECT_ID(N'[Staff]') AND [c].[name] = N'FailedLoginCount';
+    IF @var IS NOT NULL EXEC(N'ALTER TABLE [Staff] DROP CONSTRAINT ' + @var + ';');
+    ALTER TABLE [Staff] DROP COLUMN [FailedLoginCount];
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261119150000_StaffCredentialAndSecurityState'
+)
+BEGIN
+    DECLARE @var1 nvarchar(max);
+    SELECT @var1 = QUOTENAME(OBJECT_NAME([c].[default_object_id]))
+    FROM [sys].[columns] [c]
+    WHERE [c].[object_id] = OBJECT_ID(N'[Staff]') AND [c].[name] = N'LockoutEndUtc';
+    IF @var1 IS NOT NULL EXEC(N'ALTER TABLE [Staff] DROP CONSTRAINT ' + @var1 + ';');
+    ALTER TABLE [Staff] DROP COLUMN [LockoutEndUtc];
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261119150000_StaffCredentialAndSecurityState'
+)
+BEGIN
+    DECLARE @var2 nvarchar(max);
+    SELECT @var2 = QUOTENAME(OBJECT_NAME([c].[default_object_id]))
+    FROM [sys].[columns] [c]
+    WHERE [c].[object_id] = OBJECT_ID(N'[Staff]') AND [c].[name] = N'MustChangePassword';
+    IF @var2 IS NOT NULL EXEC(N'ALTER TABLE [Staff] DROP CONSTRAINT ' + @var2 + ';');
+    ALTER TABLE [Staff] DROP COLUMN [MustChangePassword];
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261119150000_StaffCredentialAndSecurityState'
+)
+BEGIN
+    DECLARE @var3 nvarchar(max);
+    SELECT @var3 = QUOTENAME(OBJECT_NAME([c].[default_object_id]))
+    FROM [sys].[columns] [c]
+    WHERE [c].[object_id] = OBJECT_ID(N'[Staff]') AND [c].[name] = N'PasswordHash';
+    IF @var3 IS NOT NULL EXEC(N'ALTER TABLE [Staff] DROP CONSTRAINT ' + @var3 + ';');
+    ALTER TABLE [Staff] DROP COLUMN [PasswordHash];
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261119150000_StaffCredentialAndSecurityState'
+)
+BEGIN
+    CREATE INDEX [IX_DemoRevocation_ExpiresAtUtc] ON [DemoRevocation] ([ExpiresAtUtc]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261119150000_StaffCredentialAndSecurityState'
+)
+BEGIN
+    CREATE INDEX [IX_UnknownLogin_ExpiresAtUtc] ON [UnknownLogin] ([ExpiresAtUtc]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261119150000_StaffCredentialAndSecurityState'
+)
+BEGIN
+    CREATE UNIQUE INDEX [IX_UnknownLogin_Name] ON [UnknownLogin] ([Name]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261119150000_StaffCredentialAndSecurityState'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20261119150000_StaffCredentialAndSecurityState', N'11.0.0');
+END;
+
+COMMIT;
+GO
+

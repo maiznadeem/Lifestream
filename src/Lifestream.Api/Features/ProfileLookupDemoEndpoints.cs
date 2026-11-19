@@ -93,7 +93,7 @@ public static class ProfileEndpoints
         check.ThrowIfInvalid();
 
         var id = user.TokenStaffId;
-        var current = await db.Staff.AsNoTracking().Where(s => s.Id == id).Select(s => new { s.PasswordHash }).FirstOrDefaultAsync(ct)
+        var current = await db.StaffCredentials.AsNoTracking().Where(c => c.StaffId == id).Select(c => new { c.PasswordHash }).FirstOrDefaultAsync(ct)
             ?? throw ApiException.NotFound("The profile");
 
         // The guess is counted, and the lock checked, before the password is: a locked account is refused (429) without any check,
@@ -113,10 +113,12 @@ public static class ProfileEndpoints
         var hash = PasswordHashing.Hash(r.NewPassword);
         await db.RunAsync(async token =>
         {
-            var entity = await db.Staff.FirstOrDefaultAsync(s => s.Id == id, token) ?? throw ApiException.NotFound("The profile");
+            // Only the credential row changes: the profile record the person has open keeps its row version.
+            var entity = await db.StaffCredentials.FirstOrDefaultAsync(c => c.StaffId == id, token) ?? throw ApiException.NotFound("The profile");
             entity.PasswordHash = hash;
+            entity.SecurityStamp = Guid.NewGuid();
             entity.MustChangePassword = false;
-            entity.FailedLoginCount = 0;
+            entity.FailedCount = 0;
             entity.LockoutEndUtc = null;
             await db.SaveChangesAsync(token);
             return true;

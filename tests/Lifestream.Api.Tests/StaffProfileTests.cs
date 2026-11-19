@@ -55,7 +55,7 @@ public sealed class StaffProfileTests(ApiFixture fx) : IClassFixture<ApiFixture>
         Assert.Equal(username, detail.Username);
         Assert.Equal(51000, detail.Salary);
 
-        var hash = await fx.Db.ScalarAsync<string>($"SELECT PasswordHash FROM Staff WHERE Id = {detail.Id}", Ct);
+        var hash = await fx.Db.ScalarAsync<string>($"SELECT PasswordHash FROM StaffCredential WHERE StaffId = {detail.Id}", Ct);
         Assert.True(PasswordHashing.IsValidHash(hash));
         Assert.NotEqual("a-long-initial-password", hash);
 
@@ -204,18 +204,18 @@ public sealed class StaffProfileTests(ApiFixture fx) : IClassFixture<ApiFixture>
         const string temporary = "typed-temporary-pass-1";
         var admin = await fx.AddStaffAsync(Role.Admin);
         var worker = await fx.AddStaffAsync(Role.Staff);
-        await fx.Db.ExecuteAsync($"UPDATE Staff SET LockoutEndUtc = DATEADD(hour, 1, SYSUTCDATETIME()), FailedLoginCount = 3 WHERE Id = {worker.Id}", Ct);
-        var oldHash = await fx.Db.ScalarAsync<string>($"SELECT PasswordHash FROM Staff WHERE Id = {worker.Id}", Ct);
+        await fx.Db.ExecuteAsync($"UPDATE StaffCredential SET LockoutEndUtc = DATEADD(hour, 1, SYSUTCDATETIME()), FailedCount = 3 WHERE StaffId = {worker.Id}", Ct);
+        var oldHash = await fx.Db.ScalarAsync<string>($"SELECT PasswordHash FROM StaffCredential WHERE StaffId = {worker.Id}", Ct);
 
         using var response = await admin.Client.PostApi(ApiRoutes.StaffResetPassword, new ResetPasswordRequest(temporary), worker.Id);
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         Assert.Empty(await response.Content.ReadAsStringAsync(Ct));
-        var newHash = await fx.Db.ScalarAsync<string>($"SELECT PasswordHash FROM Staff WHERE Id = {worker.Id}", Ct);
+        var newHash = await fx.Db.ScalarAsync<string>($"SELECT PasswordHash FROM StaffCredential WHERE StaffId = {worker.Id}", Ct);
         Assert.NotEqual(oldHash, newHash);
         Assert.NotEqual(temporary, newHash);
         Assert.True(PasswordHashing.Verify(newHash, temporary));
         Assert.False(PasswordHashing.Verify(newHash, ApiFixture.Password));
-        Assert.Equal(1, await fx.Db.ScalarAsync<int>($"SELECT COUNT(*) FROM Staff WHERE Id = {worker.Id} AND MustChangePassword = 1 AND FailedLoginCount = 0 AND LockoutEndUtc IS NULL", Ct));
+        Assert.Equal(1, await fx.Db.ScalarAsync<int>($"SELECT COUNT(*) FROM StaffCredential WHERE StaffId = {worker.Id} AND MustChangePassword = 1 AND FailedCount = 0 AND LockoutEndUtc IS NULL", Ct));
 
         // The person's sessions ended, and the temporary password signs in (the lock was cleared).
         Assert.Equal(HttpStatusCode.Unauthorized, (await worker.Client.GetApi(ApiRoutes.Me)).StatusCode);
@@ -259,7 +259,7 @@ public sealed class StaffProfileTests(ApiFixture fx) : IClassFixture<ApiFixture>
         using var signedIn = fx.NewClient(login.AccessToken);
         using var ok = await signedIn.PutApi(ApiRoutes.MePassword, new ChangePasswordRequest(ApiFixture.Password, newPassword));
         Assert.Equal(HttpStatusCode.NoContent, ok.StatusCode);
-        var hash = await fx.Db.ScalarAsync<string>($"SELECT PasswordHash FROM Staff WHERE Id = {user.Id}", Ct);
+        var hash = await fx.Db.ScalarAsync<string>($"SELECT PasswordHash FROM StaffCredential WHERE StaffId = {user.Id}", Ct);
         Assert.True(PasswordHashing.Verify(hash, newPassword));
         Assert.False(PasswordHashing.Verify(hash, ApiFixture.Password));
 
@@ -436,7 +436,7 @@ public sealed class StaffProfileTests(ApiFixture fx) : IClassFixture<ApiFixture>
         var appointment = await Seed.AppointmentAsync(fx, donor, Seed.Slot(90, 10));
         var request = await Seed.RequestAsync(fx, patient, 1);
         var receipt = await Seed.ReceiptAsync(fx, ReceiptKind.Donation, DateTime.UtcNow.AddHours(-1));
-        var hash = await fx.Db.ScalarAsync<string>($"SELECT PasswordHash FROM Staff WHERE Id = {worker.Id}", Ct);
+        var hash = await fx.Db.ScalarAsync<string>($"SELECT PasswordHash FROM StaffCredential WHERE StaffId = {worker.Id}", Ct);
 
         var gets = new (string Template, int? Id)[]
         {

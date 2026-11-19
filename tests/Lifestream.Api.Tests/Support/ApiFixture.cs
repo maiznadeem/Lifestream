@@ -441,6 +441,23 @@ public class ApiFixture : IAsyncLifetime
         return client;
     }
 
+    /// <summary>
+    /// A second app host over the same database, with the same settings, signing key and clock but empty memory: what a scale-to-zero restart
+    /// of the API looks like. Anything that must survive a restart has to be in the database for this host to know it.
+    /// </summary>
+    public WebApplicationFactory<Program> NewHostOverSameDatabase() =>
+        new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+        {
+            builder.UseEnvironment("Testing");
+            builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(Settings));
+            builder.ConfigureServices(services =>
+            {
+                services.AddSingleton<TimeProvider>(Clock);
+                services.AddSingleton<IDatabaseProbe>(Probe);
+                services.AddSingleton<Microsoft.AspNetCore.Hosting.IStartupFilter, RemoteAddressFilter>();
+            });
+        });
+
     public string NextName(string prefix) => $"{prefix}{Interlocked.Increment(ref _counter)}";
 
     /// <summary>Adds a staff row with a real hash of <see cref="Password"/> and returns a client signed in as them (token minted directly, session row stored).</summary>
