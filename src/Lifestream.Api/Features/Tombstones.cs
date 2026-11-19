@@ -16,8 +16,8 @@ namespace Lifestream.Api.Features;
 /// </summary>
 internal static class Tombstones
 {
-    /// <summary>How long after the delete a restore is accepted: the client's Undo toast (10 seconds) plus a small grace for the round trip.</summary>
-    public static readonly TimeSpan Window = TimeSpan.FromSeconds(15);
+    /// <summary>How long after the delete a restore is accepted: the shared <see cref="UndoWindow"/>, which the client reads too.</summary>
+    public static readonly TimeSpan Window = Lifestream.Contracts.UndoWindow.Duration;
 
     // Only the columns a restore needs: everything the row holds except the row version, which the database makes anew.
     private static readonly JsonSerializerOptions Options = new()

@@ -22,6 +22,12 @@ public interface IToastService
     /// </summary>
     OperationRunner Actions { get; }
 
+    /// <summary>Changes every time <see cref="EndSession"/> runs. An action that started before a sign-out compares it, so it never shows a toast to the next person (SHELL-07).</summary>
+    int Epoch { get; }
+
+    /// <summary>Sign-out: cancels every waiting toast action (Undo, View, Reload) and removes every toast, before the session is cleared.</summary>
+    void EndSession();
+
     /// <summary>Shows a toast. Name the affected record in <paramref name="message"/>; add an action such as View or Undo if one makes sense.</summary>
     /// <param name="kind">Success, info, warning or error.</param>
     /// <param name="message">The text; names the affected record.</param>
@@ -185,6 +191,23 @@ public sealed class ToastService : IToastService
     public static TimeSpan MaxLifetime { get; } = TimeSpan.FromSeconds(10);
 
     public ObservableCollection<ToastItem> Toasts { get; } = [];
+
+    public int Epoch => Volatile.Read(ref _epoch);
+
+    private int _epoch;
+
+    public void EndSession()
+    {
+        Interlocked.Increment(ref _epoch);
+        Actions.Cancel();
+        Post(() =>
+        {
+            foreach (var toast in Toasts.ToList())
+            {
+                toast.Dismiss();
+            }
+        });
+    }
 
     internal TimeProvider Clock { get; }
 
