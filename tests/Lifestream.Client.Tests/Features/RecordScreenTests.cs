@@ -404,9 +404,9 @@ public sealed class RecordScreenTests
         var raised = new List<string?>();
         vm.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
 
-        await vm.SortCommand.ExecuteAsync("-bloodType");
+        await vm.SortCommand.ExecuteAsync("-lastDonated");
 
-        Assert.Equal("bloodType", vm.SortColumn);
+        Assert.Equal("lastDonated", vm.SortColumn);
         Assert.True(vm.SortDescending);
         Assert.Contains(nameof(vm.SortColumn), raised);
         Assert.Contains(nameof(vm.SortDescending), raised);

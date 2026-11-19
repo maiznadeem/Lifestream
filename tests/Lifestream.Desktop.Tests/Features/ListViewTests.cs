@@ -234,7 +234,7 @@ public sealed class ListViewTests
         Assert.True(facts.before.Item2);
         Assert.True(facts.NameSortable);
         Assert.False(facts.PhoneSortable);
-        Assert.Equal(["name", "bloodType", "lastDonated"], facts.Sorts);
+        Assert.Equal(["name", "lastDonated"], facts.Sorts); // the keys the API accepts for donors (Contracts SortKeys); blood type no longer sorts
     }
 
     // The form (FEAT-07, FEAT-08)

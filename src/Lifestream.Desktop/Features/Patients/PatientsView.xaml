@@ -39,7 +39,7 @@
                                        AutomationProperties.Name="Patients">
             <DataGrid.Columns>
               <DataGridTextColumn Header="Name" Binding="{Binding Name}" SortMemberPath="name" Width="2*" />
-              <DataGridTextColumn Header="Blood type" Binding="{Binding BloodType, Converter={StaticResource BloodTypeText}}" SortMemberPath="bloodType" Width="100" />
+              <DataGridTextColumn Header="Blood type" Binding="{Binding BloodType, Converter={StaticResource BloodTypeText}}" CanUserSort="False" Width="100" />
               <DataGridTemplateColumn Header="Gender" Width="90">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate>
@@ -54,7 +54,7 @@
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTextColumn Header="Date of birth" Binding="{Binding DateOfBirth, Converter={StaticResource DateText}}" SortMemberPath="dateOfBirth" Width="130" />
+              <DataGridTextColumn Header="Date of birth" Binding="{Binding DateOfBirth, Converter={StaticResource DateText}}" CanUserSort="False" Width="130" />
             </DataGrid.Columns>
           </controls:LifestreamDataGrid>
           <lists:ListFooter Grid.Row="1" />

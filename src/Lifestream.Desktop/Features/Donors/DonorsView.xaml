@@ -39,7 +39,7 @@
                                        AutomationProperties.Name="Donors">
             <DataGrid.Columns>
               <DataGridTextColumn Header="Name" Binding="{Binding Name}" SortMemberPath="name" Width="2*" />
-              <DataGridTextColumn Header="Blood type" Binding="{Binding BloodType, Converter={StaticResource BloodTypeText}}" SortMemberPath="bloodType" Width="100" />
+              <DataGridTextColumn Header="Blood type" Binding="{Binding BloodType, Converter={StaticResource BloodTypeText}}" CanUserSort="False" Width="100" />
               <DataGridTemplateColumn Header="Gender" Width="90">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate>

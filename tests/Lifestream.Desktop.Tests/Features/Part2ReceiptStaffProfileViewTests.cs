@@ -213,7 +213,7 @@ public sealed class Part2ReceiptStaffProfileViewTests
 
         Assert.Equal(["Name", "Designation", "Shift", "Role", "Salary", "Phone"], facts.Headers);
         Assert.DoesNotContain(facts.Headers, h => h!.Contains("assword", StringComparison.Ordinal));
-        Assert.Equal(0, facts.Sortable); // the staff call has no sort parameter, so no column sorts
+        Assert.Equal(1, facts.Sortable); // only the name column sorts: the API sorts staff by name or username (Contracts SortKeys)
         Assert.Equal(0, facts.PasswordControls);
         Assert.Equal(1, facts.ListCalls);
         Assert.Equal("Showing 1-50 of 110", facts.Count);

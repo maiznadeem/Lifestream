@@ -4,12 +4,13 @@ using Lifestream.Client.Features.ListScreens;
 using Lifestream.Contracts;
 using Lifestream.Contracts.Patients;
 using Lifestream.Domain;
+using ContractSortKeys = Lifestream.Contracts.SortKeys;
 
 namespace Lifestream.Client.Features.Patients;
 
 /// <summary>The Patients screen: a paged, filterable list with the selected patient's detail beside it and the editor in a drawer (FEAT-01 to FEAT-08).</summary>
 public sealed class PatientsViewModel(ILifestreamApiClient api, IListViewStateStore states, IToastService toasts, IDialogService dialogs, IUiDispatcher ui)
-    : RecordListViewModel<PatientListItem, PatientDetail>(states, "patients", toasts, dialogs, ui)
+    : SortedRecordListViewModel<PatientListItem, PatientDetail>(states, "patients", toasts, dialogs, ui)
 {
     public override string PageTitle => "Patients";
 
@@ -17,7 +18,10 @@ public sealed class PatientsViewModel(ILifestreamApiClient api, IListViewStateSt
 
     protected override string RecordType => "patient";
 
-    protected override Task<ApiResult<PagedResult<PatientListItem>>> FetchPageAsync(ListRequest request, CancellationToken ct) =>
+    /// <summary>The columns that sort, as the API's validator names them (defined once in the contracts).</summary>
+    public override IReadOnlyList<string> SortKeys { get; } = ContractSortKeys.Patients;
+
+    protected override Task<ApiResult<PagedResult<PatientListItem>>> FetchSortedAsync(ListRequest request, CancellationToken ct) =>
         api.GetPatientsAsync(new PatientQuery(request.Search, BloodTypeValue, request.Page, request.PageSize, request.Sort), ct);
 
     protected override int IdOf(PatientListItem item) => item.Id;

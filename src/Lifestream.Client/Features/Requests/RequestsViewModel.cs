@@ -8,6 +8,7 @@ using Lifestream.Contracts;
 using Lifestream.Contracts.Lookups;
 using Lifestream.Contracts.Requests;
 using Lifestream.Domain;
+using ContractSortKeys = Lifestream.Contracts.SortKeys;
 
 namespace Lifestream.Client.Features.Requests;
 
@@ -119,7 +120,7 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
 
     /// <summary>One call: the search text matches the patient's name (or the request number), the blood type and status filters are sent with it.</summary>
     /// <summary>The columns that sort: when the request was placed and the date it is needed by (the API supports exactly these two).</summary>
-    public override IReadOnlyList<string> SortKeys { get; } = ["placed", "requiredBy"];
+    public override IReadOnlyList<string> SortKeys { get; } = ContractSortKeys.Requests;
 
     protected override Task<ApiResult<PagedResult<RequestListItem>>> FetchSortedAsync(ListRequest request, CancellationToken ct) =>
         _api.GetRequestsAsync(new RequestQuery(request.Search, null, _statusFilter.Value, BloodTypeValue, request.Page, request.PageSize, request.Sort), ct);

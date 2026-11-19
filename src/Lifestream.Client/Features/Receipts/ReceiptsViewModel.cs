@@ -9,6 +9,7 @@ using Lifestream.Client.Navigation;
 using Lifestream.Contracts;
 using Lifestream.Contracts.Receipts;
 using Lifestream.Domain;
+using ContractSortKeys = Lifestream.Contracts.SortKeys;
 
 namespace Lifestream.Client.Features.Receipts;
 
@@ -157,7 +158,7 @@ public sealed class ReceiptsViewModel : SortedRecordListViewModel<ReceiptRow, Re
     }
 
     /// <summary>The only column that sorts is the date (the API supports exactly "date" for receipts).</summary>
-    public override IReadOnlyList<string> SortKeys { get; } = ["date"];
+    public override IReadOnlyList<string> SortKeys { get; } = ContractSortKeys.Receipts;
 
     protected override async Task<ApiResult<PagedResult<ReceiptRow>>> FetchSortedAsync(ListRequest request, CancellationToken ct)
     {

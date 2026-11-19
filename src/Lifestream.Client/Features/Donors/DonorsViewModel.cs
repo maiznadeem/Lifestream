@@ -4,12 +4,13 @@ using Lifestream.Client.Features.ListScreens;
 using Lifestream.Contracts;
 using Lifestream.Contracts.Donors;
 using Lifestream.Domain;
+using ContractSortKeys = Lifestream.Contracts.SortKeys;
 
 namespace Lifestream.Client.Features.Donors;
 
 /// <summary>The Donors screen: a paged, filterable list with the selected donor's detail beside it and the editor in a drawer (FEAT-01 to FEAT-08).</summary>
 public sealed class DonorsViewModel(ILifestreamApiClient api, IListViewStateStore states, IToastService toasts, IDialogService dialogs, IUiDispatcher ui)
-    : RecordListViewModel<DonorListItem, DonorDetail>(states, "donors", toasts, dialogs, ui)
+    : SortedRecordListViewModel<DonorListItem, DonorDetail>(states, "donors", toasts, dialogs, ui)
 {
     public override string PageTitle => "Donors";
 
@@ -17,7 +18,10 @@ public sealed class DonorsViewModel(ILifestreamApiClient api, IListViewStateStor
 
     protected override string RecordType => "donor";
 
-    protected override Task<ApiResult<PagedResult<DonorListItem>>> FetchPageAsync(ListRequest request, CancellationToken ct) =>
+    /// <summary>The columns that sort, as the API's validator names them (defined once in the contracts).</summary>
+    public override IReadOnlyList<string> SortKeys { get; } = ContractSortKeys.Donors;
+
+    protected override Task<ApiResult<PagedResult<DonorListItem>>> FetchSortedAsync(ListRequest request, CancellationToken ct) =>
         api.GetDonorsAsync(new DonorQuery(request.Search, BloodTypeValue, request.Page, request.PageSize, request.Sort), ct);
 
     protected override int IdOf(DonorListItem item) => item.Id;

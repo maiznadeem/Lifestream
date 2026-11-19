@@ -70,7 +70,7 @@
                                        SortColumn="{Binding SortColumn, Mode=OneWay}" SortDescending="{Binding SortDescending, Mode=OneWay}"
                                        AutomationProperties.Name="Staff">
             <DataGrid.Columns>
-              <DataGridTemplateColumn Header="Name" Width="2*" MinWidth="190" CanUserSort="False">
+              <DataGridTemplateColumn Header="Name" Width="2*" MinWidth="190" SortMemberPath="name">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate>
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center" feat:Edge.Left="{DynamicResource Space.12}">

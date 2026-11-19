@@ -8,6 +8,7 @@ using Lifestream.Contracts;
 using Lifestream.Contracts.Appointments;
 using Lifestream.Contracts.Lookups;
 using Lifestream.Domain;
+using ContractSortKeys = Lifestream.Contracts.SortKeys;
 
 namespace Lifestream.Client.Features.Appointments;
 
@@ -158,7 +159,7 @@ public sealed class AppointmentsViewModel : SortedRecordListViewModel<Appointmen
     }
 
     /// <summary>The only column that sorts is the appointment time; the API supports "slot" and "placed" and this screen offers the first.</summary>
-    public override IReadOnlyList<string> SortKeys { get; } = ["slot"];
+    public override IReadOnlyList<string> SortKeys { get; } = [ContractSortKeys.Slot];
 
     protected override Task<ApiResult<PagedResult<AppointmentListItem>>> FetchSortedAsync(ListRequest request, CancellationToken ct) =>
         _api.GetAppointmentsAsync(new AppointmentQuery(request.Search, _donorFilter?.Id, _statusFilter.Value, BloodTypeValue, null, null, request.Page, request.PageSize, request.Sort), ct);

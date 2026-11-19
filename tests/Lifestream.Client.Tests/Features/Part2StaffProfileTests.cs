@@ -82,20 +82,23 @@ public sealed class Part2StaffProfileTests
     }
 
     [Fact]
-    public async Task StaffSalaryRange_AcceptsDigitsOnly_AndSaysWhenFromExceedsTo()
+    public async Task StaffSalaryRange_AcceptsDigitsOnly_SaysWhenFromExceedsTo_AndIsSentToTheApi()
     {
-        var (rig, vm) = await LoadedStaffAsync(null, Samples2.StaffRow(1, "A", false, 2000), Samples2.StaffRow(2, "B", false, 4000), Samples2.StaffRow(3, "C", false, 6000), Samples2.StaffRow(4, "D", false, null));
+        var (rig, vm) = await LoadedStaffAsync(null, Samples2.StaffRow(1, "A", false, null), Samples2.StaffRow(2, "B", false, null));
+        object? Arg(int index) => rig.Recorder.Calls.Last(c => c.Name == "GetStaffAsync").Args[index];
 
         vm.SalaryFromText = "3,0a0 ";
         Assert.Equal("300", vm.SalaryFromText); // letters, commas and spaces are dropped as they arrive
         await vm.PendingRefresh;
         vm.SalaryFromText = "3000";
         await vm.PendingRefresh;
-        Assert.Equal(["B", "C"], vm.Items.Select(i => i.DisplayName)); // From 3000: 4000 and 6000
+        Assert.Equal(3000, Arg(4)); // the list's rows carry no salary, so the range is the server's to apply
+        Assert.Null(Arg(5));
 
         vm.SalaryToText = "5000";
         await vm.PendingRefresh;
-        Assert.Equal(["B"], vm.Items.Select(i => i.DisplayName));
+        Assert.Equal(3000, Arg(4));
+        Assert.Equal(5000, Arg(5));
 
         var calls = rig.Recorder.CountOf("GetStaffAsync");
         vm.SalaryToText = "1000"; // From 3000 is higher than To 1000
@@ -106,13 +109,14 @@ public sealed class Part2StaffProfileTests
         vm.SalaryToText = "9000";
         await vm.PendingRefresh;
         Assert.Null(vm.SalaryRangeError);
-        Assert.Equal(["B", "C"], vm.Items.Select(i => i.DisplayName));
-        Assert.Equal(2, rig.Recorder.CountOf("GetStaffAsync")); // the initial list and one full fetch; typing the rest of the range reused it
-        Assert.Equal(200, rig.Recorder.Calls.Last(c => c.Name == "GetStaffAsync").Args[2]); // the full fetch is one call of the maximum page size
+        Assert.Equal(3000, Arg(4));
+        Assert.Equal(9000, Arg(5));
+        Assert.Equal(2, vm.Items.Count); // what the server answered is what is shown
 
         await vm.ClearFiltersCommand.ExecuteAsync();
         Assert.Equal(string.Empty, vm.SalaryFromText);
-        Assert.Equal(4, vm.Items.Count);
+        Assert.Null(Arg(4));
+        Assert.Null(Arg(5));
     }
 
     [Fact]
