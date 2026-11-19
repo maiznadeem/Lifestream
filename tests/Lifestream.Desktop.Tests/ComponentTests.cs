@@ -148,6 +148,8 @@ public sealed class ComponentTests
         return (surface, root, viewModel);
     }
 
+    [Trait("Category", "Perf")] // asserts a wall-clock budget: runs in the perf pass (tests/perf/run-perf.ps1), not in the loaded default run
+    [Trait("PerfPhase", "timing")]
     [Fact]
     public void Skeleton_AppearsWithin100msOfADataRequest_AndIsReplacedInPlaceWithNoLayoutShift()
     {

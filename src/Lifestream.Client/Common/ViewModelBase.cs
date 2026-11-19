@@ -213,7 +213,7 @@ public abstract partial class ViewModelBase : ObservableObject, IDisposable
         catch (Exception ex)
         {
             ShowError("Something went wrong while loading this screen.", ex.Message);
-            AsyncRelayCommand.DefaultErrorHandler(ex);
+            AsyncRelayCommand.ReportError(ex);
         }
         finally
         {
@@ -233,7 +233,17 @@ public abstract partial class ViewModelBase : ObservableObject, IDisposable
     private bool _timedOut;
 
     /// <summary>Stops a load that is in flight (the "Cancel" of the waking state).</summary>
-    public void CancelLoad() => _loadCts?.Cancel();
+    public void CancelLoad()
+    {
+        try
+        {
+            _loadCts?.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // The load finished (and disposed its source) between reading the field and cancelling: there is nothing left to cancel.
+        }
+    }
 
     /// <summary>The "Cancel" button of the waking banner, on every screen that shows one (SHELL-07).</summary>
     [NoOperationRunner("It only cancels the load in flight; it makes no API call.")]
@@ -390,7 +400,7 @@ public abstract partial class ViewModelBase : ObservableObject, IDisposable
     {
         if (disposing)
         {
-            _loadCts?.Cancel();
+            CancelLoad();
             _loadCts?.Dispose();
             _timeoutTimer?.Dispose();
             _wakingTimer?.Dispose();

@@ -8,7 +8,6 @@ using Lifestream.Client.Tests.Fakes;
 namespace Lifestream.Client.Tests;
 
 /// <summary>SHELL-02: sign-in through the REAL LifestreamApiClient and WakeAwareHandler, with only the network stubbed.</summary>
-[Collection("GlobalErrorHandler")]
 public sealed class LoginRealClientTests
 {
     [Theory]
@@ -27,15 +26,9 @@ public sealed class LoginRealClientTests
         using var api = new LifestreamApiClient(http, rig.Session);
         var vm = new LoginViewModel(api, rig.Session, rig.Get<IAppFlow>()) { Username = "u", Password = TestSecrets.P };
         var captured = new List<Exception>();
-        var previous = AsyncRelayCommand.DefaultErrorHandler;
-        AsyncRelayCommand.DefaultErrorHandler = captured.Add;
-        try
+        using (AsyncRelayCommand.CaptureErrors(captured.Add))
         {
             await vm.SignInCommand.ExecuteAsync();
-        }
-        finally
-        {
-            AsyncRelayCommand.DefaultErrorHandler = previous;
         }
 
         Assert.Empty(captured);
@@ -57,15 +50,9 @@ public sealed class LoginRealClientTests
         using var api = new LifestreamApiClient(http, rig.Session);
         var vm = new LoginViewModel(api, rig.Session, rig.Get<IAppFlow>()) { Username = "u", Password = TestSecrets.P };
         var captured = new List<Exception>();
-        var previous = AsyncRelayCommand.DefaultErrorHandler;
-        AsyncRelayCommand.DefaultErrorHandler = captured.Add;
-        try
+        using (AsyncRelayCommand.CaptureErrors(captured.Add))
         {
             await vm.SignInCommand.ExecuteAsync();
-        }
-        finally
-        {
-            AsyncRelayCommand.DefaultErrorHandler = previous;
         }
 
         Assert.Empty(captured);

@@ -23,6 +23,8 @@ public sealed class ColdDashboardRenderTests
     private static bool ChartsDrawn(byte[] png) =>
         StaHost.CountPixelsNear(png, 0xFF, 0x7A, 0x8A, 3) > 400 && StaHost.CountPixelsNear(png, 0x7C, 0xB8, 0xFF, 3) > 400;
 
+    [Trait("Category", "Perf")] // asserts a wall-clock budget: runs in the perf pass (tests/perf/run-perf.ps1), not in the loaded default run
+    [Trait("PerfPhase", "timing")]
     [Fact]
     [Trait("Category", "ColdPerf")]
     public void Dashboard_FirstChartRenderOfTheProcess_FinishesWithin300ms_OfTheDataArriving_FakeApi()

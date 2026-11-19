@@ -41,6 +41,32 @@ public sealed class AsyncRelayCommand : ICommand, System.ComponentModel.INotifyP
     /// <summary>Receives every captured exception. The composition root points it at the error reporter.</summary>
     public static Action<Exception> DefaultErrorHandler { get; set; } = static _ => { };
 
+    private static readonly AsyncLocal<Action<Exception>?> ScopedErrorHandler = new();
+
+    /// <summary>
+    /// Sends <paramref name="exception"/> to the handler of the current async flow if <see cref="CaptureErrors"/> set one, otherwise to
+    /// <see cref="DefaultErrorHandler"/>.
+    /// </summary>
+    internal static void ReportError(Exception exception) => (ScopedErrorHandler.Value ?? DefaultErrorHandler)(exception);
+
+    /// <summary>
+    /// Makes <paramref name="handler"/> receive the captured exceptions of the code that runs under the caller (and what it awaits), instead of
+    /// <see cref="DefaultErrorHandler"/>, until the result is disposed. Other threads and other tests keep the default, so a test can look at the
+    /// errors of its own commands without swapping the process-wide handler under tests that run in parallel.
+    /// </summary>
+    public static IDisposable CaptureErrors(Action<Exception> handler)
+    {
+        ArgumentNullException.ThrowIfNull(handler);
+        var previous = ScopedErrorHandler.Value;
+        ScopedErrorHandler.Value = handler;
+        return new ErrorCapture(previous);
+    }
+
+    private sealed class ErrorCapture(Action<Exception>? previous) : IDisposable
+    {
+        public void Dispose() => ScopedErrorHandler.Value = previous;
+    }
+
     public event EventHandler? CanExecuteChanged;
 
     public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
@@ -111,7 +137,7 @@ public sealed class AsyncRelayCommand : ICommand, System.ComponentModel.INotifyP
         catch (Exception ex)
         {
             LastException = ex;
-            DefaultErrorHandler(ex);
+            ReportError(ex);
         }
         finally
         {

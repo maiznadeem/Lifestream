@@ -17,6 +17,13 @@ public sealed class Part2AppointmentTests
 {
     private static readonly DateOnly Day = new(2027, 3, 10);
 
+    /// <summary>Waits for everything the editor started on its own: the day's times and the donor's eligibility check. Saving is disabled while either runs, so a test that saved after the times alone passed or failed with the timing.</summary>
+    private static async Task Settled(AppointmentEditorViewModel form)
+    {
+        await form.PendingSlots;
+        await form.PendingDonor;
+    }
+
     private static Part2Rig RigWithSlots()
     {
         var rig = new Part2Rig();
@@ -45,12 +52,12 @@ public sealed class Part2AppointmentTests
         Assert.Equal(rig.Today, form.EarliestDate); // the date field's minimum
 
         form.Date = rig.Today.AddDays(-1);
-        await form.PendingSlots;
+        await Settled(form);
         Assert.False(form.ValidateAll());
         Assert.Contains("past", form[nameof(AppointmentEditorViewModel.Date)]!, StringComparison.OrdinalIgnoreCase);
 
         form.Date = Day;
-        await form.PendingSlots;
+        await Settled(form);
         Assert.Equal(6, form.Slots.Count);
         var taken = form.Slots.Single(s => s.IsTaken);
         Assert.False(taken.IsAvailable);
@@ -80,7 +87,7 @@ public sealed class Part2AppointmentTests
         rig.Fake.On("BookAppointmentAsync", ApiResult<AppointmentDetail>.Ok(Samples2.Appointment()));
         var form = await BookingWithDonorAsync(rig);
         form.Date = Day;
-        await form.PendingSlots;
+        await Settled(form);
         form.SelectedSlot = form.Slots.Single(s => s.Display == "10:30");
 
         await form.SaveCommand.ExecuteAsync();
@@ -98,7 +105,7 @@ public sealed class Part2AppointmentTests
         var plus5 = TimeZoneInfo.CreateCustomTimeZone("plus5", TimeSpan.FromHours(5), "plus5", "plus5");
         var form = rig.BookingForm(zone: plus5);
         form.Date = Day;
-        await form.PendingSlots;
+        await Settled(form);
 
         Assert.Equal(["14:00", "14:30", "15:00", "15:30", "17:00", "18:00"], form.Slots.Select(s => s.Display));
         form.SelectedSlot = form.Slots.Single(s => s.Display == "15:30"); // 10:30 UTC
@@ -140,7 +147,7 @@ public sealed class Part2AppointmentTests
         rig.Fake.On("GetDonorAsync", ApiResult<DonorDetail>.Ok(Samples2.RestedDonor()));
         var form = rig.BookingForm();
         form.Date = Day;
-        await form.PendingSlots;
+        await Settled(form);
 
         form.TimeText = "1:00 PM";
         Assert.Equal(new TimeOnly(13, 0), form.SelectedTime);
@@ -186,12 +193,12 @@ public sealed class Part2AppointmentTests
         rig.Fake.On("GetSlotsAsync", ApiResult<IReadOnlyList<SlotInfo>>.Ok([]));
         var form = rig.BookingForm();
         form.Date = Day;
-        await form.PendingSlots;
+        await Settled(form);
         Assert.Equal("The clinic has no times on that day.", form.SlotsMessage);
 
         rig.Fake.On("GetSlotsAsync", FakeApiClient.Unreachable<IReadOnlyList<SlotInfo>>());
         form.Date = Day.AddDays(1);
-        await form.PendingSlots;
+        await Settled(form);
         Assert.Empty(form.Slots);
         Assert.Contains("Couldn't load", form.SlotsMessage, StringComparison.Ordinal);
     }
@@ -205,7 +212,7 @@ public sealed class Part2AppointmentTests
         rig.Fake.On("BookAppointmentAsync", ApiResult<AppointmentDetail>.Ok(Samples2.Appointment()));
         var form = await BookingWithDonorAsync(rig, Samples2.RecentDonor());
         form.Date = rig.Today.AddDays(10);
-        await form.PendingSlots;
+        await Settled(form);
         form.SelectedSlot = form.Slots.First(s => s.IsAvailable);
 
         Assert.Equal(BannerState.NotEligible, form.Banner.State);
@@ -293,12 +300,12 @@ public sealed class Part2AppointmentTests
         var rig = RigWithSlots();
         rig.Fake.On("RescheduleAppointmentAsync", ApiResult<AppointmentDetail>.Ok(Samples2.Appointment()));
         var form = rig.RescheduleForm(Samples2.Appointment()); // 10:30 on 10 Mar 2027
-        await form.PendingSlots;
+        await Settled(form);
         Assert.Equal(new TimeOnly(10, 30), form.SelectedTime);
         Assert.False(form.HasUnsavedChanges);
 
         form.Date = Day.AddDays(3); // only the date
-        await form.PendingSlots;
+        await Settled(form);
         Assert.Equal(new TimeOnly(10, 30), form.SelectedTime); // the free 10:30 slot of the new day is kept
         await form.SaveCommand.ExecuteAsync();
 
@@ -314,11 +321,11 @@ public sealed class Part2AppointmentTests
         rig.Fake.On("RescheduleAppointmentAsync", ApiResult<AppointmentDetail>.Ok(Samples2.Appointment()));
         var plus5 = TimeZoneInfo.CreateCustomTimeZone("plus5", TimeSpan.FromHours(5), "plus5", "plus5");
         var form = rig.RescheduleForm(Samples2.Appointment(), plus5); // 15:30 local
-        await form.PendingSlots;
+        await Settled(form);
         Assert.Equal(new TimeOnly(15, 30), form.SelectedTime);
 
         form.Date = Day.AddDays(1);
-        await form.PendingSlots;
+        await Settled(form);
         await form.SaveCommand.ExecuteAsync();
 
         Assert.Equal(new DateTime(2027, 3, 11, 10, 30, 0, DateTimeKind.Utc), rig.Recorder.LastArg<RescheduleAppointmentRequest>("RescheduleAppointmentAsync").SlotStartUtc);
@@ -332,7 +339,7 @@ public sealed class Part2AppointmentTests
         rig.Fake.On("RescheduleAppointmentAsync", ApiResult<AppointmentDetail>.Ok(Samples2.Appointment()));
         var form = rig.RescheduleForm(Samples2.Appointment());
         form.Date = Day.AddDays(5);
-        await form.PendingSlots;
+        await Settled(form);
 
         await form.SaveCommand.ExecuteAsync();
 
@@ -344,10 +351,10 @@ public sealed class Part2AppointmentTests
     {
         var rig = RigWithSlots();
         var form = rig.RescheduleForm(Samples2.Appointment());
-        await form.PendingSlots;
+        await Settled(form);
 
         form.Date = Day.AddDays(1);
-        await form.PendingSlots;
+        await Settled(form);
         form.TimeText = "9:30 AM"; // taken on every day of the fake clinic
         await form.SaveCommand.ExecuteAsync();
 
@@ -360,7 +367,7 @@ public sealed class Part2AppointmentTests
     {
         var rig = RigWithSlots();
         var form = rig.RescheduleForm(Samples2.Appointment());
-        await form.PendingSlots;
+        await Settled(form);
         await form.PendingDonor; // the donor check also gates Save; waiting for it removes a race with the thread pool
         EditorClosedEventArgs? closed = null;
         form.Closed += (_, e) => closed = e;
@@ -378,11 +385,11 @@ public sealed class Part2AppointmentTests
         rig.Fake.On("BookAppointmentAsync", FakeApiClient.Fail<AppointmentDetail>(409, ProblemCodes.SlotTaken, "That slot is already taken."));
         var form = await BookingWithDonorAsync(rig);
         form.Date = Day;
-        await form.PendingSlots;
+        await Settled(form);
         form.SelectedSlot = form.Slots.Single(s => s.Display == "10:30");
 
         await form.SaveCommand.ExecuteAsync();
-        await form.PendingSlots;
+        await Settled(form);
 
         Assert.Equal("Someone else just took that time. Choose another.", form.GetErrorFor(AppointmentEditorViewModel.Time));
         Assert.Equal(2, rig.Recorder.CountOf("GetSlotsAsync")); // the list was refreshed
@@ -396,7 +403,7 @@ public sealed class Part2AppointmentTests
         rig.Fake.On("BookAppointmentAsync", ApiResult<AppointmentDetail>.Fail(new ApiProblem(400, ProblemCodes.Validation, "Validation failed", "c", null, new Dictionary<string, string[]> { ["slotStartUtc"] = ["must be in the future"] })));
         var form = await BookingWithDonorAsync(rig);
         form.Date = Day;
-        await form.PendingSlots;
+        await Settled(form);
         form.SelectedSlot = form.Slots.Single(s => s.Display == "10:30");
 
         await form.SaveCommand.ExecuteAsync();
@@ -411,7 +418,7 @@ public sealed class Part2AppointmentTests
         var rig = RigWithSlots();
         var form = rig.BookingForm();
         form.Date = Day;
-        await form.PendingSlots;
+        await Settled(form);
         rig.Dialogs.Answer = false;
 
         await form.CancelCommand.ExecuteAsync();
