@@ -1,0 +1,69 @@
+{
+  "dataset": "demo",
+  "generatedBy": "tools/generate-screenshots.ps1",
+  "files": [
+    {
+      "screen": "login",
+      "file": "login.png",
+      "width": 1366,
+      "height": 768,
+      "sha256": "294819b865c88e5f4e1cb3f5ae5010d757547507a7536f26ffcbd1394f8dac65"
+    },
+    {
+      "screen": "dashboard",
+      "file": "dashboard.png",
+      "width": 1366,
+      "height": 768,
+      "sha256": "90ebf3aa0a13328421c7c5cb34c1db849b87ad025a4e0a05ad3aa3d3fb3d3c55"
+    },
+    {
+      "screen": "donors",
+      "file": "donors.png",
+      "width": 1366,
+      "height": 768,
+      "sha256": "206d544e16a20718f931b06b07dee8f51db5d0ec0ec8c05bc7568993abc3459c"
+    },
+    {
+      "screen": "patients",
+      "file": "patients.png",
+      "width": 1366,
+      "height": 768,
+      "sha256": "aacda3d4fe5ba71d82af20a9363048a8c332039611fc884509896d18996198f3"
+    },
+    {
+      "screen": "appointments",
+      "file": "appointments.png",
+      "width": 1366,
+      "height": 768,
+      "sha256": "14b9f9ea4406c9d796fbad4d4e580cb1ea6581b1a14f9b14b7161b3accad2d37"
+    },
+    {
+      "screen": "requests",
+      "file": "requests.png",
+      "width": 1366,
+      "height": 768,
+      "sha256": "3f94484ab957aef4b7e8b979e09e7ff30618684c24af86c910125506452dd94d"
+    },
+    {
+      "screen": "stock",
+      "file": "stock.png",
+      "width": 1366,
+      "height": 768,
+      "sha256": "53affbb734b4648d6060e3747ed27c866dd566c3373a2d526666a3a341959217"
+    },
+    {
+      "screen": "receipts",
+      "file": "receipts.png",
+      "width": 1366,
+      "height": 768,
+      "sha256": "f1b417ce145c5346e2429dd3d22b0f5dc4612fc5bb3248cb7213071fd3f6ef7d"
+    },
+    {
+      "screen": "staff",
+      "file": "staff.png",
+      "width": 1366,
+      "height": 768,
+      "sha256": "b4824b48135f834004b09c1fe96244d90eb24875afc477cab32e1ac40ce46283"
+    }
+  ]
+}

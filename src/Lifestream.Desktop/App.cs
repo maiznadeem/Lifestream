@@ -39,6 +39,7 @@ public sealed class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        LaunchProbe.Configure(e.Args);
 
         // Order matters. The host (configuration, logging, DI) comes first, then the global exception handlers, and only then the theme and the
         // fonts: anything that goes wrong while loading them is logged and shown as a friendly dialog instead of ending the process unseen (SHELL-01).
