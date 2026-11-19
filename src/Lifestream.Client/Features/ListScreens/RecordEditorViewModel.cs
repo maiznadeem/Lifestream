@@ -33,7 +33,7 @@ public abstract partial class RecordEditorViewModel : FormViewModelBase
         Today = clock;
         RecordType = recordType;
         IsNew = isNew;
-        SaveCommand = new AsyncRelayCommand(SaveAsync);
+        SaveCommand = new AsyncRelayCommand(SaveAsync, () => CanSave);
         CancelCommand = new AsyncRelayCommand(CancelAsync);
         ReloadCommand = new AsyncRelayCommand(ReloadAsync);
         ErrorsChanged += (_, _) => OnPropertyChanged("Item[]"); // lets the view bind {Binding [Name]} to a field's message
@@ -62,6 +62,12 @@ public abstract partial class RecordEditorViewModel : FormViewModelBase
     public string SaveBusyText => IsNew ? "Adding..." : "Saving...";
 
     public AsyncRelayCommand SaveCommand { get; }
+
+    /// <summary>False while the form is waiting for something its save depends on (the times of the chosen day); the Save button is then disabled.</summary>
+    protected virtual bool CanSave => true;
+
+    /// <summary>Re-reads <see cref="CanSave"/> into the Save button.</summary>
+    protected void RaiseCanSaveChanged() => SaveCommand.RaiseCanExecuteChanged();
 
     public AsyncRelayCommand CancelCommand { get; }
 
@@ -120,6 +126,11 @@ public abstract partial class RecordEditorViewModel : FormViewModelBase
 
     private async Task SaveAsync(CancellationToken ct)
     {
+        if (!CanSave)
+        {
+            return;
+        }
+
         FormError = null;
         HasConflict = false;
         _serverErrors.Clear();

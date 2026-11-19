@@ -14,7 +14,8 @@ using Microsoft.Extensions.Caching.Memory;
 namespace Lifestream.Api.Features;
 
 /// <summary>Query for GET staff (the contract has no StaffQuery, so it lives with the API).</summary>
-public sealed record StaffListQuery(string? Search = null, int Page = 1, int PageSize = Paging.DefaultPageSize, string? Sort = null);
+/// <summary>MinSalary and MaxSalary (optional, inclusive) filter by salary; only an Admin may use them, because a filter would reveal salaries the list hides.</summary>
+public sealed record StaffListQuery(string? Search = null, int Page = 1, int PageSize = Paging.DefaultPageSize, string? Sort = null, int? MinSalary = null, int? MaxSalary = null);
 
 /// <summary>Rules shared by staff management and the profile: passwords and photo storage.</summary>
 public sealed class StaffService(LifestreamDbContext db, TimeProvider time)
@@ -101,8 +102,8 @@ public static class StaffEndpoints
     /// </summary>
     private const string AdminsLock = "staff-admins";
 
-    private static readonly SortMap<Staff> Sorts = new SortMap<Staff>(s => s.Id, "name")
-        .Add("name", s => s.DisplayName).Add("username", s => s.Username);
+    private static readonly SortMap<Staff> Sorts = new SortMap<Staff>(s => s.Id, SortKeys.Name)
+        .Add(SortKeys.Name, s => s.DisplayName).Add(SortKeys.Username, s => s.Username);
 
     public static void Map(RouteGroupBuilder api)
     {
@@ -129,6 +130,41 @@ public static class StaffEndpoints
             var like = Lists.PrefixPattern(term);
             var id = int.TryParse(term, out var parsed) ? parsed : -1;
             filtered = filtered.Where(s => s.Id == id || EF.Functions.Like(s.DisplayName, like, "\\") || EF.Functions.Like(s.Username, like, "\\"));
+        }
+
+        if (q.MinSalary is not null || q.MaxSalary is not null)
+        {
+            if (!user.IsAdmin)
+            {
+                throw ApiException.Forbidden("Only an administrator can filter by salary.");
+            }
+
+            var check = new Check();
+            if (q.MinSalary is < 0)
+            {
+                check.Fail("minSalary", "must not be negative");
+            }
+
+            if (q.MaxSalary is < 0)
+            {
+                check.Fail("maxSalary", "must not be negative");
+            }
+
+            if (q.MinSalary is { } low && q.MaxSalary is { } high && low > high)
+            {
+                check.Fail("minSalary", "must not be higher than maxSalary");
+            }
+
+            check.ThrowIfInvalid();
+            if (q.MinSalary is { } min)
+            {
+                filtered = filtered.Where(s => s.Salary >= min);
+            }
+
+            if (q.MaxSalary is { } max)
+            {
+                filtered = filtered.Where(s => s.Salary <= max);
+            }
         }
 
         var sorted = Sorts.Apply(filtered, q.Sort).Skip((page - 1) * size).Take(size);

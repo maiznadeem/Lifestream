@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using Lifestream.Client.Features.Dashboard;
+using Lifestream.Desktop.Theme;
 using LiveChartsCore.Measure;
 using LiveChartsCore.SkiaSharpView;
 using LiveChartsCore.SkiaSharpView.Painting;
@@ -19,6 +20,9 @@ namespace Lifestream.Desktop.Features.Dashboard;
 public partial class DashboardView : UserControl
 {
     private DashboardViewModel? _model;
+
+    /// <summary>How many times the charts have been drawn in this process (0 means the next draw is the first, cold one; for tests).</summary>
+    internal static int ChartDrawCount { get; private set; }
 
     public DashboardView()
     {
@@ -99,6 +103,11 @@ public partial class DashboardView : UserControl
 
     private void Draw(DashboardViewModel model)
     {
+        if (!ChartWarmUp.IsRunning)
+        {
+            ChartDrawCount++;
+        }
+
         var labels = model.MonthLabels;
 
         DonationsChart.AnimationsSpeed = TimeSpan.Zero;
@@ -109,8 +118,8 @@ public partial class DashboardView : UserControl
                 Name = "Donated",
                 Values = [.. model.DonatedByMonth],
                 Fill = Ink("Color.Chart1"),
-                MaxBarWidth = 24,
-                Padding = 2,
+                MaxBarWidth = ThemeTokens.Space("Space.24"),
+                Padding = ThemeTokens.Space("Chart.BarGap"),
                 AnimationsSpeed = TimeSpan.Zero,
             },
             new ColumnSeries<int>
@@ -118,8 +127,8 @@ public partial class DashboardView : UserControl
                 Name = "Issued",
                 Values = [.. model.IssuedByMonth],
                 Fill = Ink("Color.Chart2"),
-                MaxBarWidth = 24,
-                Padding = 2,
+                MaxBarWidth = ThemeTokens.Space("Space.24"),
+                Padding = ThemeTokens.Space("Chart.BarGap"),
                 AnimationsSpeed = TimeSpan.Zero,
             },
         ];

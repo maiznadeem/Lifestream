@@ -16,8 +16,8 @@ namespace Lifestream.Api.Features;
 
 public static class AppointmentEndpoints
 {
-    private static readonly SortMap<Appointment> Sorts = new SortMap<Appointment>(a => a.Id, "slot", defaultDescending: true)
-        .Add("slot", a => a.SlotStartUtc).Add("placed", a => a.PlacedAtUtc);
+    private static readonly SortMap<Appointment> Sorts = new SortMap<Appointment>(a => a.Id, SortKeys.Slot, defaultDescending: true)
+        .Add(SortKeys.Slot, a => a.SlotStartUtc).Add(SortKeys.Placed, a => a.PlacedAtUtc);
 
     public static void Map(RouteGroupBuilder api)
     {
@@ -149,7 +149,7 @@ public static class AppointmentEndpoints
             throw new ApiException(
                 StatusCodes.Status409Conflict,
                 ProblemCodes.Ineligible,
-                "The donor is not eligible on that day. Give an override reason to book anyway.",
+                "The donor is not eligible on that day. Give an override reason to go ahead anyway.",
                 new Dictionary<string, string[]> { ["reasons"] = [.. eligibility.Reasons] });
         }
     }
@@ -203,6 +203,7 @@ public static class AppointmentEndpoints
     {
         var r = await http.ReadBodyAsync<RescheduleAppointmentRequest>(ct);
         var version = RowVersions.FromText(r.RowVersion);
+        new Check().Text("overrideReason", r.OverrideReason, 300, required: false).ThrowIfInvalid();
         var requested = Dates.Utc(r.SlotStartUtc);
         if (requested == default || requested.Year < 2000)
         {
@@ -224,12 +225,16 @@ public static class AppointmentEndpoints
             CheckSlot(check, clinic, slot, time.GetUtcNow().UtcDateTime);
             check.ThrowIfInvalid();
 
-            // The new day is judged like a booking: a donor who is ineligible on it needs the override reason the appointment already
-            // carries (a reschedule request has no field for a new one).
+            // The new day is judged like a booking: a donor who is ineligible on it needs an override reason, the one in this request
+            // or else the one the appointment already carries; a reason that was needed is stored on the appointment.
             var donor = await db.Donors.AsNoTracking().Where(d => d.Id == appointment.DonorId).Select(d => new { d.DateOfBirth, d.LastDonated, d.MedicalHold }).FirstAsync(token);
-            RequireReasonWhenIneligible(
-                Eligibility.Evaluate(donor.DateOfBirth, donor.LastDonated, DateOnly.FromDateTime(slot), donor.MedicalHold),
-                DonorEndpoints.Blank(appointment.OverrideReason));
+            var eligibility = Eligibility.Evaluate(donor.DateOfBirth, donor.LastDonated, DateOnly.FromDateTime(slot), donor.MedicalHold);
+            var reason = DonorEndpoints.Blank(r.OverrideReason) ?? DonorEndpoints.Blank(appointment.OverrideReason);
+            RequireReasonWhenIneligible(eligibility, reason);
+            if (!eligibility.IsEligible)
+            {
+                appointment.OverrideReason = reason;
+            }
 
             await db.LockAsync($"slot:{slot.Ticks}", token);
             var taken = await db.Appointments.AnyAsync(
@@ -282,7 +287,7 @@ public static class AppointmentEndpoints
     private static async Task<Created<ReceiptDetail>> RecordDonationAsync(int id, HttpRequest http, LifestreamDbContext db, CurrentUser user, TimeProvider time, IOptions<ClinicSettings> clinic, CancellationToken ct)
     {
         var r = await http.ReadBodyAsync<RecordDonationRequest>(ct);
-        new Check().Range("units", r.Units, 1, clinic.Value.MaxDonationUnits).Text("notes", r.Notes, 500, required: false).ThrowIfInvalid();
+        new Check().Range("units", r.Units, 1, clinic.Value.MaxDonationUnits).Text("notes", r.Notes, 500, required: false).Text("overrideReason", r.OverrideReason, 300, required: false).ThrowIfInvalid();
         var staffId = await user.StaffIdAsync(ct);
 
         var receiptId = await db.RunAsync(async token =>
@@ -301,6 +306,16 @@ public static class AppointmentEndpoints
 
             var now = time.GetUtcNow().UtcDateTime;
             var donor = appointment.Donor!;
+
+            // The donor is judged on the day of the donation (API-11): ineligible (age, under 90 days, medical hold) needs an override reason, kept on the appointment.
+            var eligibility = Eligibility.Evaluate(donor.DateOfBirth, donor.LastDonated, DateOnly.FromDateTime(now), donor.MedicalHold);
+            var reason = DonorEndpoints.Blank(r.OverrideReason);
+            RequireReasonWhenIneligible(eligibility, reason);
+            if (!eligibility.IsEligible)
+            {
+                appointment.OverrideReason = reason;
+            }
+
             var receipt = new Receipt
             {
                 Kind = ReceiptKind.Donation,

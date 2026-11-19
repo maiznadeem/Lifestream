@@ -14,8 +14,8 @@ namespace Lifestream.Api.Features;
 
 public static class PatientEndpoints
 {
-    private static readonly SortMap<Patient> Sorts = new SortMap<Patient>(p => p.Id, "name")
-        .Add("name", p => p.Name);
+    private static readonly SortMap<Patient> Sorts = new SortMap<Patient>(p => p.Id, SortKeys.Name)
+        .Add(SortKeys.Name, p => p.Name);
 
     public static void Map(RouteGroupBuilder api)
     {
@@ -24,6 +24,7 @@ public static class PatientEndpoints
         api.MapPost(ApiRoutes.Patients, CreateAsync);
         api.MapPatch(ApiRoutes.PatientById, UpdateAsync);
         api.MapDelete(ApiRoutes.PatientById, DeleteAsync);
+        api.MapPost(ApiRoutes.PatientRestore, RestoreAsync);
     }
 
     internal static IQueryable<Patient> Filter(IQueryable<Patient> patients, string? search, BloodType? bloodType)
@@ -168,17 +169,22 @@ public static class PatientEndpoints
         return ToDetail(patient);
     }
 
-    private static async Task<NoContent> DeleteAsync(int id, LifestreamDbContext db, CancellationToken ct)
+    private static async Task<NoContent> DeleteAsync(int id, LifestreamDbContext db, TimeProvider time, CancellationToken ct)
     {
         await db.RunAsync(async token =>
         {
             var entity = await db.Patients.FirstOrDefaultAsync(p => p.Id == id, token) ?? throw ApiException.NotFound("The patient");
+            await Tombstones.KeepAsync(db, entity, id, time, token);
             db.Patients.Remove(entity);
             await db.SaveChangesAsync(token);
             return true;
         }, ct);
         return TypedResults.NoContent();
     }
+
+    /// <summary>The Undo of a delete: the patient comes back with the same id and every value, as long as the delete was a moment ago.</summary>
+    private static async Task<PatientDetail> RestoreAsync(int id, LifestreamDbContext db, TimeProvider time, CurrentUser user, IOptions<DemoSettings> demo, CancellationToken ct) =>
+        ToDetail(await Tombstones.RestoreAsync(db, db.Patients, "Patient", id, "patient", time, token => DemoLimits.EnsureRoomAsync(db, user, demo, DemoTable.Patients, token), ct));
 
     private static PatientDetail ToDetail(Patient p) =>
         new(p.Id, p.Name, p.DateOfBirth, p.Gender, p.BloodType, p.Phone, p.Address, RowVersions.ToText(p.RowVersion));

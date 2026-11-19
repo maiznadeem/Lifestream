@@ -44,12 +44,14 @@ public sealed class AuthorizationMatrixTests(ApiFixture fx) : IClassFixture<ApiF
         new(ApiRoutes.DonorById, HttpMethod.Patch, Everyone),
         new(ApiRoutes.DonorById, HttpMethod.Delete, Everyone),
         new(ApiRoutes.DonorEligibility, HttpMethod.Get, Everyone),
+        new(ApiRoutes.DonorRestore, HttpMethod.Post, Everyone),
 
         new(ApiRoutes.Patients, HttpMethod.Get, Everyone),
         new(ApiRoutes.Patients, HttpMethod.Post, Everyone),
         new(ApiRoutes.PatientById, HttpMethod.Get, Everyone),
         new(ApiRoutes.PatientById, HttpMethod.Patch, Everyone),
         new(ApiRoutes.PatientById, HttpMethod.Delete, Everyone),
+        new(ApiRoutes.PatientRestore, HttpMethod.Post, Everyone),
 
         new(ApiRoutes.Appointments, HttpMethod.Get, Everyone),
         new(ApiRoutes.Appointments, HttpMethod.Post, Everyone),

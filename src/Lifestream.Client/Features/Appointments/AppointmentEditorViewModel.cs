@@ -33,6 +33,8 @@ public sealed partial class AppointmentEditorViewModel : RecordEditorViewModel
     private CancellationTokenSource? _slotsCts;
     private CancellationTokenSource? _donorCts;
     private bool _slotsKnown;
+    private DateOnly? _slotsDate; // the day the slots in the list belong to; null while a day is loading or when its times could not be loaded
+    private IReadOnlyList<string>? _refusedReasons; // set when the API refused the donor as ineligible (applied on the UI thread after the save)
     private bool _syncing;
     private bool _slotWasTaken;
 
@@ -44,6 +46,7 @@ public sealed partial class AppointmentEditorViewModel : RecordEditorViewModel
         _zone = zone ?? TimeZoneInfo.Local;
         _existing = existing;
         _id = existing?.Id;
+        Banner.PropertyChanged += OnBannerChanged;
         DeclareFormFields(nameof(DonorId), nameof(Date), nameof(Time), nameof(OverrideReason));
         if (existing is not null)
         {
@@ -55,6 +58,12 @@ public sealed partial class AppointmentEditorViewModel : RecordEditorViewModel
             DonorName = donor.Title;
         }
 
+        if (existing is not null)
+        {
+            OverrideReason = existing.OverrideReason ?? string.Empty; // the reason the appointment already carries, offered again for the new day
+            PendingDonor = LoadDonorAsync(); // the new day is judged for eligibility like a booking, so the donor's facts are needed here too
+        }
+
         // A slot that was just taken by someone else: after the failed save, show the list again with that slot disabled.
         SaveCommand.PropertyChanged += (_, e) =>
         {
@@ -62,6 +71,12 @@ public sealed partial class AppointmentEditorViewModel : RecordEditorViewModel
             {
                 _slotWasTaken = false;
                 PendingSlots = LoadSlotsAsync();
+            }
+
+            if (e.PropertyName == nameof(AsyncRelayCommand.IsRunning) && !SaveCommand.IsRunning && _refusedReasons is { } reasons)
+            {
+                _refusedReasons = null;
+                Banner.ShowRefused(reasons); // the donor turned out not to be eligible: the reason field appears
             }
         };
     }
@@ -87,6 +102,14 @@ public sealed partial class AppointmentEditorViewModel : RecordEditorViewModel
     public ObservableCollection<SlotChoice> Slots { get; } = [];
 
     public EligibilityBannerViewModel Banner { get; } = new();
+
+    private void OnBannerChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(EligibilityBannerViewModel.State))
+        {
+            RaiseCanSaveChanged();
+        }
+    }
 
     /// <summary>Completes when the slot list started by the last date change has finished (for tests).</summary>
     internal Task PendingSlots { get; private set; } = Task.CompletedTask;
@@ -125,6 +148,11 @@ public sealed partial class AppointmentEditorViewModel : RecordEditorViewModel
 
     [ObservableProperty]
     public partial bool IsLoadingSlots { get; set; }
+
+    /// <summary>The action waits for the chosen day's times (a slot of the old day must never be sent for the new one) and for the donor check (the answer decides whether a reason is needed).</summary>
+    protected override bool CanSave => !IsLoadingSlots && Banner.State != BannerState.Checking;
+
+    partial void OnIsLoadingSlotsChanged(bool value) => RaiseCanSaveChanged();
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasSlotsMessage))]
@@ -168,6 +196,14 @@ public sealed partial class AppointmentEditorViewModel : RecordEditorViewModel
     {
         FieldEdited(nameof(Date));
         RefreshBanner();
+
+        // The old day's times are gone the moment the date changes: until the new day's times arrive nothing can be chosen from them or sent with them.
+        _syncing = true;
+        SelectedSlot = null;
+        _syncing = false;
+        Slots.Clear();
+        _slotsKnown = false;
+        _slotsDate = null;
         PendingSlots = LoadSlotsAsync();
     }
 
@@ -300,6 +336,7 @@ public sealed partial class AppointmentEditorViewModel : RecordEditorViewModel
             }
 
             Slots.Clear();
+            _slotsDate = null;
             if (!result.IsOk)
             {
                 _slotsKnown = false;
@@ -316,6 +353,7 @@ public sealed partial class AppointmentEditorViewModel : RecordEditorViewModel
             }
 
             _slotsKnown = true;
+            _slotsDate = day;
             SlotsMessage = Slots.Count == 0 ? "The clinic has no times on that day." : null;
             ReconcileTime();
         }
@@ -338,6 +376,11 @@ public sealed partial class AppointmentEditorViewModel : RecordEditorViewModel
         if (SelectedTime is not { } time)
         {
             return;
+        }
+
+        if (IsUnmovedOriginal(time))
+        {
+            return; // the appointment's own time on its own day, even if that time has passed: nothing about it was changed
         }
 
         var match = Slots.FirstOrDefault(s => s.Local == time);
@@ -383,11 +426,6 @@ public sealed partial class AppointmentEditorViewModel : RecordEditorViewModel
             case Time:
                 return ValidateTime();
             case nameof(OverrideReason):
-                if (!IsNew)
-                {
-                    return null;
-                }
-
                 var reason = OverrideReason.Trim();
                 if (reason.Length > MaxReasonLength)
                 {
@@ -400,6 +438,13 @@ public sealed partial class AppointmentEditorViewModel : RecordEditorViewModel
         }
     }
 
+    /// <summary>True when rescheduling and the date and time are still the appointment's own.</summary>
+    private bool IsUnmovedOriginal(TimeOnly time) => !IsNew && Date == _baselineDate && time == _baselineTime;
+
+    /// <summary>The slot at a local time on the day the list was loaded for, or null: a slot of any other day is never a match (FEAT-11).</summary>
+    private SlotChoice? SlotAt(TimeOnly time) =>
+        _slotsDate is { } day && day == Date ? Slots.FirstOrDefault(s => s.Local == time && RecordFormatting.LocalDate(s.StartUtc, _zone) == day) : null;
+
     private string? ValidateTime()
     {
         if (SelectedTime is not { } time)
@@ -407,7 +452,17 @@ public sealed partial class AppointmentEditorViewModel : RecordEditorViewModel
             return TimeText.Trim().Length > 0 ? "Use a time like 13:00 or 1:00 PM." : "Choose a time.";
         }
 
-        if (Slots.FirstOrDefault(s => s.Local == time) is { } slot)
+        if (IsUnmovedOriginal(time))
+        {
+            return null;
+        }
+
+        if (IsLoadingSlots)
+        {
+            return "The times of that day are still loading.";
+        }
+
+        if (SlotAt(time) is { } slot)
         {
             if (slot.IsTaken)
             {
@@ -422,7 +477,7 @@ public sealed partial class AppointmentEditorViewModel : RecordEditorViewModel
             return null;
         }
 
-        if (_slotsKnown && Slots.Count > 0)
+        if (_slotsKnown && _slotsDate == Date && Slots.Count > 0)
         {
             return "The clinic has no slot at that time. Choose one of the times shown.";
         }
@@ -452,9 +507,9 @@ public sealed partial class AppointmentEditorViewModel : RecordEditorViewModel
     private DateTime SlotUtc()
     {
         var time = SelectedTime!.Value;
-        if (Slots.FirstOrDefault(s => s.Local == time) is { } slot)
+        if (SlotAt(time) is { } slot)
         {
-            return slot.StartUtc;
+            return slot.StartUtc; // only a slot of the chosen day
         }
 
         return DateTime.SpecifyKind(TryToUtc(Date!.Value, time)!.Value, DateTimeKind.Utc);
@@ -467,7 +522,7 @@ public sealed partial class AppointmentEditorViewModel : RecordEditorViewModel
         new(DonorId!.Value, SlotUtc(), Banner.RequiresReason ? OverrideReason.Trim() : null);
 
     /// <summary>The PATCH body of a reschedule: the row version and the slot, always date and time together.</summary>
-    public RescheduleAppointmentRequest BuildReschedule() => new(_rowVersion, SlotUtc());
+    public RescheduleAppointmentRequest BuildReschedule() => new(_rowVersion, SlotUtc()) { OverrideReason = Banner.RequiresReason ? OverrideReason.Trim() : null };
 
     protected override Func<CancellationToken, Task<ApiProblem?>> PrepareSubmit()
     {
@@ -517,9 +572,13 @@ public sealed partial class AppointmentEditorViewModel : RecordEditorViewModel
             return FieldProblem(problem, "slotStartUtc", "Someone else just took that time. Choose another.");
         }
 
-        return problem.Code == ProblemCodes.Ineligible
-            ? FieldProblem(problem, "overrideReason", "This donor isn't eligible. Enter the reason for booking anyway.")
-            : problem;
+        if (problem.Code == ProblemCodes.Ineligible)
+        {
+            _refusedReasons = problem.Errors is { } errors && errors.TryGetValue("reasons", out var reasons) ? [.. reasons] : [];
+            return FieldProblem(problem, "overrideReason", "This donor isn't eligible. Enter the reason for booking anyway.");
+        }
+
+        return problem;
     }
 
     private static ApiProblem FieldProblem(ApiProblem problem, string field, string message) =>
@@ -556,6 +615,7 @@ public sealed partial class AppointmentEditorViewModel : RecordEditorViewModel
     {
         if (disposing)
         {
+            Banner.PropertyChanged -= OnBannerChanged;
             _slotsCts?.Cancel();
             _slotsCts?.Dispose();
             _slotsCts = null;

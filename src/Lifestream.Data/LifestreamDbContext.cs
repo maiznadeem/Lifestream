@@ -41,6 +41,7 @@ public sealed class LifestreamDbContext(DbContextOptions<LifestreamDbContext> op
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<DemoState> DemoState => Set<DemoState>();
+    public DbSet<DeletedRecord> DeletedRecords => Set<DeletedRecord>();
 
     /// <summary>The acting staff id written to audit rows (from the token); null for system work.</summary>
     public int? CurrentStaffId { get; set; }

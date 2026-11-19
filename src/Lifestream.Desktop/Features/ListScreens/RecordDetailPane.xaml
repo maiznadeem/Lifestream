@@ -4,7 +4,7 @@
              xmlns:controls="clr-namespace:Lifestream.Desktop.Controls"
              xmlns:feat="clr-namespace:Lifestream.Desktop.Features"
              Focusable="False" IsTabStop="False">
-  <!-- The detail pane of the selected record: its facts, and the Edit and Delete actions that act on it (FEAT-04). The data context is the list view model. -->
+  <!-- The detail pane of the selected record: its facts, and the Edit and Delete actions that act on it, then any related action the screen adds in RelatedActions ("Book appointment" on a donor, FEAT-04). The data context is the list view model. -->
   <UserControl.Resources>
     <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
     <feat:NullToVisibleConverter x:Key="NullToVisible" />
@@ -23,21 +23,22 @@
           <RowDefinition Height="*" />
         </Grid.RowDefinitions>
         <TextBlock Style="{DynamicResource Text.Heading}" Text="{Binding DetailTitle}" TextWrapping="Wrap" AutomationProperties.HeadingLevel="Level2" />
-        <StackPanel Grid.Row="1" Orientation="Horizontal" feat:Edge.Top="{DynamicResource Space.12}" feat:Edge.Bottom="{DynamicResource Space.16}">
-          <Button x:Name="EditButton" Style="{DynamicResource Button.Secondary}" Command="{Binding EditCommand}" feat:Edge.Right="{DynamicResource Space.8}" AutomationProperties.Name="Edit">
+        <WrapPanel Grid.Row="1" feat:Edge.Top="{DynamicResource Space.12}" feat:Edge.Bottom="{DynamicResource Space.8}">
+          <Button x:Name="EditButton" Style="{DynamicResource Button.Secondary}" Command="{Binding EditCommand}" feat:Edge.Right="{DynamicResource Space.8}" feat:Edge.Bottom="{DynamicResource Space.8}" AutomationProperties.Name="Edit">
             <StackPanel Orientation="Horizontal">
               <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE70F;" feat:Edge.Right="{DynamicResource Space.8}" VerticalAlignment="Center" />
               <TextBlock Text="Edit" VerticalAlignment="Center" />
             </StackPanel>
           </Button>
-          <Button x:Name="DeleteButton" Style="{DynamicResource Button.Danger}" Command="{Binding DeleteCommand}" AutomationProperties.Name="Delete"
+          <Button x:Name="DeleteButton" Style="{DynamicResource Button.Danger}" Command="{Binding DeleteCommand}" feat:Edge.Right="{DynamicResource Space.8}" feat:Edge.Bottom="{DynamicResource Space.8}" AutomationProperties.Name="Delete"
                   controls:ButtonAssist.IsBusy="{Binding DeleteCommand.IsRunning}" controls:ButtonAssist.BusyText="Deleting...">
             <StackPanel Orientation="Horizontal">
               <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE74D;" feat:Edge.Right="{DynamicResource Space.8}" VerticalAlignment="Center" />
               <TextBlock Text="Delete" VerticalAlignment="Center" />
             </StackPanel>
           </Button>
-        </StackPanel>
+          <ContentControl Focusable="False" IsTabStop="False" feat:Edge.Bottom="{DynamicResource Space.8}" Content="{Binding RelatedActions, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+        </WrapPanel>
         <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Focusable="False">
           <ItemsControl ItemsSource="{Binding DetailFacts}" Focusable="False" AutomationProperties.Name="Record details">
             <ItemsControl.ItemTemplate>

@@ -14,8 +14,8 @@ namespace Lifestream.Api.Features;
 
 public static class DonorEndpoints
 {
-    private static readonly SortMap<Donor> Sorts = new SortMap<Donor>(d => d.Id, "name")
-        .Add("name", d => d.Name).Add("lastDonated", d => d.LastDonated!);
+    private static readonly SortMap<Donor> Sorts = new SortMap<Donor>(d => d.Id, SortKeys.Name)
+        .Add(SortKeys.Name, d => d.Name).Add(SortKeys.LastDonated, d => d.LastDonated!);
 
     public static void Map(RouteGroupBuilder api)
     {
@@ -25,6 +25,7 @@ public static class DonorEndpoints
         api.MapPost(ApiRoutes.Donors, CreateAsync);
         api.MapPatch(ApiRoutes.DonorById, UpdateAsync);
         api.MapDelete(ApiRoutes.DonorById, DeleteAsync);
+        api.MapPost(ApiRoutes.DonorRestore, RestoreAsync);
     }
 
     internal static IQueryable<Donor> Filter(IQueryable<Donor> donors, string? search, BloodType? bloodType)
@@ -189,17 +190,22 @@ public static class DonorEndpoints
         return ToDetail(donor);
     }
 
-    private static async Task<NoContent> DeleteAsync(int id, LifestreamDbContext db, CancellationToken ct)
+    private static async Task<NoContent> DeleteAsync(int id, LifestreamDbContext db, TimeProvider time, CancellationToken ct)
     {
         await db.RunAsync(async token =>
         {
             var entity = await db.Donors.FirstOrDefaultAsync(d => d.Id == id, token) ?? throw ApiException.NotFound("The donor");
+            await Tombstones.KeepAsync(db, entity, id, time, token);
             db.Donors.Remove(entity);
             await db.SaveChangesAsync(token);
             return true;
         }, ct);
         return TypedResults.NoContent();
     }
+
+    /// <summary>The Undo of a delete: the donor comes back with the same id and every value, as long as the delete was a moment ago.</summary>
+    private static async Task<DonorDetail> RestoreAsync(int id, LifestreamDbContext db, TimeProvider time, CurrentUser user, IOptions<DemoSettings> demo, CancellationToken ct) =>
+        ToDetail(await Tombstones.RestoreAsync(db, db.Donors, "Donor", id, "donor", time, token => DemoLimits.EnsureRoomAsync(db, user, demo, DemoTable.Donors, token), ct));
 
     internal static string? Blank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 

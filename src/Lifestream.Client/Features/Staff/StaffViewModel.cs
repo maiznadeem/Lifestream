@@ -5,6 +5,7 @@ using Lifestream.Client.Features.ListScreens;
 using Lifestream.Client.Session;
 using Lifestream.Contracts;
 using Lifestream.Contracts.Staff;
+using ContractSortKeys = Lifestream.Contracts.SortKeys;
 
 namespace Lifestream.Client.Features.Staff;
 
@@ -24,8 +25,6 @@ public sealed partial class StaffViewModel : SortedRecordListViewModel<StaffRow,
     private readonly ISessionService _session;
     private readonly SemaphoreSlim _photoGate = new(ConcurrentPhotoRequests);
     private readonly CancellationTokenSource _photoCts = new();
-    private IReadOnlyList<StaffListItem>? _cache;
-    private bool _useCache;
 
     public StaffViewModel(ILifestreamApiClient api, IListViewStateStore states, IToastService toasts, IDialogService dialogs, IFormDialogService forms, ISessionService session, IUiDispatcher ui)
         : base(states, "staff", toasts, dialogs, ui)
@@ -142,7 +141,6 @@ public sealed partial class StaffViewModel : SortedRecordListViewModel<StaffRow,
         }
 
         SalaryRangeError = null;
-        _useCache = true; // the range only filters what was already fetched: no new API call
         FilterChanged();
     }
 
@@ -159,39 +157,17 @@ public sealed partial class StaffViewModel : SortedRecordListViewModel<StaffRow,
 
     // ---- the list ----------------------------------------------------------------------------------------------------
 
-    /// <summary>No column of the staff list sorts: the staff call of the API client has no sort parameter, so the API's own default order (by name) is shown.</summary>
-    public override IReadOnlyList<string> SortKeys { get; } = [];
+    /// <summary>The columns that sort, as the API's validator names them (the name column sorts; a username sorts through the same key list).</summary>
+    public override IReadOnlyList<string> SortKeys { get; } = ContractSortKeys.Staff;
 
+    /// <summary>The sort, the search and the salary range all go to the API (server-side), so a page and its total always agree with what is filtered.</summary>
     protected override async Task<ApiResult<PagedResult<StaffRow>>> FetchSortedAsync(ListRequest request, CancellationToken ct)
     {
-        var reuse = _useCache;
-        _useCache = false;
-        if (!HasSalaryFilter)
-        {
-            _cache = null;
-            var plain = await _api.GetStaffAsync(request.Search, request.Page, request.PageSize, ct).ConfigureAwait(false);
-            return plain.IsOk
-                ? ApiResult<PagedResult<StaffRow>>.Ok(new PagedResult<StaffRow>([.. plain.Value.Items.Select(i => new StaffRow(i))], plain.Value.Total, plain.Value.Page, plain.Value.PageSize))
-                : ApiResult<PagedResult<StaffRow>>.Fail(plain.Problem!);
-        }
-
-        // The API has no salary filter: fetch the whole list once (at most 200, one call) and filter it here.
-        if (!reuse || _cache is null)
-        {
-            var all = await _api.GetStaffAsync(request.Search, 1, Paging.MaxPageSize, ct).ConfigureAwait(false);
-            if (!all.IsOk)
-            {
-                return ApiResult<PagedResult<StaffRow>>.Fail(all.Problem!);
-            }
-
-            _cache = all.Value.Items;
-        }
-
-        var from = SalaryFrom;
-        var to = SalaryTo;
-        var matching = _cache.Where(s => s.Salary is { } salary && (from is null || salary >= from) && (to is null || salary <= to)).ToList();
-        var page = matching.Skip((request.Page - 1) * request.PageSize).Take(request.PageSize).Select(i => new StaffRow(i)).ToList();
-        return ApiResult<PagedResult<StaffRow>>.Ok(new PagedResult<StaffRow>(page, matching.Count, request.Page, request.PageSize));
+        var range = HasSalaryFilter;
+        var result = await _api.GetStaffAsync(request.Search, request.Page, request.PageSize, request.Sort, range ? SalaryFrom : null, range ? SalaryTo : null, ct).ConfigureAwait(false);
+        return result.IsOk
+            ? ApiResult<PagedResult<StaffRow>>.Ok(new PagedResult<StaffRow>([.. result.Value.Items.Select(i => new StaffRow(i))], result.Value.Total, result.Value.Page, result.Value.PageSize))
+            : ApiResult<PagedResult<StaffRow>>.Fail(result.Problem!);
     }
 
     /// <summary>Fetches the thumbnail of a row when it is first shown. A row without a photo, or already asked for, makes no request; a failure leaves the default avatar.</summary>

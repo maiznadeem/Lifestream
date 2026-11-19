@@ -35,7 +35,7 @@ public sealed partial class MigrationScriptTests(EmptyDatabaseFixture empty) : I
         await using var db = empty.NewContext();
         Assert.Empty(await db.Database.GetPendingMigrationsAsync(Ct));
         Assert.False(db.Database.HasPendingModelChanges(), "Applying the script left the database different from the model.");
-        Assert.Equal(11 + 1, await empty.ScalarAsync<int>("SELECT COUNT(*) FROM sys.tables", Ct));
+        Assert.Equal(12 + 1, await empty.ScalarAsync<int>("SELECT COUNT(*) FROM sys.tables", Ct));
         Assert.Equal(
             db.Database.GetMigrations().Count(),
             await empty.ScalarAsync<int>("SELECT COUNT(*) FROM __EFMigrationsHistory", Ct));

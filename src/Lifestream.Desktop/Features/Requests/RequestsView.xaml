@@ -103,7 +103,7 @@
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Needed by" Width="110" SortMemberPath="requiredBy">
+              <DataGridTemplateColumn Header="Needed by" Width="Auto" MinWidth="110" SortMemberPath="requiredBy">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate>
                     <TextBlock Text="{Binding RequiredBy, Converter={StaticResource DateText}}" Style="{DynamicResource DataGrid.TextCell}" />

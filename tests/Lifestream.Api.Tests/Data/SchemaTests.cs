@@ -12,7 +12,7 @@ public sealed partial class SchemaTests(SqlServerDatabaseFixture fixture) : ICla
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     private static readonly string[] ExpectedTables =
-        ["AuditLog", "Appointment", "BloodBag", "DemoState", "Donor", "Patient", "Receipt", "RefreshToken", "Request", "Staff", "StaffPhoto"];
+        ["AuditLog", "Appointment", "BloodBag", "DemoState", "DeletedRecord", "Donor", "Patient", "Receipt", "RefreshToken", "Request", "Staff", "StaffPhoto"];
 
     // ---- DB-01 ----
 
