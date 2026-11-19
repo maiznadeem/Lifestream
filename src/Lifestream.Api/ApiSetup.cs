@@ -244,6 +244,7 @@ public static class ApiSetup
         ProfileEndpoints.Map(api);
         LookupEndpoints.Map(api);
         DemoEndpoints.Map(api);
+        ListScreenEndpoints.Map(api);
         return app;
     }
 }

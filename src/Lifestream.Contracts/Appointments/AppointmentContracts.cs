@@ -9,7 +9,11 @@ public sealed record AppointmentListItem(
     BloodType DonorBloodType,
     DateTime PlacedAtUtc,
     DateTime SlotStartUtc,
-    AppointmentStatus Status);
+    AppointmentStatus Status)
+{
+    /// <summary>True when the donor had no completed donation before this appointment (a first-time donor). False from an older server.</summary>
+    public bool DonorFirstTime { get; init; }
+}
 
 public sealed record AppointmentDetail(
     int Id,
@@ -49,4 +53,11 @@ public sealed record AppointmentQuery(
     DateTime? ToUtc = null,
     int Page = 1,
     int PageSize = Paging.DefaultPageSize,
-    string? Sort = null);
+    string? Sort = null)
+{
+    /// <summary>Optional: one of the screen's saved views (Today, Upcoming, Past, Cancelled) in the caller's local calendar.</summary>
+    public AppointmentView? View { get; init; }
+
+    /// <summary>How far the caller's local calendar is from UTC, in minutes (for <see cref="View"/>); UTC when absent.</summary>
+    public int? UtcOffsetMinutes { get; init; }
+}
