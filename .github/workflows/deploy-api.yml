@@ -160,15 +160,9 @@ jobs:
       - name: Install the Container Apps CLI extension
         run: az extension add --name containerapp --upgrade --only-show-errors
 
-      # Runs BEFORE the migration job: the job connects from the same outbound addresses, so if Azure changed them since the last
-      # deploy the migration would otherwise be refused by the firewall before this step could fix it. Entra-only authentication is
-      # checked by the script itself (it refuses to open the firewall while SQL logins are still on). When a CanNotDelete lock on the
-      # server blocks deleting a stale rule, the script removes the lock, deletes, and puts it back (see infra/sync-sql-firewall.ps1).
-      # The API reaches Azure SQL from the environment's outbound addresses, which Azure may change. The script makes the firewall
-      # exactly that set (aca-outbound-<n>) and deletes every other rule; it fails, deleting nothing, if no address is returned.
-      - name: Sync the SQL firewall to the environment's outbound addresses
-        shell: pwsh
-        run: ./infra/sync-sql-firewall.ps1 -SubscriptionId $env:AZURE_SUBSCRIPTION_ID -ResourceGroup $env:AZURE_RESOURCE_GROUP -Server $env:SQL_SERVER -Environment $env:CONTAINER_ENVIRONMENT
+      # The SQL firewall is not synced here. The Consumption environment's shared outbound pool is 170+ addresses and adding them
+      # one rule at a time took longer than this job's timeout (2026-11-19). The server keeps only the 'Allow Azure services' rule;
+      # Entra-only authentication with managed identities is the access control. infra/sync-sql-firewall.ps1 remains for manual use.
 
       - name: Run the migration job
         run: |

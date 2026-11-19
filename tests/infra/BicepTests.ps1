@@ -61,11 +61,11 @@ Describe 'INFRA-04 SQL firewall: no allow-all, only the API environment' {
         $script:RawJson | Should -Not -Match 'vnetConfiguration|infrastructureSubnetId|serviceEndpoints|acaSubnet'
     }
 
-    It 'leaves the firewall to infra/sync-sql-firewall.ps1: the script, the deploy step and the weekly workflow exist' {
+    It 'keeps infra/sync-sql-firewall.ps1 for manual use and does not run it on every deploy (the shared pool is too large)' {
         $root = Split-Path $script:InfraDir -Parent
         Test-Path (Join-Path $script:InfraDir 'sync-sql-firewall.ps1') | Should -BeTrue
         Test-Path (Join-Path $root '.github' 'workflows' 'sync-sql-firewall.yml') | Should -BeTrue
-        (Get-Content (Join-Path $root '.github' 'workflows' 'deploy-api.yml') -Raw) | Should -Match 'infra/sync-sql-firewall\.ps1'
+        (Get-Content (Join-Path $root '.github' 'workflows' 'deploy-api.yml') -Raw) | Should -Not -Match 'run: ./infra/sync-sql-firewall\.ps1'
     }
 }
 
