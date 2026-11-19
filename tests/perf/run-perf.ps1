@@ -100,6 +100,13 @@ try {
     $seedDll = Join-Path $root 'tests/perf/Lifestream.Perf.Seed/bin/Release/net11.0/Lifestream.Perf.Seed.dll'
     $apiDll = Join-Path $root 'src/Lifestream.Api/bin/Release/net11.0/Lifestream.Api.dll'
 
+    $script:testFailures = @()
+    Write-Host '== publish the perf tests (self-contained, ReadyToRun) =='
+    $testPublish = Join-Path $root 'tests/Lifestream.Desktop.Tests/bin/perf-r2r'
+    & dotnet publish (Join-Path $root 'tests/Lifestream.Desktop.Tests') -c Release -r win-x64 --self-contained -p:PublishReadyToRun=true -o $testPublish --nologo -v quiet | Out-Host
+    if ($LASTEXITCODE -ne 0) { Fail 'publish of the perf tests failed' }
+    $script:testExe = Join-Path $testPublish 'Lifestream.Desktop.Tests.exe'
+
     # ---- 1. launch ----
     if ($Phases -contains 'launch') {
         Write-Host '== app launch to login window =='
@@ -109,6 +116,12 @@ try {
         $exe = Join-Path $publish 'Lifestream.exe'
         Add-Type -Namespace Win -Name Fg -MemberDefinition '[System.Runtime.InteropServices.DllImport("user32.dll")] public static extern System.IntPtr GetForegroundWindow();'
 
+        # The app must find its appsettings.json whatever folder it is started from.
+        $env:LIFESTREAM_PUBLISHED_EXE = $exe
+        & $script:testExe -trait 'PerfPhase=launch-cwd' -noColor 2>&1 | Select-Object -Last 6 | Out-Host
+        if ($LASTEXITCODE -ne 0) { $script:testFailures += 'launch-cwd' }
+        Add-Record 'launch-cwd' 'Published exe started from the temp folder reaches the login window' 'n/a' 'one run' 1 ([int]($LASTEXITCODE -ne 0)) 'failures' '== 0' ($LASTEXITCODE -eq 0) ''
+
         function Measure-Launch {
             $pipeName = 'lifestream-perf-' + [guid]::NewGuid().ToString('N')
             $pipe = [System.IO.Pipes.NamedPipeServerStream]::new($pipeName, [System.IO.Pipes.PipeDirection]::In, 1, [System.IO.Pipes.PipeTransmissionMode]::Byte, [System.IO.Pipes.PipeOptions]::Asynchronous)
@@ -117,7 +130,6 @@ try {
                 $clock = [System.Diagnostics.Stopwatch]::StartNew()
                 $psi = [System.Diagnostics.ProcessStartInfo]::new($exe, "--perf-launch-pipe $pipeName")
                 $psi.UseShellExecute = $false
-                $psi.WorkingDirectory = $publish   # the app reads appsettings.json from the current directory (see the report: it should use the app folder)
                 $process = [System.Diagnostics.Process]::Start($psi)
                 $connected = $pipe.WaitForConnectionAsync().Wait(15000)
                 if (-not $connected) { $process.Kill($true); throw 'NO SIGNAL: the login window did not report within 15 s' }
@@ -219,12 +231,6 @@ try {
         }
     }
 
-    $script:testFailures = @()
-    Write-Host '== publish the perf tests (self-contained, ReadyToRun) =='
-    $testPublish = Join-Path $root 'tests/Lifestream.Desktop.Tests/bin/perf-r2r'
-    & dotnet publish (Join-Path $root 'tests/Lifestream.Desktop.Tests') -c Release -r win-x64 --self-contained -p:PublishReadyToRun=true -o $testPublish --nologo -v quiet | Out-Host
-    if ($LASTEXITCODE -ne 0) { Fail 'publish of the perf tests failed' }
-    $script:testExe = Join-Path $testPublish 'Lifestream.Desktop.Tests.exe'
     if ($Phases -contains '1x') { Invoke-Phase '1x' 1 @('Category=Perf&PerfPhase=lists') }
     if ($Phases -contains '10x') { Invoke-Phase '10x' 10 @('Category=Perf&PerfPhase=staff') }
     if ($Phases -contains '100x') { Invoke-Phase '100x' 100 @('Category=Perf&PerfPhase=lists', 'Category=Perf&PerfPhase=screens') $ColdRuns }
@@ -250,7 +256,7 @@ if ($cold.Count) {
     $records += [pscustomobject]@{ budget = 'cold-dashboard'; name = 'Dashboard first chart render after the data arrives, fresh process'; dataset = '100x'; stat = "median of $($cold.Count) fresh processes"; n = $cold.Count; value = [math]::Round($med, 1); unit = 'ms'; limit = '< 300'; pass = ($med -lt 300 -and $cold.Count -ge $ColdRuns); detail = "runs (ms): $(($cold | ForEach-Object { $_.value }) -join ', '); max $(($values | Select-Object -Last 1)) ms" }
 }
 $expected = @()
-if ($Phases -contains 'launch') { $expected += 'launch' }
+if ($Phases -contains 'launch') { $expected += 'launch', 'launch-cwd' }
 if ($Phases -contains '1x' -or $Phases -contains '100x') { $expected += 'lists', 'dashboard' }
 if ($Phases -contains '10x') { $expected += 'staff-payload' }
 if ($Phases -contains '100x') { $expected += 'skeleton', 'api-calls', 'ui-gap', 'grid', 'cold-dashboard' }
@@ -259,6 +265,7 @@ foreach ($m in $missing) { Write-Host "NO SIGNAL: no measurement was recorded fo
 $misses = @($records | Where-Object { -not $_.pass })
 
 $labels = @{
+    'launch-cwd' = 'Published app started from another folder (temp) reaches the login window'
     launch = 'App launch to login window (warm OS cache, Release, self-contained ReadyToRun)'
     lists = 'Warm API list endpoints (local SQL Server)'
     dashboard = 'Dashboard endpoint, no cache'
@@ -269,7 +276,7 @@ $labels = @{
     grid = 'Grid with 10,000 items'
     'cold-dashboard' = 'First (cold, fresh process) dashboard chart render after data arrives'
 }
-$limits = @{ launch = '< 1.0 s'; lists = 'p95 < 100 ms'; dashboard = 'p95 < 100 ms'; skeleton = '< 100 ms'; 'api-calls' = 'exactly 1 per data set'; 'ui-gap' = '< 50 ms'; 'staff-payload' = '< 20 KB, no image bytes'; grid = '< 300 row containers'; 'cold-dashboard' = '< 300 ms' }
+$limits = @{ 'launch-cwd' = '0 failures'; launch = '< 1.0 s'; lists = 'p95 < 100 ms'; dashboard = 'p95 < 100 ms'; skeleton = '< 100 ms'; 'api-calls' = 'exactly 1 per data set'; 'ui-gap' = '< 50 ms'; 'staff-payload' = '< 20 KB, no image bytes'; grid = '< 300 row containers'; 'cold-dashboard' = '< 300 ms' }
 $md = New-Object System.Text.StringBuilder
 function Line($text = '') { [void]$md.AppendLine($text) }
 Line '# Performance results'
@@ -293,7 +300,7 @@ Line '## Summary'
 Line
 Line '| Budget | Limit | Measured | Statistic | Verdict |'
 Line '|---|---|---|---|---|'
-foreach ($b in 'launch', 'skeleton', 'lists', 'dashboard', 'api-calls', 'ui-gap', 'staff-payload', 'grid', 'cold-dashboard') {
+foreach ($b in 'launch', 'launch-cwd', 'skeleton', 'lists', 'dashboard', 'api-calls', 'ui-gap', 'staff-payload', 'grid', 'cold-dashboard') {
     $rows = @($records | Where-Object { $_.budget -eq $b })
     if (-not $rows.Count) { continue }
     $bad = @($rows | Where-Object { -not $_.pass }).Count

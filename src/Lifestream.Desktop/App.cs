@@ -43,7 +43,7 @@ public sealed class App : Application
 
         // Order matters. The host (configuration, logging, DI) comes first, then the global exception handlers, and only then the theme and the
         // fonts: anything that goes wrong while loading them is logged and shown as a friendly dialog instead of ending the process unseen (SHELL-01).
-        _host = Host.CreateDefaultBuilder(e.Args).ConfigureServices((context, services) => Configure(context.Configuration, services)).Build();
+        _host = Host.CreateDefaultBuilder(e.Args).UseContentRoot(AppContext.BaseDirectory).ConfigureServices((context, services) => Configure(context.Configuration, services)).Build();
         var provider = _host.Services;
 
         var windows = (WpfWindowHost)provider.GetRequiredService<IWindowHost>();
