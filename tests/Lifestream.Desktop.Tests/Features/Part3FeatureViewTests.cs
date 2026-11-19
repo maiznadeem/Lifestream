@@ -237,7 +237,7 @@ public sealed class Part3FeatureViewTests
         });
 
         static bool IsBundledInter(string face) =>
-            face.StartsWith("Inter Variable Text", StringComparison.Ordinal) && face.EndsWith("|/Lifestream;component/Fonts/intervariable.ttf", StringComparison.OrdinalIgnoreCase);
+            face.StartsWith("Inter", StringComparison.Ordinal) && System.Text.RegularExpressions.Regex.IsMatch(face, @"/Lifestream;component/Fonts/inter(display)?-(regular|medium|semibold|bold)\.ttf$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
         Assert.True(IsBundledInter(facts.Document), facts.Document);
         Assert.True(facts.RunCount >= 5, "the receipt's text runs were not found");

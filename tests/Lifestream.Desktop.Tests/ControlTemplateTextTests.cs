@@ -28,8 +28,8 @@ public sealed partial class ControlTemplateTextTests
     private static bool IsIconFont(GlyphRun run) => run.GlyphTypeface.Win32FamilyNames.Values.Any(n => n.StartsWith("Segoe Fluent Icons", StringComparison.Ordinal) || n.StartsWith("Segoe MDL2 Assets", StringComparison.Ordinal));
 
     private static bool IsInter(GlyphRun run) =>
-        run.GlyphTypeface.Win32FamilyNames.Values.Any(n => n.StartsWith("Inter Variable Text", StringComparison.Ordinal))
-        && run.GlyphTypeface.FontUri.AbsolutePath.EndsWith("/Lifestream;component/Fonts/intervariable.ttf", StringComparison.OrdinalIgnoreCase);
+        run.GlyphTypeface.Win32FamilyNames.Values.Any(n => n.StartsWith("Inter", StringComparison.Ordinal))
+        && System.Text.RegularExpressions.Regex.IsMatch(run.GlyphTypeface.FontUri.AbsolutePath, @"/Lifestream;component/Fonts/inter(display)?-(regular|medium|semibold|bold)\.ttf$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
     /// <summary>Every glyph run that the visual and everything under it draws (the retained drawing of each visual, recursively).</summary>
     private static IEnumerable<(Visual Owner, GlyphRun Run)> GlyphRuns(Visual root)

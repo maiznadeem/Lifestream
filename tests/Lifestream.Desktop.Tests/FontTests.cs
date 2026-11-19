@@ -11,7 +11,7 @@ namespace Lifestream.Desktop.Tests;
 [Collection("Wpf")]
 public sealed class FontTests
 {
-    private const string Family = "Inter Variable Text"; // how WPF names the family of InterVariable.ttf (its optical-size instance)
+    private const string Family = "Inter"; // the Win32 family of the static files ("Inter", "Inter Medium", "Inter Display SemiBold"...)
 
     private static string DesktopDir => RepoPaths.Find("src/Lifestream.Desktop");
 
@@ -19,24 +19,35 @@ public sealed class FontTests
     public void TheFontFileAndItsLicence_AreInTheRepo_WithTheVersionAndHashRecorded()
     {
         var folder = Path.Combine(DesktopDir, "Fonts");
-        var font = Path.Combine(folder, "InterVariable.ttf");
-        Assert.True(File.Exists(font), "Fonts/InterVariable.ttf is missing");
         Assert.Contains("SIL Open Font License", File.ReadAllText(Path.Combine(folder, "OFL.txt")), StringComparison.Ordinal);
-
         var record = File.ReadAllText(Path.Combine(folder, "README.md"));
-        var hash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(font)));
-        Assert.Contains(hash, record, StringComparison.OrdinalIgnoreCase);
+        string[] files = ["Inter-Regular.ttf", "Inter-Medium.ttf", "Inter-SemiBold.ttf", "Inter-Bold.ttf", "InterDisplay-SemiBold.ttf", "InterDisplay-Bold.ttf"];
+        Assert.Equal(files.Order(), Directory.GetFiles(folder, "*.ttf").Select(Path.GetFileName).Order());
+        foreach (var file in files)
+        {
+            var bytes = File.ReadAllBytes(Path.Combine(folder, file));
+            Assert.Contains(Convert.ToHexString(SHA256.HashData(bytes)), record, StringComparison.OrdinalIgnoreCase);
+            Assert.True(HasTrueTypeHinting(bytes), $"{file} has no TrueType hinting (fpgm table): it would render soft at small sizes");
+        }
+
         Assert.Contains("4.1", record, StringComparison.Ordinal);
         Assert.Contains("github.com/rsms/inter", record, StringComparison.Ordinal);
 
         // It ships inside the executable as a WPF resource, so the app needs no installed font.
-        Assert.Contains("Fonts\\InterVariable.ttf", File.ReadAllText(Path.Combine(DesktopDir, "Lifestream.Desktop.csproj")), StringComparison.Ordinal);
+        Assert.Contains("Fonts\\Inter-*.ttf", File.ReadAllText(Path.Combine(DesktopDir, "Lifestream.Desktop.csproj")), StringComparison.Ordinal);
         Assert.Contains("Resource Include", File.ReadAllText(Path.Combine(DesktopDir, "Lifestream.Desktop.csproj")), StringComparison.Ordinal);
+    }
+
+    /// <summary>True when the font has a TrueType font program (the fpgm table): the hinting that snaps stems to pixels.</summary>
+    private static bool HasTrueTypeHinting(byte[] font)
+    {
+        var tables = (font[4] << 8) | font[5];
+        return Enumerable.Range(0, tables).Any(i => System.Text.Encoding.ASCII.GetString(font, 12 + (16 * i), 4) == "fpgm");
     }
 
     /// <summary>The face name starts with the family (it adds the weight, such as "SemiBold") and the file is the one embedded in Lifestream.exe, not an installed font.</summary>
     private static bool IsBundledInter(string face) =>
-        face.StartsWith(Family, StringComparison.Ordinal) && face.EndsWith("|/Lifestream;component/Fonts/intervariable.ttf", StringComparison.OrdinalIgnoreCase);
+        face.StartsWith(Family, StringComparison.Ordinal) && System.Text.RegularExpressions.Regex.IsMatch(face, @"/Lifestream;component/Fonts/inter(display)?-(regular|medium|semibold|bold)\.ttf$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
     private static IEnumerable<object> AllKeys(ResourceDictionary dictionary) =>
         dictionary.MergedDictionaries.SelectMany(AllKeys).Concat(dictionary.Keys.Cast<object>());

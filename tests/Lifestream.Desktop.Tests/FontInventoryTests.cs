@@ -17,10 +17,10 @@ namespace Lifestream.Desktop.Tests;
 [Collection("Wpf")]
 public sealed partial class FontInventoryTests
 {
-    private const string Family = "Inter Variable Text";
+    private const string Family = "Inter"; // the Win32 family of the static files: "Inter", "Inter Medium", "Inter SemiBold", "Inter Display SemiBold"...
 
     private static bool IsBundledInter(string face) =>
-        face.StartsWith(Family, StringComparison.Ordinal) && face.EndsWith("|/Lifestream;component/Fonts/intervariable.ttf", StringComparison.OrdinalIgnoreCase);
+        face.StartsWith(Family, StringComparison.Ordinal) && System.Text.RegularExpressions.Regex.IsMatch(face, @"/Lifestream;component/Fonts/inter(display)?-(regular|medium|semibold|bold)\.ttf$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
     private static string Resolved(FontFamily family, FontStyle style, FontWeight weight, FontStretch stretch)
     {

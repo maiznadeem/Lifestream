@@ -17,7 +17,7 @@ namespace Lifestream.Desktop.Theme;
 public static class FontSetup
 {
     private const string FontFolder = "pack://application:,,,/Lifestream;component/Fonts/";
-    private const string FamilyName = "Inter Variable Text";
+    private const string FamilyName = "Inter";
 
     // One Skia typeface per process, shared by every thread. LiveCharts latches its fallback typeface process-wide on the first label it draws
     // and disposes any other typeface when a paint is torn down, so a second object for the same font would be disposed under its users.
@@ -129,10 +129,10 @@ public static class FontSetup
             }
 
             _ = Application.Current; // registers the pack: scheme when no application exists yet (unit tests)
-            var resource = Application.GetResourceStream(new Uri(FontFolder + "InterVariable.ttf", UriKind.Absolute))
-                ?? throw new InvalidOperationException("The bundled font Fonts/InterVariable.ttf is not embedded in the executable.");
+            var resource = Application.GetResourceStream(new Uri(FontFolder + "Inter-Regular.ttf", UriKind.Absolute))
+                ?? throw new InvalidOperationException("The bundled font Fonts/Inter-Regular.ttf is not embedded in the executable.");
             using var stream = resource.Stream;
-            return _bundledTypeface = SKTypeface.FromStream(stream) ?? throw new InvalidOperationException("Skia could not read the bundled font Fonts/InterVariable.ttf.");
+            return _bundledTypeface = SKTypeface.FromStream(stream) ?? throw new InvalidOperationException("Skia could not read the bundled font Fonts/Inter-Regular.ttf.");
         }
     }
 

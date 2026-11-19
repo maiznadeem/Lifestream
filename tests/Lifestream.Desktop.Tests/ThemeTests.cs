@@ -377,7 +377,7 @@ public sealed partial class ThemeTests
             Assert.Contains($"x:Key=\"Space.{spacing}\">{spacing}<", text, StringComparison.Ordinal);
         }
 
-        Assert.Contains("Radius.Control\">6<", text, StringComparison.Ordinal);
+        Assert.Contains("Radius.Control\">8<", text, StringComparison.Ordinal);
         Assert.Contains("Radius.Card\">12<", text, StringComparison.Ordinal);
         Assert.Contains("Height.CaptionButton\">32<", text, StringComparison.Ordinal);
         Assert.Contains("Width.CaptionButton\">46<", text, StringComparison.Ordinal);
@@ -430,7 +430,7 @@ public sealed partial class ThemeTests
     {
         var text = File.ReadAllText(Path.Combine(DesktopDir, "Theme", "Typography.xaml"));
 
-        Assert.Contains("Fonts/#Inter Variable Text</FontFamily>", text, StringComparison.Ordinal);
+        Assert.Contains("Fonts/#Inter</FontFamily>", text, StringComparison.Ordinal);
         Assert.DoesNotContain("Segoe UI Variable", text, StringComparison.Ordinal);
     }
 

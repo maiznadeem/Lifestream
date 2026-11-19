@@ -49,8 +49,8 @@ same view (danger buttons are outlined and carry an icon).
 
 ## Typography
 
-One family: **Inter** (SIL Open Font License), bundled in the executable from `Fonts/InterVariable.ttf` (version, source and SHA-256 in
-`Fonts/README.md`, licence in `Fonts/OFL.txt`) and named once, in `Theme/Typography.xaml`. WPF sees it as `Inter Variable Text`. Every text
+One family: **Inter** (SIL Open Font License), bundled in the executable as hinted static TrueType files, `Fonts/Inter-*.ttf` and `Fonts/InterDisplay-*.ttf` (version, source and SHA-256 in
+`Fonts/README.md`, licence in `Fonts/OFL.txt`) and named once, in `Theme/Typography.xaml`. Text styles use `Font.Family` (Inter); Display and Title use `Font.Display` (Inter Display). Every text
 style and every text-bearing control resolves to it (`FontTests`). Icons use the system icon font (Segoe Fluent Icons, Segoe MDL2 Assets
 as fallback), through `IconText`, which is hidden from UI Automation; icons are not text. The charts draw with SkiaSharp, not WPF text, so
 `Theme/ChartFont` loads the same embedded file into an `SKTypeface` and makes it the LiveCharts default; `ChartFontTests` renders the dashboard
@@ -75,10 +75,12 @@ and checks the glyphs are Inter's, not Segoe UI's.
   scans every `*.cs` under the Desktop project for `Thickness`/`CornerRadius`/`Margin`/`Padding` literals other than 0. Exempt, with the
   reason in the test: the printed receipt layout and the LiveCharts bar gap.
 - Control height 32 (compact) or 40 (default); grid rows 40 (design range 36 to 40).
-- Radius 6 for inputs and buttons (`Radius.Control`), 12 for cards and dialogs (`Radius.Card`) and chips (`Radius.Pill`), 10 for the
+- Radius 8 for inputs and buttons (`Radius.Control`), 12 for cards and dialogs (`Radius.Card`) and chips (`Radius.Pill`), 12 for the
   keyboard focus ring that sits 4 DIP outside a control (`Radius.FocusRing`); 2, 6 and 14 (`Radius.2`, `Radius.6`, `Radius.14`) and the
   left-side-only 12 (`Radius.Left8`) for the few shapes that need them. Cards and popups carry a soft shadow (`controls:Card`, drawn in the
   card's own visual so text keeps ClearType), and every window draws small text with `TextFormattingMode=Display` (headings stay `Ideal`).
+  Every bordered element is a `controls:CrispBorder`: its edge is a whole number of device pixels at 100 to 175 % scaling (a plain 1 DIP
+  stroke is 1.25 to 1.75 px there and looks soft), and nothing at rest carries a render transform.
 - Caption buttons 46 x 32. Sidebar 232 wide.
 - One shadow token for dialogs and drawers only; cards are separated by surface colour.
 
