@@ -108,7 +108,11 @@ public sealed class FontSetupTests
         var typeface = StaHost.Run(() =>
         {
             SKTypeface? seen = null;
-            WithLoaders(() => throw new InvalidOperationException("no font"), () => true, log => seen = FontSetup.ChartTypeface);
+            WithLoaders(() => throw new InvalidOperationException("no font"), () => true, log =>
+            {
+                _ = ThemeLoader.Resources; // runs ApplyChartFont with the failing loader: this test sets up the state it asserts on
+                seen = FontSetup.ChartTypeface;
+            });
             return seen is not null;
         });
 
@@ -131,6 +135,8 @@ public sealed class FontSetupTests
             {
                 FontSetup.ChartTypefaceLoader = () => throw new IOException("Cannot locate resource 'fonts/intervariable.ttf'.");
                 FontSetup.ApplyChartFont(); // for real: LiveCharts now has the fallback typeface
+                // The test sets up its own state (the failing loader, a real ApplyChartFont) and asserts on it below; it no longer depends on which test
+                // drew a chart first, because the assembly fixture fixes LiveCharts' process-wide latched typeface before any test runs.
                 using var rig = FeatureHarness.NewRig();
                 var vm = FeatureHarness.Create<DashboardViewModel>(rig);
                 var view = FeatureHarness.DashboardView(vm);
@@ -152,6 +158,58 @@ public sealed class FontSetupTests
         Assert.True(distinctPixels > 20, "the dashboard rendered nothing");
         Assert.False(restored);
         Assert.False(FontSetup.ChartFellBack); // the real loader is back
+    }
+
+    [Fact]
+    public void TheBundledChartTypeface_IsOneObjectForTheWholeProcess_AcrossStaThreads()
+    {
+        // ThemeLoader is per thread, so each STA thread runs ApplyChartFont itself. LiveCharts latches its fallback typeface process-wide and
+        // disposes every other typeface when a paint is torn down, so a second Inter object would be disposed under the charts that use it.
+        var first = StaHost.Run(() =>
+        {
+            _ = ThemeLoader.Resources;
+            return ChartFont.Inter;
+        });
+        var second = StaHost.Run(() =>
+        {
+            _ = ThemeLoader.Resources;
+            return ChartFont.Inter;
+        });
+
+        Assert.Same(first, second);
+    }
+
+    [Fact]
+    public void TheTypefaceLiveChartsLatchedOnItsFirstLabel_IsTheProcessInter()
+    {
+        // LiveCharts 2.0.5 keeps SkiaPaint.FallbackTypeface (internal) from the first label drawn in the process; the assembly fixture draws that label.
+        var latched = (SKTypeface?)typeof(LiveChartsCore.SkiaSharpView.Painting.SolidColorPaint).BaseType!
+            .GetProperty("FallbackTypeface", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)?.GetValue(null);
+
+        Assert.NotNull(latched);
+        Assert.Same(StaHost.Run(() => ChartFont.Inter), latched);
+    }
+
+    [Fact]
+    public void TheFallbackChartTypeface_IsOneObjectForTheWholeProcess_AcrossStaThreads()
+    {
+        var (first, second) = StaHost.Run(() =>
+        {
+            SKTypeface? a = null;
+            SKTypeface? b = null;
+            WithLoaders(() => throw new InvalidOperationException("no font"), () => true, log =>
+            {
+                _ = ThemeLoader.Resources;
+                a = FontSetup.ChartTypeface;
+                ThemeLoader.Reset();
+                _ = ThemeLoader.Resources;
+                b = FontSetup.ChartTypeface;
+            });
+            return (a, b);
+        });
+
+        Assert.NotNull(first);
+        Assert.Same(first, second);
     }
 
     [Fact]

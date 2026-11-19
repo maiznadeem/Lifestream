@@ -19,6 +19,12 @@ public static class FontSetup
     private const string FontFolder = "pack://application:,,,/Lifestream;component/Fonts/";
     private const string FamilyName = "Inter Variable Text";
 
+    // One Skia typeface per process, shared by every thread. LiveCharts latches its fallback typeface process-wide on the first label it draws
+    // and disposes any other typeface when a paint is torn down, so a second object for the same font would be disposed under its users.
+    private static readonly object TypefaceLock = new();
+    private static SKTypeface? _bundledTypeface;
+    private static SKTypeface? _fallbackTypeface;
+
     /// <summary>Loads the bundled Inter as a Skia typeface (the chart text). Throws when it cannot.</summary>
     public static Func<SKTypeface> ChartTypefaceLoader { get; set; } = LoadBundledChartTypeface;
 
@@ -100,7 +106,10 @@ public static class FontSetup
     {
         try
         {
-            return SKTypeface.FromFamilyName(SystemFonts.MessageFontFamily.Source) ?? SKTypeface.Default ?? SKTypeface.CreateDefault();
+            lock (TypefaceLock)
+            {
+                return _fallbackTypeface ??= SKTypeface.FromFamilyName(SystemFonts.MessageFontFamily.Source) ?? SKTypeface.Default ?? SKTypeface.CreateDefault();
+            }
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -109,13 +118,22 @@ public static class FontSetup
         }
     }
 
+    /// <summary>Loads the bundled Inter once per process; every later call, from any thread, returns the same object. A failed load is not cached, so the next call retries.</summary>
     private static SKTypeface LoadBundledChartTypeface()
     {
-        _ = Application.Current; // registers the pack: scheme when no application exists yet (unit tests)
-        var resource = Application.GetResourceStream(new Uri(FontFolder + "InterVariable.ttf", UriKind.Absolute))
-            ?? throw new InvalidOperationException("The bundled font Fonts/InterVariable.ttf is not embedded in the executable.");
-        using var stream = resource.Stream;
-        return SKTypeface.FromStream(stream) ?? throw new InvalidOperationException("Skia could not read the bundled font Fonts/InterVariable.ttf.");
+        lock (TypefaceLock)
+        {
+            if (_bundledTypeface is not null)
+            {
+                return _bundledTypeface;
+            }
+
+            _ = Application.Current; // registers the pack: scheme when no application exists yet (unit tests)
+            var resource = Application.GetResourceStream(new Uri(FontFolder + "InterVariable.ttf", UriKind.Absolute))
+                ?? throw new InvalidOperationException("The bundled font Fonts/InterVariable.ttf is not embedded in the executable.");
+            using var stream = resource.Stream;
+            return _bundledTypeface = SKTypeface.FromStream(stream) ?? throw new InvalidOperationException("Skia could not read the bundled font Fonts/InterVariable.ttf.");
+        }
     }
 
     private static bool IsBundledFamilyAvailable()
