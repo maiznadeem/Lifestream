@@ -391,6 +391,8 @@ public class ApiFixture : IAsyncLifetime
                 }
 
                 services.AddSingleton<Microsoft.AspNetCore.Hosting.IStartupFilter, RemoteAddressFilter>();
+                services.AddSingleton<ICredentialHasher>(SharedPbkdf2Work.Instance); // real PBKDF2, each password/hash pair verified once per run
+                services.AddSingleton(SharedPbkdf2Work.Instance.Dummy); // one dummy hash for the run instead of one per host
                 ConfigureTestServices(services);
             });
         });
@@ -455,6 +457,7 @@ public class ApiFixture : IAsyncLifetime
                 services.AddSingleton<TimeProvider>(Clock);
                 services.AddSingleton<IDatabaseProbe>(Probe);
                 services.AddSingleton<Microsoft.AspNetCore.Hosting.IStartupFilter, RemoteAddressFilter>();
+                services.AddSingleton<ICredentialHasher>(SharedPbkdf2Work.Instance); // a restarted host computes its own dummy hash, as a real start does
             });
         });
 
