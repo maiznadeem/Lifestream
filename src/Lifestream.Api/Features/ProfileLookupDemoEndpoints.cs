@@ -28,7 +28,7 @@ public static class ProfileEndpoints
     private static async Task<ProfileResponse> LoadAsync(LifestreamDbContext db, int id, CancellationToken ct)
     {
         var s = await db.Staff.AsNoTracking().Where(x => x.Id == id)
-            .Select(x => new { x.Id, x.DisplayName, x.Username, x.Designation, x.Shift, x.Phone, x.HasPhoto, x.RowVersion })
+            .Select(x => new { x.Id, x.DisplayName, x.Username, x.Designation, x.Shift, x.Phone, HasPhoto = db.StaffPhotos.Any(p => p.StaffId == x.Id), x.RowVersion })
             .FirstOrDefaultAsync(ct) ?? throw ApiException.NotFound("The profile");
         return new ProfileResponse(s.Id, s.DisplayName, s.Username, s.Designation, s.Shift, s.Phone, s.HasPhoto, RowVersions.ToText(s.RowVersion));
     }
@@ -75,7 +75,7 @@ public static class ProfileEndpoints
     }
 
     /// <summary>Needs the current password (a wrong one counts toward the lockout), a new one of at least 12 characters; ends every other session.</summary>
-    private static async Task<NoContent> ChangePasswordAsync(HttpRequest http, LifestreamDbContext db, CurrentUser user, AuthService auth, TimeProvider time, CancellationToken ct)
+    private static async Task<NoContent> ChangePasswordAsync(HttpRequest http, LifestreamDbContext db, CurrentUser user, AuthService auth, CancellationToken ct)
     {
         var r = await http.ReadBodyAsync<ChangePasswordRequest>(ct);
         var check = new Check();
@@ -93,19 +93,15 @@ public static class ProfileEndpoints
         check.ThrowIfInvalid();
 
         var id = user.TokenStaffId;
-        var current = await db.Staff.AsNoTracking().Where(s => s.Id == id).Select(s => new { s.PasswordHash, s.LockoutEndUtc }).FirstOrDefaultAsync(ct)
+        var current = await db.Staff.AsNoTracking().Where(s => s.Id == id).Select(s => new { s.PasswordHash }).FirstOrDefaultAsync(ct)
             ?? throw ApiException.NotFound("The profile");
 
-        // A locked account is refused before any password is checked, so a stolen access token cannot be used to guess the password.
-        var now = time.GetUtcNow().UtcDateTime;
-        if (current.LockoutEndUtc is { } until && until > now)
-        {
-            throw new ApiException(StatusCodes.Status429TooManyRequests, ProblemCodes.LockedOut, "Too many failed attempts. Try again later.", retryAfter: until - now);
-        }
-
+        // The guess is counted, and the lock checked, before the password is: a locked account is refused (429) without any check,
+        // so a stolen access token cannot be used to guess the password, however many requests arrive at once.
+        var attempt = await auth.ReserveAttemptAsync(id, ct);
         if (!PasswordHashing.Verify(current.PasswordHash, r.CurrentPassword))
         {
-            if (await auth.RegisterFailureAsync(id, ct))
+            if (attempt.LockedNow)
             {
                 // The lock started: sign the caller out everywhere.
                 await auth.RevokeAllForAsync(id, null, ct);
@@ -119,6 +115,7 @@ public static class ProfileEndpoints
         {
             var entity = await db.Staff.FirstOrDefaultAsync(s => s.Id == id, token) ?? throw ApiException.NotFound("The profile");
             entity.PasswordHash = hash;
+            entity.MustChangePassword = false;
             entity.FailedLoginCount = 0;
             entity.LockoutEndUtc = null;
             await db.SaveChangesAsync(token);
@@ -128,10 +125,11 @@ public static class ProfileEndpoints
         return TypedResults.NoContent();
     }
 
-    private static async Task<NoContent> UploadPhotoAsync(HttpRequest http, CurrentUser user, PhotoProcessor photos, StaffService staff, CancellationToken ct)
+    /// <summary>Returns the profile (with its row version, which the upload did not change), so the caller needs no reload.</summary>
+    private static async Task<ProfileResponse> UploadPhotoAsync(HttpRequest http, CurrentUser user, PhotoProcessor photos, StaffService staff, LifestreamDbContext db, CancellationToken ct)
     {
         await staff.SavePhotoAsync(user.TokenStaffId, await photos.ReadAsync(http, ct), ct);
-        return TypedResults.NoContent();
+        return await LoadAsync(db, user.TokenStaffId, ct);
     }
 }
 
@@ -218,8 +216,10 @@ public static class DemoEndpoints
         var now = time.GetUtcNow().UtcDateTime;
         if (!await DemoReset.ForceAsync(db, DateOnly.FromDateTime(now), ct))
         {
-            var last = await db.DemoState.AsNoTracking().Select(s => s.LastForcedResetAtUtc).FirstOrDefaultAsync(ct);
-            var wait = last is { } at ? at + DemoReset.ForceCooldown - now : DemoReset.ForceCooldown;
+            // The reset time was stamped by the database's clock, so "how long is left" is measured with the same clock (DateTime.UtcNow is
+            // SYSUTCDATETIME() inside the query); mixing it with this host's clock made the answer depend on the difference between them.
+            var state = await db.DemoState.AsNoTracking().Select(s => new { s.LastForcedResetAtUtc, DatabaseNow = DateTime.UtcNow }).FirstOrDefaultAsync(ct);
+            var wait = state is { LastForcedResetAtUtc: { } at } ? at + DemoReset.ForceCooldown - state.DatabaseNow : DemoReset.ForceCooldown;
             throw new ApiException(StatusCodes.Status429TooManyRequests, ProblemCodes.DemoResetCooldown, "The demo data was reset a moment ago. Try again later.", retryAfter: wait > TimeSpan.Zero ? wait : TimeSpan.FromMinutes(1));
         }
 

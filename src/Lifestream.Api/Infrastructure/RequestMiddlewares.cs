@@ -50,6 +50,35 @@ public sealed class IdentityMiddleware(RequestDelegate next, ILogger<IdentityMid
     }
 }
 
+/// <summary>
+/// While a signed-in person still has an administrator-set password, every endpoint except sign-in (auth/*), reading their own
+/// profile (GET me) and changing the password (PUT me/password) answers 403 password_change_required.
+/// </summary>
+public sealed class PasswordChangeRequiredMiddleware(RequestDelegate next)
+{
+    private static readonly string AuthPrefix = ApiRoutes.Path("auth") + "/";
+    private static readonly string MePath = ApiRoutes.Path(ApiRoutes.Me);
+    private static readonly string MePasswordPath = ApiRoutes.Path(ApiRoutes.MePassword);
+
+    public async Task InvokeAsync(HttpContext context, CurrentUser user)
+    {
+        if (user.IsAuthenticated && user.MustChangePassword && !IsAllowed(context.Request))
+        {
+            throw new ApiException(StatusCodes.Status403Forbidden, ExtraProblemCodes.PasswordChangeRequired, "You must set a new password before you continue.");
+        }
+
+        await next(context);
+    }
+
+    private static bool IsAllowed(HttpRequest request)
+    {
+        var path = request.Path.Value?.TrimEnd('/') ?? "";
+        return path.StartsWith(AuthPrefix, StringComparison.OrdinalIgnoreCase)
+            || path.Equals(MePasswordPath, StringComparison.OrdinalIgnoreCase)
+            || (path.Equals(MePath, StringComparison.OrdinalIgnoreCase) && HttpMethods.IsGet(request.Method));
+    }
+}
+
 /// <summary>Demo abuse limits: at most N write requests per client address per UTC day (the design's "creates per IP per day").</summary>
 public sealed class DemoWriteCapMiddleware(RequestDelegate next)
 {

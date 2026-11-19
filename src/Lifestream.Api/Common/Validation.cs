@@ -184,5 +184,16 @@ public static class Dates
         _ => DateTime.SpecifyKind(value, DateTimeKind.Utc),
     };
 
+    /// <summary>The earliest and latest year a date filter may name. Far inside what SQL Server and DateTime can hold, so day arithmetic on it never overflows.</summary>
+    public const int MinYear = 1900;
+    public const int MaxYear = 2200;
+
+    /// <summary>Refuses a date outside <see cref="MinYear"/>..<see cref="MaxYear"/> with a 400 naming the field.</summary>
+    public static DateTime CheckWindow(DateTime value, string field) =>
+        value.Year is >= MinYear and <= MaxYear ? value : throw ApiException.Validation(field, $"must be between {MinYear} and {MaxYear}");
+
+    public static DateOnly CheckWindow(DateOnly value, string field) =>
+        value.Year is >= MinYear and <= MaxYear ? value : throw ApiException.Validation(field, $"must be between {MinYear} and {MaxYear}");
+
     public static DateOnly Today(TimeProvider time) => DateOnly.FromDateTime(time.GetUtcNow().UtcDateTime);
 }

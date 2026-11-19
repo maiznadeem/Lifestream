@@ -57,6 +57,16 @@ public static class DashboardEndpoints
 
         var nowUtc = time.GetUtcNow().UtcDateTime;
         var localToday = DateOnly.FromDateTime(nowUtc.AddMinutes(offset));
+        if (from is { } givenFrom)
+        {
+            Dates.CheckWindow(givenFrom, "from");
+        }
+
+        if (to is { } givenTo)
+        {
+            Dates.CheckWindow(givenTo, "to");
+        }
+
         var end = to ?? localToday;
         var start = from ?? new DateOnly(end.Year, end.Month, 1).AddMonths(-11);
         if (start > end)

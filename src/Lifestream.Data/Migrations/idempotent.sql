@@ -1224,3 +1224,24 @@ END;
 COMMIT;
 GO
 
+BEGIN TRANSACTION;
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261119120000_StaffMustChangePassword'
+)
+BEGIN
+    ALTER TABLE [Staff] ADD [MustChangePassword] bit NOT NULL DEFAULT CAST(0 AS bit);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261119120000_StaffMustChangePassword'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20261119120000_StaffMustChangePassword', N'11.0.0');
+END;
+
+COMMIT;
+GO
+

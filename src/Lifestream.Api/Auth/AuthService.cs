@@ -1,5 +1,5 @@
+using Lifestream.Api.Common;
 using Lifestream.Api.Infrastructure;
-using Lifestream.Contracts;
 using Lifestream.Contracts.Auth;
 using Lifestream.Data;
 using Lifestream.Data.Entities;
@@ -19,8 +19,12 @@ public sealed class AuthService(
     IOptions<AuthSettings> authSettings,
     IOptions<JwtSettings> jwtSettings,
     IOptions<DemoSettings> demoSettings,
-    IMemoryCache cache)
+    IMemoryCache cache,
+    UnknownLoginTracker unknown,
+    DemoSessionDenylist demoSessions)
 {
+    private const int ConcurrencyRetries = 5;
+
     // Verified against when the user does not exist, so an unknown name costs the same time as a wrong password.
     private static readonly Lazy<string> DummyHash = new(() => PasswordHashing.Hash("not-a-real-account"));
 
@@ -31,83 +35,127 @@ public sealed class AuthService(
     public static ApiException InvalidCredentials() =>
         new(StatusCodes.Status401Unauthorized, ExtraProblemCodes.InvalidCredentials, "The username or password is not correct.");
 
+    /// <summary>
+    /// The order matters: the guess is counted (and the lock checked) in ONE atomic step BEFORE the password is checked, so however
+    /// many requests arrive at once, only the first few (the configured maximum) are ever verified. A name with no staff row (and the
+    /// demo account, which has no password login) goes through the same counting in memory, so the two cases are indistinguishable.
+    /// </summary>
     public async Task<TokenResponse> LoginAsync(LoginRequest request, CancellationToken ct)
     {
         var username = request.Username.Trim();
-        var user = await db.Staff
+        var user = await db.Staff.AsNoTracking()
             .Where(s => s.Username == username)
-            .Select(s => new { s.Id, s.DisplayName, s.PasswordHash, s.Role, s.IsDemo, s.LockoutEndUtc, s.FailedLoginCount })
+            .Select(s => new { s.Id, s.DisplayName, s.PasswordHash, s.Role, s.IsDemo, s.LockoutEndUtc, s.MustChangePassword })
             .FirstOrDefaultAsync(ct);
 
-        if (user is { LockoutEndUtc: { } until } && until > Now)
+        if (user is null or { IsDemo: true })
         {
-            throw new ApiException(StatusCodes.Status429TooManyRequests, ProblemCodes.LockedOut, "Too many failed attempts. Try again later.", retryAfter: until - Now);
-        }
-
-        var ok = PasswordHashing.Verify(user?.PasswordHash ?? DummyHash.Value, request.Password) && user is { IsDemo: false };
-        if (!ok || user is null)
-        {
-            if (user is { IsDemo: false })
+            if (unknown.Reserve(username, Auth.MaxFailedAttempts, Auth.LockoutMinutes) is { } wait)
             {
-                await RegisterFailureAsync(user.Id, ct);
+                throw LoginProblems.Locked(wait);
             }
 
+            PasswordHashing.Verify(DummyHash.Value, request.Password);
             throw InvalidCredentials();
         }
 
-        if (user.FailedLoginCount != 0 || user.LockoutEndUtc is not null)
+        // Fast path for an account that is already locked: no hash is checked and nothing is written.
+        if (user.LockoutEndUtc is { } until && until > Now)
         {
-            await UpdateStaffAsync(user.Id, s =>
-            {
-                s.FailedLoginCount = 0;
-                s.LockoutEndUtc = null;
-            }, ct);
+            throw LoginProblems.Locked(until - Now);
         }
 
-        return await IssueAsync(user.Id, user.DisplayName, user.Role, isDemo: false, ct);
+        await ReserveAttemptAsync(user.Id, ct);
+        if (!PasswordHashing.Verify(user.PasswordHash, request.Password))
+        {
+            throw InvalidCredentials();
+        }
+
+        await ClearFailuresAsync(user.Id, ct);
+        return await IssueAsync(user.Id, user.DisplayName, user.Role, isDemo: false, user.MustChangePassword, ct);
     }
 
-    /// <summary>Counts a wrong password (login or change-password). The lock starts after the configured number and counting restarts.</summary>
-    /// <summary>Returns true when this failure started the lockout.</summary>
-    public async Task<bool> RegisterFailureAsync(int staffId, CancellationToken ct)
+    /// <summary>
+    /// Counts one password guess for a real account, atomically (an application lock per account serialises the check of the lock
+    /// and the increment; the write is audited like every other staff write). Throws 429 when the account is locked. The lock starts
+    /// with the guess that reaches the limit, and counting restarts. A write that cannot be made is an error, never a dropped count.
+    /// </summary>
+    public async Task<AttemptReservation> ReserveAttemptAsync(int staffId, CancellationToken ct)
     {
-        var lockedNow = false;
-        await UpdateStaffAsync(staffId, s =>
+        for (var attempt = 1; ; attempt++)
         {
-            lockedNow = false;
-            s.FailedLoginCount++;
-            if (s.FailedLoginCount >= Auth.MaxFailedAttempts)
-            {
-                s.LockoutEndUtc = Now.AddMinutes(Auth.LockoutMinutes);
-                s.FailedLoginCount = 0;
-                lockedNow = true;
-            }
-        }, ct);
-        return lockedNow;
-    }
-
-    /// <summary>Changes a staff row through the tracked entity (so it is audited like every other staff write); a clash with a concurrent change reloads and tries again.</summary>
-    private async Task UpdateStaffAsync(int staffId, Action<Staff> change, CancellationToken ct)
-    {
-        for (var attempt = 0; attempt < 3; attempt++)
-        {
-            db.ChangeTracker.Clear();
-            var staff = await db.Staff.FirstOrDefaultAsync(s => s.Id == staffId, ct);
-            if (staff is null)
-            {
-                return;
-            }
-
-            change(staff);
             try
             {
-                await db.SaveChangesAsync(ct);
-                db.ChangeTracker.Clear();
+                return await db.RunAsync(async token =>
+                {
+                    await db.LockAsync($"login:{staffId}", token);
+                    var staff = await AttachCountersAsync(staffId, token) ?? throw InvalidCredentials();
+                    var now = Now;
+                    if (staff.LockoutEndUtc is { } until && until > now)
+                    {
+                        throw LoginProblems.Locked(until - now);
+                    }
+
+                    staff.FailedLoginCount++;
+                    var lockedNow = staff.FailedLoginCount >= Auth.MaxFailedAttempts;
+                    if (lockedNow)
+                    {
+                        staff.LockoutEndUtc = now.AddMinutes(Auth.LockoutMinutes);
+                        staff.FailedLoginCount = 0;
+                    }
+
+                    await db.SaveChangesAsync(token);
+                    return new AttemptReservation(lockedNow);
+                }, ct);
+            }
+            catch (DbUpdateConcurrencyException) when (attempt < ConcurrencyRetries)
+            {
+                // Another writer changed the row between the read and the write: count again from the fresh row.
+            }
+        }
+    }
+
+    /// <summary>
+    /// Loads only the counters and the row version (never the password hash) into a stub that EF tracks, so the save writes just the
+    /// changed counter columns, checks the row version and is audited like any other staff update.
+    /// </summary>
+    private async Task<Staff?> AttachCountersAsync(int staffId, CancellationToken token)
+    {
+        var row = await db.Staff.AsNoTracking().Where(s => s.Id == staffId).Select(s => new { s.FailedLoginCount, s.LockoutEndUtc, s.RowVersion }).FirstOrDefaultAsync(token);
+        if (row is null)
+        {
+            return null;
+        }
+
+        var staff = new Staff { Id = staffId, FailedLoginCount = row.FailedLoginCount, LockoutEndUtc = row.LockoutEndUtc, RowVersion = row.RowVersion };
+        db.Staff.Attach(staff);
+        return staff;
+    }
+
+    /// <summary>A right password ends the run of failures (and any lock the guess itself started).</summary>
+    public async Task ClearFailuresAsync(int staffId, CancellationToken ct)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                await db.RunAsync(async token =>
+                {
+                    await db.LockAsync($"login:{staffId}", token);
+                    var staff = await AttachCountersAsync(staffId, token);
+                    if (staff is not null && (staff.FailedLoginCount != 0 || staff.LockoutEndUtc is not null))
+                    {
+                        staff.FailedLoginCount = 0;
+                        staff.LockoutEndUtc = null;
+                        await db.SaveChangesAsync(token);
+                    }
+
+                    return true;
+                }, ct);
                 return;
             }
-            catch (DbUpdateConcurrencyException)
+            catch (DbUpdateConcurrencyException) when (attempt < ConcurrencyRetries)
             {
-                // Another request changed the row first: read it again and apply the change to the fresh values.
             }
         }
     }
@@ -129,14 +177,21 @@ public sealed class AuthService(
         var secret = request.RefreshToken;
         if (secret.Contains('.', StringComparison.Ordinal))
         {
-            // A demo refresh token (a signed token, no database row).
-            if (!demoSettings.Value.Enabled || await tokens.ReadDemoRefreshAsync(secret) is not { } demoFamily)
+            // A demo refresh token (a signed token, no database row). It is single use: a token that was already rotated, or whose session
+            // signed out, is refused, and a replayed one ends the whole session (as for staff).
+            if (!demoSettings.Value.Enabled || await tokens.ReadDemoRefreshAsync(secret) is not { } demoRefresh || demoSessions.IsRevoked(demoRefresh.Family))
             {
                 throw Unauthorized();
             }
 
+            if (!demoSessions.TryUse(demoRefresh.TokenId, demoRefresh.ExpiresUtc))
+            {
+                demoSessions.RevokeFamily(demoRefresh.Family, DemoSessionEnd());
+                throw Unauthorized();
+            }
+
             var demo = await db.Staff.Where(s => s.IsDemo).Select(s => new { s.Id, s.DisplayName }).FirstOrDefaultAsync(ct) ?? throw Unauthorized();
-            return DemoTokens(demo.Id, demo.DisplayName, demoFamily);
+            return DemoTokens(demo.Id, demo.DisplayName, demoRefresh.Family);
         }
 
         var hash = TokenService.HashRefresh(secret);
@@ -165,15 +220,20 @@ public sealed class AuthService(
             throw Unauthorized();
         }
 
-        var user = await db.Staff.Where(s => s.Id == stored.StaffId).Select(s => new { s.DisplayName, s.Role, s.IsDemo }).FirstOrDefaultAsync(ct) ?? throw Unauthorized();
-        return await IssueAsync(stored.StaffId, user.DisplayName, user.Role, user.IsDemo, ct, stored.FamilyId);
+        var user = await db.Staff.Where(s => s.Id == stored.StaffId).Select(s => new { s.DisplayName, s.Role, s.IsDemo, s.MustChangePassword }).FirstOrDefaultAsync(ct) ?? throw Unauthorized();
+        return await IssueAsync(stored.StaffId, user.DisplayName, user.Role, user.IsDemo, user.MustChangePassword, ct, stored.FamilyId);
     }
 
-    /// <summary>Ends the whole session (every refresh token of the family) from its refresh token. Unknown tokens are ignored; demo tokens are stateless.</summary>
+    /// <summary>Ends the whole session (every refresh token of the family, and for a demo session its access tokens too) from its refresh token. Unknown tokens are ignored.</summary>
     public async Task LogoutAsync(string refreshToken, CancellationToken ct)
     {
         if (refreshToken.Contains('.', StringComparison.Ordinal))
         {
+            if (demoSettings.Value.Enabled && await tokens.ReadDemoRefreshAsync(refreshToken) is { } demoRefresh)
+            {
+                demoSessions.RevokeFamily(demoRefresh.Family, DemoSessionEnd());
+            }
+
             return;
         }
 
@@ -193,6 +253,9 @@ public sealed class AuthService(
         RevocationCache.Clear(cache);
     }
 
+    /// <summary>When every token of a demo session that exists now will have expired: the denylist entry can be forgotten then.</summary>
+    private DateTime DemoSessionEnd() => Now.AddHours(jwtSettings.Value.DemoRefreshHours).AddMinutes(1);
+
     private TokenResponse DemoTokens(int staffId, string displayName, Guid family)
     {
         var (access, expires) = tokens.CreateAccess(staffId, displayName, Role.Staff, true, family);
@@ -207,7 +270,7 @@ public sealed class AuthService(
         RevocationCache.Clear(cache);
     }
 
-    private async Task<TokenResponse> IssueAsync(int staffId, string displayName, Role role, bool isDemo, CancellationToken ct, Guid? family = null)
+    private async Task<TokenResponse> IssueAsync(int staffId, string displayName, Role role, bool isDemo, bool mustChangePassword, CancellationToken ct, Guid? family = null)
     {
         var fam = family ?? Guid.NewGuid();
         var now = Now;
@@ -222,14 +285,14 @@ public sealed class AuthService(
         });
         await db.SaveChangesAsync(ct);
         var (access, expires) = tokens.CreateAccess(staffId, displayName, role, isDemo, fam);
-        return new TokenResponse(access, secret, expires, TokenService.Session(staffId, displayName, role, isDemo));
+        return new TokenResponse(access, secret, expires, TokenService.Session(staffId, displayName, role, isDemo, mustChangePassword));
     }
 
     private static ApiException Unauthorized() => new(StatusCodes.Status401Unauthorized, ExtraProblemCodes.Unauthorized, "The session has ended. Sign in again.");
 }
 
 /// <summary>What the database says about a session right now.</summary>
-public sealed record SessionState(bool Active, Role Role);
+public sealed record SessionState(bool Active, Role Role, bool MustChangePassword = false);
 
 /// <summary>
 /// Short-lived memory of "this session is still active and this is the person's role", so an access token check does not hit the
@@ -257,11 +320,11 @@ public static class RevocationCache
         }
 
         var now = time.GetUtcNow().UtcDateTime;
-        var role = await db.RefreshTokens
+        var session = await db.RefreshTokens
             .Where(t => t.FamilyId == family && t.RevokedAtUtc == null && t.ExpiresAtUtc > now)
-            .Select(t => (Role?)t.Staff!.Role)
+            .Select(t => new { t.Staff!.Role, t.Staff.MustChangePassword })
             .FirstOrDefaultAsync(ct);
-        var state = new SessionState(role is not null, role ?? Role.Staff);
+        var state = new SessionState(session is not null, session?.Role ?? Role.Staff, session?.MustChangePassword ?? false);
         cache.Set(key, state, TimeSpan.FromSeconds(20));
         return state;
     }

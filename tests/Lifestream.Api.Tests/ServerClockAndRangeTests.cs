@@ -138,11 +138,29 @@ public sealed class ServerClockAndRangeTests(ApiFixture fx) : IClassFixture<ApiF
 
     private static readonly DateTime Day = Utc(2031, 2, 14);
 
+    /// <summary>
+    /// Pins the API clock for a date-range test: noon of the test day, put back when the test ends. Every row the range tests add is dated
+    /// explicitly, so neither the API clock nor the database's own clock (which cannot be set) decides what lands in a range; pinning the
+    /// API clock also means no daily demo reset (which regenerates data relative to the clock's day) can start in the middle of a test.
+    /// </summary>
+    private Restore PinClocks()
+    {
+        var before = fx.Clock.GetUtcNow().UtcDateTime;
+        fx.Clock.Set(Utc(2031, 2, 14, 12));
+        return new Restore(() => fx.Clock.Set(before));
+    }
+
+    private sealed class Restore(Action undo) : IDisposable
+    {
+        public void Dispose() => undo();
+    }
+
     private static string ToDate => "2031-02-14";
 
     [Fact]
     public async Task Receipts_RangeEndingOnADay_IncludesTheLastMillisecond_ExcludesMidnightAfter_ExcludesTheLastMillisecondBefore()
     {
+        using var pinned = PinClocks();
         var admin = await fx.AddStaffAsync(Role.Admin);
         var tag = Utc(2031, 2, 14, 12);
         var dayBefore = await Seed.ReceiptAsync(fx, ReceiptKind.Donation, Utc(2031, 2, 13, 23, 59, 59, 999));
@@ -173,6 +191,7 @@ public sealed class ServerClockAndRangeTests(ApiFixture fx) : IClassFixture<ApiF
     [Fact]
     public async Task Requests_RangeOnThePlacedDate_IsHalfOpen()
     {
+        using var pinned = PinClocks();
         var admin = await fx.AddStaffAsync(Role.Admin);
         var patient = await Seed.PatientAsync(fx, fx.NextName("Range Patient "));
         var before = await Seed.RequestAsync(fx, patient, 1, placedAtUtc: Utc(2031, 2, 13, 23, 59, 59, 999));
@@ -192,6 +211,7 @@ public sealed class ServerClockAndRangeTests(ApiFixture fx) : IClassFixture<ApiF
     [Fact]
     public async Task Appointments_RangeOnTheSlot_IsHalfOpen()
     {
+        using var pinned = PinClocks();
         var admin = await fx.AddStaffAsync(Role.Admin);
         var donor = await Seed.DonorAsync(fx);
         var before = await Seed.AppointmentAsync(fx, donor, Utc(2031, 2, 13, 23, 59, 59, 999));
@@ -208,6 +228,7 @@ public sealed class ServerClockAndRangeTests(ApiFixture fx) : IClassFixture<ApiF
     [Fact]
     public async Task Dashboard_ChartData_CountsTheLastMillisecondOfTheToDate_NotMidnightAfter_NorTheLastMillisecondBefore()
     {
+        using var pinned = PinClocks();
         var admin = await fx.AddStaffAsync(Role.Admin);
         var units = 1;
         // Blood type APos is used by nothing else in this class; each receipt is `units` unit(s).

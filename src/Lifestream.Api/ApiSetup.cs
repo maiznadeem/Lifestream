@@ -102,6 +102,8 @@ public static class ApiSetup
 
         services.AddSingleton<TokenService>();
         services.AddSingleton<DemoDirectory>();
+        services.AddSingleton<UnknownLoginTracker>();
+        services.AddSingleton<DemoSessionDenylist>();
         services.AddScoped<CurrentUser>();
         services.AddScoped<AuthService>();
         services.AddScoped<StaffService>();
@@ -122,6 +124,13 @@ public static class ApiSetup
                         var principal = context.Principal!;
                         if (principal.HasClaim(Claims.Demo, "1"))
                         {
+                            // A demo session has no database row; its sign-out is remembered in memory.
+                            var demoFamily = Guid.TryParseExact(principal.FindFirst(Claims.Family)?.Value, "N", out var df) ? df : Guid.Empty;
+                            if (demoFamily == Guid.Empty || context.HttpContext.RequestServices.GetRequiredService<DemoSessionDenylist>().IsRevoked(demoFamily))
+                            {
+                                context.Fail("The session has ended.");
+                            }
+
                             return;
                         }
 
@@ -143,6 +152,12 @@ public static class ApiSetup
                             }
 
                             identity.AddClaim(new System.Security.Claims.Claim(Claims.Role, state.Role.ToString()));
+                        }
+
+                        // Whether an administrator-set password still has to be replaced is also the database's call, on every request.
+                        if (state.MustChangePassword && principal.Identity is System.Security.Claims.ClaimsIdentity mustChange)
+                        {
+                            mustChange.AddClaim(new System.Security.Claims.Claim(Claims.MustChangePassword, "1"));
                         }
                     },
                 };
@@ -168,6 +183,7 @@ public static class ApiSetup
         app.UseMiddleware<BodyLimitMiddleware>();
         app.UseAuthentication();
         app.UseAuthorization();
+        app.UseMiddleware<PasswordChangeRequiredMiddleware>();
         app.UseMiddleware<IdentityMiddleware>();
         app.UseMiddleware<DemoWriteCapMiddleware>();
         app.UseMiddleware<IdempotencyMiddleware>();
@@ -179,7 +195,8 @@ public static class ApiSetup
         // Liveness only: never opens a database connection (the startup probe and the client warm-up call it).
         app.MapGet(ApiRoutes.Healthz, () => Results.Ok(new { status = "healthy" }));
 
-        // Readiness: the only health route that touches the database; "waking" and "resting" are distinct, visible states.
+        // Readiness: the only health route that touches the database; "waking" and "resting" are distinct, visible states. Not ready is
+        // an error like any other: RFC 7807 problem details with a code and the correlation id, plus the state as a "database" member.
         app.MapGet(ApiRoutes.Readyz, async (IDatabaseProbe probe, CancellationToken ct) =>
         {
             try
@@ -189,11 +206,21 @@ public static class ApiSetup
             }
             catch (Exception exception) when (DatabaseErrors.IsResting(exception))
             {
-                return Results.Json(new ReadinessResponse(DatabaseStates.Resting), statusCode: StatusCodes.Status503ServiceUnavailable);
+                return new ProblemResult(
+                    StatusCodes.Status503ServiceUnavailable,
+                    ProblemCodes.DatabaseResting,
+                    DatabaseProblems.RestingTitle,
+                    DatabaseProblems.RestingRetryAfter(),
+                    new Dictionary<string, object?> { ["database"] = DatabaseStates.Resting });
             }
             catch (Exception exception) when (DatabaseErrors.IsWaking(exception) || exception is SqlException)
             {
-                return Results.Json(new ReadinessResponse(DatabaseStates.Waking), statusCode: StatusCodes.Status503ServiceUnavailable);
+                return new ProblemResult(
+                    StatusCodes.Status503ServiceUnavailable,
+                    ProblemCodes.DatabaseWaking,
+                    DatabaseProblems.WakingTitle,
+                    DatabaseProblems.WakingRetryAfter,
+                    new Dictionary<string, object?> { ["database"] = DatabaseStates.Waking });
             }
         });
 

@@ -73,15 +73,24 @@ public sealed class ResilienceTests(WakeApiFixture fx) : IClassFixture<WakeApiFi
     [InlineData(40613, "waking")]
     [InlineData(-2, "waking")]
     [InlineData(42119, "resting")]
-    public async Task Readyz_ReportsWakingAndRestingAsDistinctStates(int sqlError, string state)
+    public async Task Readyz_ReportsWakingAndRestingAsDistinctStates_AsProblemDetailsWithCodeAndCorrelationId(int sqlError, string state)
     {
         using var client = fx.NewClient();
         fx.Probe.FailWith = sqlError;
         try
         {
             using var response = await client.GetAsync(ApiRoutes.Readyz, Ct);
-            Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
-            var body = JsonSerializer.Deserialize<ReadinessResponse>(await response.Content.ReadAsStringAsync(Ct), ApiFixture.Json)!;
+
+            // RFC 7807 like every other error: stable code, correlation id (the helper checks both and the media type), no server text.
+            using var problem = await response.Problem(503, state == "waking" ? ProblemCodes.DatabaseWaking : ProblemCodes.DatabaseResting);
+            Assert.Equal(state, problem.RootElement.GetProperty("database").GetString());
+            Assert.Equal(503, problem.RootElement.GetProperty("status").GetInt32());
+            Assert.True(response.Headers.Contains("Retry-After"));
+            Assert.True(response.Headers.Contains(ApiHeaders.CorrelationId));
+            Assert.DoesNotContain("simulated", problem.RootElement.GetRawText(), StringComparison.Ordinal);
+
+            // The readiness contract still reads from it.
+            var body = JsonSerializer.Deserialize<ReadinessResponse>(problem.RootElement.GetRawText(), ApiFixture.Json)!;
             Assert.Equal(state, body.Database);
         }
         finally

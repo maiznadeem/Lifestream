@@ -1,4 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- Timing tests are tagged Category=Perf and run alone in a perf pass: run them with: dotnet test, filter Category=Perf; an explicit filter replaces this default. -->
+    <VSTestTestCaseFilter>Category!=Perf</VSTestTestCaseFilter>
+  </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
     <ProjectReference Include="..\..\src\Lifestream.Api\Lifestream.Api.csproj" />
