@@ -134,11 +134,15 @@ public sealed class UnsavedChangesInventoryTests : IDisposable
         var closed = 0;
         dialog.CloseRequested += (_, _) => closed++;
         makeDirty(dialog);
-
-        await dialog.CancelCommand.ExecuteAsync();
+        var reported = new List<Exception>();
+        using (AsyncRelayCommand.CaptureErrors(reported.Add))
+        {
+            await dialog.CancelCommand.ExecuteAsync();
+        }
 
         Assert.Equal(0, closed); // cannot ask, so it does not discard what was typed
         Assert.IsType<InvalidOperationException>(dialog.CancelCommand.LastException);
+        Assert.Same(dialog.CancelCommand.LastException, Assert.Single(reported));
     }
 
     [Fact]

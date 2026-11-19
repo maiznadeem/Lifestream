@@ -13,7 +13,6 @@ namespace Lifestream.Client.Tests;
 /// LifestreamApiClient and WakeAwareHandler (only the network stubbed) turn it into a problem, and sign-in shows an
 /// inline message instead of raising to the global handler.
 /// </summary>
-[Collection("GlobalErrorHandler")]
 public sealed class UnreadableErrorBodyTests
 {
     private static readonly string[] Charsets = ["no-such-charset", "utf-8", "UTF-16", "iso-8859-1", "\"utf-8\"", "x-bogus", "utf-7", "", "utf-32be", "windows-1252"];
@@ -96,15 +95,9 @@ public sealed class UnreadableErrorBodyTests
         {
             var vm = new LoginViewModel(api, rig.Session, rig.Get<IAppFlow>()) { Username = "u", Password = TestSecrets.P };
             var captured = new List<Exception>();
-            var previous = AsyncRelayCommand.DefaultErrorHandler;
-            AsyncRelayCommand.DefaultErrorHandler = captured.Add;
-            try
+            using (AsyncRelayCommand.CaptureErrors(captured.Add))
             {
                 await vm.SignInCommand.ExecuteAsync();
-            }
-            finally
-            {
-                AsyncRelayCommand.DefaultErrorHandler = previous;
             }
 
             Assert.Equal(string.Empty, string.Join(" | ", captured.Select(e => $"{e.GetType().Name}: {e.Message}")));

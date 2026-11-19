@@ -111,3 +111,94 @@ jobs:
           name: desktop-captures
           path: ${{ runner.temp }}\captures
           if-no-files-found: ignore
+
+  # xUnit's default test order comes from the test assembly's path, so a test that leaks state into another passes in one checkout and
+  # fails in the next. A seeded order is the same on every machine, so this job runs every test project under two fixed seeds
+  # (`Lifestream.X.Tests :<seed>`, the xUnit v3 runner's seed argument) and fails the pull request when any run fails. A failing seed
+  # is reproduced locally with the same command; the build is the one the other jobs already prove.
+  test-order:
+    name: test order (${{ matrix.name }}, two fixed seeds each)
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Domain, Client, Api
+            os: ubuntu-latest
+            projects: "Domain Client Api"
+            sql: true
+          - name: Desktop
+            os: windows-latest
+            projects: "Desktop"
+            sql: false
+    env:
+      SEEDS: "20260101 987654321"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Start SQL Server 2025
+        if: matrix.sql
+        run: |
+          password="Aa1!$(openssl rand -hex 16)"
+          echo "::add-mask::$password"
+          docker run -d --name lifestream-sql -p 1433:1433 \
+            -e ACCEPT_EULA=Y -e "MSSQL_SA_PASSWORD=$password" \
+            mcr.microsoft.com/mssql/server:2025-latest
+          echo "LIFESTREAM_TEST_SQL=Server=localhost,1433;User Id=sa;Password=$password;TrustServerCertificate=true" >> "$GITHUB_ENV"
+          for attempt in $(seq 1 60); do
+            if docker logs lifestream-sql 2>&1 | grep -q "SQL Server is now ready for client connections"; then
+              echo "SQL Server ready after $attempt checks"
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs lifestream-sql | tail -50
+          echo "SQL Server did not become ready" >&2
+          exit 1
+
+      - name: Build the test projects (warnings are errors)
+        shell: bash
+        run: |
+          for project in ${{ matrix.projects }}; do
+            dotnet build "tests/Lifestream.$project.Tests" -c Release
+          done
+
+      # Every project and seed runs even when an earlier one failed, so one pull request shows all the order failures at once.
+      - name: Test, two fixed seeds per project
+        shell: bash
+        env:
+          LIFESTREAM_CAPTURE_DIR: ${{ runner.temp }}/captures
+        run: |
+          mkdir -p "$RUNNER_TEMP/test-logs" "$LIFESTREAM_CAPTURE_DIR"
+          export DOTNET_HOST_PATH="$(command -v dotnet)"
+          fail=0
+          root="$PWD"
+          for project in ${{ matrix.projects }}; do
+            dir="$root/$(ls -d tests/Lifestream.$project.Tests/bin/Release/net11.0* | head -1)"
+            exe="$dir/Lifestream.$project.Tests"
+            if [ -f "$exe.exe" ]; then exe="$exe.exe"; fi
+            for seed in $SEEDS; do
+              echo "::group::$project, seed $seed"
+              set +e
+              (cd "$dir" && "$exe" ":$seed" -noLogo 2>&1) | tee "$RUNNER_TEMP/test-logs/order-$project-$seed.log"
+              status=${PIPESTATUS[0]}
+              set -e
+              echo "::endgroup::"
+              if [ "$status" -ne 0 ]; then
+                echo "::error::$project failed under seed $seed (exit $status). Reproduce: Lifestream.$project.Tests :$seed"
+                fail=1
+              fi
+            done
+          done
+          exit $fail
+
+      - name: Scan the test logs for credentials
+        if: always()
+        shell: pwsh
+        run: ./tools/scan-artifacts.ps1 -Path "$env:RUNNER_TEMP/test-logs" -ReportPath "$env:RUNNER_TEMP/scan-test-logs.json"
+

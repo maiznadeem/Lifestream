@@ -7,7 +7,6 @@ using Lifestream.Contracts.Auth;
 
 namespace Lifestream.Client.Tests;
 
-[Collection("GlobalErrorHandler")]
 public sealed class LoginViewModelTests
 {
     private static LoginViewModel Create(Rig rig) => rig.Get<LoginViewModel>();
@@ -106,15 +105,9 @@ public sealed class LoginViewModelTests
         var vm = Create(rig);
         vm.Username = "u";
         vm.Password = TestSecrets.P;
-        var previous = Lifestream.Client.Common.AsyncRelayCommand.DefaultErrorHandler;
-        Lifestream.Client.Common.AsyncRelayCommand.DefaultErrorHandler = captured.Add;
-        try
+        using (Lifestream.Client.Common.AsyncRelayCommand.CaptureErrors(captured.Add))
         {
             await vm.SignInCommand.ExecuteAsync();
-        }
-        finally
-        {
-            Lifestream.Client.Common.AsyncRelayCommand.DefaultErrorHandler = previous;
         }
 
         Assert.Single(captured);

@@ -213,7 +213,7 @@ public abstract partial class ViewModelBase : ObservableObject, IDisposable
         catch (Exception ex)
         {
             ShowError("Something went wrong while loading this screen.", ex.Message);
-            AsyncRelayCommand.DefaultErrorHandler(ex);
+            AsyncRelayCommand.ReportError(ex);
         }
         finally
         {

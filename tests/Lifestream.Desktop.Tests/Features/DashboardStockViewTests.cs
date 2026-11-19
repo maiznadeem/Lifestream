@@ -170,7 +170,7 @@ public sealed class DashboardStockViewTests
     [Fact]
     public void Dashboard_Cards_AreFlat_NoBlurOrShadowEffect_InXamlOrOnTheRenderedTree_FakeApi()
     {
-        var featuresDir = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "src", "Lifestream.Desktop", "Features");
+        var featuresDir = Lifestream.Client.Tests.RepoPaths.Find("src/Lifestream.Desktop/Features");
         var xaml = Directory.EnumerateFiles(Path.GetFullPath(featuresDir), "*.xaml", SearchOption.AllDirectories).ToList();
         Assert.True(xaml.Count >= 10, $"scanned {xaml.Count} feature xaml files");
         foreach (var file in xaml)
@@ -307,7 +307,7 @@ public sealed class DashboardStockViewTests
     [Fact]
     public void FeatureXaml_UsesThemeTokensForSpacingAndRadius_NoLiteralNumbers_NoHexColours()
     {
-        var featuresDir = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "src", "Lifestream.Desktop", "Features"));
+        var featuresDir = Path.GetFullPath(Lifestream.Client.Tests.RepoPaths.Find("src/Lifestream.Desktop/Features"));
         var literal = new System.Text.RegularExpressions.Regex(""""(?:Margin|Padding|CornerRadius|Spacing)\s*=\s*"([^"{]*)"|Property="(?:Margin|Padding|CornerRadius|Spacing)"\s+Value="([^"{]*)"""");
         var hex = new System.Text.RegularExpressions.Regex("""#[0-9A-Fa-f]{6,8}""");
         var offenders = new List<string>();
