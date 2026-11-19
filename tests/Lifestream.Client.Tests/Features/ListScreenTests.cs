@@ -151,20 +151,20 @@ public sealed class ListScreenTests
         await vm.LoadAsync();
 
         Assert.Equal(50, vm.Items.Count);
-        Assert.Equal("Showing 1-50 of 120", vm.RangeText);
+        Assert.Equal("Showing 1–50 of 120", vm.RangeText);
         Assert.Equal(50, rig.Recorder.LastArg<DonorQuery>("GetDonorsAsync").PageSize);
 
         await vm.NextPageCommand.ExecuteAsync();
         Assert.Equal(2, rig.Recorder.LastArg<DonorQuery>("GetDonorsAsync").Page);
-        Assert.Equal("Showing 51-100 of 120", vm.RangeText);
+        Assert.Equal("Showing 51–100 of 120", vm.RangeText);
 
         await vm.NextPageCommand.ExecuteAsync();
         Assert.Equal(20, vm.Items.Count);
-        Assert.Equal("Showing 101-120 of 120", vm.RangeText);
+        Assert.Equal("Showing 101–120 of 120", vm.RangeText);
         Assert.False(vm.HasNextPage);
 
         await vm.PreviousPageCommand.ExecuteAsync();
-        Assert.Equal("Showing 51-100 of 120", vm.RangeText);
+        Assert.Equal("Showing 51–100 of 120", vm.RangeText);
         Assert.Equal(4, rig.Recorder.CountOf("GetDonorsAsync")); // one call per page, never the whole list
     }
 
@@ -239,7 +239,7 @@ public sealed class ListScreenTests
         rig.PatientsReturn(q => Samples.PatientPage(75, q.Page, q.PageSize));
         var vm = rig.Patients();
         await vm.LoadAsync();
-        Assert.Equal("Showing 1-50 of 75", vm.RangeText);
+        Assert.Equal("Showing 1–50 of 75", vm.RangeText);
 
         vm.SearchText = "omar";
         rig.Clock.Advance(Debounce);

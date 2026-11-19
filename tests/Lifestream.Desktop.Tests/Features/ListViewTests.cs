@@ -56,7 +56,7 @@ public sealed class ListViewTests
                 Calls: (rig.Api.CountOf("GetDonorsAsync"), rig.Api.CountOf("GetDonorAsync")));
         });
 
-        Assert.Equal("Showing 1-50 of 128", facts.Count);
+        Assert.Equal("Showing 1–50 of 128", facts.Count);
         Assert.Equal(50, facts.Items);
         Assert.InRange(facts.Rows, 1, 50);
         Assert.True(facts.FirstDob);
@@ -204,7 +204,7 @@ public sealed class ListViewTests
             return (texts.First(t => t.StartsWith("Showing", StringComparison.Ordinal)), host.All<DataGridRow>().Count(), texts.Contains(vm.DetailTitle));
         });
 
-        Assert.Equal("Showing 1-50 of 64", facts.Item1);
+        Assert.Equal("Showing 1–50 of 64", facts.Item1);
         Assert.True(facts.Item2 > 0);
         Assert.True(facts.Item3);
     }

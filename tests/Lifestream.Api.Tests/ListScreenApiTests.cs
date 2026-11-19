@@ -227,6 +227,8 @@ public sealed class ListScreenApiTests(ApiFixture fx) : IClassFixture<ApiFixture
             [.. (await (await staff.Client.GetApi(ApiRoutes.Appointments, $"?donorId={donor.Id}&view={view}&utcOffsetMinutes=0&sort=slot")).Read<PagedResult<AppointmentListItem>>()).Items.Select(a => a.Id)];
 
         Assert.Equal([todayDone.Id, today.Id], await View(AppointmentView.Today));
+        var unsorted = await (await staff.Client.GetApi(ApiRoutes.Appointments, $"?donorId={donor.Id}&view=Today&utcOffsetMinutes=0")).Read<PagedResult<AppointmentListItem>>();
+        Assert.Equal([todayDone.Id, today.Id], unsorted.Items.Select(a => a.Id)); // the agenda reads in time order without a sort
         Assert.Equal([tomorrow.Id], await View(AppointmentView.Upcoming));
         Assert.Equal([lapsed.Id, yesterday.Id], await View(AppointmentView.Past));
         Assert.Equal(2, (await View(AppointmentView.Cancelled)).Count);

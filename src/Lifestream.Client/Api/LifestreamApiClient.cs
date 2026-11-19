@@ -92,7 +92,7 @@ public sealed class LifestreamApiClient(HttpClient http, ISessionService session
 
     // Donors
     public Task<ApiResult<PagedResult<DonorListItem>>> GetDonorsAsync(DonorQuery query, CancellationToken ct = default) =>
-        SendAsync<PagedResult<DonorListItem>>(HttpMethod.Get, Url(ApiRoutes.Donors, ("search", query.Search), ("bloodType", query.BloodType), ("page", query.Page), ("pageSize", query.PageSize), ("sort", query.Sort)), ct: ct);
+        SendAsync<PagedResult<DonorListItem>>(HttpMethod.Get, Url(ApiRoutes.Donors, ("search", query.Search), ("bloodType", query.BloodType), ("page", query.Page), ("pageSize", query.PageSize), ("sort", query.Sort), ("eligible", query.Eligible), ("lastDonated", query.LastDonated)), ct: ct);
 
     public Task<ApiResult<DonorDetail>> GetDonorAsync(int id, CancellationToken ct = default) =>
         SendAsync<DonorDetail>(HttpMethod.Get, ApiRoutes.Path(ApiRoutes.DonorById, id), ct: ct);
@@ -133,7 +133,7 @@ public sealed class LifestreamApiClient(HttpClient http, ISessionService session
 
     // Appointments
     public Task<ApiResult<PagedResult<AppointmentListItem>>> GetAppointmentsAsync(AppointmentQuery query, CancellationToken ct = default) =>
-        SendAsync<PagedResult<AppointmentListItem>>(HttpMethod.Get, Url(ApiRoutes.Appointments, ("search", query.Search), ("donorId", query.DonorId), ("status", query.Status), ("bloodType", query.BloodType), ("fromUtc", query.FromUtc), ("toUtc", query.ToUtc), ("page", query.Page), ("pageSize", query.PageSize), ("sort", query.Sort)), ct: ct);
+        SendAsync<PagedResult<AppointmentListItem>>(HttpMethod.Get, Url(ApiRoutes.Appointments, ("search", query.Search), ("donorId", query.DonorId), ("status", query.Status), ("bloodType", query.BloodType), ("fromUtc", query.FromUtc), ("toUtc", query.ToUtc), ("page", query.Page), ("pageSize", query.PageSize), ("sort", query.Sort), ("view", query.View), ("utcOffsetMinutes", query.UtcOffsetMinutes)), ct: ct);
 
     public Task<ApiResult<AppointmentDetail>> GetAppointmentAsync(int id, CancellationToken ct = default) =>
         SendAsync<AppointmentDetail>(HttpMethod.Get, ApiRoutes.Path(ApiRoutes.AppointmentById, id), ct: ct);
@@ -155,7 +155,7 @@ public sealed class LifestreamApiClient(HttpClient http, ISessionService session
 
     // Requests
     public Task<ApiResult<PagedResult<RequestListItem>>> GetRequestsAsync(RequestQuery query, CancellationToken ct = default) =>
-        SendAsync<PagedResult<RequestListItem>>(HttpMethod.Get, Url(ApiRoutes.Requests, ("search", query.Search), ("patientId", query.PatientId), ("status", query.Status), ("bloodType", query.BloodType), ("page", query.Page), ("pageSize", query.PageSize), ("sort", query.Sort)), ct: ct);
+        SendAsync<PagedResult<RequestListItem>>(HttpMethod.Get, Url(ApiRoutes.Requests, ("search", query.Search), ("patientId", query.PatientId), ("status", query.Status), ("bloodType", query.BloodType), ("page", query.Page), ("pageSize", query.PageSize), ("sort", query.Sort), ("view", query.View), ("utcOffsetMinutes", query.UtcOffsetMinutes)), ct: ct);
 
     public Task<ApiResult<RequestDetail>> GetRequestAsync(int id, CancellationToken ct = default) =>
         SendAsync<RequestDetail>(HttpMethod.Get, ApiRoutes.Path(ApiRoutes.RequestById, id), ct: ct);
@@ -271,6 +271,19 @@ public sealed class LifestreamApiClient(HttpClient http, ISessionService session
 
     public Task<ApiResult> ResetDemoAsync(CancellationToken ct = default) =>
         SendAsync(HttpMethod.Post, ApiRoutes.Path(ApiRoutes.DemoReset), null, ct);
+
+    // List screens, direction A
+    public Task<ApiResult<DonorDonations>> GetDonorDonationsAsync(int id, CancellationToken ct = default) =>
+        SendAsync<DonorDonations>(HttpMethod.Get, ApiRoutes.Path(ApiRoutes.DonorDonations, id), ct: ct);
+
+    public Task<ApiResult<AppointmentViewCounts>> GetAppointmentViewCountsAsync(AppointmentQuery query, CancellationToken ct = default) =>
+        SendAsync<AppointmentViewCounts>(HttpMethod.Get, Url(ApiRoutes.AppointmentViews, ("search", query.Search), ("donorId", query.DonorId), ("bloodType", query.BloodType), ("utcOffsetMinutes", query.UtcOffsetMinutes)), ct: ct);
+
+    public Task<ApiResult<RequestViewCounts>> GetRequestViewCountsAsync(RequestQuery query, CancellationToken ct = default) =>
+        SendAsync<RequestViewCounts>(HttpMethod.Get, Url(ApiRoutes.RequestViews, ("search", query.Search), ("patientId", query.PatientId), ("bloodType", query.BloodType), ("utcOffsetMinutes", query.UtcOffsetMinutes)), ct: ct);
+
+    public Task<ApiResult<FulfilPreview>> GetFulfilPreviewAsync(int requestId, CancellationToken ct = default) =>
+        SendAsync<FulfilPreview>(HttpMethod.Get, ApiRoutes.Path(ApiRoutes.RequestBags, requestId), ct: ct);
 
     // Plumbing
 

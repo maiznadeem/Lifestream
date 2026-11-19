@@ -53,8 +53,10 @@ public static class AppointmentEndpoints
             filtered = filtered.Where(a => a.SlotStartUtc < e);
         }
 
+        // Today's agenda and the upcoming appointments read in time order unless the caller sorts.
+        var sort = q.Sort ?? (view is AppointmentView.Today or AppointmentView.Upcoming ? SortKeys.Slot : null);
         var total = Lists.Total(filtered);
-        var rows = await (from a in Sorts.Apply(filtered, q.Sort).Skip((page - 1) * size).Take(size).ForSearch(q.Search)
+        var rows = await (from a in Sorts.Apply(filtered, sort).Skip((page - 1) * size).Take(size).ForSearch(q.Search)
                           from t in total
                           select new ListRow<AppointmentListItem>(
                               new AppointmentListItem(a.Id, a.DonorId, a.Donor!.Name, a.Donor.BloodType, a.PlacedAtUtc, a.SlotStartUtc, a.Status)

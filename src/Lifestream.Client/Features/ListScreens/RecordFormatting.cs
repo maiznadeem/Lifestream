@@ -21,6 +21,9 @@ public static class RecordFormatting
         return local.TimeOfDay == TimeSpan.Zero ? Formatting.Date(DateOnly.FromDateTime(local)) : Formatting.DateTime(value, zone);
     }
 
+    /// <summary>A record's code as every list screen shows it (one style everywhere): the kind's letters and the id, "A-0905", "R-0148", "RC-0001".</summary>
+    public static string Code(string prefix, int id) => $"{prefix}-{id.ToString("0000", System.Globalization.CultureInfo.InvariantCulture)}";
+
     /// <summary>The secondary text under a name: "#123".</summary>
     public static string IdText(int id) => $"#{id}";
 

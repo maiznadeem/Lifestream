@@ -154,4 +154,18 @@ public interface ILifestreamApiClient
     Task<ApiResult<EnumLookups>> GetEnumLookupsAsync(CancellationToken ct = default);
 
     Task<ApiResult> ResetDemoAsync(CancellationToken ct = default);
+
+    // List screens, direction A (read-only)
+
+    /// <summary>The donor's donations, newest first, with each bag and where it went, and the totals.</summary>
+    Task<ApiResult<DonorDonations>> GetDonorDonationsAsync(int id, CancellationToken ct = default);
+
+    /// <summary>How many appointments each saved view holds, with the query's search, donor, blood group and local offset (its paging, sort and view are ignored).</summary>
+    Task<ApiResult<AppointmentViewCounts>> GetAppointmentViewCountsAsync(AppointmentQuery query, CancellationToken ct = default);
+
+    /// <summary>How many requests each saved view holds, with the query's search, patient, blood group and local offset (its paging, sort and view are ignored).</summary>
+    Task<ApiResult<RequestViewCounts>> GetRequestViewCountsAsync(RequestQuery query, CancellationToken ct = default);
+
+    /// <summary>The bags a fulfil of this request would issue now (oldest first) and the units of its group in stock.</summary>
+    Task<ApiResult<FulfilPreview>> GetFulfilPreviewAsync(int requestId, CancellationToken ct = default);
 }

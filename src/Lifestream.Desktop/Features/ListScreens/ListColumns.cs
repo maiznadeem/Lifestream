@@ -16,6 +16,35 @@ public static class ListColumns
     public static readonly DependencyProperty IsResponsiveProperty =
         DependencyProperty.RegisterAttached("IsResponsive", typeof(bool), typeof(ListColumns), new PropertyMetadata(false, OnIsResponsiveChanged));
 
+    /// <summary>A column of numbers (design system 5.14): its header sits at the right, over the right-aligned values. Read when the grid is responsive.</summary>
+    public static readonly DependencyProperty IsNumericProperty =
+        DependencyProperty.RegisterAttached("IsNumeric", typeof(bool), typeof(ListColumns), new PropertyMetadata(false));
+
+    public static bool GetIsNumeric(DependencyObject column) => (bool)(column ?? throw new ArgumentNullException(nameof(column))).GetValue(IsNumericProperty);
+
+    public static void SetIsNumeric(DependencyObject column, bool value) => (column ?? throw new ArgumentNullException(nameof(column))).SetValue(IsNumericProperty, value);
+
+    /// <summary>Gives each numeric column a header style based on the grid's own header style, aligned right.</summary>
+    public static void AlignNumericHeaders(DataGrid grid)
+    {
+        ArgumentNullException.ThrowIfNull(grid);
+        if (grid.TryFindResource("DataGridColumnHeader.Lifestream") is not Style header)
+        {
+            return;
+        }
+
+        foreach (var column in grid.Columns)
+        {
+            if (GetIsNumeric(column) && column.HeaderStyle is null)
+            {
+                var style = new Style(typeof(System.Windows.Controls.Primitives.DataGridColumnHeader), header);
+                style.Setters.Add(new Setter(Control.HorizontalContentAlignmentProperty, HorizontalAlignment.Right));
+                style.Seal();
+                column.HeaderStyle = style;
+            }
+        }
+    }
+
     public static double GetHideBelow(DependencyObject column) => (double)(column ?? throw new ArgumentNullException(nameof(column))).GetValue(HideBelowProperty);
 
     public static void SetHideBelow(DependencyObject column, double value) => (column ?? throw new ArgumentNullException(nameof(column))).SetValue(HideBelowProperty, value);
@@ -83,13 +112,17 @@ public static class ListColumns
         }
 
         grid.SizeChanged -= OnSizeChanged;
+        grid.Loaded -= OnGridLoaded;
         if ((bool)e.NewValue)
         {
             grid.SizeChanged += OnSizeChanged;
+            grid.Loaded += OnGridLoaded;
             Apply(grid, grid.ActualWidth);
             RestoreWidths(grid);
         }
     }
+
+    private static void OnGridLoaded(object sender, RoutedEventArgs e) => AlignNumericHeaders((DataGrid)sender);
 
     private static void OnSizeChanged(object sender, SizeChangedEventArgs e)
     {

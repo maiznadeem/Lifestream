@@ -68,7 +68,7 @@ public sealed class Part2AppointmentRequestViewTests
                 Calls: (rig.Api.CountOf("GetAppointmentsAsync"), rig.Api.CountOf("GetAppointmentAsync")));
         });
 
-        Assert.Equal("Showing 1-50 of 86", facts.Count);
+        Assert.Equal("Showing 1–50 of 86", facts.Count);
         Assert.Equal(["Time", "Donor", "Group", "Status", "Booked on"], facts.Headers); // no id column, no constant or always-empty column; the day is the group heading
         Assert.Equal(["slot"], facts.Sortable);
         Assert.All(facts.Sortable, key => Assert.Contains(key, facts.VmKeys)); // a column only sorts by a key the screen declares (and the API accepts)
@@ -277,7 +277,7 @@ public sealed class Part2AppointmentRequestViewTests
                 Fulfil: host.All<Button>().Any(b => b.IsVisible && AutomationProperties.GetName(b) == "Fulfil request"));
         });
 
-        Assert.Equal("Showing 1-40 of 40", facts.Count);
+        Assert.Equal("Showing 1–40 of 40", facts.Count);
         Assert.Equal(["Patient", "Group", "Units", "Needed by", "Urgency", "Status"], facts.Headers);
         Assert.Equal(["requiredBy"], facts.Sortable);
         Assert.All(facts.Sortable, key => Assert.Contains(key, facts.Keys));
