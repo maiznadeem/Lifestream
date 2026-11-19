@@ -21,7 +21,10 @@ namespace Lifestream.Desktop.Tests.RedesignA;
 /// design dataset through the real view models and views (off-screen; no window is shown). Each render is saved for the side-by-side comparison with
 /// the target images and checked for the facts a broken layout would lose: no clipped content, the breakpoint, the theme's canvas colour.
 /// </summary>
+// In the "Wpf" collection: these tests switch the app's theme and build the shell, both process-wide (the theme, and the dependency property descriptors
+// the shell hooks its breakpoint on); beside another class doing the same on its own thread they corrupt that shared state (seen under CI's order seeds).
 [Trait("Category", "RenderA")]
+[Collection("Wpf")]
 public sealed class RenderTests
 {
     /// <summary>Where the renders go: LIFESTREAM_CAPTURE_DIR, else the run's phase 1 captures folder, else the test output.</summary>

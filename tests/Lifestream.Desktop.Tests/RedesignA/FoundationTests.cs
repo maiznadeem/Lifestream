@@ -20,6 +20,9 @@ using ThemeMode = Lifestream.Client.Common.ThemeMode;
 namespace Lifestream.Desktop.Tests.RedesignA;
 
 /// <summary>Direction A's foundation: tokens in both themes, runtime theme switching, every control style, no effect on text, the title bar, the palette and the sidebar rail.</summary>
+// In the "Wpf" collection: these tests switch the app's theme and build the shell, both process-wide (the theme, and the dependency property descriptors
+// the shell hooks its breakpoint on); beside another class doing the same on its own thread they corrupt that shared state (seen under CI's order seeds).
+[Collection("Wpf")]
 public sealed class FoundationTests
 {
     private static ResourceDictionary Load(string file) => new() { Source = new Uri($"/Lifestream;component/Theme/{file}", UriKind.Relative) };

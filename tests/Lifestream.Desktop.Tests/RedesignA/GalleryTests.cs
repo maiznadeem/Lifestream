@@ -13,7 +13,10 @@ namespace Lifestream.Desktop.Tests.RedesignA;
 /// hover, pressed, focus, disabled and busy states, fields at rest, focused, in error and disabled, selection controls, badges, a toast, an empty state
 /// and a skeleton. Saved for review next to the mock-up; the test checks that every piece built its template.
 /// </summary>
+// In the "Wpf" collection: these tests switch the app's theme and build the shell, both process-wide (the theme, and the dependency property descriptors
+// the shell hooks its breakpoint on); beside another class doing the same on its own thread they corrupt that shared state (seen under CI's order seeds).
 [Trait("Category", "RenderA")]
+[Collection("Wpf")]
 public sealed class GalleryTests
 {
     [Theory]
