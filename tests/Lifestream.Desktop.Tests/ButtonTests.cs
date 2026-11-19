@@ -26,7 +26,7 @@ public sealed class ButtonTests
     private static Grid Stage(Button button)
     {
         var grid = new Grid { Width = 320, Height = 120 };
-        grid.SetResourceReference(Panel.BackgroundProperty, "Brush.SurfaceCanvas");
+        grid.SetResourceReference(Panel.BackgroundProperty, "Brush.Canvas");
         grid.Children.Add(button);
         return grid;
     }
@@ -157,12 +157,19 @@ public sealed class ButtonTests
     [Fact]
     public void Button_MinimumSizes_MeetTheDesign()
     {
+        // Direction A (docs/design-system.md 5.1): controls are 34 tall, the Small variants 28; icon buttons are square at the same sizes. Short labels
+        // do not make a button shorter than its minimum, and these labels are short enough not to make it taller.
         var sizes = StaHost.Run(() =>
         {
             var result = new Dictionary<string, Size>();
-            foreach (var variant in new[] { "Primary", "Secondary", "Ghost", "Danger", "Icon" })
+            foreach (var variant in new[] { "Primary", "Secondary", "Ghost", "Danger", "Icon", "Primary.Small", "Secondary.Small", "Danger.Small", "Icon.Small" })
             {
-                var button = Create(variant, "OK");
+                var button = Create(variant.StartsWith("Icon", StringComparison.Ordinal) ? "Icon" : variant, "OK");
+                if (variant == "Icon.Small")
+                {
+                    button.SetResourceReference(FrameworkElement.StyleProperty, "Button.Icon.Small");
+                }
+
                 using var host = Hosted.Create(Stage(button), 320, 120);
                 host.Settle();
                 result[variant] = new Size(button.ActualWidth, button.ActualHeight);
@@ -171,11 +178,23 @@ public sealed class ButtonTests
             return result;
         });
 
-        Assert.True(sizes["Primary"].Height >= 40);
-        Assert.True(sizes["Secondary"].Height >= 32);
-        Assert.True(sizes["Ghost"].Height >= 32);
-        Assert.True(sizes["Danger"].Height >= 32);
-        Assert.True(sizes["Icon"].Width >= 32 && sizes["Icon"].Height >= 32);
+        foreach (var variant in new[] { "Primary", "Secondary", "Ghost", "Danger" })
+        {
+            Assert.Equal(34, sizes[variant].Height, 0.5);
+            Assert.True(sizes[variant].Width >= 34, $"{variant} is {sizes[variant].Width} wide");
+        }
+
+        Assert.Equal(34, sizes["Icon"].Width, 0.5);
+        Assert.Equal(34, sizes["Icon"].Height, 0.5);
+
+        foreach (var variant in new[] { "Primary.Small", "Secondary.Small", "Danger.Small" })
+        {
+            Assert.Equal(28, sizes[variant].Height, 0.5);
+            Assert.True(sizes[variant].Width >= 28, $"{variant} is {sizes[variant].Width} wide");
+        }
+
+        Assert.Equal(28, sizes["Icon.Small"].Width, 0.5);
+        Assert.Equal(28, sizes["Icon.Small"].Height, 0.5);
     }
 
     [Fact]

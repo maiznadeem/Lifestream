@@ -2,7 +2,6 @@ using System.Diagnostics;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
-using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using Lifestream.Client.Api;
 using Lifestream.Client.Features.Dashboard;
@@ -21,9 +20,13 @@ public sealed class DashboardStockViewTests
     private const int Width = 1366;
     private const int Height = 736;
 
-    /// <summary>True when both series colours (Chart1 #FF7A8A and Chart2 #7CB8FF from the tokens) are on screen in numbers only a drawn chart produces.</summary>
-    private static bool ChartsDrawn(byte[] png) =>
-        StaHost.CountPixelsNear(png, 0xFF, 0x7A, 0x8A, 3) > 400 && StaHost.CountPixelsNear(png, 0x7C, 0xB8, 0xFF, 3) > 400;
+    /// <summary>True when both series colours (Brush.Chart1 and Brush.Chart2 of the theme in use) are on screen in numbers only a drawn chart produces.</summary>
+    private static bool ChartsDrawn(byte[] png, FrameworkElement scope)
+    {
+        var one = ((SolidColorBrush)scope.TryFindResource("Brush.Chart1")).Color;
+        var two = ((SolidColorBrush)scope.TryFindResource("Brush.Chart2")).Color;
+        return StaHost.CountPixelsNear(png, one.R, one.G, one.B, 3) > 400 && StaHost.CountPixelsNear(png, two.R, two.G, two.B, 3) > 400;
+    }
 
     [Trait("Category", "Perf")] // asserts a wall-clock budget: runs in the perf pass (tests/perf/run-perf.ps1), not in the loaded default run
     [Trait("PerfPhase", "timing")]
@@ -54,7 +57,7 @@ public sealed class DashboardStockViewTests
             gate.SetResult();
             Hosted.Await(() => load);
             var arrival = Stopwatch.StartNew(); // the data has been applied; the charts must be drawn within 300 ms
-            var drawn = Hosted.PumpUntil(() => ChartsDrawn(host.Capture()), 2000);
+            var drawn = Hosted.PumpUntil(() => ChartsDrawn(host.Capture(), host.Element), 2000);
             var drawnMs = arrival.ElapsedMilliseconds;
             host.Settle(300);
             FeatureHarness.Save(host, "DashboardView_Loaded.png");
@@ -156,46 +159,59 @@ public sealed class DashboardStockViewTests
         Assert.Equal(0, withEffect);
     }
 
+    // Direction A removed the totals grid (and the KPI cards, and the demographics chart). The numbers it showed right-aligned live in the stock
+    // meters of "Stock by blood group": one row per group, the count right-aligned in its own column, a group below its minimum drawn in Critical.
     [Fact]
-    public void Dashboard_TotalsTable_NumbersAreRightAlignedUnderRightAlignedHeaders_NoCellBorders_FakeApi()
+    public void Dashboard_StockMeters_ShowTheEightGroups_CountsRightAligned_LowGroupsInCritical_FakeApi()
     {
         var facts = StaHost.Run(() =>
         {
             using var rig = FeatureHarness.NewRig();
             var vm = FeatureHarness.Create<DashboardViewModel>(rig);
-            using var host = Hosted.Create(FeatureHarness.DashboardView(vm), Width, 1700); // tall enough to show every block without scrolling
+            var view = FeatureHarness.DashboardView(vm);
+            using var host = Hosted.Create(view, Width, 1700); // tall enough to show every block without scrolling
             Hosted.Await(() => vm.LoadAsync());
             host.Settle(400);
+            FeatureHarness.Save(host, "DashboardView_StockMeters.png");
 
-            var grid = host.Find<LifestreamDataGrid>("TotalsGrid");
-            var headers = host.All<DataGridColumnHeader>().Where(h => grid.IsAncestorOf(h) && h.Content is TextBlock).Select(h => (TextBlock)h.Content).ToList();
-            var cell = host.All<DataGridCell>().First(c => grid.IsAncestorOf(c) && c.Column.DisplayIndex == 1);
-            var text = Hosted.Descendants(cell).OfType<TextBlock>().First();
-            var textBounds = Hosted.BoundsOf(text, cell);
-            var headerBox = host.All<DataGridColumnHeader>().First(h => h.Column?.DisplayIndex == 1 && grid.IsAncestorOf(h));
-            var headerText = (TextBlock)headerBox.Content;
-            var headerTextRight = Hosted.BoundsOf(headerText, headerBox).Right;
-            var headerRight = headerBox.ActualWidth;
-            FeatureHarness.Save(host, "DashboardView_Totals.png");
-            return (
-                HeaderAlignments: headers.Select(h => h.TextAlignment).ToList(),
-                HeaderStretch: headers.All(h => h.HorizontalAlignment == HorizontalAlignment.Stretch),
-                CellAlignment: text.TextAlignment,
-                CellFillsColumn: Math.Abs(textBounds.Width - cell.ActualWidth) < 1,
-                HeaderTextReachesTheRight: headerRight - headerTextRight < 13,
-                GridLines: grid.GridLinesVisibility,
-                Borders: grid.CellStyle.Setters.OfType<Setter>().Where(s => s.Property == Control.BorderThicknessProperty).Select(s => s.Value).ToList(),
-                Rows: grid.Items.Count);
+            var list = host.Find<ItemsControl>("StockList");
+            var critical = ((SolidColorBrush)host.Element.TryFindResource("Brush.Critical")).Color;
+            var ink2 = ((SolidColorBrush)host.Element.TryFindResource("Brush.Ink2")).Color;
+            var rows = new List<(string Group, string Count, HorizontalAlignment Align, double CountRight, double BarLeft, double BarRight, Color Fill, Color CountColour, bool Low)>();
+            for (var i = 0; i < list.Items.Count; i++)
+            {
+                var container = (ContentPresenter)list.ItemContainerGenerator.ContainerFromIndex(i);
+                var count = Hosted.Descendants(container).OfType<TextBlock>().Single(t => t.Name == "Count");
+                var bar = Hosted.Descendants(container).OfType<MeterBar>().Single();
+                var countBounds = Hosted.BoundsOf(count, list);
+                var barBounds = Hosted.BoundsOf(bar, list);
+                var model = (StockMeter)list.Items[i];
+                rows.Add((model.Group, string.Concat(count.Inlines.OfType<System.Windows.Documents.Run>().Select(r => r.Text)), count.HorizontalAlignment,
+                    countBounds.Right, barBounds.Left, barBounds.Right, ((SolidColorBrush)bar.Fill!).Color, ((SolidColorBrush)count.Foreground).Color, model.IsLow));
+            }
+
+            return (Rows: rows, ListWidth: list.ActualWidth, Critical: critical, Ink2: ink2, Models: vm.StockMeters.ToList());
         });
 
-        Assert.Equal([TextAlignment.Right, TextAlignment.Right], facts.HeaderAlignments);
-        Assert.True(facts.HeaderStretch);
-        Assert.Equal(TextAlignment.Right, facts.CellAlignment);
-        Assert.True(facts.CellFillsColumn);
-        Assert.True(facts.HeaderTextReachesTheRight);
-        Assert.Equal(DataGridGridLinesVisibility.None, facts.GridLines);
-        Assert.All(facts.Borders, thickness => Assert.Equal(new Thickness(0), thickness));
-        Assert.Equal(9, facts.Rows);
+        Assert.Equal(8, facts.Rows.Count);
+        Assert.Equal(facts.Models.Select(m => m.Group), facts.Rows.Select(r => r.Group));
+        Assert.Equal(8, facts.Rows.Select(r => r.Group).Distinct().Count());
+        Assert.All(facts.Rows, r => Assert.StartsWith(facts.Models.Single(m => m.Group == r.Group).CountText, r.Count, StringComparison.Ordinal));
+
+        // The counts are right-aligned: every one ends at the same x, at the right edge of the list, whatever its digits.
+        Assert.All(facts.Rows, r => Assert.Equal(HorizontalAlignment.Right, r.Align));
+        Assert.All(facts.Rows, r => Assert.True(Math.Abs(r.CountRight - facts.ListWidth) < 1, $"{r.Group}: the count ends at {r.CountRight}, the list at {facts.ListWidth}"));
+        // The bars start and end at the same x in every row, so the eight meters can be compared by eye.
+        Assert.Single(facts.Rows.Select(r => Math.Round(r.BarLeft, 1)).Distinct());
+        Assert.Single(facts.Rows.Select(r => Math.Round(r.BarRight, 1)).Distinct());
+
+        // Groups below their minimum (two in the demo data) use the Critical token for the bar and the count; the rest are Ink2 and never Critical.
+        var low = facts.Rows.Where(r => r.Low).ToList();
+        Assert.Equal(2, low.Count);
+        Assert.All(low, r => Assert.Equal(facts.Critical, r.Fill));
+        Assert.All(low, r => Assert.Equal(facts.Critical, r.CountColour));
+        Assert.All(facts.Rows.Where(r => !r.Low), r => Assert.Equal(facts.Ink2, r.Fill));
+        Assert.All(facts.Rows.Where(r => !r.Low), r => Assert.NotEqual(facts.Critical, r.CountColour));
     }
 
     // Stock (FEAT-19)

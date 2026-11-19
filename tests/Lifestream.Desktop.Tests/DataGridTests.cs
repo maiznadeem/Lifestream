@@ -27,7 +27,7 @@ public sealed class DataGridTests
     private static Grid Stage(UIElement child, double width, double height)
     {
         var grid = new Grid { Width = width, Height = height };
-        grid.SetResourceReference(Panel.BackgroundProperty, "Brush.SurfaceCanvas");
+        grid.SetResourceReference(Panel.BackgroundProperty, "Brush.Canvas");
         grid.Children.Add(child);
         return grid;
     }
@@ -61,9 +61,9 @@ public sealed class DataGridTests
     }
 
     [Fact]
-    public void DataGrid_RowsAre40Dip_TextIs14Dip_SeparatorsOnly_SelectionMeetsContrastSurface()
+    public void DataGrid_RowsAre44Dip_HeaderIs38_TextIs14Dip_SeparatorsOnly_SelectionIsTheSelectedTokenWithA3DipBar()
     {
-        var (rowHeight, fontSize, verticalLine, rowLine, lines, headerHeight, selectedColour) = StaHost.Run(() =>
+        var (rowHeight, fontSize, verticalLine, rowLine, lines, headerHeight, minRow, selected) = StaHost.Run(() =>
         {
             var grid = Grid(Rows(6));
             using var host = Hosted.Create(Stage(grid, 900, 400), 900, 400);
@@ -84,18 +84,40 @@ public sealed class DataGridTests
             host.Settle(150);
             host.Capture("DataGrid_Selected.png");
             var selectedBounds = Hosted.BoundsOf(host.All<DataGridRow>().ElementAt(2), host.Element);
-            var selectedPixel = Pixel(host.Pixels(), 900, 700, (int)(selectedBounds.Top + 20));
-            return (row.ActualHeight, cellText.FontSize, verticalSample == background, separatorSample != background, grid.GridLinesVisibility, phoneHeader.ActualHeight, selectedPixel);
+            var selectedRow = host.All<DataGridRow>().ElementAt(2);
+            var selectedPixels = host.Pixels();
+            var bar = (FrameworkElement)selectedRow.Template.FindName("SelectedBar", selectedRow);
+            var barBounds = Hosted.BoundsOf(bar, host.Element);
+            Color Token(string key) => ((SolidColorBrush)host.Element.TryFindResource(key)).Color;
+            var otherBar = (FrameworkElement)host.All<DataGridRow>().ElementAt(1).Template.FindName("SelectedBar", host.All<DataGridRow>().ElementAt(1));
+            var selected = (
+                Fill: Pixel(selectedPixels, 900, 700, (int)(selectedBounds.Top + 20)), // away from the bar and the text
+                Expected: Token("Brush.Selected"),
+                BarPixel: Pixel(selectedPixels, 900, (int)barBounds.Left + 1, (int)(selectedBounds.Top + 20)),
+                BarToken: Token("Brush.SelectedBar"),
+                BarWidth: bar.ActualWidth,
+                BarLeft: barBounds.Left - selectedBounds.Left,
+                BarVisible: bar.IsVisible,
+                OtherRowBarVisible: otherBar.IsVisible);
+            return (row.ActualHeight, cellText.FontSize, verticalSample == background, separatorSample != background, grid.GridLinesVisibility, phoneHeader.ActualHeight, grid.MinRowHeight, selected);
         });
 
-        Assert.Equal(40, rowHeight, 0.5);
+        // Direction A: rows are 44 DIP (compact 34 is for dense panels), the header 38.
+        Assert.Equal(44, rowHeight, 0.5);
+        Assert.Equal(44, minRow);
         Assert.Equal(14, fontSize);
         Assert.True(verticalLine, "no vertical separator between columns");
         Assert.True(rowLine, "a separator line under each row");
         Assert.Equal(DataGridGridLinesVisibility.None, lines);
-        Assert.Equal(40, headerHeight, 0.5);
-        Assert.Equal(0x4A, selectedColour.R);
-        Assert.Equal(0x1F, selectedColour.G); // the selected row is the SurfaceSelected token, which keeps 4.5:1 with the text (ThemeTests)
+        Assert.Equal(38, headerHeight, 0.5);
+
+        // The selected row is the Selected token (which keeps 4.5:1 with the text, ThemeTests) with a 3 DIP SelectedBar inside its left edge.
+        Assert.Equal(selected.Expected, selected.Fill);
+        Assert.True(selected.BarVisible);
+        Assert.False(selected.OtherRowBarVisible, "only the selected row shows the bar");
+        Assert.Equal(3, selected.BarWidth, 0.5);
+        Assert.Equal(0, selected.BarLeft, 0.5);
+        Assert.Equal(selected.BarToken, selected.BarPixel);
     }
 
     private static Color Pixel(byte[] bgra, int width, int x, int y)
@@ -107,7 +129,7 @@ public sealed class DataGridTests
     [Fact]
     public void DataGrid_SortIndicators_FollowViewModelState_AndSurviveANewPageOfItems()
     {
-        var (glyphAscending, glyphDescending, afterFilter, commandCalls, other) = StaHost.Run(() =>
+        var (ascending, descending, afterFilter, commandCalls, other) = StaHost.Run(() =>
         {
             var calls = new List<object?>();
             var grid = Grid(Rows(5));
@@ -116,37 +138,44 @@ public sealed class DataGridTests
             using var host = Hosted.Create(Stage(grid, 900, 400), 900, 400);
             host.Settle(300);
 
-            string Glyph(string header)
+            // Direction A draws the indicator as an Icon (a 13 px chevron, Chevd): pointing down for descending, turned 180 degrees for ascending.
+            (bool Visible, string Kind, double Angle) Indicator(string header)
             {
                 var headerElement = host.All<System.Windows.Controls.Primitives.DataGridColumnHeader>().First(h => (string)h.Content == header);
-                var block = FindByName<TextBlock>(headerElement, "SortGlyph");
-                return block is { IsVisible: true } ? block.Text : string.Empty;
+                var icon = FindByName<Icon>(headerElement, "SortGlyph")!;
+                var angle = icon.RenderTransform is RotateTransform rotate ? rotate.Angle : 0;
+                return (icon.IsVisible, icon.Kind.ToString(), angle);
             }
 
-            var ascending = Glyph("Name");
+            var asc = Indicator("Name");
             grid.SortDescending = true;
             host.Settle(100);
-            var descending = Glyph("Name");
+            var desc = Indicator("Name");
             host.Capture("DataGrid_SortIndicator.png");
 
             // "Filtering and paging" replace the items; the sort belongs to the view model, so the indicator stays.
             grid.ItemsSource = Rows(3);
             host.Settle(150);
-            var afterItems = Glyph("Name");
+            var afterItems = Indicator("Name");
 
             // Clicking another header asks for that sort through the command and moves the indicator.
             var phone = host.All<System.Windows.Controls.Primitives.DataGridColumnHeader>().First(h => (string)h.Content == "Phone");
             // The header is a button: what a click does is its protected OnClick, which raises the grid's Sorting event.
             typeof(System.Windows.Controls.Primitives.ButtonBase).GetMethod("OnClick", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.Invoke(phone, null);
             host.Settle(100);
-            return (ascending, descending, afterItems, calls.ToList(), Glyph("Phone"));
+            return (asc, desc, afterItems, calls.ToList(), Indicator("Phone"));
         });
 
-        Assert.Equal("", glyphAscending);
-        Assert.Equal("", glyphDescending);
-        Assert.Equal("", afterFilter);
+        Assert.True(ascending.Visible);
+        Assert.Equal("Chevd", ascending.Kind);
+        Assert.Equal(180, ascending.Angle);
+        Assert.True(descending.Visible);
+        Assert.Equal("Chevd", descending.Kind);
+        Assert.Equal(0, descending.Angle);
+        Assert.True(afterFilter.Visible);
+        Assert.Equal(0, afterFilter.Angle); // still the descending sort set above
         Assert.Equal(["phone"], commandCalls.Select(c => c?.ToString()));
-        Assert.Equal("", other);
+        Assert.False(other.Visible); // the view model has not changed the sort, so no other header shows an indicator
     }
 
     private sealed class RelayStub(Action<object?> execute) : System.Windows.Input.ICommand

@@ -12,7 +12,7 @@ namespace Lifestream.Desktop.Tests;
 
 /// <summary>
 /// The 2.0.1 visual refresh: the app icon is real and embedded in the executable, Button and TextBox carry the shared corner radius, hover and
-/// focus treatment, and the text of a rendered sign-in screen is drawn in the bundled Inter (not a fallback) with crisp small-text layout.
+/// focus treatment, and the text of a rendered sign-in screen is drawn in the bundled Onest (not a fallback) with crisp small-text layout.
 /// </summary>
 [Collection("Wpf")]
 public sealed class VisualPolishTests
@@ -71,7 +71,7 @@ public sealed class VisualPolishTests
             var control = (CornerRadius)host.Element.FindResource("Radius.Control");
             var rest = (Border)button.Template.FindName("Rest", button);
             var hover = (Border)button.Template.FindName("HoverLayer", button);
-            var ring = (Border)button.Template.FindName("FocusRing", button);
+            var ring = (Border)button.Template.FindName("FocusRing", button); // a CrispBorder, which is a Border
             var hoverBefore = hover.Opacity;
             VisualStateManager.GoToState(button, "MouseOver", useTransitions: true);
             host.Settle(300);
@@ -87,22 +87,22 @@ public sealed class VisualPolishTests
             box.Focus();
             host.Settle(300);
             var underlineFocused = underline.Opacity;
-            var focusedBorder = ((SolidColorBrush)boxBorder.BorderBrush).Color;
+            var focusedBar = ((SolidColorBrush)underline.Background).Color; // direction A: focus is a 2 px bar along the bottom of the field, not a recoloured border
             box.Text = "Ayşe";
             host.Settle(50);
 
             return (control, rest.CornerRadius, ButtonAssist.GetHoverBackground(button) is not null, hoverBefore, hoverAfter, ring.IsVisible, ring.CornerRadius,
                 boxBorder.CornerRadius, hoverFill.Background is not null, placeholderShown, placeholder.Text, placeholder.IsVisible, box.IsKeyboardFocusWithin, underlineFocused,
-                focusedBorder, (Color)host.Element.FindResource("Color.FocusRing"), (CornerRadius)host.Element.FindResource("Radius.Card"));
+                focusedBar, (Color)host.Element.FindResource("Color.Focus"), (CornerRadius)host.Element.FindResource("Radius.Panel"));
         });
 
-        Assert.Equal(new CornerRadius(8), facts.control);
+        Assert.Equal(new CornerRadius(6), facts.control);      // direction A: 6 for controls
         Assert.Equal(facts.control, facts.Item2);              // button corners
         Assert.True(facts.Item3, "the button has a hover fill");
         Assert.Equal(0, facts.hoverBefore);
         Assert.Equal(1, facts.hoverAfter, 2);                  // the hover state fades the fill in
         Assert.True(facts.Item6, "the keyboard focus ring shows");
-        Assert.Equal(new CornerRadius(12), facts.Item7);       // the ring follows the corner 4 DIP out
+        Assert.Equal(new CornerRadius(10), facts.Item7);       // the ring follows the corner 4 DIP out
         Assert.Equal(facts.control, facts.Item8);              // text box corners
         Assert.True(facts.Item9, "the text box has a hover fill");
         Assert.True(facts.placeholderShown, "an empty field shows its placeholder");
@@ -110,15 +110,15 @@ public sealed class VisualPolishTests
         Assert.False(facts.Item12, "the placeholder goes away once there is text");
         if (facts.Item13)
         {
-            Assert.Equal(1, facts.underlineFocused, 2);        // the accent line under a focused field
-            Assert.Equal(facts.Item16, facts.focusedBorder);
+            Assert.Equal(1, facts.underlineFocused, 2);        // the 2 px bar under a focused field...
+            Assert.Equal(facts.Item16, facts.focusedBar);      // ...in the Focus colour
         }
 
-        Assert.Equal(new CornerRadius(12), facts.Item17);      // cards and dialogs
+        Assert.Equal(new CornerRadius(8), facts.Item17);       // panels and cards: 8 (dialogs are Radius.Dialog, 12)
     }
 
     [Fact]
-    public void Font_EveryTextOfARenderedSignInScreen_IsTheBundledInter_WithRealWeights_AndWindowsUseDisplayFormatting()
+    public void Font_EveryTextOfARenderedSignInScreen_IsTheBundledOnest_WithRealWeights_AndWindowsUseDisplayFormatting()
     {
         var (texts, mode) = StaHost.Run(() =>
         {
@@ -144,15 +144,18 @@ public sealed class VisualPolishTests
 
         Assert.True(texts.Count >= 8, $"only {texts.Count} texts rendered");
         Assert.Contains(texts, t => t.Text == "Sign in");
-        Assert.Contains(texts, t => t.Requested == FontWeights.Bold);
+        // Direction A uses three of the four bundled weights on the sign-in screen (Bold 700 is bundled but A sets no text in it): each must be its own file.
+        Assert.Contains(texts, t => t.Requested == FontWeights.SemiBold);
+        Assert.Contains(texts, t => t.Requested == FontWeights.Medium);
+        Assert.Contains(texts, t => t.Requested == FontWeights.Normal);
         Assert.All(texts, t =>
         {
             Assert.True(t.Resolved, $"'{t.Text}' did not resolve to a font");
-            Assert.StartsWith("Inter", t.Family, StringComparison.Ordinal);
-            Assert.Matches(@"(?i)/Lifestream;component/Fonts/inter(display)?-(regular|medium|semibold|bold)\.ttf$", t.Uri);
+            Assert.StartsWith("Onest", t.Family, StringComparison.Ordinal);
+            Assert.Matches(@"(?i)/Lifestream;component/Fonts/onest-(regular|medium|semibold|bold)\.ttf$", t.Uri);
             Assert.Equal(t.Requested, t.Weight);                // a real named instance of the weight...
             Assert.Equal(StyleSimulations.None, t.Simulated);  // ...not a synthesised bold
-            Assert.Equal(0, t.Missing);                          // and every character is in Inter: no per-glyph fallback
+            Assert.Equal(0, t.Missing);                          // and every character is in Onest: no per-glyph fallback
         });
         Assert.Equal(TextFormattingMode.Display, mode);
     }

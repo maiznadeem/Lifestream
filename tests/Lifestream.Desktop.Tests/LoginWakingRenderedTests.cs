@@ -1,3 +1,4 @@
+using System.Windows;
 using System.Windows.Automation.Peers;
 using System.Windows.Automation.Provider;
 using System.Windows.Controls;
@@ -30,7 +31,7 @@ public sealed class LoginWakingRenderedTests
             vm.Username = "u";
             vm.Password = TestSecrets.P;
             host.Settle(100);
-            var banner = host.Find<Border>("WakingBanner");
+            var banner = host.Find<FrameworkElement>("WakingBanner");
             var cancel = host.Find<Button>("CancelButton");
             var before = banner.IsVisible;
 

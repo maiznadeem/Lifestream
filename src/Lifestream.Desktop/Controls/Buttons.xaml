@@ -49,9 +49,9 @@
 
       <assist:CrispBorder x:Name="Rest" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
               BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="{StaticResource Radius.Control}" />
-      <Border x:Name="HoverLayer" Opacity="0" Background="{TemplateBinding assist:ButtonAssist.HoverBackground}"
+      <Border x:Name="HoverLayer" Opacity="0" Margin="{TemplateBinding BorderThickness}" Background="{TemplateBinding assist:ButtonAssist.HoverBackground}"
               CornerRadius="{StaticResource Radius.Control}" IsHitTestVisible="False" />
-      <Border x:Name="PressedLayer" Opacity="0" Background="{TemplateBinding assist:ButtonAssist.PressedBackground}"
+      <Border x:Name="PressedLayer" Opacity="0" Margin="{TemplateBinding BorderThickness}" Background="{TemplateBinding assist:ButtonAssist.PressedBackground}"
               CornerRadius="{StaticResource Radius.Control}" IsHitTestVisible="False" />
       <!-- The primary variant's 1 px bottom shade (inset 0 -1px): a line inside the template, no effect. Other variants set no Sheen brush. -->
       <Border x:Name="Sheen" Height="1" VerticalAlignment="Bottom" Margin="{DynamicResource Inset.L4R4B1}" Background="{TemplateBinding assist:ButtonAssist.Sheen}"
@@ -133,9 +133,9 @@
       </VisualStateManager.VisualStateGroups>
 
       <Border x:Name="Rest" Background="{TemplateBinding Background}" CornerRadius="{StaticResource Radius.Control}" />
-      <Border x:Name="HoverLayer" Opacity="0" Background="{TemplateBinding assist:ButtonAssist.HoverBackground}"
+      <Border x:Name="HoverLayer" Opacity="0" Margin="{TemplateBinding BorderThickness}" Background="{TemplateBinding assist:ButtonAssist.HoverBackground}"
               CornerRadius="{StaticResource Radius.Control}" IsHitTestVisible="False" />
-      <Border x:Name="PressedLayer" Opacity="0" Background="{TemplateBinding assist:ButtonAssist.PressedBackground}"
+      <Border x:Name="PressedLayer" Opacity="0" Margin="{TemplateBinding BorderThickness}" Background="{TemplateBinding assist:ButtonAssist.PressedBackground}"
               CornerRadius="{StaticResource Radius.Control}" IsHitTestVisible="False" />
       <Rectangle x:Name="Dash" Stroke="{TemplateBinding BorderBrush}" StrokeThickness="1" StrokeDashArray="3 3" RadiusX="6" RadiusY="6"
                  SnapsToDevicePixels="False" IsHitTestVisible="False" />

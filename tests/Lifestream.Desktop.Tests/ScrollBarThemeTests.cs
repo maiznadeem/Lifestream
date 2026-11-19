@@ -1,25 +1,40 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Media;
+using Lifestream.Desktop.Controls;
+using Lifestream.Desktop.Theme;
 
 namespace Lifestream.Desktop.Tests;
 
-/// <summary>Scroll bars use the dark theme, not the default light Windows style.</summary>
+/// <summary>
+/// Scroll bars are Windows 11 style overlays (direction A, docs/design-system.md 5.24): a 12 DIP strip over the content's edge with a transparent
+/// track at rest and a 2 DIP thumb (Ink3 at 55 %), which widens to 6 DIP while the pointer is on the strip. The strip never takes layout width.
+/// (The 2.0 test asserted a dark track and a 3:1 thumb; A's track is transparent and the thumb is deliberately quiet, so those facts are gone.)
+/// </summary>
 [Collection("Wpf")]
 public sealed class ScrollBarThemeTests
 {
-    private static double Luminance(byte r, byte g, byte b)
-    {
-        static double Lin(double v) => v <= 0.03928 ? v / 12.92 : Math.Pow((v + 0.055) / 1.055, 2.4);
-        return (0.2126 * Lin(r / 255.0)) + (0.7152 * Lin(g / 255.0)) + (0.0722 * Lin(b / 255.0));
-    }
+    private sealed record Facts(
+        double BarWidth,
+        double ViewerWidth,
+        double ViewportAtRest,
+        double ViewportExpanded,
+        bool TrackIsTransparent,
+        double WellOpacityAtRest,
+        double PillAtRest,
+        double PillExpanded,
+        double WellOpacityExpanded,
+        double ThumbOpacityAtRest,
+        double ThumbOpacityExpanded,
+        Color ThumbColour,
+        Color Ink3);
 
-    private static double Ratio(double a, double b) => (Math.Max(a, b) + 0.05) / (Math.Min(a, b) + 0.05);
-
-    [Fact]
-    public void ScrollBar_TrackAndThumb_AreDark_AndThumbStandsOutFromTheTrackBy3To1()
+    private static Facts Measure()
     {
-        var (track, thumb, thickness) = StaHost.Run(() =>
+        MotionSettings.Override = true; // animations on, so the widening runs; the theme reads the setting when it loads
+        ThemeLoader.Reset();
+        try
         {
             var content = new StackPanel();
             for (var i = 0; i < 60; i++)
@@ -28,34 +43,72 @@ public sealed class ScrollBarThemeTests
             }
 
             var viewer = new ScrollViewer { Content = content, VerticalScrollBarVisibility = ScrollBarVisibility.Visible };
-            using var host = Hosted.Create(Hosted.Stage(viewer), 400, 300);
+            using var host = Hosted.Create(Hosted.Stage(viewer), 400, 300, animations: true);
             host.Settle(250);
             var bar = host.All<ScrollBar>().First(b => b.Orientation == Orientation.Vertical && b.IsVisible);
-            var thumbElement = host.All<Thumb>().First(t => t.IsVisible);
-            host.Capture("ScrollBar_Dark.png");
-            var pixels = host.Pixels();
-            var width = (int)Math.Ceiling(host.Element.ActualWidth);
+            var thumb = host.All<Thumb>().First(t => t.IsVisible);
+            var pill = (FrameworkElement)thumb.Template.FindName("Pill", thumb);
+            var rest = (Border)thumb.Template.FindName("Rest", thumb);
+            var well = (Border)bar.Template.FindName("Well", bar);
+            host.Capture("ScrollBar_Overlay_Rest.png");
 
-            (byte R, byte G, byte B) At(Rect bounds, double fx, double fy)
-            {
-                var x = (int)(bounds.X + (bounds.Width * fx));
-                var y = (int)(bounds.Y + (bounds.Height * fy));
-                var i = ((y * width) + x) * 4;
-                return (pixels[i + 2], pixels[i + 1], pixels[i]);
-            }
+            var barWidth = bar.ActualWidth;
+            var viewportAtRest = viewer.ViewportWidth;
+            var trackTransparent = bar.Background is SolidColorBrush { Color.A: 0 } or null;
+            var wellAtRest = well.Opacity;
+            var pillAtRest = pill.ActualWidth;
+            var thumbOpacityAtRest = rest.Opacity;
+            var thumbColour = ((SolidColorBrush)rest.Background).Color;
 
-            var barBounds = Hosted.BoundsOf(bar, host.Element);
-            var thumbBounds = Hosted.BoundsOf(thumbElement, host.Element);
-            // The track below the thumb (the thumb sits at the top of a long list).
-            var trackPixel = At(barBounds, 0.5, 0.95);
-            var thumbPixel = At(thumbBounds, 0.5, 0.5);
-            return (trackPixel, thumbPixel, bar.ActualWidth);
-        });
+            OverlayScroll.SetIsExpanded(bar, true); // what the pointer entering the strip does
+            host.Settle(300); // the widening takes 120 ms
+            host.Capture("ScrollBar_Overlay_Expanded.png");
+            return new Facts(
+                barWidth,
+                viewer.ActualWidth,
+                viewportAtRest,
+                viewer.ViewportWidth,
+                trackTransparent,
+                wellAtRest,
+                pillAtRest,
+                pill.ActualWidth,
+                well.Opacity,
+                thumbOpacityAtRest,
+                rest.Opacity,
+                thumbColour,
+                ((SolidColorBrush)host.Element.TryFindResource("Brush.Ink3")).Color);
+        }
+        finally
+        {
+            MotionSettings.Override = null;
+            ThemeLoader.Reset();
+        }
+    }
 
-        var trackLuminance = Luminance(track.R, track.G, track.B);
-        var thumbLuminance = Luminance(thumb.R, thumb.G, thumb.B);
-        Assert.True(trackLuminance < 0.05, $"the scroll bar track is not dark: rgb({track.R},{track.G},{track.B})");
-        Assert.True(Ratio(thumbLuminance, trackLuminance) >= 3, $"the thumb rgb({thumb.R},{thumb.G},{thumb.B}) has under 3:1 contrast with the track rgb({track.R},{track.G},{track.B})");
-        Assert.InRange(thickness, 8, 16); // thin
+    [Fact]
+    public void ScrollBar_IsAnOverlayStrip_WithATransparentTrack_AndAThinQuietThumb_ThatWidensOnHover()
+    {
+        var f = StaHost.Run(Measure);
+
+        Assert.Equal(12, f.BarWidth); // the strip is 12 DIP so a 2 DIP thumb can still be grabbed
+        Assert.True(f.TrackIsTransparent, "the bar's track has a fill at rest: it must be transparent");
+        Assert.Equal(0, f.WellOpacityAtRest); // no track well until the pointer is on the strip
+        Assert.Equal(2, f.PillAtRest);
+        Assert.Equal(f.Ink3, f.ThumbColour);
+        Assert.Equal(0.55, f.ThumbOpacityAtRest, 2);
+
+        Assert.Equal(6, f.PillExpanded);
+        Assert.Equal(1, f.WellOpacityExpanded, 2);
+        Assert.Equal(0.85, f.ThumbOpacityExpanded, 2);
+    }
+
+    [Fact]
+    public void ScrollBar_NeverTakesLayoutWidth_NotAtRest_NotWhenExpanded()
+    {
+        var f = StaHost.Run(Measure);
+
+        // The bar sits over the content: the viewport is the whole viewer, so showing, hiding or widening the bar never moves the content.
+        Assert.Equal(f.ViewerWidth, f.ViewportAtRest);
+        Assert.Equal(f.ViewerWidth, f.ViewportExpanded);
     }
 }

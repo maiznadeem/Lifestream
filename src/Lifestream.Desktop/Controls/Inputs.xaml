@@ -114,6 +114,12 @@
               <Setter TargetName="BottomEdge" Property="Background" Value="{DynamicResource Brush.Critical}" />
               <Setter TargetName="ErrorBar" Property="Visibility" Value="Visible" />
             </Trigger>
+            <!-- A field inside a FormField that shows an error looks like a field in error too. -->
+            <DataTrigger Binding="{Binding HasError, RelativeSource={RelativeSource AncestorType=controls:FormField}}" Value="True">
+              <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brush.Critical}" />
+              <Setter TargetName="BottomEdge" Property="Background" Value="{DynamicResource Brush.Critical}" />
+              <Setter TargetName="ErrorBar" Property="Visibility" Value="Visible" />
+            </DataTrigger>
             <Trigger Property="IsEnabled" Value="False">
               <Setter Property="Foreground" Value="{DynamicResource Brush.Ink3}" />
               <Setter TargetName="Box" Property="Background" Value="{DynamicResource Brush.Layer2}" />
@@ -226,6 +232,12 @@
               <Setter TargetName="BottomEdge" Property="Background" Value="{DynamicResource Brush.Critical}" />
               <Setter TargetName="ErrorBar" Property="Visibility" Value="Visible" />
             </Trigger>
+            <!-- A field inside a FormField that shows an error looks like a field in error too. -->
+            <DataTrigger Binding="{Binding HasError, RelativeSource={RelativeSource AncestorType=controls:FormField}}" Value="True">
+              <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brush.Critical}" />
+              <Setter TargetName="BottomEdge" Property="Background" Value="{DynamicResource Brush.Critical}" />
+              <Setter TargetName="ErrorBar" Property="Visibility" Value="Visible" />
+            </DataTrigger>
             <Trigger Property="IsEnabled" Value="False">
               <Setter Property="Foreground" Value="{DynamicResource Brush.Ink3}" />
               <Setter TargetName="Box" Property="Background" Value="{DynamicResource Brush.Layer2}" />
@@ -304,6 +316,12 @@
               <Setter TargetName="BottomEdge" Property="Background" Value="{DynamicResource Brush.Critical}" />
               <Setter TargetName="ErrorBar" Property="Visibility" Value="Visible" />
             </Trigger>
+            <!-- A field inside a FormField that shows an error looks like a field in error too. -->
+            <DataTrigger Binding="{Binding HasError, RelativeSource={RelativeSource AncestorType=controls:FormField}}" Value="True">
+              <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brush.Critical}" />
+              <Setter TargetName="BottomEdge" Property="Background" Value="{DynamicResource Brush.Critical}" />
+              <Setter TargetName="ErrorBar" Property="Visibility" Value="Visible" />
+            </DataTrigger>
             <Trigger Property="IsEnabled" Value="False">
               <Setter Property="Foreground" Value="{DynamicResource Brush.Ink3}" />
               <Setter TargetName="Box" Property="Background" Value="{DynamicResource Brush.Layer2}" />

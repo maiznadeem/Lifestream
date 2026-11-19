@@ -35,42 +35,106 @@ public sealed class ShellViewTests
 
     // Shell layout (SHELL-20, SHELL-21)
 
+    /// <summary>The title bar's visible pieces (wordmark, search, notifications, account) that share area with another piece or with the sidebar's account card.</summary>
+    private static List<string> OverlappingPieces(Hosted host, ShellView view)
+    {
+        var pieces = new[] { "Wordmark", "SearchField", "CompactSearch", "NotificationsButton", "AvatarButton", "AccountButton" }
+            .Select(n => (Name: n, Element: host.Find<FrameworkElement>(n)))
+            .Where(p => p.Element.IsVisible && p.Element.ActualWidth > 0)
+            .Select(p => (p.Name, Bounds: Hosted.BoundsOf(p.Element, view)))
+            .ToList();
+        var problems = new List<string>();
+        for (var i = 0; i < pieces.Count; i++)
+        {
+            for (var j = i + 1; j < pieces.Count; j++)
+            {
+                if (Overlaps(pieces[i].Bounds, pieces[j].Bounds))
+                {
+                    problems.Add($"{pieces[i].Name} overlaps {pieces[j].Name}: {pieces[i].Bounds} / {pieces[j].Bounds}");
+                }
+            }
+        }
+
+        var account = host.Find<Button>("AccountButton");
+        foreach (var radio in host.All<RadioButton>().Where(r => r.IsVisible))
+        {
+            if (Overlaps(Hosted.BoundsOf(radio, view), Hosted.BoundsOf(account, view)))
+            {
+                problems.Add($"sidebar item '{radio.Content}' overlaps the account card");
+            }
+        }
+
+        return problems;
+    }
+
     [Fact]
     public void Shell_At1024x640_NoClipping()
     {
-        var (scrollable, logoOutsideScroll, navHeight, itemCount, overlaps, accountSize, titleMatchesMenu) = StaHost.Run(() =>
+        var f = StaHost.Run(() =>
         {
             var (rig, shell) = ShellFor();
             using (rig)
             {
                 var view = ViewFor(shell);
-                using var host = Hosted.Create(view, 1024, 608); // 640 minus the 32 DIP caption
+                using var host = Hosted.Create(view, 1024, 640); // direction A: the title bar is part of the view and the window's content extends under the caption
                 _ = shell.StartAsync();
                 host.Settle(400);
                 host.Capture("Shell_At1024x640.png");
 
                 var scroll = host.Find<ScrollViewer>("NavScroll");
-                var logo = host.Find<StackPanel>("LogoRow");
-                var inScroll = Ancestors(logo).Any(a => a == scroll);
-                var radios = host.All<RadioButton>().ToList();
+                var nav = host.Find<DockPanel>("Nav");
+                var wordmark = host.Find<TextBlock>("Wordmark");
+                var mark = host.All<LogoMark>().First();
                 var account = host.Find<Button>("AccountButton");
-                var title = host.All<TextBlock>().First(t => t.Style is not null && t.Text == shell.PageTitle && t.FontSize == 24);
-                var titleBounds = Hosted.BoundsOf(title, view);
-                var accountBounds = Hosted.BoundsOf(account, view);
-                var navBounds = radios.Select(r => Hosted.BoundsOf(r, view)).ToList();
-                var overlap = navBounds.Any(b => b.Right > 232 + 0.5) || Overlaps(titleBounds, accountBounds);
+                var radios = host.All<RadioButton>().ToList();
+                var navBounds = Hosted.BoundsOf(nav, view);
+                var itemsOutsideSidebar = radios.Where(r => r.IsVisible).Select(r => Hosted.BoundsOf(r, view)).Any(b => b.Left < navBounds.Left - 0.5 || b.Right > navBounds.Right + 0.5 || b.Bottom > navBounds.Bottom + 0.5);
                 var selected = radios.Single(r => r.IsChecked == true);
-                return (scroll.ScrollableHeight, !inScroll, scroll.ViewportHeight, radios.Count, overlap, (account.ActualWidth, account.ActualHeight), (string)selected.Content == shell.PageTitle);
+                return (
+                    Scrollable: scroll.ScrollableHeight,
+                    Pinned: !Ancestors(account).Contains(scroll) && !Ancestors(wordmark).Contains(scroll) && !Ancestors(mark).Contains(scroll),
+                    Viewport: scroll.ViewportHeight,
+                    Items: radios.Count,
+                    Overlaps: OverlappingPieces(host, view),
+                    ItemsOutsideSidebar: itemsOutsideSidebar,
+                    Account: (account.ActualWidth, account.ActualHeight),
+                    TitleMatchesMenu: (string)selected.Content == shell.PageTitle);
             }
         });
 
-        Assert.Equal(0, scrollable); // the sidebar does not scroll at 640 DIP
-        Assert.True(logoOutsideScroll); // the logo is pinned outside the scroll region
-        Assert.True(navHeight > 300);
-        Assert.Equal(8, itemCount);
-        Assert.False(overlaps);
-        Assert.True(accountSize.ActualWidth >= 32 && accountSize.ActualHeight >= 32);
-        Assert.True(titleMatchesMenu); // the selected menu label is the page title
+        Assert.Equal(0, f.Scrollable); // the sidebar does not scroll at 640 DIP
+        Assert.True(f.Pinned); // the mark, the wordmark and the account card are pinned outside the scroll region
+        Assert.True(f.Viewport > 300);
+        Assert.Equal(8, f.Items);
+        Assert.Empty(f.Overlaps);
+        Assert.False(f.ItemsOutsideSidebar);
+        Assert.True(f.Account.ActualWidth >= 32 && f.Account.ActualHeight >= 32);
+        Assert.True(f.TitleMatchesMenu); // the selected menu label is the page title
+    }
+
+    [Fact]
+    public void Shell_TitleBar_NeverOverlaps_WithTheSidebarExpandedOrCollapsed()
+    {
+        // Ctrl+B turns the sidebar into the 52 DIP rail at any window size; the title bar's pieces must still not run into each other.
+        var problems = StaHost.Run(() =>
+        {
+            var (rig, shell) = ShellFor();
+            using (rig)
+            {
+                var view = ViewFor(shell);
+                using var host = Hosted.Create(view, 1920, 1080);
+                _ = shell.StartAsync();
+                host.Settle(300);
+                var list = OverlappingPieces(host, view).Select(p => "expanded: " + p).ToList();
+                shell.ToggleNavCommand.ExecuteAsync().GetAwaiter().GetResult();
+                host.Settle(300);
+                host.Capture("Shell_Collapsed.png");
+                list.AddRange(OverlappingPieces(host, view).Select(p => "collapsed: " + p));
+                return list;
+            }
+        });
+
+        Assert.Empty(problems);
     }
 
     /// <summary>True when two rectangles share area (touching edges do not count).</summary>
@@ -87,6 +151,9 @@ public sealed class ShellViewTests
             yield return parent;
         }
     }
+
+    /// <summary>The width of the three caption buttons (3 x 46 DIP).</summary>
+    private static readonly double ChromeCaptionWidth = Lifestream.Desktop.Chrome.ChromeWindow.CaptionButtonsWidth;
 
     public static TheoryData<int, int, double> Sizes()
     {
@@ -116,14 +183,13 @@ public sealed class ShellViewTests
             using (rig)
             {
                 var width = pixelWidth / scale;
-                var height = (pixelHeight / scale) - 32;
+                var height = pixelHeight / scale; // the title bar is inside the view; the caption buttons float over its right end
                 var view = ViewFor(shell);
                 using var host = Hosted.Create(view, width, height);
                 _ = shell.StartAsync();
                 host.Settle(300);
 
                 var list = new List<string>();
-                var bounds = new Rect(0, 0, width, height);
                 var scroll = host.Find<ScrollViewer>("NavScroll");
                 if (scroll.ScrollableHeight > 0)
                 {
@@ -139,14 +205,19 @@ public sealed class ShellViewTests
                     }
                 }
 
-                var title = host.All<TextBlock>().First(t => t.FontSize == 24);
-                var account = host.Find<Button>("AccountButton");
-                if (Overlaps(Hosted.BoundsOf(title, view), Hosted.BoundsOf(account, view)))
+                list.AddRange(OverlappingPieces(host, view)); // title bar pieces, and the sidebar's items against its account card
+
+                // The caption buttons (46 DIP each, three of them) sit over the title bar's right end: nothing of the shell may sit under them.
+                var captionLeft = width - ChromeCaptionWidth;
+                foreach (var name in new[] { "SearchField", "CompactSearch", "NotificationsButton", "AvatarButton" })
                 {
-                    list.Add("title overlaps the account control");
+                    var piece = host.Find<FrameworkElement>(name);
+                    if (piece.IsVisible && Hosted.BoundsOf(piece, view).Right > captionLeft + 0.5)
+                    {
+                        list.Add($"{name} runs under the caption buttons");
+                    }
                 }
 
-                _ = bounds;
                 if (scale == 1.0 && pixelWidth == 2560)
                 {
                     host.Capture("Shell_At2560x1440.png");
@@ -160,28 +231,38 @@ public sealed class ShellViewTests
     }
 
     [Fact]
-    public void Shell_Account_Control_HasTheNameAvatarChevron_AndAMenuWithThreeEntries()
+    public void Shell_Account_Control_HasTheNameAndAvatar_AndAMenuWithProfileChangePasswordThemeCollapseAndSignOut()
     {
-        var (name, text, menuItems, hasImage, tabStop) = StaHost.Run(() =>
+        var f = StaHost.Run(() =>
         {
             var (rig, shell) = ShellFor();
             using (rig)
             {
                 var view = ViewFor(shell);
-                using var host = Hosted.Create(view, 1100, 600);
+                using var host = Hosted.Create(view, 1400, 700); // wide enough for the full sidebar (below 1280 it is a rail with no name)
                 host.Settle(200);
                 var account = host.Find<Button>("AccountButton");
+                var avatarButton = host.Find<Button>("AvatarButton");
                 var texts = host.All<TextBlock>().Where(t => account.IsAncestorOf(t)).Select(t => t.Text).ToList();
-                return (AutomationProperties.GetName(account), string.Join("|", texts), account.ContextMenu!.Items.OfType<MenuItem>().Select(m => (string)m.Header).ToList(), host.All<Image>().Any(i => account.IsAncestorOf(i)), account.IsTabStop && account.Focusable);
+                var menu = (ContextMenu)view.Resources["AccountMenu"];
+                var items = menu.Items.OfType<MenuItem>().ToList();
+                var theme = items.Single(m => (string)m.Header == "Theme").Items.OfType<MenuItem>().Select(m => (string)m.Header).ToList();
+                return (
+                    Names: (AutomationProperties.GetName(account), AutomationProperties.GetName(avatarButton)),
+                    Text: string.Join("|", texts),
+                    Menu: items.Select(m => (string)m.Header).ToList(),
+                    Theme: theme,
+                    HasAvatar: host.All<Avatar>().Any(a => account.IsAncestorOf(a)) && host.All<Avatar>().Any(a => avatarButton.IsAncestorOf(a)),
+                    TabStops: (account.IsTabStop && account.Focusable, avatarButton.IsTabStop && avatarButton.Focusable));
             }
         });
 
-        Assert.Equal("Account menu", name);
-        Assert.Contains("Test User", text);
-        Assert.Contains("", text); // chevron
-        Assert.Equal(["Profile", "Change password", "Sign out"], menuItems);
-        Assert.True(hasImage); // the avatar
-        Assert.True(tabStop); // reachable by keyboard
+        Assert.Equal(("Account menu", "Account menu"), f.Names); // the sidebar's account card and the title bar's avatar open the same menu
+        Assert.Contains("Test User", f.Text);
+        Assert.Equal(["Profile", "Change password", "Theme", "Collapse the sidebar", "Sign out"], f.Menu);
+        Assert.Equal(["Light", "Dark", "Match Windows"], f.Theme);
+        Assert.True(f.HasAvatar); // the avatar
+        Assert.True(f.TabStops.Item1 && f.TabStops.Item2); // reachable by keyboard (Enter or Space opens the menu)
     }
 
     [Fact]
@@ -462,22 +543,33 @@ public sealed class ShellViewTests
     [Fact]
     public void Login_ProblemMessage_IsAnAssertiveLiveRegion_AndFieldsHaveLabels()
     {
-        var (live, labels, names) = StaHost.Run(() =>
+        var (live, problemName, fields) = StaHost.Run(() =>
         {
             using var rig = new Rig(dispatcher: WpfTestUi.Dispatcher());
             var vm = rig.Get<LoginViewModel>();
             using var host = Hosted.Create(LoginFor(vm), 520, 688);
             host.Settle(200);
-            var problem = host.All<Border>().First(b => AutomationProperties.GetName(b) == "Sign-in problem");
-            var fields = host.All<FormField>().Select(f => f.Label).ToList();
-            var inputs = host.All<TextBox>().Select(AutomationProperties.GetName).Concat(host.All<PasswordField>().Select(AutomationProperties.GetName)).ToList();
-            return (AutomationProperties.GetLiveSetting(problem), fields, inputs);
+            // The problem row is a Grid in direction A (it was a Border).
+            var problem = host.Find<Grid>("ProblemRow");
+            var list = new List<(string Name, bool LabelAbove, bool LabelAligned)>();
+            foreach (var field in new FrameworkElement[] { host.Find<TextBox>("UsernameBox"), host.Find<PasswordField>("PasswordBox") })
+            {
+                var name = AutomationProperties.GetName(field);
+                var fieldBounds = Hosted.BoundsOf(field, host.Element);
+                // The label is a TextBlock of its own, above the field, with the same words as the field's automation name (never a placeholder that vanishes).
+                var label = host.All<TextBlock>().FirstOrDefault(t => t.IsVisible && t.Text == name && Hosted.BoundsOf(t, host.Element).Bottom <= fieldBounds.Top + 1);
+                var labelBounds = label is null ? Rect.Empty : Hosted.BoundsOf(label, host.Element);
+                list.Add((name, label is not null && fieldBounds.Top - labelBounds.Bottom < 16, label is not null && Math.Abs(labelBounds.Left - fieldBounds.Left) < 1));
+            }
+
+            return (AutomationProperties.GetLiveSetting(problem), AutomationProperties.GetName(problem), list);
         });
 
         Assert.Equal(AutomationLiveSetting.Assertive, live);
-        Assert.Equal(["Username", "Password"], labels); // persistent visible labels
-        Assert.Contains("Username", names);
-        Assert.Contains("Password", names);
+        Assert.Equal("Sign-in problem", problemName);
+        Assert.Equal(["Username", "Password"], fields.Select(f => f.Name)); // every field has a name for screen readers...
+        Assert.All(fields, f => Assert.True(f.LabelAbove, $"no visible '{f.Name}' label sits directly above its field")); // ...and a persistent visible label above it
+        Assert.All(fields, f => Assert.True(f.LabelAligned, $"the '{f.Name}' label is not aligned with its field"));
     }
 
     // UI Automation and keyboard (SHELL-34, SHELL-35)
@@ -593,23 +685,41 @@ public sealed class ShellViewTests
         }
 
         var views = Directory.EnumerateFiles(Lifestream.Client.Tests.RepoPaths.Find("src/Lifestream.Desktop"), "*.xaml", SearchOption.AllDirectories);
-        Assert.All(views, f => Assert.DoesNotContain("TabIndex", File.ReadAllText(f), StringComparison.Ordinal));
+        // No view sets a TabIndex. The one exception is the theme's TabControl template (Controls/Selection.xaml), which orders its tab strip (1) before its
+        // content (2) exactly as they sit on screen, as WPF's own template does: that is the visual order, so it is not a custom order.
+        Assert.All(views, f =>
+        {
+            var text = File.ReadAllText(f);
+            if (f.EndsWith(Path.Combine("Controls", "Selection.xaml"), StringComparison.Ordinal))
+            {
+                text = text.Replace("KeyboardNavigation.TabIndex=\"1\"", string.Empty, StringComparison.Ordinal).Replace("KeyboardNavigation.TabIndex=\"2\"", string.Empty, StringComparison.Ordinal);
+            }
+
+            Assert.DoesNotContain("TabIndex", text, StringComparison.Ordinal);
+        });
     }
 
     [Fact]
     public void FocusVisual_IsATwoPixelRing_AtThreeToOneContrast()
     {
-        var (thickness, brushColour) = StaHost.Run(() =>
+        var (thickness, stroke, token) = StaHost.Run(() =>
         {
             var resources = Lifestream.Desktop.Theme.ThemeLoader.Resources;
             var style = (Style)resources[SystemParameters.FocusVisualStyleKey];
             var template = (ControlTemplate)style.Setters.OfType<Setter>().First(s => s.Property == Control.TemplateProperty).Value;
             var rect = (System.Windows.Shapes.Rectangle)template.LoadContent();
-            return (rect.StrokeThickness, ((System.Windows.Media.SolidColorBrush)resources["Brush.FocusRing"]).Color);
+            using var host = Hosted.Create(Hosted.Stage(rect), 100, 100); // the stroke is a DynamicResource: it resolves once the ring is in a themed tree
+            host.Settle(50);
+            return (rect.StrokeThickness, ((System.Windows.Media.SolidColorBrush)rect.Stroke).Color, ((System.Windows.Media.SolidColorBrush)resources["Brush.Focus"]).Color);
         });
 
         Assert.Equal(2, thickness);
-        Assert.Equal(0xFF, brushColour.R); // #FFB4BF: 11.01:1 on the canvas (ThemeTests checks every pair)
+        Assert.Equal(token, stroke); // direction A: the ring is the Focus token (2.0 had FocusRing)
+        foreach (var theme in new[] { "Light", "Dark" })
+        {
+            var ratio = ThemeTests.Contrast(theme, "Focus", "Layer");
+            Assert.True(ratio >= 3, $"{theme}: the focus ring (Focus) on the Layer surface is {ratio:0.00}:1, needs 3:1");
+        }
     }
 
     // Toasts through the shell
