@@ -164,6 +164,7 @@ Describe 'workflow robustness: the guarded steps cannot be neutered by || true o
         @{ File = 'Deploy'; Pattern = 'tools/scan-image\.sh|tools/prune-image-versions|tools/verify-image-versions|infra/sync-sql-firewall' }
         @{ File = 'Scan'; Pattern = 'tools/scan-image\.sh|tools/scan-artifacts\.ps1' }
         @{ File = 'Release'; Pattern = 'tools/scan-artifacts\.ps1' }
+        @{ File = 'Ci'; Pattern = 'tools/scan-artifacts\.ps1' }
         @{ File = 'SyncFw'; Pattern = 'infra/sync-sql-firewall' }
     ) {
         $wf = (Get-Variable -Scope Script -Name $File).Value
@@ -230,5 +231,85 @@ Describe 'release.yml' {
         $script:Release.Text | Should -Match 'name: store-msix'
         $script:Release.Yaml.jobs.release.permissions.contents | Should -Be 'write'
         $script:Release.Yaml.jobs.release.Keys | Should -Not -Contain 'id-token'
+    }
+}
+
+Describe 'actionlint passes on every workflow, ci.yml included' {
+    It 'actionlint (LIFESTREAM_ACTIONLINT or PATH) reports no problem in <_>' -ForEach @('ci.yml', 'deploy-api.yml', 'release.yml', 'screenshots.yml', 'secret-scan.yml', 'sync-sql-firewall.yml') {
+        $actionlint = if ($env:LIFESTREAM_ACTIONLINT) { $env:LIFESTREAM_ACTIONLINT } else { (Get-Command actionlint -ErrorAction SilentlyContinue).Source }
+        $actionlint | Should -Not -BeNullOrEmpty -Because 'actionlint is required; a missing linter must fail, not skip'
+        $out = & $actionlint (Join-Path $script:Dir $_) 2>&1 | Out-String
+        $LASTEXITCODE | Should -Be 0 -Because $out
+    }
+
+    It 'ci.yml sets the render capture folder in a step (the runner context is not available in a job-level env)' {
+        $script:Ci.Yaml.jobs.desktop.ContainsKey('env') | Should -BeFalse
+        $first = @($script:Ci.Yaml.jobs.desktop.steps)[0]
+        (Run $first) | Should -Match 'LIFESTREAM_CAPTURE_DIR=\$env:RUNNER_TEMP\\captures" >> \$env:GITHUB_ENV'
+    }
+}
+
+Describe 'INFRA-01 workflows scan the logs: docker build output, vpk output, test logs and captures before upload' {
+    It 'ci.yml keeps the output of every dotnet test run and scans it (even when tests fail), in both jobs' {
+        foreach ($jobName in 'api', 'desktop') {
+            $job = $script:Ci.Yaml.jobs[$jobName]
+            $test = StepIndex $job { param($s) (Run $s) -match 'dotnet test' }
+            $scan = StepIndex $job { param($s) (Run $s) -match 'tools/scan-artifacts\.ps1 -Path "\$env:RUNNER_TEMP/test-logs"' }
+            $test | Should -BeGreaterThan -1 -Because $jobName
+            $scan | Should -BeGreaterThan $test -Because $jobName
+            $steps = @($job.steps)
+            $steps[$scan].if | Should -Match 'always\(\)' -Because $jobName
+            $runs = [regex]::Matches((Run $steps[$test]), '(?m)^\s*dotnet test .*$')
+            $runs.Count | Should -BeGreaterThan 0
+            foreach ($m in $runs) { $m.Value | Should -Match '2>&1 \| (tee|Tee-Object) "\$(env:)?RUNNER_TEMP/test-logs/' -Because $m.Value }
+        }
+        # bash steps fail on the first failing pipeline only with pipefail (shell: bash); the pwsh step checks each exit code.
+        $apiTest = @($script:Ci.Yaml.jobs.api.steps)[(StepIndex $script:Ci.Yaml.jobs.api { param($s) (Run $s) -match 'dotnet test' })]
+        $apiTest.shell | Should -Be 'bash'
+        (Run @($script:Ci.Yaml.jobs.desktop.steps)[(StepIndex $script:Ci.Yaml.jobs.desktop { param($s) (Run $s) -match 'dotnet test' })]) | Should -Match 'if \(\$client -ne 0 -or \$desktop -ne 0\) \{ exit 1 \}'
+    }
+
+    It 'ci.yml scans the render captures with the test logs and uploads them only when that scan passed' {
+        $job = $script:Ci.Yaml.jobs.desktop
+        $scan = StepIndex $job { param($s) (Run $s) -match 'scan-artifacts\.ps1 .*LIFESTREAM_CAPTURE_DIR' }
+        $upload = StepIndex $job { param($s) (Uses $s) -like 'actions/upload-artifact*' }
+        $scan | Should -BeGreaterThan -1
+        $upload | Should -BeGreaterThan $scan
+        $steps = @($job.steps)
+        $steps[$scan].id | Should -Be 'scan-logs'
+        $steps[$upload].if | Should -Match "steps\.scan-logs\.outcome == 'success'"
+    }
+
+    It '<File> keeps the docker build output (bash, pipefail) and scans it with the image before anything is pushed' -ForEach @(
+        @{ File = 'Scan'; Job = 'api-image' }, @{ File = 'Deploy'; Job = 'image' }
+    ) {
+        $wf = (Get-Variable -Scope Script -Name $File).Value
+        $job = $wf.Yaml.jobs[$Job]
+        $build = StepIndex $job { param($s) (Run $s) -match 'docker buildx build' }
+        $scan = StepIndex $job { param($s) (Run $s) -match 'scan-artifacts\.ps1 -Path "\$RUNNER_TEMP/docker-build\.log"' }
+        $image = StepIndex $job { param($s) (Run $s) -match 'tools/scan-image\.sh' }
+        $steps = @($job.steps)
+        (Run $steps[$build]) | Should -Match '--progress=plain .*2>&1 \| tee "\$RUNNER_TEMP/docker-build\.log"'
+        $steps[$build].shell | Should -Be 'bash'
+        $scan | Should -BeGreaterThan $build
+        $image | Should -BeGreaterThan $build
+        $push = StepIndex $job { param($s) (Run $s) -match 'docker push' }
+        if ($push -ge 0) { $push | Should -BeGreaterThan $scan }
+    }
+
+    It 'release.yml keeps the vpk pack output and scans it with the installer before the upload' {
+        $job = $script:Release.Yaml.jobs.release
+        $pack = StepIndex $job { param($s) (Run $s) -match 'vpk @vpkArgs 2>&1 \| Tee-Object "\$env:RUNNER_TEMP/vpk\.log"' }
+        $scan = StepIndex $job { param($s) (Run $s) -match 'scan-artifacts\.ps1 -Path "\$env:RUNNER_TEMP/Releases","\$env:RUNNER_TEMP/vpk\.log"' }
+        $upload = StepIndex $job { param($s) (Run $s) -match 'vpk upload github' }
+        $pack | Should -BeGreaterThan -1
+        $scan | Should -BeGreaterThan $pack
+        $upload | Should -BeGreaterThan $scan
+        (Run @($job.steps)[$pack]) | Should -Match 'if \(\$LASTEXITCODE -ne 0\) \{ exit \$LASTEXITCODE \}'
+    }
+
+    It 'secret-scan.yml scans the repository as git sees it (-GitTracked), never by walking the working folder' {
+        $script:Scan.Text | Should -Match 'scan-artifacts\.ps1 -Path src,tests,infra,packaging -GitTracked'
+        $script:Scan.Text | Should -Not -Match 'SkipBuildOutput'
     }
 }

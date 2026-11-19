@@ -291,3 +291,222 @@ Describe 'scan-artifacts.ps1' {
         (Get-Content $report -Raw) | Should -Not -Match ([regex]::Escape($script:Secret))
     }
 }
+
+# INFRA-01 binary mode (v-03c): nothing may depend on the byte before the keyword, and the value shapes the verifier found must be
+# values. The real compiled DLLs are in ScanBinaries.Tests.ps1 and the real publish/installer/image in ScanRealArtifacts.Tests.ps1;
+# these build exact byte layouts around the keyword so that every possible preceding byte or UTF-16 unit is covered.
+Describe 'INFRA-01 binary mode: keywords found anywhere, decided on the right side' {
+    BeforeAll {
+        $script:PwdKey = 'P' + 'wd='; $script:Pw = 'Pass' + 'word'; $script:V = 'Zq7x' + 'K2mP9'
+        function script:Get-Bytes([string]$Text, [string]$Enc) {
+            switch ($Enc) { 'UTF-8' { [Text.Encoding]::UTF8.GetBytes($Text) } 'UTF-16LE' { [Text.Encoding]::Unicode.GetBytes($Text) } 'UTF-16BE' { [Text.Encoding]::BigEndianUnicode.GetBytes($Text) } }
+        }
+        # A binary file: NUL padding, then $Text in the encoding, then NUL padding.
+        function script:Write-Binary([string]$Dir, [string]$Name, [string]$Text, [string]$Enc) {
+            $pad = [byte[]]::new(16)
+            [IO.File]::WriteAllBytes((Join-Path $Dir $Name), $pad + (Get-Bytes $Text $Enc) + $pad)
+        }
+        function script:Get-FindingCount([string]$Output) { @($Output -split "`n" | Where-Object { $_ -match '^FINDING ' }).Count }
+    }
+
+    It 'finds a UTF-8 keyword after EVERY possible preceding byte 0x00-0xFF (the length byte of attribute, .resources and BAML strings)' {
+        $d = New-Folder 'every-byte-utf8'
+        $ms = [IO.MemoryStream]::new()
+        foreach ($b in 0..255) {
+            $ms.Write([byte[]]::new(8), 0, 8); $ms.WriteByte([byte]$b)
+            $x = [Text.Encoding]::UTF8.GetBytes($script:PwdKey + $script:V); $ms.Write($x, 0, $x.Length)
+        }
+        $ms.Write([byte[]]::new(8), 0, 8)
+        [IO.File]::WriteAllBytes((Join-Path $d 'blob.bin'), $ms.ToArray())
+        $r = Invoke-Scan $d @('-MaxFindingsPerFile', '1000')
+        $r.ExitCode | Should -Be 1 -Because $r.Output
+        @($r.Output -split "`n" | Where-Object { $_ -match '^FINDING .*encoding=UTF-8 ' }).Count | Should -Be 256 -Because $r.Output
+    }
+
+    It 'finds a UTF-16 keyword after EVERY UTF-16 unit a #US heap puts before a literal (terminal byte 0/1, then any length byte), LE and BE' -ForEach @(
+        @{ Enc = 'UTF-16LE' }, @{ Enc = 'UTF-16BE' }
+    ) {
+        $d = New-Folder ('every-unit-' + $Enc)
+        $ms = [IO.MemoryStream]::new()
+        foreach ($terminal in 0, 1) {
+            foreach ($len in 0..255) {
+                $ms.Write([byte[]]::new(8), 0, 8)
+                $unit = if ($Enc -eq 'UTF-16LE') { [byte[]]@($terminal, $len) } else { [byte[]]@($len, $terminal) }
+                $ms.Write($unit, 0, 2)
+                $x = Get-Bytes ($script:PwdKey + $script:V) $Enc; $ms.Write($x, 0, $x.Length)
+            }
+        }
+        $ms.Write([byte[]]::new(8), 0, 8)
+        [IO.File]::WriteAllBytes((Join-Path $d 'heap.bin'), $ms.ToArray())
+        $r = Invoke-Scan $d @('-MaxFindingsPerFile', '1000')
+        $r.ExitCode | Should -Be 1 -Because $r.Output
+        @($r.Output -split "`n" | Where-Object { $_ -match "^FINDING .*encoding=$Enc " }).Count | Should -Be 512 -Because $r.Output
+    }
+
+    It 'flags the v-03c value shape <Name> as <Enc> in a binary file' -ForEach @(
+        foreach ($enc in 'UTF-8', 'UTF-16LE', 'UTF-16BE') {
+            @{ Enc = $enc; Name = 'cyrillic-first';    Text = 'Server=x;Database=BloodBank;' + ('Pass' + 'word=') + [string][char]0x43F + [char]0x430 + [char]0x440 + [char]0x43E + [char]0x43B + [char]0x44C + ('Zq7x' + 'K2mP9') }
+            @{ Enc = $enc; Name = 'cyrillic-only';     Text = ('Pass' + 'word=') + [string][char]0x43F + [char]0x430 + [char]0x440 + [char]0x43E + [char]0x43B + [char]0x44C }
+            @{ Enc = $enc; Name = 'euro-first';        Text = ('Pass' + 'word=') + [string][char]0x20AC + ('Zq7x' + 'K2mP9') }
+            @{ Enc = $enc; Name = 'brace-then-bang';   Text = ('P' + 'wd=') + '{abc}!' + ('Zq7x' + 'K2mP9') }
+            @{ Enc = $enc; Name = 'percent-then';      Text = ('Pass' + 'word=') + '%abc%-' + ('Zq7x' + 'K2mP9') }
+            @{ Enc = $enc; Name = 'odbc-brace';        Text = 'Driver={ODBC Driver 18 for SQL Server};Server=x;UID=sa;' + ('P' + 'wd=') + '{Summer-2024};' }
+            @{ Enc = $enc; Name = 'short-in-conn-str'; Text = 'Server=tcp:x;Database=BloodBank;' + ('P' + 'wd=') + 'ab1;' }
+            @{ Enc = $enc; Name = 'json-colon';        Text = '{"' + ('pass' + 'word') + '": "' + ('Zq7x' + 'K2mP9') + '"}' }
+            @{ Enc = $enc; Name = 'sa-env';            Text = 'MSSQL_SA_' + ('PASS' + 'WORD') + '=' + ('Zq7x' + 'K2mP9') }
+            @{ Enc = $enc; Name = 'account-key';       Text = 'DefaultEndpointsProtocol=https;AccountName=x;' + ('Account' + 'Key=') + 'bXlrZXltYXRlcmlhbA==' }
+            @{ Enc = $enc; Name = 'client-secret';     Text = ('client' + '_secret=') + ('Zq7x' + 'K2mP9') + '&grant_type=client_credentials' }
+            @{ Enc = $enc; Name = 'libpq-spaced';      Text = 'host=db user=app ' + ('pass' + 'word=') + ('Zq7x' + 'K2mP9') + ' dbname=x' }
+        }
+    ) {
+        $d = New-Folder ('shape-' + $Name + '-' + $Enc)
+        Write-Binary $d 'App.dll' $Text $Enc
+        $r = Invoke-Scan $d
+        $r.ExitCode | Should -Be 1 -Because $r.Output
+        $r.Output | Should -Not -Match $script:V
+        $r.Output | Should -Not -Match 'Summer-2024'
+    }
+
+    It 'does not flag a placeholder or template value in a binary file: <Text>' -ForEach @(
+        @{ Text = ('Pass' + 'word={0}') }, @{ Text = ('Pass' + 'word=%s') }, @{ Text = ('Pass' + 'word=${DB_PASSWORD}') }, @{ Text = ('Pass' + 'word=$(DbPassword)') }
+        @{ Text = ('Pass' + 'word=%PASSWORD%') }, @{ Text = ('Pass' + 'word=<your password here>') }, @{ Text = ('Pass' + 'word=********') }
+        @{ Text = ('Server={0};Database={1};User ' + 'ID={2};Pass' + 'word={3};') }, @{ Text = ('UID=%s%u%s') }, @{ Text = ('uid=%lu)') }
+        @{ Text = ('Pass' + 'word="{Binding Pass' + 'word, Mode=TwoWay}"') }, @{ Text = ('uid: { $uid }') }
+        @{ Text = ('urn:uuid:C2F41010-65B3-11D1-A29F-00AA00C14882/') }
+    ) {
+        $d = New-Folder ('placeholder-' + [guid]::NewGuid().ToString('N'))
+        Write-Binary $d 'Lib.dll' $Text 'UTF-16LE'
+        Write-Binary $d 'lib.so' $Text 'UTF-8'
+        $r = Invoke-Scan $d
+        $r.ExitCode | Should -Be 0 -Because $r.Output
+    }
+
+    It 'does not flag messages and labels in a binary file (prose after the value, an empty value, a key with no value): <Text>' -ForEach @(
+        @{ Text = ('passwd: ' + 'pass' + 'word updated successfully') }, @{ Text = ('id-help-' + 'pass' + 'word = Display the id as a ' + 'pass' + 'word file entry') }
+        @{ Text = ('Pass' + 'word: ') }, @{ Text = ('Enter your ' + 'Pass' + 'word = ') }, @{ Text = ('UID= PARTLABEL= PARTUUID=') }
+        @{ Text = ('pass userId=UserIdentifier.AnyUser instead of userId=null.') }
+    ) {
+        $d = New-Folder ('prose-' + [guid]::NewGuid().ToString('N'))
+        Write-Binary $d 'tool' $Text 'UTF-8'
+        $r = Invoke-Scan $d
+        $r.ExitCode | Should -Be 0 -Because $r.Output
+    }
+
+    It 'by design does not flag a value shorter than 6 characters with no connection-string key in the same string (binary mode only)' {
+        $d = New-Folder 'short-alone'
+        Write-Binary $d 'tool' ($script:PwdKey + 'ab1') 'UTF-8'
+        (Invoke-Scan $d).ExitCode | Should -Be 0
+        Set-Content -Encoding ascii (Join-Path $d 'app.config') ($script:PwdKey + 'ab1')
+        (Invoke-Scan (Join-Path $d 'app.config')).ExitCode | Should -Be 1 -Because 'in a text file any value is a finding'
+    }
+
+    Context 'archives and installers: every member is opened and scanned in binary mode' {
+        BeforeAll {
+            $script:Cred = 'Server=tcp:x;Database=BloodBank;' + $script:PwdKey + $script:V + ';'
+            function script:New-Zip([string]$Path, [hashtable]$Entries) {
+                $fs = [IO.File]::Create($Path)
+                $zip = [IO.Compression.ZipArchive]::new($fs, [IO.Compression.ZipArchiveMode]::Create)
+                foreach ($k in $Entries.Keys) {
+                    $e = $zip.CreateEntry($k, [IO.Compression.CompressionLevel]::Optimal)
+                    $s = $e.Open(); $b = [byte[]]$Entries[$k]; $s.Write($b, 0, $b.Length); $s.Dispose()
+                }
+                $zip.Dispose(); $fs.Dispose()
+            }
+        }
+
+        It 'finds a credential in a gzip file and in a .tar.gz (each member by name)' {
+            $d = New-Folder 'gz'
+            $raw = [Text.Encoding]::UTF8.GetBytes($script:Cred)
+            $ms = [IO.MemoryStream]::new(); $gz = [IO.Compression.GZipStream]::new($ms, [IO.Compression.CompressionLevel]::Optimal, $true); $gz.Write($raw, 0, $raw.Length); $gz.Dispose()
+            [IO.File]::WriteAllBytes((Join-Path $d 'settings.json.gz'), $ms.ToArray())
+            $r = Invoke-Scan $d
+            $r.ExitCode | Should -Be 1 -Because $r.Output
+            $r.Output | Should -Match 'settings\.json\.gz!/settings\.json'
+            $t = New-Folder 'targz'
+            $tarMs = [IO.MemoryStream]::new(); $tw = [Formats.Tar.TarWriter]::new($tarMs, [Formats.Tar.TarEntryFormat]::Pax, $true)
+            $entry = [Formats.Tar.PaxTarEntry]::new([Formats.Tar.TarEntryType]::RegularFile, 'app/conn.txt'); $entry.DataStream = [IO.MemoryStream]::new($raw); $tw.WriteEntry($entry); $tw.Dispose()
+            $ms2 = [IO.MemoryStream]::new(); $gz2 = [IO.Compression.GZipStream]::new($ms2, [IO.Compression.CompressionLevel]::Optimal, $true); $tarMs.Position = 0; $tarMs.CopyTo($gz2); $gz2.Dispose()
+            [IO.File]::WriteAllBytes((Join-Path $t 'layer.tar.gz'), $ms2.ToArray())
+            $r2 = Invoke-Scan $t
+            $r2.ExitCode | Should -Be 1 -Because $r2.Output
+            $r2.Output | Should -Match 'layer\.tar\.gz!/layer\.tar!/app/conn\.txt'
+        }
+
+        It 'finds a credential in a zip nested 5 levels deep' {
+            $d = New-Folder 'deep'
+            $inner = [Text.Encoding]::Unicode.GetBytes($script:Cred)
+            $bytes = $inner; $name = 'App.dll'
+            foreach ($level in 1..5) {
+                $p = Join-Path $TestDrive "lvl$level.zip"; New-Zip $p @{ $name = $bytes }
+                $bytes = [IO.File]::ReadAllBytes($p); $name = "lvl$level.zip"
+            }
+            [IO.File]::WriteAllBytes((Join-Path $d 'outer.nupkg'), $bytes)
+            $r = Invoke-Scan $d
+            $r.ExitCode | Should -Be 1 -Because $r.Output
+            $r.Output | Should -Match 'lvl1\.zip!/App\.dll'
+        }
+
+        It 'finds a credential in a zip appended to an executable stub (the Velopack Setup.exe layout), naming the member' {
+            $d = New-Folder 'sfx'
+            $zipPath = Join-Path $TestDrive 'payload.zip'
+            New-Zip $zipPath @{ 'lib/app/appsettings.json' = [Text.Encoding]::UTF8.GetBytes('{"ConnectionStrings":{"L":"' + $script:Cred + '"}}') }
+            $stub = [byte[]](0x4D, 0x5A) + [byte[]]::new(4094)
+            [IO.File]::WriteAllBytes((Join-Path $d 'Lifestream-win-Setup.exe'), $stub + [IO.File]::ReadAllBytes($zipPath))
+            $r = Invoke-Scan $d
+            $r.ExitCode | Should -Be 1 -Because $r.Output
+            $r.Output | Should -Match 'Setup\.exe!/lib/app/appsettings\.json'
+        }
+    }
+
+    Context 'the reviewed binary allow-list (file name | rule | sha256 of the matched text)' {
+        BeforeAll {
+            $script:StockText = 'Passwd' + ': ' + 'sec' + 'ret'   # a documentation example such as the one in Debian's debconf.conf
+            $script:StockDir = New-Folder 'stock-allow'
+            Write-Binary $script:StockDir 'debconf.conf' $script:StockText 'UTF-8'
+            function script:Write-BinAllow([string]$text) { $f = Join-Path $TestDrive ('binallow-' + [guid]::NewGuid().ToString('N') + '.txt'); Set-Content -LiteralPath $f $text; $f }
+            # The checked-in list already accepts this exact text in debconf.conf, so these tests pass their own lists.
+            $r0 = Invoke-Scan $script:StockDir @('-BinaryAllowlist', (Write-BinAllow '# empty'))
+            $script:StockSha = [regex]::Match($r0.Output, 'matchSha256=([0-9a-f]{64})').Groups[1].Value
+        }
+
+        It 'flags it without an entry and prints the matchSha256 a reviewer would list' {
+            $script:StockSha | Should -Match '^[0-9a-f]{64}$'
+            $r = Invoke-Scan $script:StockDir @('-BinaryAllowlist', (Write-BinAllow '# empty'))
+            $r.ExitCode | Should -Be 1 -Because $r.Output
+        }
+
+        It 'accepts exactly that text in a file of that name once listed' {
+            $r = Invoke-Scan $script:StockDir @('-BinaryAllowlist', (Write-BinAllow "debconf.conf|PasswordValue|$($script:StockSha)"))
+            $r.ExitCode | Should -Be 0 -Because $r.Output
+            $r.Output | Should -Match '1 allow-listed'
+        }
+
+        It 'does not apply the entry to another file name, another rule, or edited text' {
+            $allow = Write-BinAllow "debconf.conf|PasswordValue|$($script:StockSha)"
+            $other = New-Folder 'stock-allow-other'; Write-Binary $other 'other.conf' $script:StockText 'UTF-8'
+            (Invoke-Scan $other @('-BinaryAllowlist', $allow)).ExitCode | Should -Be 1
+            (Invoke-Scan $script:StockDir @('-BinaryAllowlist', (Write-BinAllow "debconf.conf|UserIdValue|$($script:StockSha)"))).ExitCode | Should -Be 1
+            $edited = New-Folder 'stock-allow-edited'; Write-Binary $edited 'debconf.conf' ($script:StockText + '2') 'UTF-8'
+            (Invoke-Scan $edited @('-BinaryAllowlist', $allow)).ExitCode | Should -Be 1
+        }
+
+        It 'refuses an entry for the product''s own files, a path, a wildcard, an unknown rule or a bad hash: exit 2 (<Entry>)' -ForEach @(
+            @{ Entry = 'Lifestream.Desktop.dll|PasswordValue|' + ('a' * 64) }, @{ Entry = 'lifestream.dll|PasswordValue|' + ('a' * 64) }
+            @{ Entry = 'appsettings.json|PasswordValue|' + ('a' * 64) }, @{ Entry = 'lib/debconf.conf|PasswordValue|' + ('a' * 64) }
+            @{ Entry = '*.conf|PasswordValue|' + ('a' * 64) }, @{ Entry = '..|PasswordValue|' + ('a' * 64) }
+            @{ Entry = 'debconf.conf|AnyRule|' + ('a' * 64) }, @{ Entry = 'debconf.conf|PasswordValue|nothex' }
+        ) {
+            $r = Invoke-Scan $script:StockDir @('-BinaryAllowlist', (Write-BinAllow $Entry))
+            $r.ExitCode | Should -Be 2 -Because $r.Output
+        }
+    }
+
+    It 'still fails when the findings of one file exceed -MaxFindingsPerFile, and says how many were not listed' {
+        $d = New-Folder 'over-cap'
+        Write-Binary $d 'many.bin' ((1..30 | ForEach-Object { $script:PwdKey + $script:V + $_ + ';' + [char]0 }) -join '') 'UTF-8'
+        $r = Invoke-Scan $d @('-MaxFindingsPerFile', '5')
+        $r.ExitCode | Should -Be 1
+        (Get-FindingCount $r.Output) | Should -Be 5
+        $r.Output | Should -Match '25 more finding\(s\) not listed'
+    }
+}

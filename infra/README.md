@@ -154,7 +154,7 @@ The API container itself gets `ConnectionStrings__Lifestream` with `Authenticati
 |---|---|
 | OWN-02, INFRA-09 | `pwsh tests/infra/run.ps1` (allow-list of idle-free resource types over the compiled template, no VNet); `az containerapp show --subscription 88f308cf-f1e5-4e4d-b0bc-3e8b14ef9c65 -n lifestream-api -g Lifestream` shows `minReplicas 0`, `maxReplicas 1`, a `Startup` probe on `/healthz`, ingress `external` with `allowInsecure false`; `az consumption budget list --subscription 88f308cf-f1e5-4e4d-b0bc-3e8b14ef9c65` shows `lifestream-monthly`. |
 | OWN-03, INFRA-12 | After a deploy, `tools/prune-image-versions.ps1` keeps the newest 3 (refusing to delete the deployed image) and `tools/verify-image-versions.ps1` requires at most 3 versions, the deployed SHA among them and `docker manifest inspect` to pass; `tests/infra/ImageVersions.Tests.ps1`. |
-| INFRA-01 | `tools/scan-artifacts.ps1` runs in `secret-scan.yml` (repo, desktop and API publish output, logs, API image), in `deploy-api.yml` before the image is pushed and in `release.yml` on the publish folder and the installer files. The image scan covers the whole image filesystem plus its config and history, and has zero hits on the stock `mcr.microsoft.com/dotnet/aspnet:11.0` base (`tests/infra/ScanArtifacts.Tests.ps1`). |
+| INFRA-01 | `tools/scan-artifacts.ps1` (see "Credential scanner" below) runs in `secret-scan.yml` (every tracked file of src, tests, infra and packaging; the desktop and API publish output and their logs; every layer of the API image, its configuration and the docker build log), in `deploy-api.yml` on every image layer and the build log before the image is pushed, in `release.yml` on the publish folder and its log, then on the installer, the update packages and the vpk log, and in `ci.yml` on the test logs and render captures before they are uploaded. `tests/infra/ScanRealArtifacts.Tests.ps1` builds the real Desktop publish and vpk Releases with a planted connection string (they fail) and clean (zero findings), and scans the API publish and the stock `mcr.microsoft.com/dotnet/aspnet:11.0` layers (zero findings). |
 | INFRA-04 | `az sql server firewall-rule list --subscription 88f308cf-f1e5-4e4d-b0bc-3e8b14ef9c65 -g Lifestream -s lifestream-server` shows only `aca-outbound-<n>` rules, each a single address from the environment's `outboundIpAddresses`; `tests/infra/SqlFirewall.Tests.ps1`. |
 | INFRA-05 | `az sql server ad-only-auth get --subscription 88f308cf-f1e5-4e4d-b0bc-3e8b14ef9c65 -g Lifestream -n lifestream-server` shows `azureAdOnlyAuthentication true` (`enable-entra-only.ps1` checks it); `tests/infra/EntraOnly.Tests.ps1`. |
 | INFRA-06 | `bootstrap-sql.ps1` ends with its verification query returning no problems. |
@@ -163,6 +163,41 @@ The API container itself gets `ConnectionStrings__Lifestream` with `Authenticati
 | INFRA-10 | `az sql db show --subscription 88f308cf-f1e5-4e4d-b0bc-3e8b14ef9c65 -g Lifestream -s lifestream-server -n BloodBank` shows `useFreeLimit true` and `freeLimitExhaustionBehavior AutoPause`. |
 | INFRA-13 | `deploy-api.yml` has `id-token: write`, no Azure secret, and the `deploy` job needs `image`, which needs `gate`. |
 | INFRA-19 | `tools/generate-screenshots.ps1` (workflow `screenshots.yml`). |
+
+## Credential scanner
+
+`tools/scan-artifacts.ps1 -Path <files or folders>` exits 1 on a credential, 2 when it could not scan (missing path, no files, a read
+error, a malformed allow-list) and 0 only when it looked at everything and found nothing. The rules live in `tools/scan-engine.cs`, which
+the script compiles with PowerShell's own .NET runtime (no SDK needed on the runner).
+
+- **Binary mode** (any file that is not plain text, and every member of a zip, nupkg, msix, tar, gzip, docker layer or an installer with
+  an appended zip such as Velopack's `Setup.exe`, up to 6 levels deep): a credential keyword (password, passwd, pwd, user id, uid,
+  accountkey, sharedaccesskey, client_secret, so also `MSSQL_SA_PASSWORD`, `DbPassword`) is looked for **anywhere**, in UTF-8 and in
+  UTF-16LE and UTF-16BE at both byte alignments. Nothing depends on the byte before the keyword: in compiled .NET code that byte is a
+  string length (the `#US` heap, custom-attribute blobs, `.resources`, BAML) and can be any value; three earlier designs failed exactly
+  there. The decision is made on the right: `=` or `:` and a value that is not a placeholder, plus either a connection-string key
+  (server, data source, initial catalog, database, user id, uid, address, addr) in the same string within 300 bytes, or a value of at
+  least 6 characters that is not followed by more words (a help or log message after the separator is not a value).
+- **.NET assemblies** are also read with `System.Reflection.Metadata`: every user string, custom-attribute blob, string constant and
+  manifest resource (`.resources` strings, BAML and other embedded streams); the text rules run on every string found there, so a
+  literal of any length is caught.
+- **Text mode** (plain-text files on disk, logs, source): the keyword as a whole word and any value that is not a placeholder.
+- **Values** can be quoted, ODBC `{brace-quoted}` or plain, with any characters (Cyrillic, the euro sign ...). Only an exact
+  placeholder is not a value: `{0}`, `{name}`, `${NAME}`, `$(NAME)`, `%NAME%`, `%s`, `<your password>`, `*****`, XAML
+  `{Binding ...}` and templates made only of those. `{abc}!x` or `%abc%-x` are values.
+- **Source tree**: `-GitTracked` scans what git lists (tracked files, plus new files that are not ignored), so ignored build output is
+  never walked, while every tracked file is scanned and a tracked file under `bin`, `obj` or `TestResults` fails the scan. In C# an
+  assignment from an identifier is code only where the keyword is in code; in any string literal or comment it is a finding.
+  CI and a local run use the same command: `pwsh tools/scan-artifacts.ps1 -Path src,tests,infra,packaging -GitTracked`.
+- **Allow-lists**, both reviewed by a person and both matched by hash, so an edit re-flags the text:
+  `tools/secret-scan-allowlist.txt` (`path|rule|sha256 of the line`, paths under `tests/` only) for throw-away test values, and
+  `tools/secret-scan-binary-allowlist.txt` (`file name|rule|sha256 of the matched text`) for benign strings in third-party files, today
+  the 20 strings of the stock aspnet:11.0 layers. A finding prints the hash to list; names starting with `Lifestream` or `appsettings`
+  are refused. Nothing is exempted by path or by rule.
+- **Images**: `tools/scan-image.sh <image>` scans `docker save` output, so each layer tar is scanned on its own and a file that one
+  layer adds and a later layer deletes is still found, plus `docker image inspect` (baked environment variables) and the history.
+- The matched value is never printed; reports carry the file, rule, encoding, offset and hash only. A full Desktop publish (250 MB)
+  scans in about 6 seconds and the Releases folder (1.1 GB, every member opened) in about 16.
 
 ## Every Azure CLI call passes the subscription
 
@@ -173,6 +208,8 @@ Scripts and this runbook always pass `--subscription 88f308cf-f1e5-4e4d-b0bc-3e8
 
 `pwsh tests/infra/run.ps1` runs the Bicep assertions and the idle-cost allow-list (`az bicep build`, no Azure access), the scanner,
 bootstrap, firewall-sync, Entra-only and image-version tests (with a mocked `az`, `gh` and `docker`), screenshot and Store
-packaging tests, static workflow assertions and `actionlint`. Needed locally: Pester 5+, the `powershell-yaml` module, `actionlint`, the
+packaging tests, static workflow assertions and `actionlint`. The scanner tests build real artifacts: tiny class libraries, the Desktop
+publish and its vpk Releases (the .NET 11 SDK via `LIFESTREAM_DOTNET_ROOT` and `vpk` via `LIFESTREAM_VPK`, or both on PATH), and
+download the stock aspnet:11.0 layer blobs (cached by digest in `LIFESTREAM_SCAN_CACHE` or the temp folder). Needed locally: Pester 5+, the `powershell-yaml` module, `actionlint`, the
 Azure CLI with Bicep (for `az bicep build`, no login required) and optionally `shellcheck`. Point the runner at user-local installs with
 `LIFESTREAM_PESTER_PATH`, `LIFESTREAM_YAML_MODULE`, `LIFESTREAM_ACTIONLINT` and `LIFESTREAM_SHELLCHECK_DIR`.

@@ -107,7 +107,8 @@ jobs:
           if ('${{ steps.signing.outputs.enabled }}' -eq 'true') {
             $vpkArgs += @('--signParams', "/f `"${{ steps.signing.outputs.pfx }}`" /p `"$env:WINDOWS_SIGNING_PFX_PASSWORD`" /fd sha256 /tr http://timestamp.digicert.com /td sha256")
           }
-          vpk @vpkArgs
+          vpk @vpkArgs 2>&1 | Tee-Object "$env:RUNNER_TEMP/vpk.log"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Verify the signature when signing is configured
         if: steps.signing.outputs.enabled == 'true'
@@ -116,9 +117,9 @@ jobs:
           $bad = Get-ChildItem "$env:RUNNER_TEMP/Releases" -Filter '*Setup.exe' | Where-Object { (Get-AuthenticodeSignature $_.FullName).Status -ne 'Valid' }
           if ($bad) { throw "Not validly signed: $($bad.Name -join ', ')" }
 
-      - name: Scan the installer and update packages for credentials
+      - name: Scan the installer, the update packages and the pack log for credentials
         shell: pwsh
-        run: ./tools/scan-artifacts.ps1 -Path "$env:RUNNER_TEMP/Releases" -ReportPath "$env:RUNNER_TEMP/scan-releases.json"
+        run: ./tools/scan-artifacts.ps1 -Path "$env:RUNNER_TEMP/Releases","$env:RUNNER_TEMP/vpk.log" -ReportPath "$env:RUNNER_TEMP/scan-releases.json"
 
       - name: Checksums
         shell: pwsh
