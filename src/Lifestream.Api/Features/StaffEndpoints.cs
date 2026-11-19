@@ -133,12 +133,10 @@ public static class StaffEndpoints
 
         var sorted = Sorts.Apply(filtered, q.Sort).Skip((page - 1) * size).Take(size);
 
-        // Salary and phone are read, and sent, for an Admin only. Never the password hash, never the photo bytes.
-        var rows = user.IsAdmin
-            ? await sorted.Select(s => new ListRow<StaffListItem>(
-                new StaffListItem(s.Id, s.DisplayName, s.Username, s.Designation, s.Shift, s.Role, db.StaffPhotos.Any(p => p.StaffId == s.Id), s.Salary, s.Phone), filtered.Count())).ToListAsync(ct)
-            : await sorted.Select(s => new ListRow<StaffListItem>(
-                new StaffListItem(s.Id, s.DisplayName, s.Username, s.Designation, s.Shift, s.Role, db.StaffPhotos.Any(p => p.StaffId == s.Id), null, null), filtered.Count())).ToListAsync(ct);
+        // The list carries only what a row of the grid shows: no salary and no phone (the detail has them, for an Admin only), so 110
+        // staff stay under 20 KB whatever their names. Never the password hash, never the photo bytes.
+        var rows = await sorted.Select(s => new ListRow<StaffListItem>(
+            new StaffListItem(s.Id, s.DisplayName, s.Username, s.Designation, s.Shift, s.Role, db.StaffPhotos.Any(p => p.StaffId == s.Id), null, null), filtered.Count())).ToListAsync(ct);
         return await Lists.BuildAsync(rows, page, size, () => filtered.CountAsync(ct));
     }
 

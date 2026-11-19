@@ -216,8 +216,10 @@ public static class DemoEndpoints
         var now = time.GetUtcNow().UtcDateTime;
         if (!await DemoReset.ForceAsync(db, DateOnly.FromDateTime(now), ct))
         {
-            var last = await db.DemoState.AsNoTracking().Select(s => s.LastForcedResetAtUtc).FirstOrDefaultAsync(ct);
-            var wait = last is { } at ? at + DemoReset.ForceCooldown - now : DemoReset.ForceCooldown;
+            // The reset time was stamped by the database's clock, so "how long is left" is measured with the same clock (DateTime.UtcNow is
+            // SYSUTCDATETIME() inside the query); mixing it with this host's clock made the answer depend on the difference between them.
+            var state = await db.DemoState.AsNoTracking().Select(s => new { s.LastForcedResetAtUtc, DatabaseNow = DateTime.UtcNow }).FirstOrDefaultAsync(ct);
+            var wait = state is { LastForcedResetAtUtc: { } at } ? at + DemoReset.ForceCooldown - state.DatabaseNow : DemoReset.ForceCooldown;
             throw new ApiException(StatusCodes.Status429TooManyRequests, ProblemCodes.DemoResetCooldown, "The demo data was reset a moment ago. Try again later.", retryAfter: wait > TimeSpan.Zero ? wait : TimeSpan.FromMinutes(1));
         }
 

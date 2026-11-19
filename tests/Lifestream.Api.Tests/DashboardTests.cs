@@ -128,8 +128,6 @@ public sealed class DashboardTests(Scale10ApiFixture fx) : IClassFixture<Scale10
 
 public sealed class DashboardLocalDayTests(ApiFixture fx) : IClassFixture<ApiFixture>
 {
-    private static CancellationToken Ct => TestContext.Current.CancellationToken;
-
     private static DateTime LocalToUtc(DateOnly day, int hour, int minute, int offsetMinutes) =>
         DateTime.SpecifyKind(day.ToDateTime(new TimeOnly(hour, minute)).AddMinutes(-offsetMinutes), DateTimeKind.Utc);
 
@@ -165,11 +163,21 @@ public sealed class DashboardLocalDayTests(ApiFixture fx) : IClassFixture<ApiFix
         Assert.Equal(1, series.Donated[^2]);
         Assert.Equal(0, series.Donated[^1]);
     }
+}
+
+/// <summary>
+/// Gender counts are exact numbers, so this class has a database of its own (a shared one gets donors from every other test:
+/// the count of 17 became 18 and the test failed depending on what ran before it).
+/// </summary>
+public sealed class DashboardDemographicsTests(ApiFixture fx) : IClassFixture<ApiFixture>
+{
+    private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
     public async Task Dashboard_GenderCounts_EqualIndependentCount_IncludingOther()
     {
         var admin = await fx.AddStaffAsync(Role.Admin);
+        Assert.Equal(0, await fx.Db.ScalarAsync<int>("SELECT COUNT(*) FROM Donor", Ct));
         await using (var db = fx.Db.NewContext())
         {
             db.Donors.AddRange(Enumerable.Range(0, 17).Select(i => TestRows.Donor($"Male {i}", Gender.Male)));
@@ -202,7 +210,7 @@ public sealed class CachedDashboardFixture : ApiFixture
 public sealed class DashboardCacheTests(CachedDashboardFixture fx) : IClassFixture<CachedDashboardFixture>
 {
     [Fact]
-    public async Task Dashboard_IsCachedBriefly_SecondCallRunsNoQuery_AndTheCacheNeverExceedsAMinute()
+    public async Task Dashboard_IsCachedBriefly_SecondCallRunsNoQuery()
     {
         var admin = await fx.AddStaffAsync(Role.Admin);
         (await admin.Client.GetApi(ApiRoutes.Me)).Dispose();
@@ -221,7 +229,55 @@ public sealed class DashboardCacheTests(CachedDashboardFixture fx) : IClassFixtu
         }
 
         Assert.Empty(fx.Commands.Commands);
-        var configured = fx.Factory.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<Lifestream.Api.Infrastructure.DashboardSettings>>().Value.CacheSeconds;
-        Assert.InRange(configured, 1, 60);
+    }
+}
+
+/// <summary>Records every cache entry the API creates, so a test can read the lifetime that was really applied.</summary>
+public sealed class RecordingMemoryCache : Microsoft.Extensions.Caching.Memory.IMemoryCache
+{
+    private readonly Microsoft.Extensions.Caching.Memory.MemoryCache _inner = new(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions());
+
+    public System.Collections.Concurrent.ConcurrentQueue<Microsoft.Extensions.Caching.Memory.ICacheEntry> Entries { get; } = new();
+
+    public Microsoft.Extensions.Caching.Memory.ICacheEntry CreateEntry(object key)
+    {
+        var entry = _inner.CreateEntry(key);
+        Entries.Enqueue(entry);
+        return entry;
+    }
+
+    public void Remove(object key) => _inner.Remove(key);
+
+    public bool TryGetValue(object key, out object? value) => _inner.TryGetValue(key, out value);
+
+    public void Dispose() => _inner.Dispose();
+}
+
+/// <summary>A configuration that asks for an hour of caching: the API must still never keep the dashboard longer than a minute.</summary>
+public sealed class HourlyCacheDashboardFixture : ApiFixture
+{
+    public RecordingMemoryCache Cache { get; } = new();
+
+    protected override void Configure(Dictionary<string, string?> settings) => settings["Dashboard:CacheSeconds"] = "3600";
+
+    protected override void ConfigureTestServices(IServiceCollection services) => services.AddSingleton<Microsoft.Extensions.Caching.Memory.IMemoryCache>(Cache);
+}
+
+public sealed class DashboardCachePolicyTests(HourlyCacheDashboardFixture fx) : IClassFixture<HourlyCacheDashboardFixture>
+{
+    [Fact]
+    public async Task Dashboard_EvenWhenConfiguredForAnHour_IsCachedForAtMostSixtySeconds_TheEffectivePolicyNotTheOption()
+    {
+        var admin = await fx.AddStaffAsync(Role.Admin);
+        using var response = await admin.Client.GetApi(ApiRoutes.Dashboard);
+        Assert.Equal(System.Net.HttpStatusCode.OK, response.StatusCode);
+
+        var dashboardEntries = fx.Cache.Entries.Where(e => e.Key is ValueTuple<string, DateOnly, DateOnly, int> k && k.Item1 == "dashboard").ToList();
+        Assert.NotEmpty(dashboardEntries);
+        Assert.All(dashboardEntries, e =>
+        {
+            Assert.NotNull(e.AbsoluteExpirationRelativeToNow);
+            Assert.InRange(e.AbsoluteExpirationRelativeToNow!.Value, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(60));
+        });
     }
 }

@@ -2,7 +2,10 @@ using Lifestream.Domain;
 
 namespace Lifestream.Contracts.Staff;
 
-/// <summary>Never carries photo bytes or any credential; the photo is fetched lazily from staff/{id}/photo.</summary>
+/// <summary>
+/// Never carries photo bytes or any credential; the photo is fetched lazily from staff/{id}/photo. <c>Salary</c> and <c>Phone</c> are
+/// always null in the list (they keep the 110-staff payload under 20 KB); read them from <see cref="StaffDetail"/>.
+/// </summary>
 public sealed record StaffListItem(
     int Id,
     string DisplayName,

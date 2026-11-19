@@ -28,9 +28,20 @@ public sealed class TestClock : TimeProvider
 
     public override DateTimeOffset GetUtcNow() => _now;
 
-    public void Advance(TimeSpan by) => _now += by;
+    /// <summary>Raised after the clock moved (a fixture uses it to keep the once-a-day demo reset from firing because a test crossed midnight).</summary>
+    public event Action? Changed;
 
-    public void Set(DateTime utc) => _now = new DateTimeOffset(DateTime.SpecifyKind(utc, DateTimeKind.Utc));
+    public void Advance(TimeSpan by)
+    {
+        _now += by;
+        Changed?.Invoke();
+    }
+
+    public void Set(DateTime utc)
+    {
+        _now = new DateTimeOffset(DateTime.SpecifyKind(utc, DateTimeKind.Utc));
+        Changed?.Invoke();
+    }
 
     public DateOnly Today => DateOnly.FromDateTime(_now.UtcDateTime);
 }
@@ -245,6 +256,14 @@ public class ApiFixture : IAsyncLifetime
 
     protected virtual SqlServerDatabaseFixture CreateDb() => new();
 
+    /// <summary>
+    /// False (the default): the once-a-day demo reset can never fire during a test, whatever the wall clock is. The test clock starts at the real time
+    /// and tests move it by minutes, so near midnight UTC the "first request of the day" would arrive in the middle of a test and wipe the staff it
+    /// just added (404 on GET me). The marker of the last reset is therefore moved forward whenever the clock moves. A fixture for tests that ARE about the
+    /// daily reset returns true: its clock starts at noon UTC (far from midnight) and the marker is left to the test.
+    /// </summary>
+    protected virtual bool DailyResetIsUnderTest => false;
+
     /// <summary>False leaves the real readiness probe in place (it opens a real connection).</summary>
     protected virtual bool UseFakeProbe => true;
 
@@ -263,6 +282,12 @@ public class ApiFixture : IAsyncLifetime
     {
         Db = CreateDb();
         await Db.InitializeAsync();
+        if (DailyResetIsUnderTest)
+        {
+            Clock.Set(DateTime.UtcNow.Date.AddHours(12).AddMilliseconds(500)); // not on a whole second: token issue times are whole seconds, and the reset header compares them with the reset time
+        }
+
+        Clock.Changed += KeepDailyResetAway;
         Configure(Settings);
         Settings["ConnectionStrings:Lifestream"] = Db.ConnectionString;
         Settings["Jwt:SigningKey"] = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
@@ -286,6 +311,21 @@ public class ApiFixture : IAsyncLifetime
             });
         });
         _ = Factory.Server;
+    }
+
+    /// <summary>Moves the last-reset marker up to the clock's day (never back), so the clock crossing midnight does not start a reset.</summary>
+    private void KeepDailyResetAway()
+    {
+        if (DailyResetIsUnderTest)
+        {
+            return;
+        }
+
+        using var connection = new SqlConnection(Db.ConnectionString);
+        connection.Open();
+        using var command = new SqlCommand("UPDATE DemoState SET LastResetDate = @today WHERE LastResetDate < @today", connection);
+        command.Parameters.Add(new SqlParameter("@today", System.Data.SqlDbType.Date) { Value = Clock.Today.ToDateTime(TimeOnly.MinValue) });
+        command.ExecuteNonQuery();
     }
 
     public async ValueTask DisposeAsync()
@@ -388,7 +428,15 @@ public class ApiFixture : IAsyncLifetime
             db.DemoState.Add(new DemoState { LastResetDate = Clock.Today });
             await db.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
+
+        KeepDailyResetAway();
     }
+}
+
+/// <summary>For the tests about the once-a-day demo reset itself: the clock starts at noon UTC and the reset marker belongs to the test.</summary>
+public sealed class DemoResetApiFixture : ApiFixture
+{
+    protected override bool DailyResetIsUnderTest => true;
 }
 
 /// <summary>The same host over a database that holds the 100x dataset (27,000 receipts, 3,500 donors).</summary>

@@ -151,7 +151,16 @@ public sealed class ListTests(Scale10ApiFixture fx) : IClassFixture<Scale10ApiFi
         var admin = await fx.AddStaffAsync(Role.Admin);
         var demo = await fx.AddDemoAsync();
         var adminView = await (await admin.Client.GetApi(ApiRoutes.Staff, "?pageSize=200")).Read<PagedResult<StaffListItem>>();
-        Assert.Contains(adminView.Items, s => s.Salary is not null && s.Phone is not null);
+
+        // The list never carries them (the payload budget); the detail gives them to an administrator.
+        Assert.All(adminView.Items, s =>
+        {
+            Assert.Null(s.Salary);
+            Assert.Null(s.Phone);
+        });
+        var adminDetail = await (await admin.Client.GetApi(ApiRoutes.StaffById, admin.Id)).Read<StaffDetail>();
+        Assert.NotNull(adminDetail.Salary);
+        Assert.NotNull(adminDetail.Phone);
         var demoView = await (await demo.Client.GetApi(ApiRoutes.Staff, "?pageSize=200")).Read<PagedResult<StaffListItem>>();
         Assert.All(demoView.Items, s =>
         {

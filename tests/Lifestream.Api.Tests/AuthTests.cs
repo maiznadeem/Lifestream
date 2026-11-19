@@ -74,10 +74,17 @@ public sealed class AuthTests(ApiFixture fx) : IClassFixture<ApiFixture>
         using var problem = await locked.Problem(429, ProblemCodes.LockedOut);
         Assert.True(int.Parse(locked.Headers.GetValues("Retry-After").Single(), System.Globalization.CultureInfo.InvariantCulture) > 0);
 
-        // The lock expires with the clock.
+        // The lock expires with the clock (moved back afterwards: the clock is shared by every test of this class).
         fx.Clock.Advance(TimeSpan.FromMinutes(16));
-        using var after = await LoginAsync(user.Username, ApiFixture.Password);
-        Assert.Equal(HttpStatusCode.OK, after.StatusCode);
+        try
+        {
+            using var after = await LoginAsync(user.Username, ApiFixture.Password);
+            Assert.Equal(HttpStatusCode.OK, after.StatusCode);
+        }
+        finally
+        {
+            fx.Clock.Advance(TimeSpan.FromMinutes(-16));
+        }
     }
 
     [Fact]
