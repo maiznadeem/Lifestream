@@ -175,17 +175,19 @@ jobs:
           LIFESTREAM_CAPTURE_DIR: ${{ runner.temp }}/captures
         run: |
           mkdir -p "$RUNNER_TEMP/test-logs" "$LIFESTREAM_CAPTURE_DIR"
-          export DOTNET_HOST_PATH="$(command -v dotnet)"
+          DOTNET_HOST_PATH="$(command -v dotnet)"
+          export DOTNET_HOST_PATH
           fail=0
           root="$PWD"
           for project in ${{ matrix.projects }}; do
-            dir="$root/$(ls -d tests/Lifestream.$project.Tests/bin/Release/net11.0* | head -1)"
+            outputs=("$root/tests/Lifestream.$project.Tests/bin/Release/"net11.0*)
+            dir="${outputs[0]}"
             exe="$dir/Lifestream.$project.Tests"
             if [ -f "$exe.exe" ]; then exe="$exe.exe"; fi
             for seed in $SEEDS; do
               echo "::group::$project, seed $seed"
               set +e
-              (cd "$dir" && "$exe" ":$seed" -noLogo 2>&1) | tee "$RUNNER_TEMP/test-logs/order-$project-$seed.log"
+              (cd "$dir" && "$exe" ":$seed" -noLogo -notrait "Category=Perf" 2>&1) | tee "$RUNNER_TEMP/test-logs/order-$project-$seed.log"
               status=${PIPESTATUS[0]}
               set -e
               echo "::endgroup::"

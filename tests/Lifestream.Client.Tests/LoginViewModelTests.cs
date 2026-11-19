@@ -198,6 +198,7 @@ public sealed class LoginViewModelTests
         Assert.True(rig.Session.User!.IsDemo);
     }
 
+    [Trait("Category", "Perf")] // asserts a wall-clock budget: runs in the perf pass (tests/perf/run-perf.ps1), not in the loaded default run
     [Fact]
     public async Task LoginViewModel_BusyStateShowsWithin100ms_WithSigningInText_AndReadOnlyFields()
     {

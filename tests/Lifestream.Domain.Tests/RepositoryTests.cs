@@ -256,6 +256,7 @@ public sealed partial class RepositoryTests
         Assert.Matches(@"(?m)^\s*pull_request:", ci);
         Assert.DoesNotContain("continue-on-error", body, StringComparison.Ordinal);
         Assert.Contains("exit $fail", body, StringComparison.Ordinal);
+        Assert.Contains("-notrait \"Category=Perf\"", body, StringComparison.Ordinal); // running the exe directly skips the csproj filter: wall-clock tests stay out of it too
     }
 
     // ---- INFRA-18: repository hygiene ----

@@ -95,6 +95,9 @@ public sealed class SearchTermApiTests(ApiFixture fx) : IClassFixture<ApiFixture
     public async Task Receipts_APageFarPastTheEnd_IsEmptyWithTheTotal_FromOneStatement_AndTheSearchHasNoFallbackCount()
     {
         var admin = await fx.AddStaffAsync(Role.Admin);
+        // Two donations and one issue, so each of the searches below (the donor phone is on the donation receipts only) matches at least two
+        // receipts from this test's own rows, whichever other test of the class ran before it.
+        await Seed.ReceiptAsync(fx, ReceiptKind.Donation, DateTime.UtcNow.AddHours(-4));
         await Seed.ReceiptAsync(fx, ReceiptKind.Donation, DateTime.UtcNow.AddHours(-3));
         await Seed.ReceiptAsync(fx, ReceiptKind.Issue, DateTime.UtcNow.AddHours(-2));
 

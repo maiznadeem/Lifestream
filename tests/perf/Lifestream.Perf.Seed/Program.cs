@@ -87,8 +87,8 @@ static async Task<int> RunAsync(string[] args)
             var factor = int.Parse(Option(args, "--factor") ?? "100", CultureInfo.InvariantCulture);
             var today = Option(args, "--today") is { } d ? DateOnly.ParseExact(d, "yyyy-MM-dd", CultureInfo.InvariantCulture) : DateOnly.FromDateTime(DateTime.UtcNow);
             var admin = "";
-            var password = Environment.GetEnvironmentVariable("LIFESTREAM_PERF_ADMIN_PASSWORD");
-            if (string.IsNullOrEmpty(password))
+            var adminSecret = Environment.GetEnvironmentVariable("LIFESTREAM_PERF_ADMIN_PASSWORD");
+            if (string.IsNullOrEmpty(adminSecret))
             {
                 Console.Error.WriteLine("ERROR: set LIFESTREAM_PERF_ADMIN_PASSWORD (the session administrator's password).");
                 return 2;
@@ -107,7 +107,7 @@ static async Task<int> RunAsync(string[] args)
                     // The measuring session signs in as the first generated administrator (its password is the only thing changed), so the
                     // staff count stays exactly the generator's (110 at factor 10, 1,100 at factor 100).
                     var sessionAdmin = set.Staff.First(s => s.Role == Role.Admin && !s.IsDemo);
-                    sessionAdmin.Credential = new StaffCredential { PasswordHash = PasswordHashing.Hash(password) };
+                    sessionAdmin.Credential = new StaffCredential { PasswordHash = PasswordHashing.Hash(adminSecret) };
                     admin = sessionAdmin.Username;
                     set.AddTo(db);
                     // Today's DemoState row: without it the API's once-a-day demo reset runs on the first signed-in request and replaces this dataset with the 1x demo set.
