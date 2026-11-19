@@ -170,26 +170,44 @@
                 </GroupStyle>
               </DataGrid.GroupStyle>
               <DataGrid.Columns>
-                <DataGridTemplateColumn Header="Time" Width="80" SortMemberPath="slot">
+                <DataGridTemplateColumn Header="Time" Width="76" SortMemberPath="slot">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
-                      <TextBlock Style="{DynamicResource DataGrid.TextCell}" FontWeight="Medium" Typography.NumeralAlignment="Tabular">
-                        <TextBlock.Text>
-                          <MultiBinding Converter="{StaticResource SlotTime}">
-                            <Binding Path="SlotStartUtc" />
-                            <Binding Path="DataContext.DisplayZone" RelativeSource="{RelativeSource AncestorType=DataGrid}" />
-                          </MultiBinding>
-                        </TextBlock.Text>
-                      </TextBlock>
+                      <StackPanel VerticalAlignment="Center">
+                        <TextBlock Style="{DynamicResource DataGrid.TextCell}" FontWeight="Medium">
+                          <TextBlock.Text>
+                            <MultiBinding Converter="{StaticResource SlotTime}">
+                              <Binding Path="SlotStartUtc" />
+                              <Binding Path="DataContext.DisplayZone" RelativeSource="{RelativeSource AncestorType=DataGrid}" />
+                            </MultiBinding>
+                          </TextBlock.Text>
+                        </TextBlock>
+                        <!-- The agenda's next appointment: a dot and "Next" in Info under the time -->
+                        <StackPanel Orientation="Horizontal">
+                          <StackPanel.Visibility>
+                            <MultiBinding Converter="{StaticResource Agenda}" ConverterParameter="Next">
+                              <Binding />
+                              <Binding Path="DataContext" RelativeSource="{RelativeSource AncestorType=DataGrid}" />
+                              <Binding Path="DataContext.AgendaVersion" RelativeSource="{RelativeSource AncestorType=DataGrid}" />
+                            </MultiBinding>
+                          </StackPanel.Visibility>
+                          <Ellipse Width="6" Height="6" Fill="{DynamicResource Brush.Info}" VerticalAlignment="Center" Margin="{DynamicResource Inset.R4}" />
+                          <TextBlock Style="{DynamicResource Text.Caption}" Foreground="{DynamicResource Brush.Info}" FontWeight="SemiBold" Text="Next" />
+                        </StackPanel>
+                      </StackPanel>
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="Donor" Width="1.6*" MinWidth="200" MaxWidth="320" CanUserSort="False">
+                <DataGridTemplateColumn Header="Donor" Width="1.6*" MinWidth="180" MaxWidth="320" CanUserSort="False">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
-                      <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                      <Grid VerticalAlignment="Center">
+                        <Grid.ColumnDefinitions>
+                          <ColumnDefinition Width="Auto" />
+                          <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
                         <controls:Avatar Initials="{Binding DonorName, Converter={StaticResource Initials}}" Size="28" VerticalAlignment="Center" />
-                        <StackPanel Margin="{StaticResource Appts.NameGap}" VerticalAlignment="Center">
+                        <StackPanel Grid.Column="1" Margin="{StaticResource Appts.NameGap}" VerticalAlignment="Center">
                           <TextBlock Style="{DynamicResource Text.Body}" FontWeight="Medium" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" ToolTip="{Binding DonorName}">
                             <Hyperlink Style="{StaticResource DonorLink}" Command="{Binding DataContext.OpenDonorCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}" CommandParameter="{Binding}"
                                        AutomationProperties.Name="Open donor">
@@ -198,31 +216,31 @@
                           </TextBlock>
                           <TextBlock Style="{DynamicResource DataGrid.SecondaryLine}" Text="{Binding DonorId, Converter={StaticResource Code}, ConverterParameter=D}" />
                         </StackPanel>
-                      </StackPanel>
+                      </Grid>
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="Group" Width="80" CanUserSort="False">
+                <DataGridTemplateColumn Header="Group" Width="68" CanUserSort="False">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
                       <controls:BloodGroupTag Text="{Binding DonorBloodType, Converter={StaticResource BloodGroup}}" HorizontalAlignment="Left" VerticalAlignment="Center" />
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="Status" Width="*" MinWidth="150" CanUserSort="False">
+                <DataGridTemplateColumn Header="Status" Width="*" MinWidth="218" CanUserSort="False">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
-                      <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                      <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <controls:StatusChip Status="{Binding Status, Converter={StaticResource StatusKind}}" Label="{Binding Status, Converter={StaticResource StatusText}}" VerticalAlignment="Center" />
                         <controls:Badge Text="First-time" Kind="Info" Icon="Info" VerticalAlignment="Center" Margin="{StaticResource Appts.PillGap}"
                                         Visibility="{Binding DonorFirstTime, Converter={StaticResource BoolToVisibility}}" />
-                      </WrapPanel>
+                      </StackPanel>
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
                 <!-- Today's agenda only: "Next" with Check in on the first appointment still to come, Record donation on the later ones -->
-                <DataGridTemplateColumn x:Name="AgendaColumn" Header="Next step" Width="*" MinWidth="200" CanUserSort="False"
-                                        Visibility="{Binding Data.IsAgenda, Source={StaticResource Model}, Converter={StaticResource BoolToVisibility}}">
+                <DataGridTemplateColumn x:Name="AgendaColumn" Header="Next step" Width="*" MinWidth="170" CanUserSort="False" lists:ListColumns.HideBelow="700"
+                                        lists:ListColumns.IsShown="{Binding Data.IsAgenda, Source={StaticResource Model}}">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
                       <Grid VerticalAlignment="Center">
@@ -234,7 +252,6 @@
                               <Binding Path="DataContext.AgendaVersion" RelativeSource="{RelativeSource AncestorType=DataGrid}" />
                             </MultiBinding>
                           </StackPanel.Visibility>
-                          <controls:Badge Text="Next" Kind="Info" ShowDot="True" VerticalAlignment="Center" Margin="{StaticResource Appts.ChipGap}" />
                           <Button Style="{DynamicResource Button.Secondary.Small}" Command="{Binding DataContext.CheckInCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
                                   CommandParameter="{Binding}" controls:ButtonAssist.BusyText="" AutomationProperties.Name="Check in" ToolTip="Open the appointment: eligibility today, then record the donation">
                             <StackPanel Orientation="Horizontal">

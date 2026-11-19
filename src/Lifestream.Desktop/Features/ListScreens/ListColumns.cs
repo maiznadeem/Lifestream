@@ -16,6 +16,37 @@ public static class ListColumns
     public static readonly DependencyProperty IsResponsiveProperty =
         DependencyProperty.RegisterAttached("IsResponsive", typeof(bool), typeof(ListColumns), new PropertyMetadata(false, OnIsResponsiveChanged));
 
+    /// <summary>
+    /// Whether the column belongs to what the screen shows now (bind it through a <see cref="DataProxy"/>: a column has no data context). A column that is not shown stays
+    /// hidden whatever the width; one that is shown still folds away below its <see cref="HideBelowProperty"/>. True by default.
+    /// </summary>
+    public static readonly DependencyProperty IsShownProperty =
+        DependencyProperty.RegisterAttached("IsShown", typeof(bool), typeof(ListColumns), new PropertyMetadata(true, OnIsShownChanged));
+
+    public static bool GetIsShown(DependencyObject column) => (bool)(column ?? throw new ArgumentNullException(nameof(column))).GetValue(IsShownProperty);
+
+    public static void SetIsShown(DependencyObject column, bool value) => (column ?? throw new ArgumentNullException(nameof(column))).SetValue(IsShownProperty, value);
+
+    /// <summary>The grid of each column seen by <see cref="Apply"/>, so a change of <see cref="IsShownProperty"/> can lay the columns out again.</summary>
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<DataGridColumn, DataGrid> Owners = new();
+
+    private static void OnIsShownChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is not DataGridColumn column)
+        {
+            return;
+        }
+
+        if (Owners.TryGetValue(column, out var grid) && grid.ActualWidth > 0)
+        {
+            Apply(grid, grid.ActualWidth);
+        }
+        else
+        {
+            column.Visibility = (bool)e.NewValue ? Visibility.Visible : Visibility.Collapsed;
+        }
+    }
+
     /// <summary>A column of numbers (design system 5.14): its header sits at the right, over the right-aligned values. Read when the grid is responsive.</summary>
     public static readonly DependencyProperty IsNumericProperty =
         DependencyProperty.RegisterAttached("IsNumeric", typeof(bool), typeof(ListColumns), new PropertyMetadata(false));
@@ -64,13 +95,15 @@ public static class ListColumns
 
         foreach (var column in grid.Columns)
         {
+            Owners.AddOrUpdate(column, grid);
             var below = GetHideBelow(column);
-            if (below <= 0)
+            var governed = column.ReadLocalValue(IsShownProperty) != DependencyProperty.UnsetValue;
+            if (below <= 0 && !governed)
             {
                 continue;
             }
 
-            var visibility = width < below ? Visibility.Collapsed : Visibility.Visible;
+            var visibility = !GetIsShown(column) || (below > 0 && width < below) ? Visibility.Collapsed : Visibility.Visible;
             if (column.Visibility != visibility)
             {
                 column.Visibility = visibility;

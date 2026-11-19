@@ -92,13 +92,17 @@
                 <DataGridTemplateColumn Header="Name" SortMemberPath="name" Width="1.6*" MinWidth="200" MaxWidth="320">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
-                      <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                      <Grid VerticalAlignment="Center">
+                        <Grid.ColumnDefinitions>
+                          <ColumnDefinition Width="Auto" />
+                          <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
                         <controls:Avatar Initials="{Binding Name, Converter={StaticResource Initials}}" Size="28" VerticalAlignment="Center" />
-                        <StackPanel Margin="{StaticResource Patients.NameGap}" VerticalAlignment="Center">
+                        <StackPanel Grid.Column="1" Margin="{StaticResource Patients.NameGap}" VerticalAlignment="Center">
                           <TextBlock Style="{DynamicResource DataGrid.PrimaryLine}" FontWeight="Medium" Text="{Binding Name}" />
                           <TextBlock Style="{DynamicResource Text.Caption}" Text="{Binding Id, Converter={StaticResource Code}, ConverterParameter=P}" />
                         </StackPanel>
-                      </StackPanel>
+                      </Grid>
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>

@@ -126,12 +126,16 @@
                                          lists:ListColumns.IsResponsive="True" lists:ListKeys.Panel="{Binding ElementName=Panel}"
                                          AutomationProperties.Name="Requests">
               <DataGrid.Columns>
-                <DataGridTemplateColumn Header="Patient" Width="1.6*" MinWidth="200" MaxWidth="320" CanUserSort="False">
+                <DataGridTemplateColumn Header="Patient" Width="1.6*" MinWidth="170" MaxWidth="320" CanUserSort="False">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
-                      <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                      <Grid VerticalAlignment="Center">
+                        <Grid.ColumnDefinitions>
+                          <ColumnDefinition Width="Auto" />
+                          <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
                         <controls:Avatar Initials="{Binding PatientName, Converter={StaticResource Initials}}" Size="28" VerticalAlignment="Center" />
-                        <StackPanel Margin="{StaticResource Reqs.NameGap}" VerticalAlignment="Center">
+                        <StackPanel Grid.Column="1" Margin="{StaticResource Reqs.NameGap}" VerticalAlignment="Center">
                           <TextBlock Style="{DynamicResource Text.Body}" FontWeight="Medium" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" ToolTip="{Binding PatientName}">
                             <Hyperlink Style="{StaticResource PatientLink}" Command="{Binding DataContext.OpenPatientCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}" CommandParameter="{Binding}"
                                        AutomationProperties.Name="Open patient">
@@ -140,33 +144,33 @@
                           </TextBlock>
                           <TextBlock Style="{DynamicResource DataGrid.SecondaryLine}"><Run Text="{Binding Id, Mode=OneWay, Converter={StaticResource Code}, ConverterParameter=R}" /><Run Text=" · " /><Run Text="{Binding PatientId, Mode=OneWay, Converter={StaticResource Code}, ConverterParameter=P}" /></TextBlock>
                         </StackPanel>
-                      </StackPanel>
+                      </Grid>
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="Group" Width="80" CanUserSort="False">
+                <DataGridTemplateColumn Header="Group" Width="72" CanUserSort="False">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
                       <controls:BloodGroupTag Text="{Binding BloodType, Converter={StaticResource BloodGroup}}" HorizontalAlignment="Left" VerticalAlignment="Center" />
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="Units" Width="70" CanUserSort="False" lists:ListColumns.IsNumeric="True">
+                <DataGridTemplateColumn Header="Units" Width="64" CanUserSort="False" lists:ListColumns.IsNumeric="True" lists:ListColumns.HideBelow="600">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
-                      <TextBlock Style="{DynamicResource DataGrid.TextCell}" Text="{Binding Units}" HorizontalAlignment="Right" Typography.NumeralAlignment="Tabular" />
+                      <TextBlock Style="{DynamicResource DataGrid.TextCell}" Text="{Binding Units}" HorizontalAlignment="Right" />
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="Needed by" Width="*" MinWidth="116" SortMemberPath="requiredBy" lists:ListColumns.HideBelow="600">
+                <DataGridTemplateColumn Header="Needed by" Width="*" MinWidth="110" SortMemberPath="requiredBy" lists:ListColumns.HideBelow="600">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
                       <TextBlock Style="{DynamicResource DataGrid.TextCell}" Text="{Binding RequiredBy, Converter={StaticResource DateText}}" />
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn x:Name="UrgencyColumn" Header="Urgency" Width="*" MinWidth="140" CanUserSort="False"
-                                        Visibility="{Binding Data.ShowOpenColumns, Source={StaticResource Model}, Converter={StaticResource BoolToVisibility}}">
+                <DataGridTemplateColumn x:Name="UrgencyColumn" Header="Urgency" Width="*" MinWidth="154" CanUserSort="False"
+                                        lists:ListColumns.IsShown="{Binding Data.ShowOpenColumns, Source={StaticResource Model}}">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
                       <!-- Tag carries the urgency kind; the colour and icon follow it. A closed request has none. -->
@@ -197,8 +201,8 @@
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn x:Name="CoverColumn" Header="Cover" Width="*" MinWidth="120" CanUserSort="False"
-                                        Visibility="{Binding Data.ShowOpenColumns, Source={StaticResource Model}, Converter={StaticResource BoolToVisibility}}">
+                <DataGridTemplateColumn x:Name="CoverColumn" Header="Cover" Width="*" MinWidth="118" CanUserSort="False"
+                                        lists:ListColumns.IsShown="{Binding Data.ShowOpenColumns, Source={StaticResource Model}}">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
                       <controls:Badge HorizontalAlignment="Left" VerticalAlignment="Center">
@@ -231,7 +235,7 @@
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
                 <DataGridTemplateColumn x:Name="StatusColumn" Header="Status" Width="*" MinWidth="120" CanUserSort="False"
-                                        Visibility="{Binding Data.ShowStatusColumn, Source={StaticResource Model}, Converter={StaticResource BoolToVisibility}}">
+                                        lists:ListColumns.IsShown="{Binding Data.ShowStatusColumn, Source={StaticResource Model}}">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
                       <controls:StatusChip Status="{Binding Status, Converter={StaticResource StatusKind}}" Label="{Binding Status, Converter={StaticResource StatusText}}"

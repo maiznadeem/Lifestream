@@ -98,16 +98,20 @@
                                          lists:ListColumns.IsResponsive="True" lists:ListKeys.Panel="{Binding ElementName=Panel}"
                                          AutomationProperties.Name="Donors">
               <DataGrid.Columns>
-                <DataGridTemplateColumn Header="Name" SortMemberPath="name" Width="1.6*" MinWidth="200" MaxWidth="320">
+                <DataGridTemplateColumn Header="Name" SortMemberPath="name" Width="1.6*" MinWidth="190" MaxWidth="320">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
-                      <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                      <Grid VerticalAlignment="Center">
+                        <Grid.ColumnDefinitions>
+                          <ColumnDefinition Width="Auto" />
+                          <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
                         <controls:Avatar Initials="{Binding Name, Converter={StaticResource Initials}}" Size="28" VerticalAlignment="Center" />
-                        <StackPanel Margin="{StaticResource Donors.NameGap}" VerticalAlignment="Center">
+                        <StackPanel Grid.Column="1" Margin="{StaticResource Donors.NameGap}" VerticalAlignment="Center">
                           <TextBlock Style="{DynamicResource DataGrid.PrimaryLine}" FontWeight="Medium" Text="{Binding Name}" />
                           <TextBlock Style="{DynamicResource Text.Caption}" Text="{Binding Id, Converter={StaticResource Code}, ConverterParameter=D}" />
                         </StackPanel>
-                      </StackPanel>
+                      </Grid>
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
@@ -118,7 +122,7 @@
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="Eligibility" Width="*" MinWidth="130" CanUserSort="False">
+                <DataGridTemplateColumn Header="Eligibility" Width="*" MinWidth="136" CanUserSort="False">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
                       <controls:Badge HorizontalAlignment="Left" VerticalAlignment="Center">
@@ -150,7 +154,7 @@
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="Last donated" SortMemberPath="lastDonated" Width="*" MinWidth="120" lists:ListColumns.HideBelow="560">
+                <DataGridTemplateColumn Header="Last donated" SortMemberPath="lastDonated" Width="*" MinWidth="114" lists:ListColumns.HideBelow="560">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
                       <TextBlock x:Name="LastText" Style="{DynamicResource DataGrid.TextCell}" Text="{Binding LastDonated, Converter={StaticResource DateText}, ConverterParameter=Never}" />
@@ -162,14 +166,15 @@
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="Donations" Width="100" CanUserSort="False" lists:ListColumns.HideBelow="660" lists:ListColumns.IsNumeric="True">
+                <DataGridTemplateColumn Header="Donations" Width="96" CanUserSort="False" lists:ListColumns.HideBelow="660" lists:ListColumns.IsNumeric="True">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
-                      <TextBlock Style="{DynamicResource DataGrid.TextCell}" Text="{Binding Donations}" HorizontalAlignment="Right" Typography.NumeralAlignment="Tabular" />
+                      <!-- Proportional figures: Onest's tabular 1 is very wide, so "11" would read "1 1" (design-qa 25); the right edge still lines the counts up -->
+                      <TextBlock Style="{DynamicResource DataGrid.TextCell}" Text="{Binding Donations}" HorizontalAlignment="Right" />
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="Phone" Width="*" MinWidth="130" CanUserSort="False" lists:ListColumns.HideBelow="740">
+                <DataGridTemplateColumn Header="Phone" Width="*" MinWidth="118" CanUserSort="False" lists:ListColumns.HideBelow="720">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
                       <TextBlock Style="{DynamicResource DataGrid.TextCell}" Text="{Binding Phone}" />
@@ -179,7 +184,7 @@
                 <DataGridTemplateColumn Header="Age" Width="70" CanUserSort="False" lists:ListColumns.HideBelow="1100" lists:ListColumns.IsNumeric="True">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
-                      <TextBlock Style="{DynamicResource DataGrid.TextCell}" HorizontalAlignment="Right" Typography.NumeralAlignment="Tabular">
+                      <TextBlock Style="{DynamicResource DataGrid.TextCell}" HorizontalAlignment="Right">
                         <TextBlock.Text>
                           <MultiBinding Converter="{StaticResource Age}">
                             <Binding Path="DateOfBirth" />
