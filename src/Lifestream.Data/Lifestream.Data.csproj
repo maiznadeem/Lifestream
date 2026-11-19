@@ -4,6 +4,8 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" />
+    <!-- SqlClient 7 moved Microsoft Entra authentication (Managed Identity, Default) into this package. -->
+    <PackageReference Include="Microsoft.Data.SqlClient.Extensions.Azure" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
