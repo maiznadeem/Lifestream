@@ -82,7 +82,6 @@ public sealed class WritePlanApiFixture : ApiFixture
 /// with more than 5,000 rows. The fulfil statement is additionally replayed with its actual plan inside a transaction that is rolled back.
 /// Set LIFESTREAM_PLAN_CAPTURE to a file path to write one line per statement.
 /// </summary>
-[Collection("Scale datasets: one class at a time")]
 public sealed partial class ApiWritePlanMatrixTests(WritePlanApiFixture fx) : IClassFixture<WritePlanApiFixture>
 {
     private const int BigTableRows = 5_000;
@@ -319,6 +318,20 @@ public sealed partial class ApiWritePlanMatrixTests(WritePlanApiFixture fx) : IC
 
     [Fact]
     public async Task EveryWriteAndDetailEndpoint_AtScale_SendsNoStatementThatScansABigTable()
+    {
+        // The plans are read back from the plan cache, which a RESTORE (another class's copy of the 100x database) would empty mid-run.
+        await ScaleDatabaseFixture.PlanCacheGate.WaitAsync(Ct);
+        try
+        {
+            await EveryWriteAndDetailEndpointAsync();
+        }
+        finally
+        {
+            ScaleDatabaseFixture.PlanCacheGate.Release();
+        }
+    }
+
+    private async Task EveryWriteAndDetailEndpointAsync()
     {
         var sizes = await SizesAsync();
         var admin = await fx.AddStaffAsync(Role.Admin, "writeplanadmin");

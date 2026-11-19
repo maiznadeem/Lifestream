@@ -18,10 +18,29 @@ namespace Lifestream.Api.Tests.Data;
 /// than 5,000 rows. The matrix uses COMMON filter values (Fulfilled requests, Completed appointments, blood type OPos), 1- and 2-letter
 /// name searches, every documented sort, page 1 and a deep page. Each list request must also be one database call (API-22).
 /// Set LIFESTREAM_PLAN_CAPTURE to a file path to write one line per request (operators, pages read, SQL).
+/// The cases are split over this class and <see cref="ApiPlanMatrixPart2Tests"/> to <see cref="ApiPlanMatrixPart4Tests"/>, each with its own copy of
+/// the 100x database and host, so the four parts run at the same time (the cases of one class run one after the other).
 /// </summary>
-[Collection("Scale datasets: one class at a time")] // the 100x databases load 100,000 rows and the perf tests time requests, so they do not overlap
 public sealed class ApiPlanMatrixTests(ScaleApiFixture fx) : IClassFixture<ScaleApiFixture>
 {
+    /// <summary>How many classes share the cases.</summary>
+    public const int Parts = 4;
+
+    /// <summary>Every <see cref="Parts"/>-th case of <see cref="Cases"/>, starting at <paramref name="part"/>.</summary>
+    public static TheoryData<string> CasesOfPart(int part)
+    {
+        var data = new TheoryData<string>();
+        foreach (var (row, index) in Cases().Select((row, index) => (row, index)))
+        {
+            if (index % Parts == part)
+            {
+                data.Add(row.Data);
+            }
+        }
+
+        return data;
+    }
+
     private const int BigTableRows = 5_000;
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
@@ -199,14 +218,17 @@ public sealed class ApiPlanMatrixTests(ScaleApiFixture fx) : IClassFixture<Scale
     }
 
     [Theory]
-    [MemberData(nameof(Cases))]
-    public async Task ApiRequest_AtScale_UsesNoTableScan_AndOneDatabaseCall(string @case)
+    [MemberData(nameof(CasesOfPart), 0)]
+    public Task ApiRequest_AtScale_UsesNoTableScan_AndOneDatabaseCall(string @case) => CheckAsync(fx, @case);
+
+    /// <summary>One case of the matrix against the given fixture's host and database.</summary>
+    internal static async Task CheckAsync(ScaleApiFixture fx, string @case)
     {
-        var admin = await AdminAsync();
+        var admin = await AdminAsync(fx);
         var sizes = (await fx.Db.RowsAsync(
             "SELECT t.name, SUM(p.rows) FROM sys.tables t JOIN sys.partitions p ON p.object_id = t.object_id AND p.index_id IN (0, 1) GROUP BY t.name", Ct))
             .ToDictionary(r => (string)r[0]!, r => Convert.ToInt64(r[1], CultureInfo.InvariantCulture));
-        var url = await UrlAsync(@case, admin.Client);
+        var url = await UrlAsync(fx, @case, admin.Client);
 
         fx.Statements.Drain();
         fx.Statements.Recording = true;
@@ -266,23 +288,24 @@ public sealed class ApiPlanMatrixTests(ScaleApiFixture fx) : IClassFixture<Scale
     }
 
     private static readonly SemaphoreSlim AdminLock = new(1, 1);
-    private static TestUser? _admin;
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<ScaleApiFixture, TestUser> Admins = [];
 
-    /// <summary>One signed-in admin for the whole matrix (the fixture is shared by the class).</summary>
-    private async Task<TestUser> AdminAsync()
+    /// <summary>One signed-in admin per fixture for its part of the matrix (the fixture is shared by the class).</summary>
+    private static async Task<TestUser> AdminAsync(ScaleApiFixture fx)
     {
         await AdminLock.WaitAsync(Ct);
         try
         {
-            if (_admin is null)
+            if (!Admins.TryGetValue(fx, out var admin))
             {
-                _admin = await fx.AddStaffAsync(Role.Admin, "planadmin");
+                admin = await fx.AddStaffAsync(Role.Admin, "planadmin");
 
                 // The first request of a session also checks the session (refresh-token row, demo state); that is not a filter click.
-                (await _admin.Client.GetAsync(ApiRoutes.Path(ApiRoutes.Me), Ct)).EnsureSuccessStatusCode();
+                (await admin.Client.GetAsync(ApiRoutes.Path(ApiRoutes.Me), Ct)).EnsureSuccessStatusCode();
+                Admins.Add(fx, admin);
             }
 
-            return _admin;
+            return admin;
         }
         finally
         {
@@ -290,7 +313,7 @@ public sealed class ApiPlanMatrixTests(ScaleApiFixture fx) : IClassFixture<Scale
         }
     }
 
-    private async Task<string> UrlAsync(string @case, HttpClient client)
+    private static async Task<string> UrlAsync(ScaleApiFixture fx, string @case, HttpClient client)
     {
         var parts = @case.Split('|');
         var from = DateTime.UtcNow.AddDays(-120).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
@@ -386,4 +409,28 @@ public sealed class ApiPlanMatrixTests(ScaleApiFixture fx) : IClassFixture<Scale
             File.AppendAllText(path, sb.ToString());
         }
     }
+}
+
+/// <summary>The second quarter of the cases of <see cref="ApiPlanMatrixTests"/>, on its own copy of the 100x database.</summary>
+public sealed class ApiPlanMatrixPart2Tests(ScaleApiFixture fx) : IClassFixture<ScaleApiFixture>
+{
+    [Theory]
+    [MemberData(nameof(ApiPlanMatrixTests.CasesOfPart), 1, MemberType = typeof(ApiPlanMatrixTests))]
+    public Task ApiRequest_AtScale_UsesNoTableScan_AndOneDatabaseCall(string @case) => ApiPlanMatrixTests.CheckAsync(fx, @case);
+}
+
+/// <summary>The third quarter of the cases of <see cref="ApiPlanMatrixTests"/>, on its own copy of the 100x database.</summary>
+public sealed class ApiPlanMatrixPart3Tests(ScaleApiFixture fx) : IClassFixture<ScaleApiFixture>
+{
+    [Theory]
+    [MemberData(nameof(ApiPlanMatrixTests.CasesOfPart), 2, MemberType = typeof(ApiPlanMatrixTests))]
+    public Task ApiRequest_AtScale_UsesNoTableScan_AndOneDatabaseCall(string @case) => ApiPlanMatrixTests.CheckAsync(fx, @case);
+}
+
+/// <summary>The last quarter of the cases of <see cref="ApiPlanMatrixTests"/>, on its own copy of the 100x database.</summary>
+public sealed class ApiPlanMatrixPart4Tests(ScaleApiFixture fx) : IClassFixture<ScaleApiFixture>
+{
+    [Theory]
+    [MemberData(nameof(ApiPlanMatrixTests.CasesOfPart), 3, MemberType = typeof(ApiPlanMatrixTests))]
+    public Task ApiRequest_AtScale_UsesNoTableScan_AndOneDatabaseCall(string @case) => ApiPlanMatrixTests.CheckAsync(fx, @case);
 }

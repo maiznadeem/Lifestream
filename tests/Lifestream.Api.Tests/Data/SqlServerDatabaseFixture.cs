@@ -263,12 +263,30 @@ public sealed class ScaleDatabaseFixture : SqlServerDatabaseFixture
 
     protected override bool ApplyMigrations => false; // the restored copy already has the schema
 
+    /// <summary>
+    /// Held while a copy is restored, and by a test that reads plans back from the server's plan cache for its whole run: a RESTORE empties the plan
+    /// cache of the whole instance, so a restore for another class must not happen between that test's request and its reading of the plan.
+    /// </summary>
+    public static SemaphoreSlim PlanCacheGate { get; } = new(1, 1);
+
     protected override async Task CreateAsync(CancellationToken ct)
     {
         var template = await ScaleTemplate.GetAsync(ct);
         Today = template.Today;
         Receipts = template.Receipts;
-        await ExecuteOnMasterAsync(
+        await PlanCacheGate.WaitAsync(ct);
+        try
+        {
+            await RestoreAsync(template, ct);
+        }
+        finally
+        {
+            PlanCacheGate.Release();
+        }
+    }
+
+    private Task RestoreAsync(ScaleTemplate.Built template, CancellationToken ct) =>
+        ExecuteOnMasterAsync(
             """
             DECLARE @data nvarchar(4000) = CAST(SERVERPROPERTY('InstanceDefaultDataPath') AS nvarchar(4000)) + @name + N'.mdf';
             DECLARE @log nvarchar(4000) = CAST(SERVERPROPERTY('InstanceDefaultLogPath') AS nvarchar(4000)) + @name + N'_log.ldf';
@@ -279,7 +297,6 @@ public sealed class ScaleDatabaseFixture : SqlServerDatabaseFixture
             new SqlParameter("@file", SqlDbType.NVarChar, 4000) { Value = template.BackupFile },
             new SqlParameter("@dataFile", SqlDbType.NVarChar, 128) { Value = template.DataFile },
             new SqlParameter("@logFile", SqlDbType.NVarChar, 128) { Value = template.LogFile });
-    }
 
     /// <summary>The 100x template of this test run: built on first use, backed up into the server's backup folder, then dropped.</summary>
     private static class ScaleTemplate

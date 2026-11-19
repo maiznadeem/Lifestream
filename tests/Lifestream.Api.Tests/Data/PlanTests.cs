@@ -11,7 +11,6 @@ namespace Lifestream.Api.Tests.Data;
 /// The 100x dataset (about 27,000 receipts) loaded into a real database once, and the queries the API will run against it (DB-05, DB-06, DB-14).
 /// Plans are the actual plans, captured with the real parameter values.
 /// </summary>
-[Collection("Scale datasets: one class at a time")] // the 100x databases load 100,000 rows and the perf tests time requests, so they do not overlap
 public sealed class PlanTests(ScaleDatabaseFixture fixture) : IClassFixture<ScaleDatabaseFixture>
 {
     private const int BigTableRows = 5_000;
