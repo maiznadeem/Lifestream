@@ -30,6 +30,7 @@ public sealed class SidebarWhileLoadingTests
             rig.Get<IToastService>(),
             rig.Get<Lifestream.Client.Api.IServerStatus>(),
             rig.Get<Lifestream.Client.Updates.UpdateService>(),
+            rig.Get<Lifestream.Client.Features.Profile.IChangePasswordPrompt>(),
             [
                 new Destination("Slow", "G", "x", typeof(SlowViewModel)),
                 new Destination("Donors", "G", "x", typeof(DonorsPlaceholderViewModel)),

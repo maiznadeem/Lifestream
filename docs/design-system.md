@@ -52,7 +52,9 @@ same view (danger buttons are outlined and carry an icon).
 One family: **Inter** (SIL Open Font License), bundled in the executable from `Fonts/InterVariable.ttf` (version, source and SHA-256 in
 `Fonts/README.md`, licence in `Fonts/OFL.txt`) and named once, in `Theme/Typography.xaml`. WPF sees it as `Inter Variable Text`. Every text
 style and every text-bearing control resolves to it (`FontTests`). Icons use the system icon font (Segoe Fluent Icons, Segoe MDL2 Assets
-as fallback), through `IconText`, which is hidden from UI Automation; icons are not text.
+as fallback), through `IconText`, which is hidden from UI Automation; icons are not text. The charts draw with SkiaSharp, not WPF text, so
+`Theme/ChartFont` loads the same embedded file into an `SKTypeface` and makes it the LiveCharts default; `ChartFontTests` renders the dashboard
+and checks the glyphs are Inter's, not Segoe UI's.
 
 | Token | Size / line height (DIP) | Weight | Use |
 |---|---|---|---|
@@ -68,7 +70,10 @@ as fallback), through `IconText`, which is hidden from UI Automation; icons are 
 - 4-DIP base: 4, 8, 12, 16, 24, 32, 48 (`Space.*` numbers, `Pad.*` all-sides thicknesses). Field gap 16 (`Gap.Field`), section gap 32, page
   padding 24. A margin or padding that is not the same on every side is an `Inset.*` token whose name says the sides: `H` is left and
   right, `V` is top and bottom, `L`, `T`, `R`, `B` one side each (`Inset.T16` is 16 above, `Inset.H12V8` is 12 across and 8 down). The
-  feature screens use the `Edge` helper, which composes `Space.*` tokens one side at a time. No view writes a spacing number.
+  feature screens use the `Edge` helper, which composes `Space.*` tokens one side at a time. No view writes a spacing number. C# that builds elements itself reads the same tokens through `Theme/ThemeTokens` (`Space`, `Inset`,
+  `Radius`), which throws when a token is missing instead of falling back to a number; `Theme_NoSpacingOrRadiusLiteralsInCSharp_OnlyTokens`
+  scans every `*.cs` under the Desktop project for `Thickness`/`CornerRadius`/`Margin`/`Padding` literals other than 0. Exempt, with the
+  reason in the test: the printed receipt layout and the LiveCharts bar gap.
 - Control height 32 (compact) or 40 (default); grid rows 40 (design range 36 to 40).
 - Radius 4 for inputs and buttons (`Radius.Control`), 8 for cards and dialogs (`Radius.Card`), 12 for chips (`Radius.Pill`); 2, 6 and 14
   (`Radius.2`, `Radius.6`, `Radius.14`) and the left-side-only 8 (`Radius.Left8`) for the few shapes that need them.

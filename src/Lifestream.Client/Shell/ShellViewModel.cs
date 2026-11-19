@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using Lifestream.Client.Api;
 using Lifestream.Client.Common;
+using Lifestream.Client.Features.Profile;
 using Lifestream.Client.Navigation;
 using Lifestream.Client.Session;
 using Lifestream.Client.Updates;
@@ -31,6 +32,7 @@ public sealed partial class ShellViewModel : ViewModelBase
     private readonly ISessionService _session;
     private readonly IAppFlow _flow;
     private readonly IServerStatus _serverStatus;
+    private readonly IChangePasswordPrompt _passwords;
     private readonly IReadOnlyList<Destination> _catalog;
     private readonly SynchronizationContext? _context = SynchronizationContext.Current;
 
@@ -40,8 +42,9 @@ public sealed partial class ShellViewModel : ViewModelBase
         IAppFlow flow,
         IToastService toasts,
         IServerStatus serverStatus,
-        UpdateService updates)
-        : this(navigation, session, flow, toasts, serverStatus, updates, NavigationCatalog.Default)
+        UpdateService updates,
+        IChangePasswordPrompt passwords)
+        : this(navigation, session, flow, toasts, serverStatus, updates, passwords, NavigationCatalog.Default)
     {
     }
 
@@ -52,6 +55,7 @@ public sealed partial class ShellViewModel : ViewModelBase
         IToastService toasts,
         IServerStatus serverStatus,
         UpdateService updates,
+        IChangePasswordPrompt passwords,
         IReadOnlyList<Destination> catalog)
         : base(LoadState.Ready)
     {
@@ -61,6 +65,7 @@ public sealed partial class ShellViewModel : ViewModelBase
         _session = session;
         _flow = flow;
         _serverStatus = serverStatus;
+        _passwords = passwords;
         _catalog = catalog;
 
         var allowed = catalog.Where(d => d.IsAllowedFor(session.User)).ToList();
@@ -156,10 +161,20 @@ public sealed partial class ShellViewModel : ViewModelBase
     /// <summary>Called when the main window is about to close: false means the user chose to stay (SHELL-24).</summary>
     public Task<bool> ConfirmCloseAsync() => Navigation.ConfirmDiscardAsync();
 
-    /// <summary>Opens the first destination and checks for an update in the background.</summary>
+    /// <summary>
+    /// Opens the first destination and checks for an update in the background. After an admin reset the person must choose a new
+    /// password first: the required change-password dialog opens before any screen, and the only ways out of it are changing the
+    /// password or signing out (a dismissed dialog signs out).
+    /// </summary>
     public async Task StartAsync()
     {
         _ = Updates.CheckAsync();
+        if (_session.User?.MustChangePassword == true && !await _passwords.PromptAsync(required: true).ConfigureAwait(true))
+        {
+            await _flow.SignOutAsync("Choose a new password to continue. Sign in with the temporary password you were given.", force: true).ConfigureAwait(true);
+            return;
+        }
+
         await OpenAsync(_catalog[0]).ConfigureAwait(true);
     }
 
