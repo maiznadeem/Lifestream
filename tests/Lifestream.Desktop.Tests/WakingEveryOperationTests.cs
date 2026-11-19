@@ -33,6 +33,9 @@ namespace Lifestream.Desktop.Tests;
 /// a Cancel beside it, and that pressing that Cancel cancels the HTTP request that is waiting. Nothing is read from the view model's own flags.
 /// The fake API stands in for the server (a handler that never answers and records the cancellation token it was given); the status flips to waking as
 /// the wake-aware handler does after 3 s. A command that makes no API call must be in the reviewed list below, with the reason.
+/// The single-operation tests (Undo, Delete) run on a manual clock (the clock of the screen, its toasts and dialogs) stepped 3.6 s past the start of the
+/// call; the walk of every command keeps the real clock, because its screens also run timers of their own (thumbnail loads, slot lookups) whose
+/// order against the waking threshold is part of what it covers.
 /// </summary>
 [Collection("Wpf")]
 public sealed class WakingEveryOperationTests
@@ -244,7 +247,7 @@ public sealed class WakingEveryOperationTests
     }
 
     /// <summary>One operation under test: its own rig, view model, rendered screen and silent server.</summary>
-    private sealed class Operation(Screen screen, string commandName, ScreenState state = ScreenState.RecordSelected) : IDisposable
+    private sealed class Operation(Screen screen, string commandName, ScreenState state = ScreenState.RecordSelected, bool realTime = false) : IDisposable
     {
         public ScreenState State { get; } = state;
 
@@ -257,6 +260,11 @@ public sealed class WakingEveryOperationTests
         public OffscreenDialogs Dialogs { get; } = new();
 
         public SilentServer Server { get; } = new();
+
+        /// <summary>The operation's manual clock (the screen, its runner, the toasts and the dialogs run on it, and the test steps it over the waking threshold); null on the real clock.</summary>
+        public ManualTimeProvider? Manual { get; } = realTime ? null : new(DateTimeOffset.UtcNow);
+
+        public TimeProvider Clock => (TimeProvider?)Manual ?? TimeProvider.System;
 
         public Screen Screen { get; } = screen;
 
@@ -336,11 +344,11 @@ public sealed class WakingEveryOperationTests
     private static bool Open(Operation op)
     {
         var screen = op.Screen;
-        var rig = op.Rig = Part2Harness.NewRig();
+        var rig = op.Rig = Part2Harness.NewRig(clock: op.Manual);
         rig.Get<DialogService>().Presenter = new Yes();
         rig.Get<FormDialogService>().Presenter = op.Dialogs;
         var vm = op.Vm = (ViewModelBase)Create(rig, screen.ViewModel);
-        vm.Attach(rig.Get<ServerStatus>(), TimeProvider.System);
+        vm.Attach(rig.Get<ServerStatus>(), op.Clock);
         var host = op.Host = Hosted.Create(screen.View(vm), Width, Height);
         Hosted.Await(() => vm.LoadAsync());
         host.Settle(100);
@@ -356,7 +364,7 @@ public sealed class WakingEveryOperationTests
     /// <summary>The commands a user could press with the screen in this state (the others are disabled there), found on one throwaway instance so the walk does not build a screen for each disabled command.</summary>
     private static HashSet<string> Runnable(Screen screen, ScreenState state)
     {
-        using var probe = new Operation(screen, "probe", state);
+        using var probe = new Operation(screen, "probe", state, realTime: true);
         var found = new HashSet<string>();
         if (!Open(probe))
         {
@@ -375,9 +383,9 @@ public sealed class WakingEveryOperationTests
     }
 
     /// <summary>Loads the screen, puts it in the state, makes the server stop answering and runs the command (it starts its API call and waits).</summary>
-    private static Operation Start(Screen screen, string commandName, ScreenState state = ScreenState.RecordSelected)
+    private static Operation Start(Screen screen, string commandName, ScreenState state = ScreenState.RecordSelected, bool realTime = false)
     {
-        var op = new Operation(screen, commandName, state);
+        var op = new Operation(screen, commandName, state, realTime);
         var strict = state == ScreenState.RecordSelected; // the reviewed lists describe the selected-record state; elsewhere a disabled or silent command is simply not applicable
         var arranged = Open(op);
         var rig = op.Rig!;
@@ -431,6 +439,13 @@ public sealed class WakingEveryOperationTests
         }
 
         return op;
+    }
+
+    /// <summary>Steps the operation's clock 3.6 s past the start of its call (the waking threshold is 3 s), then <see cref="Inspect"/>.</summary>
+    private static string? InspectAfterWakingThreshold(Operation op, string capture)
+    {
+        op.Manual!.Advance(TimeSpan.FromMilliseconds(3600));
+        return Inspect(op, capture);
     }
 
     /// <summary>After the 3.6 s: what the user sees, then Cancel, then whether the HTTP requests stopped.</summary>
@@ -501,7 +516,7 @@ public sealed class WakingEveryOperationTests
         {
             // The real shell, as the user has it: the toast and its waking notice live in the shell, the screen is the page it shows.
             using var op = new Operation(screen, "Undo", state);
-            var rig = op.Rig = Part2Harness.NewRig();
+            var rig = op.Rig = Part2Harness.NewRig(clock: op.Manual);
             rig.Get<DialogService>().Presenter = new Yes();
             rig.Get<FormDialogService>().Presenter = op.Dialogs;
             var shell = rig.Get<Lifestream.Client.Shell.ShellViewModel>();
@@ -564,8 +579,7 @@ public sealed class WakingEveryOperationTests
             host.Settle(150);
             Assert.True(op.Server.Count > 0, "Undo made no API call");
             rig.Get<ServerStatus>().Enter();
-            Hosted.RunDispatcherFor(3600);
-            return Inspect(op, Path.Combine(capturesDirectory, "waking", $"{screen.Name}_Undo_{state}.png"));
+            return InspectAfterWakingThreshold(op, Path.Combine(capturesDirectory, "waking", $"{screen.Name}_Undo_{state}.png"));
         });
 
         Assert.True(problem is null, problem);
@@ -582,8 +596,7 @@ public sealed class WakingEveryOperationTests
             Assert.False(op.Finished, op.Problem);
             Assert.Contains("DeleteDonorAsync", op.Server.Waiting.Select(w => w.Method));
             op.Rig!.Get<ServerStatus>().Enter();
-            Hosted.RunDispatcherFor(3600);
-            return Inspect(op, Path.Combine(capturesDirectory, "waking", "DonorsDelete_Waking_3_6s.png"));
+            return InspectAfterWakingThreshold(op, Path.Combine(capturesDirectory, "waking", "DonorsDelete_Waking_3_6s.png"));
         });
 
         Assert.True(problem is null, problem);
@@ -611,7 +624,7 @@ public sealed class WakingEveryOperationTests
                         {
                             if (runnable is null || runnable.Contains(command.Name))
                             {
-                                operations.Add(Start(screen, command.Name, state));
+                                operations.Add(Start(screen, command.Name, state, realTime: true));
                             }
                         }
 

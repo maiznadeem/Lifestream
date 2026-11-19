@@ -71,7 +71,7 @@ public sealed class FakeUpdateSource(Version? latest = null) : IUpdateSource
 /// <summary>The real client services wired to the fake API, a fake window host and a fake update source.</summary>
 public sealed class Rig : IDisposable
 {
-    public Rig(FakeApiClient? api = null, Version? latestVersion = null, Version? currentVersion = null, IUiDispatcher? dispatcher = null, Lifestream.Client.Features.Profile.IChangePasswordPrompt? passwordPrompt = null)
+    public Rig(FakeApiClient? api = null, Version? latestVersion = null, Version? currentVersion = null, IUiDispatcher? dispatcher = null, Lifestream.Client.Features.Profile.IChangePasswordPrompt? passwordPrompt = null, TimeProvider? clock = null)
     {
         Api = api ?? new FakeApiClient();
         Updates = new FakeUpdateSource(latestVersion);
@@ -87,6 +87,11 @@ public sealed class Rig : IDisposable
         if (passwordPrompt is not null)
         {
             services.AddSingleton(passwordPrompt);
+        }
+
+        if (clock is not null)
+        {
+            services.AddSingleton(clock); // the clock of the navigation, the toasts and the form dialogs (a test's manual clock)
         }
         Provider = services.BuildServiceProvider();
     }
