@@ -20,7 +20,8 @@ public sealed class AuthService(
     IOptions<JwtSettings> jwtSettings,
     IOptions<DemoSettings> demoSettings,
     IMemoryCache cache,
-    UnknownLoginTracker unknown)
+    UnknownLoginTracker unknown,
+    DemoSessionDenylist demoSessions)
 {
     private const int ConcurrencyRetries = 5;
 
@@ -176,14 +177,21 @@ public sealed class AuthService(
         var secret = request.RefreshToken;
         if (secret.Contains('.', StringComparison.Ordinal))
         {
-            // A demo refresh token (a signed token, no database row).
-            if (!demoSettings.Value.Enabled || await tokens.ReadDemoRefreshAsync(secret) is not { } demoFamily)
+            // A demo refresh token (a signed token, no database row). It is single use: a token that was already rotated, or whose session
+            // signed out, is refused, and a replayed one ends the whole session (as for staff).
+            if (!demoSettings.Value.Enabled || await tokens.ReadDemoRefreshAsync(secret) is not { } demoRefresh || demoSessions.IsRevoked(demoRefresh.Family))
             {
                 throw Unauthorized();
             }
 
+            if (!demoSessions.TryUse(demoRefresh.TokenId, demoRefresh.ExpiresUtc))
+            {
+                demoSessions.RevokeFamily(demoRefresh.Family, DemoSessionEnd());
+                throw Unauthorized();
+            }
+
             var demo = await db.Staff.Where(s => s.IsDemo).Select(s => new { s.Id, s.DisplayName }).FirstOrDefaultAsync(ct) ?? throw Unauthorized();
-            return DemoTokens(demo.Id, demo.DisplayName, demoFamily);
+            return DemoTokens(demo.Id, demo.DisplayName, demoRefresh.Family);
         }
 
         var hash = TokenService.HashRefresh(secret);
@@ -216,11 +224,16 @@ public sealed class AuthService(
         return await IssueAsync(stored.StaffId, user.DisplayName, user.Role, user.IsDemo, user.MustChangePassword, ct, stored.FamilyId);
     }
 
-    /// <summary>Ends the whole session (every refresh token of the family) from its refresh token. Unknown tokens are ignored; demo tokens are stateless.</summary>
+    /// <summary>Ends the whole session (every refresh token of the family, and for a demo session its access tokens too) from its refresh token. Unknown tokens are ignored.</summary>
     public async Task LogoutAsync(string refreshToken, CancellationToken ct)
     {
         if (refreshToken.Contains('.', StringComparison.Ordinal))
         {
+            if (demoSettings.Value.Enabled && await tokens.ReadDemoRefreshAsync(refreshToken) is { } demoRefresh)
+            {
+                demoSessions.RevokeFamily(demoRefresh.Family, DemoSessionEnd());
+            }
+
             return;
         }
 
@@ -239,6 +252,9 @@ public sealed class AuthService(
             .ExecuteUpdateAsync(t => t.SetProperty(x => x.RevokedAtUtc, now), ct);
         RevocationCache.Clear(cache);
     }
+
+    /// <summary>When every token of a demo session that exists now will have expired: the denylist entry can be forgotten then.</summary>
+    private DateTime DemoSessionEnd() => Now.AddHours(jwtSettings.Value.DemoRefreshHours).AddMinutes(1);
 
     private TokenResponse DemoTokens(int staffId, string displayName, Guid family)
     {

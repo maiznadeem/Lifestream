@@ -18,6 +18,7 @@ public static class Claims
     public const string Demo = "demo";
     public const string Family = "sid";
     public const string Use = "use";
+    public const string TokenId = "jti";
 
     /// <summary>Present ("1") while the person must change an administrator-set password; added from the database on every request, never read from the token.</summary>
     public const string MustChangePassword = "mcp";
@@ -82,7 +83,10 @@ public sealed class TokenService
         return (token, expires);
     }
 
-    /// <summary>A demo session's refresh token: signed, carries its own family id, needs no database row (so a daily reset never logs a visitor out).</summary>
+    /// <summary>
+    /// A demo session's refresh token: signed, carries its own family id and a unique token id, needs no database row (so a daily reset
+    /// never logs a visitor out). Rotation and sign-out are remembered by <see cref="DemoSessionDenylist"/>.
+    /// </summary>
     public string CreateDemoRefresh(Guid family)
     {
         var now = _time.GetUtcNow().UtcDateTime;
@@ -90,7 +94,7 @@ public sealed class TokenService
         {
             Issuer = _settings.Issuer,
             Audience = _settings.Audience + "-refresh",
-            Claims = new Dictionary<string, object> { [Claims.Family] = family.ToString("N"), [Claims.Use] = RefreshUse },
+            Claims = new Dictionary<string, object> { [Claims.Family] = family.ToString("N"), [Claims.Use] = RefreshUse, [Claims.TokenId] = Guid.NewGuid().ToString("N") },
             IssuedAt = now,
             NotBefore = now,
             Expires = now.AddHours(_settings.DemoRefreshHours),
@@ -98,8 +102,8 @@ public sealed class TokenService
         });
     }
 
-    /// <summary>The family id inside a valid, unexpired demo refresh token, or null when the text is not one.</summary>
-    public async Task<Guid?> ReadDemoRefreshAsync(string token)
+    /// <summary>The session, token id and expiry inside a valid, unexpired demo refresh token, or null when the text is not one.</summary>
+    public async Task<DemoRefresh?> ReadDemoRefreshAsync(string token)
     {
         var parameters = AccessParameters;
         parameters.ValidAudience = _settings.Audience + "-refresh";
@@ -109,7 +113,11 @@ public sealed class TokenService
             return null;
         }
 
-        return Guid.TryParseExact(result.ClaimsIdentity.FindFirst(Claims.Family)?.Value, "N", out var family) ? family : null;
+        return Guid.TryParseExact(result.ClaimsIdentity.FindFirst(Claims.Family)?.Value, "N", out var family)
+            && Guid.TryParseExact(result.ClaimsIdentity.FindFirst(Claims.TokenId)?.Value, "N", out var tokenId)
+            && result.SecurityToken is { } parsed
+                ? new DemoRefresh(family, tokenId, parsed.ValidTo)
+                : null;
     }
 
     public static string NewRefreshSecret() => Base64Url(RandomNumberGenerator.GetBytes(32));
@@ -121,6 +129,9 @@ public sealed class TokenService
     public static SessionUser Session(int staffId, string displayName, Role role, bool isDemo, bool mustChangePassword = false) =>
         new(staffId, displayName, role, isDemo, CanManageStaff: role == Role.Admin && !isDemo) { MustChangePassword = mustChangePassword };
 }
+
+/// <summary>What a valid demo refresh token says: which session, which token, and until when.</summary>
+public sealed record DemoRefresh(Guid Family, Guid TokenId, DateTime ExpiresUtc);
 
 /// <summary>The caller, read from the validated token. Staff ids always come from here, never from a request body.</summary>
 public sealed class CurrentUser(IHttpContextAccessor accessor, DemoDirectory demo, IServiceProvider services)

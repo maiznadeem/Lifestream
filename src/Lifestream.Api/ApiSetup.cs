@@ -102,6 +102,7 @@ public static class ApiSetup
         services.AddSingleton<TokenService>();
         services.AddSingleton<DemoDirectory>();
         services.AddSingleton<UnknownLoginTracker>();
+        services.AddSingleton<DemoSessionDenylist>();
         services.AddScoped<CurrentUser>();
         services.AddScoped<AuthService>();
         services.AddScoped<StaffService>();
@@ -122,6 +123,13 @@ public static class ApiSetup
                         var principal = context.Principal!;
                         if (principal.HasClaim(Claims.Demo, "1"))
                         {
+                            // A demo session has no database row; its sign-out is remembered in memory.
+                            var demoFamily = Guid.TryParseExact(principal.FindFirst(Claims.Family)?.Value, "N", out var df) ? df : Guid.Empty;
+                            if (demoFamily == Guid.Empty || context.HttpContext.RequestServices.GetRequiredService<DemoSessionDenylist>().IsRevoked(demoFamily))
+                            {
+                                context.Fail("The session has ended.");
+                            }
+
                             return;
                         }
 
