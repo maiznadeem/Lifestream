@@ -1,17 +1,21 @@
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Automation;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using Lifestream.Client.Common;
 using Lifestream.Client.Features.Stock;
+using Lifestream.Contracts.Stock;
 using Lifestream.Desktop.Controls;
 
 namespace Lifestream.Desktop.Features.Stock;
 
 /// <summary>
-/// The Stock screen. Ctrl+F puts focus on the blood group chip (the screen has no search box); the chip opens its menu on a click; Enter on a row moves
-/// into the group's panel and Esc closes it; a compact window drops the "More than 7 days left" column (the panel and the status still carry it).
+/// The Stock screen. Ctrl+F puts focus on the table (the screen has no search box; eight rows need none); the blood group chip, shown only for a group
+/// another screen asked for, opens its menu on a click; Enter on a row moves into the group's panel and Esc closes it. The six age-band headers come from
+/// <see cref="StockAges.Bands"/>, the definition the server counts with. A compact window folds the Refresh label to its icon and narrows the panel;
+/// the Status column folds away when the table gets narrow (the panel still says it).
 /// </summary>
 public partial class StockView : UserControl
 {
@@ -21,6 +25,7 @@ public partial class StockView : UserControl
     public StockView()
     {
         InitializeComponent();
+        SetBandHeaders();
         DataContextChanged += OnDataContextChanged;
         Loaded += (_, _) =>
         {
@@ -53,8 +58,35 @@ public partial class StockView : UserControl
         }
     }
 
-    /// <summary>Ctrl+F: the stock screen has no search box, so the blood group chip takes focus.</summary>
-    private void OnFocusSearchRequested(object? sender, EventArgs e) => BloodTypeChip.Focus();
+    /// <summary>Ctrl+F: the stock screen has no search box, so the table takes focus (on its selected or first row).</summary>
+    private void OnFocusSearchRequested(object? sender, EventArgs e)
+    {
+        if (Grid.Items.Count > 0)
+        {
+            Grid.CurrentCell = new DataGridCellInfo(Grid.SelectedItem ?? Grid.Items[0], Grid.Columns[0]);
+        }
+
+        Grid.Focus();
+    }
+
+    /// <summary>"0–6" to "35–42" over "days old" for each band column, centred over its cells; the last band is marked as the one that expires soon.</summary>
+    private void SetBandHeaders()
+    {
+        DataGridTemplateColumn[] columns = [Band0, Band1, Band2, Band3, Band4, Band5];
+        for (var i = 0; i < columns.Length && i < StockAges.Bands.Count; i++)
+        {
+            var band = StockAges.Bands[i];
+            columns[i].Header = new TextBlock
+            {
+                Text = band.Label,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                ToolTip = i == columns.Length - 1
+                    ? $"{band.FromDay} to {band.ToDay} days since collection: expires within {Lifestream.Domain.BloodRules.ExpiringSoonDays} days"
+                    : $"{band.FromDay} to {band.ToDay} days since collection",
+            };
+            AutomationProperties.SetName((TextBlock)columns[i].Header, $"{band.FromDay} to {band.ToDay} days old");
+        }
+    }
 
     private void OnBloodTypeChipClick(object sender, RoutedEventArgs e)
     {
@@ -94,10 +126,25 @@ public partial class StockView : UserControl
 
     private void OnBreakpointChanged(object? sender, EventArgs e) => ApplyBreakpoint();
 
+    /// <summary>The band headers sit centred over their centred counts (the grid's own header style, with the alignment changed).</summary>
+    private void CenterBandHeaders()
+    {
+        if (Band0.HeaderStyle is null && Grid.ColumnHeaderStyle is { } baseStyle)
+        {
+            var style = new Style(typeof(DataGridColumnHeader), baseStyle);
+            style.Setters.Add(new Setter(HorizontalContentAlignmentProperty, HorizontalAlignment.Center));
+            foreach (var column in new[] { Band0, Band1, Band2, Band3, Band4, Band5 })
+            {
+                column.HeaderStyle = style;
+            }
+        }
+    }
+
     private void ApplyBreakpoint()
     {
         var compact = Responsive.GetBreakpoint(this) == Breakpoint.Compact;
-        FreshColumn.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+        RefreshLabel.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+        CenterBandHeaders();
         if (compact)
         {
             Panel.SetResourceReference(SidePanel.PanelWidthProperty, "Width.PanelCompact");

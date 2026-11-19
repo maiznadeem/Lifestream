@@ -8,10 +8,11 @@
              xmlns:local="clr-namespace:Lifestream.Desktop.Features.Staff"
              xmlns:vm="clr-namespace:Lifestream.Client.Features.Staff;assembly=Lifestream.Client"
              controls:ShellPage.OwnsHeader="True" Focusable="False">
-  <!-- Staff (direction A): the page header with Add staff member, one line for the read-only demo account, a toolbar (search with Ctrl F and a salary
-       range, digits only), the table (avatar with initials until a photo arrives, lazily, row by row; a role badge; no password anywhere), and the
-       selected person's side panel: who they are, role and access badges, Edit / Reset password / Delete, and their details; the add and edit form
-       opens in the same panel. -->
+  <!-- Staff (direction A): the page header with Add staff member (secondary while the panel is open, its label folded to the icon in a compact window),
+       one line for the read-only demo account, a toolbar (search with Ctrl F and a "+ Salary" chip whose popup takes a range, digits only), the table
+       (avatar with initials until a photo arrives, lazily, row by row; job title, shift and a role badge; no password anywhere), and the selected person's
+       side panel: who they are, role and access badges, Reset password (the one primary), Edit and a "..." menu with Delete staff member, then what the
+       role can do and their details. The add and edit form opens in the same panel. -->
   <UserControl.Resources>
     <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
     <services:HasTextToVisibilityConverter x:Key="HasText" />
@@ -54,13 +55,14 @@
         <RowDefinition Height="*" />
       </Grid.RowDefinitions>
 
-      <controls:PageHeader Overline="Administration" Title="Staff" Count="{Binding Total}">
+      <controls:PageHeader Title="Staff" Count="{Binding Total}">
         <controls:PageHeader.Actions>
+          <!-- Button.Primary, or Button.Secondary while the panel is open (one filled button per screen: then the panel's action is the filled one); set in code-behind. -->
           <Button x:Name="AddButton" Style="{DynamicResource Button.Primary}" Command="{Binding AddCommand}" IsEnabled="{Binding CanManageStaff}"
-                  AutomationProperties.Name="Add staff member" ToolTip="Ctrl+N" ToolTipService.ShowOnDisabled="True">
+                  AutomationProperties.Name="Add staff member" ToolTip="Add staff member (Ctrl+N)" ToolTipService.ShowOnDisabled="True">
             <StackPanel Orientation="Horizontal">
-              <controls:Icon Kind="Userplus" Size="16" VerticalAlignment="Center" feat:Edge.Right="{DynamicResource Space.8}" />
-              <TextBlock Text="Add staff member" VerticalAlignment="Center" />
+              <controls:Icon Kind="Userplus" Size="16" VerticalAlignment="Center" />
+              <TextBlock x:Name="AddLabel" Text="Add staff member" VerticalAlignment="Center" feat:Edge.Left="{DynamicResource Space.8}" />
             </StackPanel>
           </Button>
         </controls:PageHeader.Actions>
@@ -78,31 +80,63 @@
       <!-- Toolbar: search (Ctrl F, Enter searches at once) and the salary range. -->
       <WrapPanel Grid.Row="2" feat:Edge.Top="{DynamicResource Space.16}" feat:Edge.Bottom="{DynamicResource Space.12}">
         <TextBox x:Name="SearchBox" Style="{DynamicResource TextBox.Search}" Width="300" Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" MaxLength="100"
-                 controls:SearchAssist.Shortcut="Ctrl F" controls:InputAssist.Placeholder="Name or username" feat:Edge.Right="{DynamicResource Space.16}" AutomationProperties.Name="Search staff">
+                 controls:SearchAssist.Shortcut="Ctrl F" controls:InputAssist.Placeholder="Search name or username" feat:Edge.Right="{DynamicResource Space.8}" AutomationProperties.Name="Search staff">
           <TextBox.InputBindings>
             <KeyBinding Key="Enter" Command="{Binding SearchNowCommand}" />
           </TextBox.InputBindings>
         </TextBox>
-        <StackPanel Orientation="Horizontal" feat:Edge.Right="{DynamicResource Space.8}">
-          <TextBlock Style="{DynamicResource Text.Label}" Text="Salary" VerticalAlignment="Center" feat:Edge.Right="{DynamicResource Space.8}" />
-          <TextBox x:Name="SalaryFromBox" Width="96" Text="{Binding SalaryFromText, UpdateSourceTrigger=PropertyChanged}" MaxLength="8" feat:DigitsOnly.IsEnabled="True"
-                   controls:InputAssist.Placeholder="From" AutomationProperties.Name="Salary from" />
-          <TextBlock Style="{DynamicResource Text.Secondary}" Text="to" VerticalAlignment="Center" feat:Edge.Left="{DynamicResource Space.8}" feat:Edge.Right="{DynamicResource Space.8}" />
-          <TextBox x:Name="SalaryToBox" Width="96" Text="{Binding SalaryToText, UpdateSourceTrigger=PropertyChanged}" MaxLength="8" feat:DigitsOnly.IsEnabled="True"
-                   controls:InputAssist.Placeholder="To" AutomationProperties.Name="Salary to" />
-        </StackPanel>
+        <Grid feat:Edge.Right="{DynamicResource Space.8}">
+          <Button x:Name="SalaryChip" Style="{DynamicResource Button.Chip}" Click="OnSalaryChipClick" AutomationProperties.Name="Salary filter" ToolTip="Filter by a salary range">
+            <StackPanel Orientation="Horizontal">
+              <controls:Icon x:Name="SalaryPlus" Kind="Plus" Size="14" VerticalAlignment="Center" feat:Edge.Right="{DynamicResource Space.8}"
+                             Visibility="{Binding HasSalaryRange, Converter={StaticResource NotVisible}}" />
+              <TextBlock x:Name="SalaryChipText" Text="{Binding SalaryChipText}" VerticalAlignment="Center" />
+              <controls:Icon Kind="Alert" Size="14" Foreground="{DynamicResource Brush.Critical}" VerticalAlignment="Center" feat:Edge.Left="{DynamicResource Space.8}"
+                             Visibility="{Binding HasSalaryRangeError, Converter={StaticResource BoolToVisibility}}" />
+              <controls:Icon Kind="Chevd" Size="14" VerticalAlignment="Center" feat:Edge.Left="{DynamicResource Space.8}" Foreground="{DynamicResource Brush.Ink3}" />
+            </StackPanel>
+          </Button>
+          <!-- The range: two digit-only boxes. The list follows as you type (after the usual pause); Done closes, Clear empties both. -->
+          <Popup x:Name="SalaryPopup" PlacementTarget="{Binding ElementName=SalaryChip}" Placement="Bottom" StaysOpen="False" AllowsTransparency="True" Focusable="False"
+                 Opened="OnSalaryPopupOpened">
+            <controls:ElevatedSurface Level="Flyout" CornerRadius="{DynamicResource Radius.Panel}" feat:Edge.Top="{DynamicResource Space.4}">
+              <Border Background="{DynamicResource Brush.Layer}" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="1" CornerRadius="{DynamicResource Radius.Panel}"
+                      Padding="{DynamicResource Pad.16}" Width="288" KeyboardNavigation.TabNavigation="Cycle" KeyDown="OnSalaryPopupKeyDown">
+                <StackPanel>
+                  <TextBlock Style="{DynamicResource Text.Heading}" Text="Salary" feat:Edge.Bottom="{DynamicResource Space.12}" />
+                  <Grid>
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="*" />
+                      <ColumnDefinition Width="Auto" />
+                      <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBox x:Name="SalaryFromBox" Text="{Binding SalaryFromText, UpdateSourceTrigger=PropertyChanged}" MaxLength="8" feat:DigitsOnly.IsEnabled="True"
+                             controls:InputAssist.Placeholder="From" AutomationProperties.Name="Salary from" />
+                    <TextBlock Grid.Column="1" Style="{DynamicResource Text.Secondary}" Text="to" VerticalAlignment="Center" feat:Edge.Left="{DynamicResource Space.8}" feat:Edge.Right="{DynamicResource Space.8}" />
+                    <TextBox x:Name="SalaryToBox" Grid.Column="2" Text="{Binding SalaryToText, UpdateSourceTrigger=PropertyChanged}" MaxLength="8" feat:DigitsOnly.IsEnabled="True"
+                             controls:InputAssist.Placeholder="To" AutomationProperties.Name="Salary to" />
+                  </Grid>
+                  <StackPanel Orientation="Horizontal" feat:Edge.Top="{DynamicResource Space.8}" Visibility="{Binding HasSalaryRangeError, Converter={StaticResource BoolToVisibility}}"
+                              AutomationProperties.LiveSetting="Polite">
+                    <controls:Icon Kind="Alert" Size="14" Foreground="{DynamicResource Brush.Critical}" VerticalAlignment="Center" feat:Edge.Right="{DynamicResource Space.4}" />
+                    <TextBlock x:Name="SalaryError" Style="{DynamicResource Text.Caption}" Foreground="{DynamicResource Brush.Critical}" Text="{Binding SalaryRangeError}" VerticalAlignment="Center" TextWrapping="Wrap" />
+                  </StackPanel>
+                  <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" feat:Edge.Top="{DynamicResource Space.16}">
+                    <Button Style="{DynamicResource Button.Subtle.Small}" Content="Clear" Command="{Binding ClearSalaryCommand}" feat:Edge.Right="{DynamicResource Space.8}" AutomationProperties.Name="Clear the salary range" />
+                    <Button Style="{DynamicResource Button.Secondary.Small}" Content="Done" Click="OnSalaryDone" AutomationProperties.Name="Close the salary filter" />
+                  </StackPanel>
+                </StackPanel>
+              </Border>
+            </controls:ElevatedSurface>
+          </Popup>
+        </Grid>
         <Button Style="{DynamicResource Button.Subtle}" Content="Clear filters" Command="{Binding ClearFiltersCommand}" Visibility="{Binding HasActiveFilters, Converter={StaticResource BoolToVisibility}}"
                 AutomationProperties.Name="Clear filters" />
-        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" feat:Edge.Left="{DynamicResource Space.8}" Visibility="{Binding HasSalaryRangeError, Converter={StaticResource BoolToVisibility}}"
-                    AutomationProperties.LiveSetting="Polite">
-          <controls:Icon Kind="Alert" Size="14" Foreground="{DynamicResource Brush.Critical}" VerticalAlignment="Center" feat:Edge.Right="{DynamicResource Space.4}" />
-          <TextBlock x:Name="SalaryError" Style="{DynamicResource Text.Caption}" Foreground="{DynamicResource Brush.Critical}" Text="{Binding SalaryRangeError}" VerticalAlignment="Center" />
-        </StackPanel>
       </WrapPanel>
 
       <lists:ScreenWakingNotice Grid.Row="3" />
 
-      <controls:LoadSurface x:Name="ListSurface" Grid.Row="4" State="{Binding State}" SkeletonKind="List" SkeletonColumns="2*,130,110,130"
+      <controls:LoadSurface x:Name="ListSurface" Grid.Row="4" State="{Binding State}" SkeletonKind="List" SkeletonColumns="2*,*,*,*"
                             ErrorMessage="{Binding ErrorMessage}" ErrorDetail="{Binding ErrorDetail}" RetryCommand="{Binding RetryCommand}"
                             EmptyIcon="Staff" EmptyTitle="{Binding EmptyTitle}" EmptyMessage="{Binding EmptyMessage}" EmptyActionText="{Binding EmptyActionText}"
                             EmptyActionCommand="{Binding EmptyActionCommand}">
@@ -114,9 +148,9 @@
             </Grid.RowDefinitions>
             <controls:LifestreamDataGrid x:Name="Grid" ItemsSource="{Binding Items}" SelectedItem="{Binding SelectedItem, Mode=TwoWay}" SortCommand="{Binding SortCommand}"
                                          SortColumn="{Binding SortColumn, Mode=OneWay}" SortDescending="{Binding SortDescending, Mode=OneWay}"
-                                         AutomationProperties.Name="Staff" KeyDown="OnGridKeyDown">
+                                         AutomationProperties.Name="Staff" KeyDown="OnGridKeyDown" lists:ListColumns.IsResponsive="True">
               <DataGrid.Columns>
-                <DataGridTemplateColumn Header="Name" Width="2*" MinWidth="220" SortMemberPath="name">
+                <DataGridTemplateColumn Header="Name" Width="2*" MinWidth="220" MaxWidth="320" SortMemberPath="name">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate DataType="{x:Type vm:StaffRow}">
                       <Grid VerticalAlignment="Center">
@@ -135,30 +169,32 @@
                         </Grid>
                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
                           <TextBlock Style="{DynamicResource DataGrid.PrimaryLine}" Text="{Binding DisplayName}" />
-                          <TextBlock Style="{DynamicResource DataGrid.SecondaryLine}" Foreground="{DynamicResource Brush.Ink3}" Text="{Binding Username}" />
+                          <TextBlock Style="{DynamicResource DataGrid.SecondaryLine}" Foreground="{DynamicResource Brush.Ink3}">
+                            <Run Text="{Binding CodeText, Mode=OneWay}" /><Run Text="  " /><Run Text="{Binding Username, Mode=OneWay}" />
+                          </TextBlock>
                         </StackPanel>
                       </Grid>
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="Designation" Width="130" CanUserSort="False">
+                <DataGridTemplateColumn Header="Job title" Width="*" MinWidth="130" CanUserSort="False">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate DataType="{x:Type vm:StaffRow}">
                       <TextBlock Text="{Binding DesignationText}" Style="{DynamicResource DataGrid.TextCell}" />
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn x:Name="ShiftColumn" Header="Shift" Width="110" CanUserSort="False">
+                <DataGridTemplateColumn x:Name="ShiftColumn" Header="Shift" Width="*" MinWidth="110" CanUserSort="False">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate DataType="{x:Type vm:StaffRow}">
                       <TextBlock Text="{Binding ShiftText}" Style="{DynamicResource DataGrid.TextCell}" />
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="Role" Width="130" CanUserSort="False">
+                <DataGridTemplateColumn Header="Role" Width="*" MinWidth="140" CanUserSort="False">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate DataType="{x:Type vm:StaffRow}">
-                      <controls:Badge x:Name="Role" Text="{Binding RoleText}" Kind="Neutral" HorizontalAlignment="Left" VerticalAlignment="Center" />
+                      <controls:Badge x:Name="Role" Text="{Binding RoleText}" Kind="Neutral" Icon="User" HorizontalAlignment="Left" VerticalAlignment="Center" />
                       <DataTemplate.Triggers>
                         <DataTrigger Binding="{Binding IsAdmin}" Value="True">
                           <Setter TargetName="Role" Property="Kind" Value="Info" />
@@ -170,9 +206,7 @@
                 </DataGridTemplateColumn>
               </DataGrid.Columns>
             </controls:LifestreamDataGrid>
-            <Border Grid.Row="1" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="0,1,0,0" Padding="{DynamicResource Inset.H16V8}">
-              <lists:ListFooter />
-            </Border>
+            <lists:ListFooter Grid.Row="1" />
           </Grid>
         </controls:CrispBorder>
       </controls:LoadSurface>
@@ -217,36 +251,40 @@
                                 Visibility="{Binding DetailIsProtected, Converter={StaticResource BoolToVisibility}}" ToolTip="The owner account can't be deleted or lose its administrator role." />
               </WrapPanel>
 
-              <!-- Actions. Delete says why when it can't be used (your own or a protected account, or the demo account). -->
-              <Grid feat:Edge.Top="{DynamicResource Space.16}">
+              <!-- Actions: Reset password (the one primary), Edit, and a "..." menu with Delete staff member (it says why when it can't be used: your own or a
+                   protected account, or the demo account; the delete asks first). -->
+              <Grid x:Name="ActionsRow" feat:Edge.Top="{DynamicResource Space.16}">
                 <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="Auto" />
                   <ColumnDefinition Width="*" />
                   <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <WrapPanel>
-                  <Button x:Name="EditButton" Style="{DynamicResource Button.Secondary}" Command="{Binding EditCommand}" IsEnabled="{Binding CanManageStaff}" feat:Edge.Right="{DynamicResource Space.8}"
-                          feat:Edge.Bottom="{DynamicResource Space.8}" AutomationProperties.Name="Edit">
-                    <StackPanel Orientation="Horizontal">
-                      <controls:Icon Kind="Edit" Size="16" VerticalAlignment="Center" feat:Edge.Right="{DynamicResource Space.8}" />
-                      <TextBlock Text="Edit" VerticalAlignment="Center" />
-                    </StackPanel>
-                  </Button>
-                  <Button x:Name="ResetButton" Style="{DynamicResource Button.Secondary}" Command="{Binding ResetPasswordCommand}" feat:Edge.Right="{DynamicResource Space.8}" feat:Edge.Bottom="{DynamicResource Space.8}"
-                          AutomationProperties.Name="Reset password">
-                    <StackPanel Orientation="Horizontal">
-                      <controls:Icon Kind="Key" Size="16" VerticalAlignment="Center" feat:Edge.Right="{DynamicResource Space.8}" />
-                      <TextBlock Text="Reset password" VerticalAlignment="Center" />
-                    </StackPanel>
-                  </Button>
-                </WrapPanel>
-                <Button x:Name="DeleteButton" Grid.Column="1" Style="{DynamicResource Button.Subtle}" Command="{Binding DeleteCommand}" VerticalAlignment="Top" AutomationProperties.Name="Delete"
-                        Foreground="{DynamicResource Brush.Critical}" ToolTip="{Binding DeleteDisabledReason}" ToolTipService.ShowOnDisabled="True"
-                        controls:ButtonAssist.IsBusy="{Binding DeleteCommand.IsRunning}" controls:ButtonAssist.BusyText="Deleting">
+                <Button x:Name="ResetButton" Style="{DynamicResource Button.Primary}" Command="{Binding ResetPasswordCommand}" feat:Edge.Right="{DynamicResource Space.8}" AutomationProperties.Name="Reset password">
                   <StackPanel Orientation="Horizontal">
-                    <controls:Icon Kind="Trash" Size="16" VerticalAlignment="Center" feat:Edge.Right="{DynamicResource Space.8}" />
-                    <TextBlock Text="Delete" VerticalAlignment="Center" />
+                    <controls:Icon Kind="Key" Size="16" VerticalAlignment="Center" feat:Edge.Right="{DynamicResource Space.8}" />
+                    <TextBlock Text="Reset password" VerticalAlignment="Center" />
                   </StackPanel>
                 </Button>
+                <Button x:Name="EditButton" Grid.Column="1" Style="{DynamicResource Button.Secondary}" Command="{Binding EditCommand}" IsEnabled="{Binding CanManageStaff}" HorizontalAlignment="Left"
+                        AutomationProperties.Name="Edit">
+                  <StackPanel Orientation="Horizontal">
+                    <controls:Icon Kind="Edit" Size="16" VerticalAlignment="Center" feat:Edge.Right="{DynamicResource Space.8}" />
+                    <TextBlock Text="Edit" VerticalAlignment="Center" />
+                  </StackPanel>
+                </Button>
+                <lists:MenuButton x:Name="MoreButton" Grid.Column="2" Style="{DynamicResource Button.Icon}" feat:Edge.Left="{DynamicResource Space.8}" AutomationProperties.Name="More actions" ToolTip="More actions">
+                  <controls:Icon Kind="More" Size="18" />
+                  <lists:MenuButton.ContextMenu>
+                    <ContextMenu>
+                      <MenuItem x:Name="DeleteItem" Header="Delete staff member" Command="{Binding DeleteCommand}" Foreground="{DynamicResource Brush.Critical}"
+                                ToolTip="{Binding DeleteDisabledReason}" ToolTipService.ShowOnDisabled="True" AutomationProperties.Name="Delete staff member">
+                        <MenuItem.Icon>
+                          <controls:Icon Kind="Trash" Size="16" />
+                        </MenuItem.Icon>
+                      </MenuItem>
+                    </ContextMenu>
+                  </lists:MenuButton.ContextMenu>
+                </lists:MenuButton>
               </Grid>
 
               <!-- Access: what the role can do in the app. -->
@@ -292,7 +330,7 @@
                         <ColumnDefinition Width="130" />
                         <ColumnDefinition Width="*" />
                       </Grid.ColumnDefinitions>
-                      <TextBlock Style="{DynamicResource Text.Body}" Foreground="{DynamicResource Brush.Ink3}" Text="{Binding Label}" />
+                      <TextBlock Style="{DynamicResource Text.Secondary}" Text="{Binding Label}" TextWrapping="Wrap" />
                       <TextBlock Grid.Column="1" Style="{DynamicResource Text.Body}" Text="{Binding Value}" TextWrapping="Wrap" />
                     </Grid>
                   </DataTemplate>

@@ -22,6 +22,11 @@ public enum StockSeverity
 /// <summary>One blood type's tile: units available, units expiring within 7 days and whether it is below its threshold.</summary>
 public sealed record StockTile(BloodType BloodType, int Available, int ExpiringSoon, int Threshold, bool BelowThreshold)
 {
+    private static readonly IReadOnlyList<StockAgeCell> EmptyCells = [.. StockAges.Bands.Select((_, i) => new StockAgeCell(i, null, i == StockAges.BandCount - 1))];
+
+    /// <summary>The row of the stock-by-age matrix: one cell per band of <see cref="StockAges.Bands"/> (en dashes when the answer had no bands).</summary>
+    public IReadOnlyList<StockAgeCell> AgeCells { get; init; } = EmptyCells;
+
     public string BloodTypeText => BloodType.ToDisplay();
 
     public StockSeverity Severity => BelowThreshold ? StockSeverity.LowStock : ExpiringSoon > 0 ? StockSeverity.ExpiringSoon : StockSeverity.InStock;
@@ -62,6 +67,9 @@ public sealed record StockTile(BloodType BloodType, int Available, int ExpiringS
 
     public string UnitsNumber => Available.ToString("N0", System.Globalization.CultureInfo.CurrentCulture);
 
+    /// <summary>"17 units": the count as one size, number and word.</summary>
+    public string UnitsText => Available == 1 ? "1 unit" : $"{UnitsNumber} units";
+
     public string UnitWord => Available == 1 ? "unit" : "units";
 
     public string FreshText => Fresh == 0 ? "None" : Fresh.ToString("N0", System.Globalization.CultureInfo.CurrentCulture);
@@ -90,7 +98,13 @@ public sealed record StockTile(BloodType BloodType, int Available, int ExpiringS
             ? $"{ShortBy:N0} {(ShortBy == 1 ? "unit" : "units")} short of the minimum of {Threshold:N0}."
             : $"At or above the minimum of {Threshold:N0} units.";
 
-    internal static StockTile From(StockItem item, double scale = 0) => new(item.BloodType, item.Available, item.ExpiringSoon, item.Threshold, item.BelowThreshold) { Scale = scale };
+    internal static StockTile From(StockItem item, double scale = 0) => new(item.BloodType, item.Available, item.ExpiringSoon, item.Threshold, item.BelowThreshold)
+    {
+        Scale = scale,
+        AgeCells = item.AgeBands is { Count: StockAges.BandCount } bands
+            ? [.. bands.Select((count, i) => new StockAgeCell(i, count, i == StockAges.BandCount - 1))]
+            : EmptyCells,
+    };
 }
 
 /// <summary>
@@ -255,6 +269,112 @@ public sealed partial class StockViewModel : ViewModelBase, INavigationParameter
 
     public bool IsPanelOpen => SelectedTile is not null;
 
+    // ---- the bags of the selected group (the panel's list, use first at the top) ---------------------------------------
+
+    private CancellationTokenSource? _bagsLoad;
+
+    /// <summary>The selected group's available bags, oldest collection first: the order to use them in, and the order a fulfil issues them.</summary>
+    public ObservableCollection<StockBagRow> Bags { get; } = [];
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowBagsSkeleton))]
+    [NotifyPropertyChangedFor(nameof(HasBagsError))]
+    [NotifyPropertyChangedFor(nameof(HasBags))]
+    [NotifyPropertyChangedFor(nameof(HasNoBags))]
+    public partial LoadState BagsState { get; set; } = LoadState.Ready;
+
+    public bool ShowBagsSkeleton => BagsState is LoadState.Loading or LoadState.Waking;
+
+    public bool HasBagsError => BagsState == LoadState.Error;
+
+    public bool HasBags => BagsState == LoadState.Ready && Bags.Count > 0;
+
+    public bool HasNoBags => BagsState == LoadState.Ready && Bags.Count == 0 && SelectedTile is not null;
+
+    public string BagsErrorText => "Can't load the bags. Check your connection, then retry.";
+
+    /// <summary>"Showing the oldest 200 of 412 bags." when the list is capped, otherwise empty.</summary>
+    [ObservableProperty]
+    public partial string BagsMoreText { get; set; } = string.Empty;
+
+    internal TimeZoneInfo Zone { get; set; } = TimeZoneInfo.Local;
+
+    public AsyncRelayCommand RetryBagsCommand => field ??= Command(_ => LoadBagsAsync(SelectedTile));
+
+    partial void OnSelectedTileChanged(StockTile? oldValue, StockTile? newValue)
+    {
+        if (oldValue?.BloodType != newValue?.BloodType)
+        {
+            _ = LoadBagsAsync(newValue);
+        }
+    }
+
+    private async Task LoadBagsAsync(StockTile? tile)
+    {
+        _bagsLoad?.Cancel();
+        _bagsLoad?.Dispose();
+        _bagsLoad = null;
+        Bags.Clear();
+        BagsMoreText = string.Empty;
+        if (tile is null || tile.Available == 0)
+        {
+            BagsState = LoadState.Ready;
+            RaiseBags();
+            return;
+        }
+
+        var load = new CancellationTokenSource();
+        _bagsLoad = load;
+        BagsState = LoadState.Loading;
+        try
+        {
+            var result = await RunOperationAsync(ct => _api.GetStockBagsAsync(tile.BloodType, ct), load.Token).ConfigureAwait(true);
+            if (load.IsCancellationRequested)
+            {
+                return;
+            }
+
+            if (!result.IsOk)
+            {
+                BagsState = LoadState.Error;
+                return;
+            }
+
+            var today = DateOnly.FromDateTime(Clock.GetUtcNow().UtcDateTime);
+            var position = 0;
+            foreach (var bag in result.Value.Bags)
+            {
+                Bags.Add(new StockBagRow(bag, ++position, today, Zone));
+            }
+
+            BagsMoreText = result.Value.HasMore ? $"Showing the oldest {Bags.Count:N0} of {tile.Available:N0} bags." : string.Empty;
+            BagsState = LoadState.Ready;
+            RaiseBags();
+        }
+        catch (OperationCanceledException) when (load.IsCancellationRequested)
+        {
+            // Another group was chosen or the panel closed; that load owns the list now.
+        }
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _bagsLoad?.Cancel();
+            _bagsLoad?.Dispose();
+            _bagsLoad = null;
+        }
+
+        base.Dispose(disposing);
+    }
+
+    private void RaiseBags()
+    {
+        OnPropertyChanged(nameof(HasBags));
+        OnPropertyChanged(nameof(HasNoBags));
+    }
+
     public string? PanelOverline => SelectedTile is { } tile ? $"Blood group {tile.GroupText}" : null;
 
     /// <summary>True when the panel can open the group's donors and requests.</summary>
@@ -358,8 +478,23 @@ public sealed partial class StockViewModel : ViewModelBase, INavigationParameter
             : $"{low.Count} of {_fetched.Count} blood groups are below the minimum." + (outOf.Count == 0 ? string.Empty : $" {string.Join(" and ", outOf)} {(outOf.Count == 1 ? "is" : "are")} out of stock.");
         OnPropertyChanged(nameof(SummaryText));
         OnPropertyChanged(nameof(HasShortage));
+        OnPropertyChanged(nameof(HasStock));
+        var open = SelectedTile?.BloodType;
         ApplyFilters();
+        if (open is not null && SelectedTile?.BloodType == open)
+        {
+            _ = LoadBagsAsync(SelectedTile); // a refresh: the open group's bags may have changed too
+        }
     }
+
+    /// <summary>True once the stock has at least one group: the tabs, the legend and the table show only then.</summary>
+    public bool HasStock => _fetched.Count > 0;
+
+    /// <summary>The empty state's action. Donations are recorded from an appointment, so it opens Appointments (null without navigation).</summary>
+    public AsyncRelayCommand? RecordDonationCommand => _navigation is null ? null : field ??= Command(async _ =>
+    {
+        await _navigation.NavigateTo<Appointments.AppointmentsViewModel>().ConfigureAwait(true);
+    });
 
     private bool _restored;
 
@@ -386,8 +521,9 @@ public sealed partial class StockViewModel : ViewModelBase, INavigationParameter
     {
         var type = BloodTypeFilter.Value;
         var view = ViewFilter.Value;
-        // One scale for every row, so the bars compare: twice the largest minimum, or the largest stock when that is more.
-        var scale = _fetched.Count == 0 ? 0 : Math.Max(_fetched.Max(i => i.Threshold) * 2.0, _fetched.Max(i => i.Available));
+        // One scale for every row, so the bars compare: three times the largest minimum. The minimum tick sits at a third of the bar whatever the
+        // largest stock is, so "low" reads at a glance; a group with more fills the bar, and its number says how much.
+        var scale = _fetched.Count == 0 ? 0 : _fetched.Max(i => i.Threshold) * 3.0;
         var selected = SelectedTile?.BloodType;
         var visible = _fetched
             .Where(i => type is null || i.BloodType == type)

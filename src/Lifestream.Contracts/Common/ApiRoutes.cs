@@ -81,6 +81,12 @@ public static class ApiRoutes
     // Demo
     public const string DemoReset = "demo/reset";
 
+    /// <summary>GET stock/bags?bloodType=APos: the group's available bags in use-first order (StockBagList).</summary>
+    public const string StockBags = "stock/bags";
+
+    /// <summary>GET receipts/counts?search=&amp;bloodType=: the receipts matching the list's filters, in all and by kind (ReceiptCounts).</summary>
+    public const string ReceiptCounts = "receipts/counts";
+
     /// <summary>All route templates, for tests that check every route is mapped and authorised.</summary>
     public static IReadOnlyList<string> All { get; } =
         [.. typeof(ApiRoutes)

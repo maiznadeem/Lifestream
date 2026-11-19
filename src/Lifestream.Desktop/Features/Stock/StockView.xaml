@@ -3,19 +3,21 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="clr-namespace:Lifestream.Desktop.Controls"
              xmlns:feat="clr-namespace:Lifestream.Desktop.Features"
+             xmlns:lists="clr-namespace:Lifestream.Desktop.Features.ListScreens"
              xmlns:local="clr-namespace:Lifestream.Desktop.Features.Stock"
              xmlns:stock="clr-namespace:Lifestream.Client.Features.Stock;assembly=Lifestream.Client"
              controls:ShellPage.OwnsHeader="True" Focusable="False">
-  <!-- Stock (direction A, with direction B's stock-by-age view): the page header with All / Low / Expiring tabs, a blood group chip, one table of the eight
-       groups (units against the minimum, split by shelf life left: more than 7 days, or expiring within 7 days, and a status that is an icon and words),
-       and the selected group's panel (what it can be given to, what it can receive, and its donors and requests). Every number comes from the stock call. -->
+  <!-- Stock (direction A, with direction B's stock-by-age matrix): the page header with All / Low / Expiring tabs, one table of the eight groups (how many
+       bags sit in each of the six age bands, the last band being the ones that expire within 7 days, then the units against the minimum and a status that is
+       an icon and words), and the selected group's panel: its bags in use-first order with their numbers and dates, the shelf-life split and what the group
+       can be given to and receive. Every number comes from the API. -->
   <UserControl.Resources>
     <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
     <local:GroupOptionTextConverter x:Key="GroupOptionText" />
 
     <!-- The status badge of a group: out of stock and low are Critical, expiring is Warning, otherwise Success. Icon plus words, never colour alone. -->
     <DataTemplate x:Key="StatusCell" DataType="{x:Type stock:StockTile}">
-      <controls:Badge x:Name="Status" Text="{Binding BadgeText}" Kind="Success" Icon="Checkc" />
+      <controls:Badge x:Name="Status" Text="{Binding BadgeText}" Kind="Success" Icon="Checkc" HorizontalAlignment="Left" VerticalAlignment="Center" />
       <DataTemplate.Triggers>
         <DataTrigger Binding="{Binding HasExpiring}" Value="True">
           <Setter TargetName="Status" Property="Kind" Value="Warning" />
@@ -27,6 +29,39 @@
         </DataTrigger>
       </DataTemplate.Triggers>
     </DataTemplate>
+
+    <!-- One cell of the age matrix: the count on a tint whose strength follows the count (Info for most bands, Warning for the band that expires
+         within 7 days). The tint is a separate layer, so the number keeps full contrast. -->
+    <DataTemplate x:Key="AgeCell" DataType="{x:Type stock:StockAgeCell}">
+      <Grid Height="{DynamicResource Height.Compact}" AutomationProperties.Name="{Binding AutomationName}">
+        <Border x:Name="Tint" CornerRadius="{DynamicResource Radius.Small}" Background="{DynamicResource Brush.InfoSoft}" Opacity="0" />
+        <TextBlock x:Name="Number" Text="{Binding Text}" HorizontalAlignment="Center" VerticalAlignment="Center" Style="{DynamicResource Text.Body}"
+                   Foreground="{DynamicResource Brush.Ink}" FontWeight="SemiBold" Typography.NumeralAlignment="Tabular" />
+      </Grid>
+      <DataTemplate.Triggers>
+        <DataTrigger Binding="{Binding IsExpiringBand}" Value="True">
+          <Setter TargetName="Tint" Property="Background" Value="{DynamicResource Brush.WarningSoft}" />
+          <Setter TargetName="Number" Property="Foreground" Value="{DynamicResource Brush.Warning}" />
+        </DataTrigger>
+        <DataTrigger Binding="{Binding Level}" Value="1">
+          <Setter TargetName="Tint" Property="Opacity" Value="0.45" />
+        </DataTrigger>
+        <DataTrigger Binding="{Binding Level}" Value="2">
+          <Setter TargetName="Tint" Property="Opacity" Value="0.65" />
+        </DataTrigger>
+        <DataTrigger Binding="{Binding Level}" Value="3">
+          <Setter TargetName="Tint" Property="Opacity" Value="0.85" />
+        </DataTrigger>
+        <DataTrigger Binding="{Binding Level}" Value="4">
+          <Setter TargetName="Tint" Property="Opacity" Value="1" />
+        </DataTrigger>
+        <DataTrigger Binding="{Binding Level}" Value="0">
+          <Setter TargetName="Number" Property="Foreground" Value="{DynamicResource Brush.Ink3}" />
+          <Setter TargetName="Number" Property="FontWeight" Value="Normal" />
+        </DataTrigger>
+      </DataTemplate.Triggers>
+    </DataTemplate>
+
   </UserControl.Resources>
 
   <Grid x:Name="Root">
@@ -53,17 +88,17 @@
         <RowDefinition Height="*" />
       </Grid.RowDefinitions>
 
-      <controls:PageHeader Overline="Inventory" Title="Stock" Count="{Binding UnitsCountText}">
+      <controls:PageHeader Title="Stock" Count="{Binding UnitsCountText}">
         <controls:PageHeader.Actions>
           <Button x:Name="RefreshButton" Style="{DynamicResource Button.Secondary}" Command="{Binding RetryCommand}" AutomationProperties.Name="Refresh stock" ToolTip="Fetch the latest stock">
             <StackPanel Orientation="Horizontal">
-              <controls:Icon Kind="Sync" Size="16" VerticalAlignment="Center" feat:Edge.Right="{DynamicResource Space.8}" />
-              <TextBlock Text="Refresh" VerticalAlignment="Center" />
+              <controls:Icon Kind="Sync" Size="16" VerticalAlignment="Center" />
+              <TextBlock x:Name="RefreshLabel" Text="Refresh" VerticalAlignment="Center" feat:Edge.Left="{DynamicResource Space.8}" />
             </StackPanel>
           </Button>
         </controls:PageHeader.Actions>
         <controls:PageHeader.Tabs>
-          <Border Style="{DynamicResource Tabs.Strip}">
+          <Border Style="{DynamicResource Tabs.Strip}" Visibility="{Binding HasStock, Converter={StaticResource BoolToVisibility}}">
             <StackPanel x:Name="Tabs" Orientation="Horizontal" feat:Edge.Bottom="-1">
               <RadioButton x:Name="AllTab" Style="{DynamicResource Tab.Option}" GroupName="StockView" IsChecked="{Binding IsAllView, Mode=TwoWay}" AutomationProperties.Name="All blood groups">
                 <TextBlock><Run Text="All" /><Run Text=" " /><Run Text="{Binding GroupCount, Mode=OneWay}" Foreground="{DynamicResource Brush.Ink3}" /></TextBlock>
@@ -89,17 +124,19 @@
         </StackPanel>
       </controls:CrispBorder>
 
-      <!-- Toolbar: the blood group chip, Clear filters, and the legend of the table on the right. -->
-      <Grid Grid.Row="2" feat:Edge.Top="{DynamicResource Space.16}" feat:Edge.Bottom="{DynamicResource Space.12}">
+      <!-- Toolbar: a blood group filter shows only when another screen opened Stock for one group (eight rows need no filter), then the legend of the
+           matrix on the right. Both only once there is stock. -->
+      <Grid x:Name="Toolbar" Grid.Row="2" feat:Edge.Top="{DynamicResource Space.16}" feat:Edge.Bottom="{DynamicResource Space.12}" MinHeight="{DynamicResource Height.Control}"
+            Visibility="{Binding HasStock, Converter={StaticResource BoolToVisibility}}">
         <Grid.ColumnDefinitions>
           <ColumnDefinition Width="Auto" />
           <ColumnDefinition Width="Auto" />
           <ColumnDefinition Width="*" />
           <ColumnDefinition Width="Auto" />
         </Grid.ColumnDefinitions>
-        <Button x:Name="BloodTypeChip" Style="{DynamicResource Button.Chip}" Click="OnBloodTypeChipClick" AutomationProperties.Name="Blood group filter" ToolTip="Ctrl F">
+        <Button x:Name="BloodTypeChip" Style="{DynamicResource Button.Chip}" Click="OnBloodTypeChipClick" AutomationProperties.Name="Blood group filter"
+                Visibility="{Binding HasBloodTypeFilter, Converter={StaticResource BoolToVisibility}}">
           <StackPanel Orientation="Horizontal">
-            <controls:Icon x:Name="ChipPlus" Kind="Plus" Size="14" VerticalAlignment="Center" feat:Edge.Right="{DynamicResource Space.8}" />
             <TextBlock Text="{Binding BloodTypeChipText}" VerticalAlignment="Center" />
             <controls:Icon Kind="Chevd" Size="14" VerticalAlignment="Center" feat:Edge.Left="{DynamicResource Space.8}" Foreground="{DynamicResource Brush.Ink3}" />
           </StackPanel>
@@ -115,44 +152,94 @@
         </Button>
         <Button Grid.Column="1" Style="{DynamicResource Button.Subtle}" Content="Clear filters" Command="{Binding ClearFiltersCommand}" feat:Edge.Left="{DynamicResource Space.8}"
                 Visibility="{Binding HasFilters, Converter={StaticResource BoolToVisibility}}" AutomationProperties.Name="Clear filters" />
-        <StackPanel x:Name="Legend" Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center" AutomationProperties.Name="Legend">
-          <Border Width="14" Height="8" CornerRadius="{DynamicResource Radius.2}" Background="{DynamicResource Brush.WarningHatch}" VerticalAlignment="Center" feat:Edge.Right="{DynamicResource Space.8}" />
-          <TextBlock Style="{DynamicResource Text.Caption}" Text="Expires within 7 days" VerticalAlignment="Center" feat:Edge.Right="{DynamicResource Space.16}" />
-          <Border Width="2" Height="14" Background="{DynamicResource Brush.Ink3}" VerticalAlignment="Center" feat:Edge.Right="{DynamicResource Space.8}" />
-          <TextBlock x:Name="MinimumText" Style="{DynamicResource Text.Caption}" Text="{Binding MinimumText}" VerticalAlignment="Center" />
-        </StackPanel>
+        <WrapPanel x:Name="Legend" Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center" AutomationProperties.Name="Legend">
+          <TextBlock Style="{DynamicResource Text.Caption}" Text="Bags by days since collection" VerticalAlignment="Center" feat:Edge.Right="{DynamicResource Space.16}" />
+          <StackPanel Orientation="Horizontal" feat:Edge.Right="{DynamicResource Space.16}">
+            <Border Width="12" Height="12" CornerRadius="{DynamicResource Radius.2}" Background="{DynamicResource Brush.WarningSoft}" BorderBrush="{DynamicResource Brush.Warning}" BorderThickness="1"
+                    VerticalAlignment="Center" feat:Edge.Right="{DynamicResource Space.8}" />
+            <TextBlock x:Name="ExpiringLegend" Style="{DynamicResource Text.Caption}" Text="Expires within 7 days" VerticalAlignment="Center" />
+          </StackPanel>
+          <StackPanel Orientation="Horizontal">
+            <Border Width="2" Height="12" Background="{DynamicResource Brush.Ink3}" VerticalAlignment="Center" feat:Edge.Right="{DynamicResource Space.8}" />
+            <TextBlock x:Name="MinimumText" Style="{DynamicResource Text.Caption}" Text="{Binding MinimumText}" VerticalAlignment="Center" />
+          </StackPanel>
+        </WrapPanel>
       </Grid>
 
-      <controls:LoadSurface x:Name="Surface" Grid.Row="3" State="{Binding State}" SkeletonKind="List" SkeletonColumns="90,2*,140,150,150" ErrorMessage="{Binding ErrorMessage}"
-                            ErrorDetail="{Binding ErrorDetail}" RetryCommand="{Binding RetryCommand}" EmptyIcon="Stock" EmptyTitle="No stock figures yet"
-                            EmptyMessage="Stock appears here once blood has been donated." VerticalAlignment="Top">
+      <controls:LoadSurface x:Name="Surface" Grid.Row="3" State="{Binding State}" SkeletonKind="List" SkeletonColumns="72,56,56,56,56,56,56,180,150" ErrorMessage="{Binding ErrorMessage}"
+                            ErrorDetail="{Binding ErrorDetail}" RetryCommand="{Binding RetryCommand}" EmptyIcon="Stock" EmptyTitle="No blood in stock"
+                            EmptyMessage="Stock appears here once a donation is recorded. Donations are recorded from an appointment."
+                            EmptyActionText="Open appointments" EmptyActionCommand="{Binding RecordDonationCommand}" VerticalAlignment="Top">
         <Grid>
           <controls:CrispBorder x:Name="TableFrame" Background="{DynamicResource Brush.Layer}" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="1" CornerRadius="{DynamicResource Radius.Panel}"
                                 VerticalAlignment="Top">
-            <controls:LifestreamDataGrid x:Name="Grid" ItemsSource="{Binding Tiles}" SelectedItem="{Binding SelectedTile, Mode=TwoWay}" AutomationProperties.Name="Stock by blood group"
-                                         HeadersVisibility="Column" VerticalScrollBarVisibility="Disabled" KeyDown="OnGridKeyDown">
+            <controls:LifestreamDataGrid x:Name="Grid" ItemsSource="{Binding Tiles}" SelectedItem="{Binding SelectedTile, Mode=TwoWay}" AutomationProperties.Name="Stock by blood group and age"
+                                         HeadersVisibility="Column" VerticalScrollBarVisibility="Disabled" KeyDown="OnGridKeyDown" lists:ListColumns.IsResponsive="True">
               <DataGrid.Columns>
-                <DataGridTemplateColumn Header="Group" Width="90" CanUserSort="False">
+                <DataGridTemplateColumn Header="Group" Width="72" CanUserSort="False">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate DataType="{x:Type stock:StockTile}">
-                      <controls:BloodGroupTag Text="{Binding GroupText}" />
+                      <controls:BloodGroupTag Text="{Binding GroupText}" HorizontalAlignment="Left" VerticalAlignment="Center" />
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="In stock" Width="2*" MinWidth="200" CanUserSort="False">
+                <!-- The six age bands: headers come from the API's band definitions (StockAges.Bands), set in code-behind. -->
+                <DataGridTemplateColumn x:Name="Band0" Width="*" MinWidth="56" MaxWidth="96" CanUserSort="False">
+                  <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate DataType="{x:Type stock:StockTile}">
+                      <ContentControl Content="{Binding AgeCells[0]}" ContentTemplate="{StaticResource AgeCell}" Focusable="False" IsTabStop="False" />
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn x:Name="Band1" Width="*" MinWidth="56" MaxWidth="96" CanUserSort="False">
+                  <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate DataType="{x:Type stock:StockTile}">
+                      <ContentControl Content="{Binding AgeCells[1]}" ContentTemplate="{StaticResource AgeCell}" Focusable="False" IsTabStop="False" />
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn x:Name="Band2" Width="*" MinWidth="56" MaxWidth="96" CanUserSort="False">
+                  <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate DataType="{x:Type stock:StockTile}">
+                      <ContentControl Content="{Binding AgeCells[2]}" ContentTemplate="{StaticResource AgeCell}" Focusable="False" IsTabStop="False" />
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn x:Name="Band3" Width="*" MinWidth="56" MaxWidth="96" CanUserSort="False">
+                  <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate DataType="{x:Type stock:StockTile}">
+                      <ContentControl Content="{Binding AgeCells[3]}" ContentTemplate="{StaticResource AgeCell}" Focusable="False" IsTabStop="False" />
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn x:Name="Band4" Width="*" MinWidth="56" MaxWidth="96" CanUserSort="False">
+                  <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate DataType="{x:Type stock:StockTile}">
+                      <ContentControl Content="{Binding AgeCells[4]}" ContentTemplate="{StaticResource AgeCell}" Focusable="False" IsTabStop="False" />
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn x:Name="Band5" Width="*" MinWidth="56" MaxWidth="96" CanUserSort="False">
+                  <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate DataType="{x:Type stock:StockTile}">
+                      <ContentControl Content="{Binding AgeCells[5]}" ContentTemplate="{StaticResource AgeCell}" Focusable="False" IsTabStop="False" />
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <!-- Units against the minimum: the count (one size: "17 units"), then a meter of a fixed width on one scale for every row (three times the
+                     minimum), with the minimum as a tick, so the bars compare and "low" reads at a glance. -->
+                <DataGridTemplateColumn x:Name="UnitsColumn" Header="Units in stock" Width="200" CanUserSort="False">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate DataType="{x:Type stock:StockTile}">
                       <Grid VerticalAlignment="Center" AutomationProperties.Name="{Binding AutomationName}">
                         <Grid.ColumnDefinitions>
-                          <ColumnDefinition Width="*" />
-                          <ColumnDefinition Width="76" />
+                          <ColumnDefinition Width="72" />
+                          <ColumnDefinition Width="96" />
                         </Grid.ColumnDefinitions>
-                        <controls:MeterBar x:Name="Bar" VerticalAlignment="Center" Value="{Binding FillFraction}" Hatched="{Binding ExpiringFraction}" Minimum="{Binding MinimumFraction}"
+                        <TextBlock x:Name="Count" Text="{Binding UnitsText}" Style="{DynamicResource Text.Body}" FontWeight="SemiBold" VerticalAlignment="Center" Typography.NumeralAlignment="Tabular" />
+                        <controls:MeterBar x:Name="Bar" Grid.Column="1" VerticalAlignment="Center" Value="{Binding FillFraction}" Hatched="{Binding ExpiringFraction}" Minimum="{Binding MinimumFraction}"
                                            Track="{DynamicResource Brush.Layer2}" TrackStroke="{DynamicResource Brush.Stroke}" Fill="{DynamicResource Brush.Ink2}"
                                            Hatch="{DynamicResource Brush.WarningHatch}" Tick="{DynamicResource Brush.Ink3}" />
-                        <TextBlock x:Name="Count" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Typography.NumeralAlignment="Tabular">
-                          <Run Text="{Binding UnitsNumber, Mode=OneWay}" FontWeight="SemiBold" /><Run Text=" " /><Run x:Name="Word" Text="{Binding UnitWord, Mode=OneWay}" Foreground="{DynamicResource Brush.Ink3}" />
-                        </TextBlock>
                       </Grid>
                       <DataTemplate.Triggers>
                         <DataTrigger Binding="{Binding IsLow}" Value="True">
@@ -163,37 +250,7 @@
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn x:Name="FreshColumn" Header="More than 7 days" Width="140" CanUserSort="False">
-                  <DataGridTemplateColumn.CellTemplate>
-                    <DataTemplate DataType="{x:Type stock:StockTile}">
-                      <TextBlock x:Name="Fresh" Style="{DynamicResource DataGrid.TextCell}" Text="{Binding FreshText}" Typography.NumeralAlignment="Tabular" />
-                      <DataTemplate.Triggers>
-                        <DataTrigger Binding="{Binding Fresh}" Value="0">
-                          <Setter TargetName="Fresh" Property="Foreground" Value="{DynamicResource Brush.Ink3}" />
-                        </DataTrigger>
-                      </DataTemplate.Triggers>
-                    </DataTemplate>
-                  </DataGridTemplateColumn.CellTemplate>
-                </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="Within 7 days" Width="120" CanUserSort="False">
-                  <DataGridTemplateColumn.CellTemplate>
-                    <DataTemplate DataType="{x:Type stock:StockTile}">
-                      <Grid VerticalAlignment="Center" HorizontalAlignment="Left">
-                        <Border x:Name="Tint" CornerRadius="{DynamicResource Radius.Small}" Padding="{DynamicResource Inset.H8V4}" Background="Transparent">
-                          <TextBlock x:Name="Expiring" Text="{Binding ExpiringNumber}" Foreground="{DynamicResource Brush.Ink3}" Typography.NumeralAlignment="Tabular" />
-                        </Border>
-                      </Grid>
-                      <DataTemplate.Triggers>
-                        <DataTrigger Binding="{Binding HasExpiring}" Value="True">
-                          <Setter TargetName="Tint" Property="Background" Value="{DynamicResource Brush.WarningSoft}" />
-                          <Setter TargetName="Expiring" Property="Foreground" Value="{DynamicResource Brush.Warning}" />
-                          <Setter TargetName="Expiring" Property="FontWeight" Value="SemiBold" />
-                        </DataTrigger>
-                      </DataTemplate.Triggers>
-                    </DataTemplate>
-                  </DataGridTemplateColumn.CellTemplate>
-                </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="Status" Width="150" CanUserSort="False" CellTemplate="{StaticResource StatusCell}" />
+                <DataGridTemplateColumn x:Name="StatusColumn" Header="Status" Width="150" CanUserSort="False" CellTemplate="{StaticResource StatusCell}" lists:ListColumns.HideBelow="740" />
               </DataGrid.Columns>
             </controls:LifestreamDataGrid>
           </controls:CrispBorder>
@@ -206,77 +263,110 @@
     <!-- The selected group's panel. -->
     <controls:SidePanel x:Name="Panel" Grid.Column="1" IsOpen="{Binding IsPanelOpen}" Overline="{Binding PanelOverline}" CloseCommand="{Binding ClosePanelCommand}"
                         AutomationProperties.Name="Blood group details">
-      <ScrollViewer VerticalScrollBarVisibility="Auto" Focusable="False" DataContext="{Binding SelectedTile}">
+      <ScrollViewer VerticalScrollBarVisibility="Auto" Focusable="False">
         <StackPanel x:Name="PanelBody" feat:Edge.Bottom="{DynamicResource Space.24}">
-          <Grid>
+          <Grid DataContext="{Binding SelectedTile}">
             <Grid.ColumnDefinitions>
               <ColumnDefinition Width="*" />
               <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <StackPanel>
-              <TextBlock x:Name="PanelUnits" Style="{DynamicResource Text.Section}" AutomationProperties.HeadingLevel="Level2">
-                <Run Text="{Binding UnitsNumber, Mode=OneWay}" /><Run Text=" " /><Run Text="{Binding UnitWord, Mode=OneWay}" /><Run Text=" in stock" />
+              <TextBlock x:Name="PanelUnits" Style="{DynamicResource Text.Section}" AutomationProperties.HeadingLevel="Level2" TextWrapping="Wrap">
+                <Run Text="{Binding UnitsText, Mode=OneWay}" /><Run Text=" in stock" />
               </TextBlock>
               <TextBlock x:Name="PanelMinimum" Style="{DynamicResource Text.Secondary}" Text="{Binding MinimumSentence}" TextWrapping="Wrap" feat:Edge.Top="{DynamicResource Space.4}" />
             </StackPanel>
             <controls:BloodGroupTag Grid.Column="1" Text="{Binding GroupText}" IsLarge="True" VerticalAlignment="Top" feat:Edge.Left="{DynamicResource Space.12}" />
           </Grid>
 
-          <StackPanel Orientation="Horizontal" feat:Edge.Top="{DynamicResource Space.16}"
-                      Visibility="{Binding DataContext.CanNavigate, ElementName=Root, Converter={StaticResource BoolToVisibility}}">
-            <Button x:Name="FindDonorsButton" Style="{DynamicResource Button.Primary}" Command="{Binding DataContext.FindDonorsCommand, ElementName=Root}" feat:Edge.Right="{DynamicResource Space.8}"
+          <!-- Actions: one primary (the page header's Refresh is secondary), then the group's requests. -->
+          <WrapPanel feat:Edge.Top="{DynamicResource Space.16}" Visibility="{Binding CanNavigate, Converter={StaticResource BoolToVisibility}}">
+            <Button x:Name="FindDonorsButton" Style="{DynamicResource Button.Primary}" Command="{Binding FindDonorsCommand}" feat:Edge.Right="{DynamicResource Space.8}" feat:Edge.Bottom="{DynamicResource Space.8}"
                     AutomationProperties.Name="Find donors of this group">
               <StackPanel Orientation="Horizontal">
                 <controls:Icon Kind="Donor" Size="16" VerticalAlignment="Center" feat:Edge.Right="{DynamicResource Space.8}" />
-                <TextBlock VerticalAlignment="Center"><Run Text="Find " /><Run Text="{Binding GroupText, Mode=OneWay}" /><Run Text=" donors" /></TextBlock>
+                <TextBlock VerticalAlignment="Center"><Run Text="Find " /><Run Text="{Binding SelectedTile.GroupText, Mode=OneWay}" /><Run Text=" donors" /></TextBlock>
               </StackPanel>
             </Button>
-            <Button Style="{DynamicResource Button.Secondary}" Command="{Binding DataContext.OpenRequestsCommand, ElementName=Root}" AutomationProperties.Name="Open requests for this group">
+            <Button Style="{DynamicResource Button.Secondary}" Command="{Binding OpenRequestsCommand}" feat:Edge.Bottom="{DynamicResource Space.8}" AutomationProperties.Name="Open requests for this group">
               <StackPanel Orientation="Horizontal">
                 <controls:Icon Kind="Request" Size="16" VerticalAlignment="Center" feat:Edge.Right="{DynamicResource Space.8}" />
                 <TextBlock Text="Requests" VerticalAlignment="Center" />
               </StackPanel>
             </Button>
-          </StackPanel>
+          </WrapPanel>
 
-          <!-- Shelf life left: the two bands the stock figures carry, as a split bar and two numbers. -->
-          <TextBlock Style="{DynamicResource Text.Heading}" Text="Shelf life left" feat:Edge.Top="{DynamicResource Space.24}" feat:Edge.Bottom="{DynamicResource Space.8}" AutomationProperties.HeadingLevel="Level3" />
-          <controls:MeterBar x:Name="PanelSplit" Value="1" Hatched="{Binding ExpiringFraction}" Track="{DynamicResource Brush.Layer2}" TrackStroke="{DynamicResource Brush.Stroke}"
-                             Fill="{DynamicResource Brush.Ink2}" Hatch="{DynamicResource Brush.WarningHatch}" Visibility="{Binding HasExpiring, Converter={StaticResource BoolToVisibility}}"
-                             AutomationProperties.Name="Expiring share" />
-          <Grid feat:Edge.Top="{DynamicResource Space.8}">
+          <!-- Shelf life and compatibility: label and value, as in every A panel. -->
+          <TextBlock Style="{DynamicResource Text.Heading}" Text="Details" feat:Edge.Top="{DynamicResource Space.16}" feat:Edge.Bottom="{DynamicResource Space.8}" AutomationProperties.HeadingLevel="Level3" />
+          <Grid x:Name="Facts" DataContext="{Binding SelectedTile}">
             <Grid.ColumnDefinitions>
-              <ColumnDefinition Width="*" />
-              <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
-            <StackPanel>
-              <TextBlock Style="{DynamicResource Text.Caption}" Text="More than 7 days left" />
-              <TextBlock x:Name="PanelFresh" Style="{DynamicResource Text.Heading}" Text="{Binding FreshText}" Typography.NumeralAlignment="Tabular" />
-            </StackPanel>
-            <StackPanel Grid.Column="1">
-              <TextBlock Style="{DynamicResource Text.Caption}" Text="Expires within 7 days" />
-              <TextBlock x:Name="PanelExpiring" Style="{DynamicResource Text.Heading}" Text="{Binding ExpiringNumber}" Typography.NumeralAlignment="Tabular" />
-            </StackPanel>
-          </Grid>
-          <TextBlock Style="{DynamicResource Text.Secondary}" Text="Use the units that expire first before the others." TextWrapping="Wrap" feat:Edge.Top="{DynamicResource Space.8}"
-                     Visibility="{Binding HasExpiring, Converter={StaticResource BoolToVisibility}}" />
-
-          <!-- Compatibility from the red-cell rule of the domain. -->
-          <TextBlock Style="{DynamicResource Text.Heading}" Text="Compatibility" feat:Edge.Top="{DynamicResource Space.24}" feat:Edge.Bottom="{DynamicResource Space.8}" AutomationProperties.HeadingLevel="Level3" />
-          <Grid>
-            <Grid.ColumnDefinitions>
-              <ColumnDefinition Width="132" />
+              <ColumnDefinition Width="148" />
               <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
             <Grid.RowDefinitions>
               <RowDefinition Height="Auto" />
               <RowDefinition Height="Auto" />
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
-            <TextBlock Style="{DynamicResource Text.Secondary}" Foreground="{DynamicResource Brush.Ink3}" Text="Can be given to" feat:Edge.Bottom="{DynamicResource Space.8}" />
-            <TextBlock x:Name="GivesTo" Grid.Column="1" Style="{DynamicResource Text.Body}" Text="{Binding GivesToText}" TextWrapping="Wrap" feat:Edge.Bottom="{DynamicResource Space.8}" />
-            <TextBlock Grid.Row="1" Style="{DynamicResource Text.Secondary}" Foreground="{DynamicResource Brush.Ink3}" Text="Can receive" />
-            <TextBlock x:Name="ReceivesFrom" Grid.Row="1" Grid.Column="1" Style="{DynamicResource Text.Body}" Text="{Binding ReceivesFromText}" TextWrapping="Wrap" />
+            <TextBlock Style="{DynamicResource Text.Secondary}" TextWrapping="Wrap" Text="More than 7 days left" feat:Edge.Bottom="{DynamicResource Space.8}" />
+            <TextBlock x:Name="PanelFresh" Grid.Column="1" Style="{DynamicResource Text.Body}" Text="{Binding FreshText}" Typography.NumeralAlignment="Tabular" feat:Edge.Bottom="{DynamicResource Space.8}" />
+            <TextBlock Grid.Row="1" Style="{DynamicResource Text.Secondary}" TextWrapping="Wrap" Text="Expires within 7 days" feat:Edge.Bottom="{DynamicResource Space.8}" />
+            <TextBlock x:Name="PanelExpiring" Grid.Row="1" Grid.Column="1" Style="{DynamicResource Text.Body}" Text="{Binding ExpiringNumber}" Typography.NumeralAlignment="Tabular" feat:Edge.Bottom="{DynamicResource Space.8}" />
+            <TextBlock Grid.Row="2" Style="{DynamicResource Text.Secondary}" TextWrapping="Wrap" Text="Can be given to" feat:Edge.Bottom="{DynamicResource Space.8}" />
+            <TextBlock x:Name="GivesTo" Grid.Row="2" Grid.Column="1" Style="{DynamicResource Text.Body}" Text="{Binding GivesToText}" TextWrapping="Wrap" feat:Edge.Bottom="{DynamicResource Space.8}" />
+            <TextBlock Grid.Row="3" Style="{DynamicResource Text.Secondary}" TextWrapping="Wrap" Text="Can receive" />
+            <TextBlock x:Name="ReceivesFrom" Grid.Row="3" Grid.Column="1" Style="{DynamicResource Text.Body}" Text="{Binding ReceivesFromText}" TextWrapping="Wrap" />
           </Grid>
+
+          <!-- The bags, in the order to use them: oldest collection first (the order a fulfil issues them in). -->
+          <Grid feat:Edge.Top="{DynamicResource Space.24}" feat:Edge.Bottom="{DynamicResource Space.8}">
+            <TextBlock Style="{DynamicResource Text.Heading}" Text="Bags" AutomationProperties.HeadingLevel="Level3" />
+            <TextBlock Style="{DynamicResource Text.Caption}" Text="Use from the top" HorizontalAlignment="Right" VerticalAlignment="Center" />
+          </Grid>
+          <controls:Skeleton Kind="Detail" Visibility="{Binding ShowBagsSkeleton, Converter={StaticResource BoolToVisibility}}" />
+          <StackPanel Visibility="{Binding HasBagsError, Converter={StaticResource BoolToVisibility}}" AutomationProperties.LiveSetting="Assertive">
+            <TextBlock Style="{DynamicResource Text.Body}" Text="{Binding BagsErrorText}" TextWrapping="Wrap" />
+            <Button Style="{DynamicResource Button.Secondary.Small}" Content="Retry" Command="{Binding RetryBagsCommand}" HorizontalAlignment="Left" feat:Edge.Top="{DynamicResource Space.8}"
+                    AutomationProperties.Name="Retry loading the bags" />
+          </StackPanel>
+          <TextBlock Style="{DynamicResource Text.Secondary}" Text="No bags of this group are in stock." TextWrapping="Wrap" Visibility="{Binding HasNoBags, Converter={StaticResource BoolToVisibility}}" />
+          <controls:CrispBorder x:Name="BagList" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="1" CornerRadius="{DynamicResource Radius.Panel}"
+                                Visibility="{Binding HasBags, Converter={StaticResource BoolToVisibility}}">
+            <ItemsControl ItemsSource="{Binding Bags}" Focusable="False" AutomationProperties.Name="Bags in use-first order">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="{x:Type stock:StockBagRow}">
+                  <Border x:Name="Row" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="0,0,0,1" Padding="{DynamicResource Inset.H12V8}" AutomationProperties.Name="{Binding AutomationName}">
+                    <Grid>
+                      <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                      </Grid.ColumnDefinitions>
+                      <StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                          <TextBlock Style="{DynamicResource Text.Body}" FontWeight="Medium" Text="{Binding Code}" Typography.NumeralAlignment="Tabular" VerticalAlignment="Center" />
+                          <controls:Badge x:Name="First" Text="Use first" Kind="Info" Icon="Arrowright" feat:Edge.Left="{DynamicResource Space.8}" VerticalAlignment="Center" Visibility="Collapsed" />
+                        </StackPanel>
+                        <TextBlock Style="{DynamicResource Text.Caption}" TextWrapping="Wrap" feat:Edge.Top="{DynamicResource Space.4}">
+                          <Run Text="Collected " /><Run Text="{Binding CollectedText, Mode=OneWay}" /><Run Text=", expires " /><Run Text="{Binding ExpiresText, Mode=OneWay}" />
+                        </TextBlock>
+                      </StackPanel>
+                      <controls:Badge x:Name="Left" Grid.Column="1" Text="{Binding DaysLeftText}" Kind="Neutral" Icon="Clock" VerticalAlignment="Center" feat:Edge.Left="{DynamicResource Space.8}" />
+                    </Grid>
+                  </Border>
+                  <DataTemplate.Triggers>
+                    <DataTrigger Binding="{Binding IsFirst}" Value="True">
+                      <Setter TargetName="First" Property="Visibility" Value="Visible" />
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding IsExpiring}" Value="True">
+                      <Setter TargetName="Left" Property="Kind" Value="Warning" />
+                    </DataTrigger>
+                  </DataTemplate.Triggers>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </controls:CrispBorder>
+          <TextBlock Style="{DynamicResource Text.Caption}" Text="{Binding BagsMoreText}" TextWrapping="Wrap" feat:Edge.Top="{DynamicResource Space.8}" />
         </StackPanel>
       </ScrollViewer>
     </controls:SidePanel>

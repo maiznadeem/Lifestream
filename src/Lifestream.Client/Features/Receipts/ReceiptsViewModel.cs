@@ -31,6 +31,12 @@ public sealed class ReceiptRow
 
     public string WhenText => RecordFormatting.When(Item.CreatedAtUtc, Zone);
 
+    /// <summary>"18 Nov 2026": the date line of the Date cell.</summary>
+    public string DateText => Formatting.Date(RecordFormatting.LocalDate(Item.CreatedAtUtc, Zone));
+
+    /// <summary>"16:42": the time line under it.</summary>
+    public string TimeText => RecordFormatting.LocalTime(Item.CreatedAtUtc, Zone).ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture);
+
     public string KindText => RecordFormatting.Kind(Item.Kind);
 
     public string BloodTypeText => Item.BloodType.ToDisplay();
@@ -43,8 +49,11 @@ public sealed class ReceiptRow
     /// <summary>"Appointment" or "Request": the record the receipt belongs to.</summary>
     public string SourceKindText => Item.Kind == ReceiptKind.Donation ? "Appointment" : "Request";
 
-    /// <summary>"#12": the id of that appointment or request, as secondary text under the party's name.</summary>
-    public string SourceIdText => RecordFormatting.IdText((Item.Kind == ReceiptKind.Donation ? Item.AppointmentId : Item.RequestId) ?? 0);
+    /// <summary>"A-0012" or "R-0012": the code of that appointment or request, as secondary text under the party's name.</summary>
+    public string SourceIdText => Item.Kind == ReceiptKind.Donation ? RecordCodes.Appointment(Item.AppointmentId ?? 0) : RecordCodes.Request(Item.RequestId ?? 0);
+
+    /// <summary>"RC-0001": the receipt's own code.</summary>
+    public string CodeText => RecordCodes.Receipt(Item.Id);
 
     public string StaffName => Item.StaffName;
 
@@ -57,7 +66,7 @@ public sealed class ReceiptRow
     /// <summary>The group as set in type (A−).</summary>
     public string GroupText => Item.BloodType.ToTypographic();
 
-    public string StaffIdText => RecordFormatting.IdText(Item.StaffId);
+    public string StaffIdText => RecordCodes.Staff(Item.StaffId);
 }
 
 /// <summary>
@@ -108,6 +117,7 @@ public sealed class ReceiptsViewModel : SortedRecordListViewModel<ReceiptRow, Re
                 OnPropertyChanged(nameof(DetailSubtitle));
                 OnPropertyChanged(nameof(DetailGroupText));
                 OnPropertyChanged(nameof(SourceActionText));
+                OnPropertyChanged(nameof(DetailIssuedBy));
                 OpenSourceCommand?.RaiseCanExecuteChanged(); // null only while the constructor runs
             }
             if (e.PropertyName is nameof(SelectedItem) or nameof(Detail) or nameof(DetailState))
@@ -241,8 +251,11 @@ public sealed class ReceiptsViewModel : SortedRecordListViewModel<ReceiptRow, Re
     /// <summary>True when the side panel shows a receipt: a row is selected, or one was opened by id (loading, shown, or failed to load).</summary>
     public bool IsPanelOpen => SelectedItem is not null || Detail is not null || DetailState != LoadState.Ready;
 
-    /// <summary>"Donation receipt #12": the panel's header line.</summary>
-    public string? PanelOverline => Detail is { } receipt ? $"{(receipt.Kind == ReceiptKind.Donation ? "Donation" : "Blood issue")} receipt {RecordFormatting.IdText(receipt.Id)}" : null;
+    /// <summary>"Donation receipt RC-0012": the panel's header line.</summary>
+    public string? PanelOverline => Detail is { } receipt ? $"{(receipt.Kind == ReceiptKind.Donation ? "Donation" : "Blood issue")} receipt {RecordCodes.Receipt(receipt.Id)}" : null;
+
+    /// <summary>"Dr. Amara Al-Sayed": who issued the receipt, in full in the panel (the list leaves it out below the Wide breakpoint).</summary>
+    public string? DetailIssuedBy => Detail?.StaffName;
 
     /// <summary>The donor of the donation or the patient of the issue: the panel's heading.</summary>
     public string? DetailPartyName => Detail?.PartyName;
@@ -371,8 +384,41 @@ public sealed class ReceiptsViewModel : SortedRecordListViewModel<ReceiptRow, Re
             return ApiResult<PagedResult<ReceiptRow>>.Fail(result.Problem!);
         }
 
+        // The tabs' counts, for the same search and blood group. They only label the tabs: when they can't be had, the tabs show no number rather than a wrong one.
+        var counts = await _api.GetReceiptCountsAsync(new ReceiptCountQuery(request.Search, BloodTypeValue), ct).ConfigureAwait(false);
+        _fetchedCounts = counts.IsOk ? counts.Value : null;
+
         var page = result.Value;
         return ApiResult<PagedResult<ReceiptRow>>.Ok(new PagedResult<ReceiptRow>([.. page.Items.Select(i => new ReceiptRow(i, Zone))], page.Total, page.Page, page.PageSize));
+    }
+
+    private ReceiptCounts? _fetchedCounts;
+
+    /// <summary>The All, Donations and Blood issues tabs' counts (null when not known: the tab then shows no number).</summary>
+    public ReceiptCounts? Counts
+    {
+        get;
+        private set
+        {
+            if (SetProperty(ref field, value))
+            {
+                OnPropertyChanged(nameof(AllCountText));
+                OnPropertyChanged(nameof(DonationCountText));
+                OnPropertyChanged(nameof(IssueCountText));
+            }
+        }
+    }
+
+    public string AllCountText => Counts is { } c ? c.All.ToString("N0", System.Globalization.CultureInfo.CurrentCulture) : string.Empty;
+
+    public string DonationCountText => Counts is { } c ? c.Donations.ToString("N0", System.Globalization.CultureInfo.CurrentCulture) : string.Empty;
+
+    public string IssueCountText => Counts is { } c ? c.Issues.ToString("N0", System.Globalization.CultureInfo.CurrentCulture) : string.Empty;
+
+    protected override void Apply()
+    {
+        base.Apply();
+        Counts = _fetchedCounts;
     }
 
     protected override int IdOf(ReceiptRow item) => item.Id;
@@ -381,7 +427,7 @@ public sealed class ReceiptsViewModel : SortedRecordListViewModel<ReceiptRow, Re
 
     protected override int IdOfDetail(ReceiptDetail detail) => detail.Id;
 
-    protected override string NameOfDetail(ReceiptDetail detail) => $"Receipt {RecordFormatting.IdText(detail.Id)}";
+    protected override string NameOfDetail(ReceiptDetail detail) => $"Receipt {RecordCodes.Receipt(detail.Id)}";
 
     protected override Task<ApiResult<ReceiptDetail>> GetDetailAsync(int id, CancellationToken ct) => _api.GetReceiptAsync(id, ct);
 

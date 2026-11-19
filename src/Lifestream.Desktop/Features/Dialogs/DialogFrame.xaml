@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:feat="clr-namespace:Lifestream.Desktop.Features"
              xmlns:controls="clr-namespace:Lifestream.Desktop.Controls"
+             xmlns:dialogs="clr-namespace:Lifestream.Desktop.Features.Dialogs"
              Focusable="False" IsTabStop="False">
   <!-- The frame of every form dialog, in direction A's DialogSurface look: Layer, radius 12, a 1 px Stroke and the dialog shadow drawn behind it (never on the
        text); the title (20/28), a close button, a message for what went wrong, the fields, and a footer with Cancel and the primary action on the right.
@@ -15,11 +16,13 @@
                             AutomationProperties.Name="{Binding Title}">
       <controls:DialogSurface.Footer>
         <StackPanel Orientation="Horizontal">
+          <ContentControl x:Name="FooterStartHost" Focusable="False" IsTabStop="False" VerticalAlignment="Center" Content="{Binding FooterStart, RelativeSource={RelativeSource AncestorType=dialogs:DialogFrame}}" />
           <Button x:Name="CancelButton" Style="{DynamicResource Button.Secondary}" Content="{Binding CancelText}" Command="{Binding CancelCommand}" IsCancel="True"
                   AutomationProperties.Name="{Binding CancelText}" />
           <Button x:Name="PrimaryButton" Style="{DynamicResource Button.Primary}" Content="{Binding PrimaryText}" Command="{Binding PrimaryCommand}" IsDefault="True" feat:Edge.Left="{DynamicResource Space.8}"
                   Visibility="{Binding HasPrimary, Converter={StaticResource BoolToVisibility}}" controls:ButtonAssist.IsBusy="{Binding PrimaryCommand.IsRunning}"
                   controls:ButtonAssist.BusyText="{Binding PrimaryBusyText}" AutomationProperties.Name="{Binding PrimaryText}" />
+          <ContentControl x:Name="FooterEndHost" Focusable="False" IsTabStop="False" VerticalAlignment="Center" Content="{Binding FooterEnd, RelativeSource={RelativeSource AncestorType=dialogs:DialogFrame}}" />
         </StackPanel>
       </controls:DialogSurface.Footer>
       <Grid>

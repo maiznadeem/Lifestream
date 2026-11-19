@@ -244,6 +244,8 @@ public static class ApiSetup
         ProfileEndpoints.Map(api);
         LookupEndpoints.Map(api);
         DemoEndpoints.Map(api);
+        StockBagEndpoints.Map(api);
+        ReceiptCountEndpoints.Map(api);
         return app;
     }
 }
