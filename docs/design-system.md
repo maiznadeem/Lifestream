@@ -26,8 +26,8 @@ references when you touch such code.
 - **One ink primary per view.** The single filled button of a view is `Button.Primary` (dark ink on light, light ink on dark). Everything else is
   `Button.Secondary`, `Button.Subtle` or `Button.Danger`. A screen with two filled buttons is wrong.
 - **Red means blood.** `Blood` and `Critical` (the same colour) appear only on blood group tags, the logo, donor avatars, low-stock and error states,
-  and the danger button. Do not use red for emphasis, selection or decoration. (Known exceptions in the code: the selected sidebar item's bar and the
-  selected tab's bar are `Brush.Blood`; see 5.7 and 6.2.)
+  and the danger button. Do not use red for emphasis, selection or decoration. (One known exception in the code: the selected sidebar item's bar is
+  `Brush.Blood`; see 6.2. The selected tab's bar is `SelectedBar`.)
 - **Flat panels with a 1 px stroke.** A resting panel is `Layer` with a 1 px `Stroke` and `Radius.Panel` (8). No card shadows.
 - **Shadows live on their own layer.** A floating surface (menu, toast, dialog, palette, side panel) draws its shadow with a separate `Border`
   behind the content. Never put an `Effect` on an element that contains text; it renders the text through a bitmap and loses ClearType. A test
@@ -149,8 +149,9 @@ figures off unless stated.
 Plain `TextBlock` defaults come from the window (`Font.Family`, 14, `Ink`), but always pick a `Text.*` style so wrapping, line height and colour are
 set. Every `Text.*` style based on `Text.Base` wraps by default; add `TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"` for one-line cells.
 
-Rules: proportional figures in prose and tabular figures only in right-aligned numeric columns and meters (`Text.Numeric` or
-`Typography.NumeralAlignment="Tabular"`). Blood groups carry a real minus sign (U+2212): use `BloodType.ToTypographic()` for the screen and keep
+Rules: proportional figures in prose and in labels such as "17 units"; tabular figures only where numbers of several digits are stacked in a
+right-aligned column (`Text.Numeric` or `Typography.NumeralAlignment="Tabular"`). Onest's tabular 1 is as wide as an 8, so a tabular "17 units"
+reads as "1 7 units": do not use tabular figures for a number that stands in a label. Blood groups carry a real minus sign (U+2212): use `BloodType.ToTypographic()` for the screen and keep
 `ToDisplay()` (ASCII "O-") for search, files and the API. Nothing is smaller than 12 DIP except key caps.
 
 ### 2.3 Spacing
@@ -269,7 +270,7 @@ Set by `Responsive.Source="True"` on the shell root from the main window's width
 
 | Breakpoint | Window width | Shell | Screens |
 |---|---|---|---|
-| `Compact` | below 1280 | Sidebar is the 52 rail, title bar 40, search is a "Search Ctrl K" button, bell and avatar are hidden, page padding `Pad.PageCompact` | Side panel 352, dashboard rows stack, filter chips fold into a Filters button, low-priority columns hide (planned) |
+| `Compact` | below 1280 | Sidebar is the 52 rail, title bar 40, search is a "Search Ctrl K" button, bell and avatar are hidden, page padding `Pad.PageCompact` | Side panel 352, the dashboard's panels stack at their own heights and only the page scrolls, filter chips fold into a Filters button, low-priority columns hide (planned) |
 | `Standard` | 1280 to 1599 | Full sidebar (unless collapsed with Ctrl+B) | Full layout |
 | `Wide` | 1600 and up | Same as Standard | Wide tables may show extra columns; reading layouts keep their max width |
 
@@ -438,6 +439,13 @@ Busy: `controls:ButtonAssist.IsBusy="{Binding Cmd.IsRunning}"` and `controls:But
 replace the label, the width does not change, further clicks are ignored (marked handled), UI Automation `ItemStatus` is `Busy`, and busy wins over
 disabled so a running command does not look dead. The default `BusyText` is "Working..."; always set a specific verb.
 
+A button whose content shows no text (an icon alone, or an icon with a label that a compact window has collapsed) turns busy with the spinner alone
+and stays as wide as its icon. The template's root (`ButtonHost`) finds this out each time the button is measured and sets the read-only
+`ButtonAssist.HasLabel`; nothing needs setting in the view (an empty `BusyText` is not needed for it).
+
+`Button.Subtle` has no fill of its own, so it sits on a panel, on the page canvas or on Mica. Its hover and pressed fills are tints of ink
+(`Well`, then `CaptionHover` over it), which show on all three; the opaque `Hover` token is within a shade of the canvas and would vanish there.
+
 ```xml
 <Button Style="{DynamicResource Button.Primary}" Command="{Binding SaveCommand}" IsDefault="True"
         controls:ButtonAssist.IsBusy="{Binding SaveCommand.IsRunning}" controls:ButtonAssist.BusyText="Saving"
@@ -465,9 +473,15 @@ Don't: two primary buttons; a danger button as a primary action; "OK" or "Submit
 |---|---|
 | Hover | `Layer2` fill |
 | Focus | A 2 px `Primary` bar along the bottom, faded in over `Motion.Fast` |
-| Error | `Critical` border and a 2 px `Critical` bar. Shown when `Validation.HasError` is true on the input. |
+| Error | `Critical` border and a 2 px `Critical` bar. Shown when `Validation.HasError` is true on the input, and when `InputAssist.HasError` is true (see below). |
 | Disabled | `Layer2` fill, `Stroke` border, `Ink3` text |
-| Read-only | Looks disabled but keeps `Ink` text |
+| Read-only | The quiet `Layer2` fill and `Stroke` border of a disabled field, but `Ink` text: it can be read and copied |
+
+**One error look, and never WPF's red adorner.** Every input style sets `Validation.ErrorTemplate` to null (`Input.Base`, the check box, the
+password field, the date field, the record picker), so the saturated red rectangle WPF draws over an invalid control never appears. The error is the
+field's own Critical edge and bar. `InputAssist.HasError` is an inherited attached property that the field templates trigger on: a `FormField` sets
+it while it shows an `Error`, and a composite input (`PasswordField`, `DateField`, `RecordPicker`) sets it from its own `Validation.HasError`, so the
+box inside looks exactly like a plain field in error. A new input control must set `Validation.ErrorTemplate="{x:Null}"` and show the same look.
 
 The label lives above the field, never inside it. Wrap the input in `controls:FormField`:
 
@@ -577,8 +591,7 @@ Underline tabs: items with 10 DIP side and 8 DIP vertical padding, 13 text; the 
 
 The `-1` bottom margin lets the 2 px bar cover the strip's line. Assign the strip to `PageHeader.Tabs`.
 
-Code note: the selected bar uses `Brush.Blood` (red) in both `Tabs.Item` and `Tab.Option`, which conflicts with "red means blood". It is documented
-as built; changing it to `SelectedBar` is a one-line change in `Controls/Selection.xaml`.
+The selected bar is `Brush.SelectedBar` in both `Tabs.Item` and `Tab.Option` (red means blood; a tab is navigation).
 
 ### 5.8 Badge
 
@@ -600,8 +613,8 @@ a dot.
 
 ### 5.9 BloodGroupTag
 
-`controls:BloodGroupTag`: `Blood` text on `BloodSoft`, 12 SemiBold with tabular figures, at least 34 wide and 22 high. `IsLarge="True"` makes it 32
-high, 15 px and at least 46 wide (detail headers). Its automation name is "Blood group {Text}". Bind a value that went through
+`controls:BloodGroupTag`: `Blood` text on `BloodSoft`, 12 SemiBold, at least 34 wide and 22 high. `IsLarge="True"` makes it 32
+high, 15 px and at least 46 wide (detail headers); it is `Blood` text at both sizes, whatever the text colour of the panel around it. Its automation name is "Blood group {Text}". Bind a value that went through
 `BloodType.ToTypographic()` so the minus is U+2212.
 
 ```xml
@@ -638,7 +651,12 @@ Don't colour a tag by group or status; red here is the group's identity.
 
 `controls:Avatar`: a circle with `Initials` (one or two letters) on `Selected`, or on `BloodSoft` with `Blood` text when `IsBlood="True"` (donors and
 the signed-in staff in the account button). `Source` shows a photo clipped to the circle. `Size` is the diameter (default 32); the font is
-round(Size x 0.375). `Image.DefaultAvatar` is the drawing for a person with no photo.
+round(Size x 0.375).
+
+A person with no photo is shown by their initials, never by a blank or generic disc: `HasPhoto` is false, and the initials show, when `Source` is
+null and also when it is `Image.DefaultAvatar` (the placeholder drawing the 2.0 `AvatarConverter` returns for "no photo"). Give `Source` a converter
+that returns null for no photo (`PhotoSourceConverter`). On a selected table row, which is filled with the avatar's own `Selected` colour, the disc
+is `Layer`, so it stays visible.
 
 ```xml
 <controls:Avatar Initials="AM" Size="40" IsBlood="True" />
@@ -674,7 +692,8 @@ The header row is hidden when `Header` is empty and `HeaderActions` is null. No 
 |---|---|
 | `Overline` | A 13 muted line above the title (the date on the dashboard); hidden when empty |
 | `Title` | 28/36 SemiBold, a level 1 heading for screen readers |
-| `Count` | Text of a neutral badge next to the title ("40"); hidden when empty |
+| `Count` | Text of a neutral badge next to the title ("40"); hidden when empty, and while `State` is `Loading`, `Waking` or `Error` (a "0" there would be false) |
+| `State` | The page's load state. The default style reads it from the `State` of the view model the header is bound to, so a list screen need not set it |
 | `Actions` | Content at the right end of the title row, bottom-aligned with the title: the one primary action and its neighbours |
 | `Tabs` | A full-width row 16 below the title (a `Tabs.Strip`) |
 
@@ -743,6 +762,11 @@ Cell text styles: `DataGrid.TextCell` (14 `Ink`, one line, ellipsis, tooltip whe
 </controls:LifestreamDataGrid>
 ```
 
+A row is exactly `Height.Row` (44) tall with its separator: the 1 px line is drawn over the row's last pixel row, it does not add one.
+
+`controls:ColumnAssist.HeaderAlignment="Right"` on a column puts its header over right-aligned numbers (the grid applies it when it loads; a view
+cannot name the grid's header style before it is in a window).
+
 Not built: `ColumnPriority` (see the screen guide), a column chooser, and the Compact (34 DIP) row height. `MinRowHeight` is fixed at `Height.Row`.
 
 ### 5.15 SidePanel
@@ -756,9 +780,10 @@ layer). It is collapsed while closed, so an `Auto` grid column holding it takes 
 | `Overline` | Small muted line at the left of the header row ("Donor D-0175"); also the automation name |
 | `HeaderActions` | Content before the close button (a "..." menu button) |
 | `CloseCommand` | Run by the close button and Esc; when null they set `IsOpen` to false |
-| `PanelWidth` | 420 by default (`Width.Panel`); 352 (`Width.PanelCompact`) in a Compact window |
+| `PanelWidth` | 420 by default (`Width.Panel`); 352 (`Width.PanelCompact`) in a Compact window, by the panel's own style. A view that sets `PanelWidth` keeps its own width |
 
-The panel pads its content 24,24,24,0 and shows a close button (`Button.Icon.Small`, name "Close panel", tooltip "Close (Esc)"). The content is yours;
+The panel pads its content 24,24,24,20 (the 20 below keeps a form's sticky footer, with its divider above the buttons, clear of the window's bottom
+edge) and shows a close button (`Button.Icon.Small`, name "Close panel", tooltip "Close (Esc)"). The content is yours;
 see section 7.6 for the standard layout.
 
 ### 5.16 DialogSurface and ModalOverlay
@@ -915,6 +940,33 @@ implicit style). A viewer whose content fits shows no bar. You normally write no
 | (implicit) | Overlay with auto-hide: pages, lists, panels, dialogs, the palette |
 | `ScrollViewer.Plain` | Overlay that never fades or widens; always visible at rest width. For small popups. |
 | `ScrollViewer.DataGrid` | The data grid's own viewer (header row above the rows). Used by the grid template. |
+
+### 5.25 CappedHeightBox
+
+`controls:CappedHeightBox` asks for at most `Cap` of height for its content but takes all the height it is given. Put a scrolling list in it when the
+list stands beside a panel of another height: the list asks for a few rows, is as tall as its neighbour, and scrolls when it has more rows than room
+(the dashboard's appointments beside "Needs attention"). With no `Cap` it is a plain decorator. It also keeps a control that asks for more than it
+needs (the chart asks for about 300) from stretching a row.
+
+### 5.26 Keeping a blood group in one piece
+
+WPF may break a line before the minus sign (U+2212), which leaves "(O" at the end of one line and the minus at the start of the next. On wrapping
+text that names blood groups, bind through `controls:KeepGroupsTogetherConverter`: it puts a word joiner (U+2060) before each minus sign. The bound
+text is unchanged, so tooltips, automation names and copies keep the plain text.
+
+```xml
+<TextBlock Text="{Binding Detail, Converter={StaticResource KeepGroups}}" TextWrapping="Wrap" />
+```
+
+The minus itself: Onest's U+2212 is as wide as its plus and sits at the same height, which is right beside a capital, but both are narrow, so at 12
+to 13 px it can read as a hyphen. The en dash is wider but sits lower (at hyphen height) and looks dropped after a capital; there is no better
+glyph in the font. It is left as it is.
+
+### 5.27 Scroll bars beside the content
+
+An overlay scroll bar is drawn over the right 12 DIP of its viewer. So that it never lies over content, give the viewer that strip: the dashboard's
+page viewer reaches 14 into the page's right padding (`Inset.RN14`) and insets its content by the same (`Inset.R14`); a list inside a panel keeps
+18 at its right inside the viewer (the dashboard's appointments).
 
 ## 6. Window and shell
 
@@ -1260,8 +1312,7 @@ Standard layout of the content of a `SidePanel` (420 DIP, 352 in Compact), top t
 </controls:SidePanel>
 ```
 
-In a Compact window the panel is 352 DIP. Use a `Style` based on the theme's implicit `SidePanel` style with a `DataTrigger` on
-`(controls:Responsive.Breakpoint)` equal to `Compact` that sets `PanelWidth` to `{DynamicResource Width.PanelCompact}`. Edit-in-place (fields switching to
+In a Compact window the panel is 352 DIP by itself (the `SidePanel` style has the trigger); do not set `PanelWidth` for it in the view. Edit-in-place (fields switching to
 editors with a sticky Save and Discard footer and Ctrl+S) is the planned replacement of the 2.0 modal editors for donors, patients and staff; it is not
 built, and Ctrl+S is not bound.
 
@@ -1333,6 +1384,8 @@ profile pages use `MaxWidth.Settings` (960), centred, with `Section`s.
 |---|---|
 | Foundation (colours, themes at runtime, every keyed style, the no-effect rule, title bar, sidebar, palette) | `tests/Lifestream.Desktop.Tests/RedesignA/FoundationTests.cs` |
 | Render tests of the finished screens (sign-in, dashboard) | `tests/Lifestream.Desktop.Tests/RedesignA/RenderTests.cs`, trait `Category=RenderA` |
+| Every screen inside the real shell (sidebar, title bar, side panel open) at 1440 x 900, and the command palette at the three sizes | `RedesignA/ShellRenderTests.cs`, trait `Category=RenderA`; files `shell-{screen}-{theme}-1440x900.png`, `palette-{theme}-{w}x{h}.png` |
+| The design review's shared-control rules (one error look and no WPF adorner, avatar fallback, tag colour, tab bar, hover on the canvas, page header count, side panel inset, blood groups kept together) | `RedesignA/DesignReviewTests.cs` |
 | The demo clinic they render (Thursday 19 November 2026, 10:42, Hana Greenleaf signed in, served by the fake API) | `tests/Lifestream.Desktop.Tests/RedesignA/DesignData.cs` |
 | Host and off-screen rendering helpers | `Hosted.cs`, `StaHost.cs`, `WpfTestUi.cs` in `tests/Lifestream.Desktop.Tests`; `RedesignA/TestTheme.cs` forces the light theme unless a test picks one |
 | Token scanners and contrast checks (2.0 era) | `tests/Lifestream.Desktop.Tests/ThemeTests.cs` |
@@ -1345,7 +1398,8 @@ dotnet test tests/Lifestream.Desktop.Tests --filter Category=RenderA
 ```
 
 Each render is saved as a PNG named `<screen>-<theme>-<width>x<height>.png` (for example `signin-dark-1440x900.png`) into `LIFESTREAM_CAPTURE_DIR`.
-Without the variable the tests save to the run's capture folder when it exists, else to the test output folder (`Hosted.CaptureDirectory`). The
+Without the variable the tests save to the run's capture folder when it exists, else to the test output folder (`Hosted.CaptureDirectory`).
+Always set the variable for a working run: without it a plain `dotnet test` writes over the captures a review was made from. The
 render sizes are 1440 x 900, 1920 x 1080 (maximized) and 1024 x 700 (Compact), each in light and dark. Compare them with the target images
 (`A-login.png`, `A-dashboard.png`, `A-dashboard-dark.png`, `A-donors.png`, `A-donors-max.png`, `A-donors-narrow.png`).
 
