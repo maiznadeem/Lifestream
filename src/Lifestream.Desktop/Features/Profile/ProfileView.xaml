@@ -16,16 +16,6 @@
   </UserControl.Resources>
 
   <Grid x:Name="Page">
-    <Grid.Style>
-      <Style TargetType="Grid">
-        <Setter Property="Margin" Value="{DynamicResource Pad.PageA}" />
-        <Style.Triggers>
-          <DataTrigger Binding="{Binding (controls:Responsive.Breakpoint), RelativeSource={RelativeSource Self}}" Value="Compact">
-            <Setter Property="Margin" Value="{DynamicResource Pad.PageCompact}" />
-          </DataTrigger>
-        </Style.Triggers>
-      </Style>
-    </Grid.Style>
     <Grid.RowDefinitions>
       <RowDefinition Height="Auto" />
       <RowDefinition Height="*" />

@@ -10,7 +10,7 @@
              Focusable="False">
   <!-- Appointments (direction A): the page header with the count, "Book appointment" (secondary while an appointment is open) and the saved views (Today, Upcoming,
        Past, Cancelled, with their counts); the search with the blood group chip and the "+ Donor" chip (it opens the donor search); the table grouped by day under quiet
-       day headings (today's in SemiBold, never red); on the Today tab the day's agenda, with Next, first-time donors, "Check in" on the next appointment and "Record
+       day headings (today's in SemiBold, never red); on the Today tab the day's agenda, with Next, first-time donors, an emphasised "Record donation" on the next appointment and a quiet "Record
        donation" on the later ones; and the selected appointment (or the booking form) in the side panel: the donor and time, [Record donation] [Reschedule] [...],
        the donor's eligibility on that day, and the details. The rows come from the code-behind's day-grouped view of the view model's Items. -->
   <UserControl.Resources>
@@ -197,7 +197,7 @@
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="Donor" Width="1.6*" MinWidth="180" MaxWidth="320" CanUserSort="False">
+                <DataGridTemplateColumn Header="Donor" Width="Auto" MinWidth="180" MaxWidth="320" CanUserSort="False">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
                       <Grid VerticalAlignment="Center">
@@ -226,7 +226,7 @@
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="Status" Width="*" MinWidth="218" MaxWidth="300" CanUserSort="False">
+                <DataGridTemplateColumn Header="Status" Width="*" MinWidth="218" CanUserSort="False">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
                       <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
@@ -237,8 +237,9 @@
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <!-- Today's agenda only: "Next" with Check in on the first appointment still to come, Record donation on the later ones -->
-                <DataGridTemplateColumn x:Name="AgendaColumn" Header="Next step" Width="*" MinWidth="170" MaxWidth="280" CanUserSort="False" lists:ListColumns.HideBelow="700"
+                <!-- Today's agenda only: Record donation on every appointment still to come, emphasised (secondary) on the "Next" one and quiet on the later ones.
+                     There is no "Check in": the API keeps no check-in state, so a button with that name could only open the appointment. -->
+                <DataGridTemplateColumn x:Name="AgendaColumn" Header="Next step" Width="*" MinWidth="170" CanUserSort="False" lists:ListColumns.HideBelow="700"
                                         lists:ListColumns.IsShown="{Binding Data.IsAgenda, Source={StaticResource Model}}">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
@@ -251,11 +252,11 @@
                               <Binding Path="DataContext.AgendaVersion" RelativeSource="{RelativeSource AncestorType=DataGrid}" />
                             </MultiBinding>
                           </StackPanel.Visibility>
-                          <Button Style="{DynamicResource Button.Secondary.Small}" Command="{Binding DataContext.CheckInCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
-                                  CommandParameter="{Binding}" controls:ButtonAssist.BusyText="" AutomationProperties.Name="Check in" ToolTip="Open the appointment: eligibility today, then record the donation">
+                          <Button Style="{DynamicResource Button.Secondary.Small}" Command="{Binding DataContext.RecordDonationForCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                  CommandParameter="{Binding}" controls:ButtonAssist.BusyText="" AutomationProperties.Name="Record donation" ToolTip="Record this donor's donation">
                             <StackPanel Orientation="Horizontal">
-                              <controls:Icon Kind="Check" Size="14" VerticalAlignment="Center" />
-                              <TextBlock Text="Check in" VerticalAlignment="Center" Margin="{DynamicResource Inset.L6}" />
+                              <controls:Icon Kind="Drop" Size="14" VerticalAlignment="Center" />
+                              <TextBlock Text="Record donation" VerticalAlignment="Center" Margin="{DynamicResource Inset.L6}" />
                             </StackPanel>
                           </Button>
                         </StackPanel>
@@ -277,7 +278,7 @@
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="Booked on" Width="*" MinWidth="120" MaxWidth="200" CanUserSort="False" lists:ListColumns.HideBelow="760">
+                <DataGridTemplateColumn Header="Booked on" Width="*" MinWidth="120" CanUserSort="False" lists:ListColumns.HideBelow="760">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
                       <TextBlock Style="{DynamicResource DataGrid.TextCell}" Foreground="{DynamicResource Brush.Ink2}">

@@ -27,10 +27,9 @@
     <Grid x:Name="Page" KeyboardNavigation.TabNavigation="Local">
       <Grid.Style>
         <Style TargetType="Grid">
-          <Setter Property="Margin" Value="{DynamicResource Pad.PageA}" />
           <Style.Triggers>
-            <DataTrigger Binding="{Binding (controls:Responsive.Breakpoint), RelativeSource={RelativeSource Self}}" Value="Compact">
-              <Setter Property="Margin" Value="{DynamicResource Pad.PageCompact}" />
+            <DataTrigger Binding="{Binding IsPanelOpen}" Value="True">
+              <Setter Property="Margin" Value="{DynamicResource Inset.R24}" />
             </DataTrigger>
           </Style.Triggers>
         </Style>
@@ -132,7 +131,7 @@
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="Donor or patient" Width="2*" MinWidth="180" MaxWidth="320" CanUserSort="False">
+                <DataGridTemplateColumn Header="Donor or patient" Width="Auto" MinWidth="180" MaxWidth="320" CanUserSort="False">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate DataType="{x:Type vm:ReceiptRow}">
                       <StackPanel VerticalAlignment="Center">
@@ -178,11 +177,11 @@
 
     <!-- The selected receipt. -->
     <controls:SidePanel x:Name="Panel" Grid.Column="1" IsOpen="{Binding IsPanelOpen}" Overline="{Binding PanelOverline}" CloseCommand="{Binding ClosePanelCommand}"
-                        AutomationProperties.Name="Receipt details">
+                        lists:PanelBleed.IsEnabled="True" AutomationProperties.Name="Receipt details">
       <Grid>
         <controls:Skeleton Kind="Detail" Visibility="{Binding ShowDetailSkeleton, Converter={StaticResource BoolToVisibility}}" />
         <controls:ErrorState Message="{Binding DetailError}" RetryCommand="{Binding RetryDetailCommand}" Visibility="{Binding HasDetailError, Converter={StaticResource BoolToVisibility}}" />
-        <ScrollViewer x:Name="PanelBody" VerticalScrollBarVisibility="Auto" Focusable="False" Visibility="{Binding HasDetail, Converter={StaticResource BoolToVisibility}}">
+        <ScrollViewer x:Name="PanelBody" Style="{DynamicResource ScrollViewer.Panel}" VerticalScrollBarVisibility="Auto" Focusable="False" Visibility="{Binding HasDetail, Converter={StaticResource BoolToVisibility}}">
           <StackPanel feat:Edge.Bottom="{DynamicResource Space.24}">
             <Grid>
               <Grid.ColumnDefinitions>
@@ -201,10 +200,11 @@
             </TextBlock>
 
             <!-- Actions: Print (the one primary on the screen), the record it was issued for, and a "..." menu with the rarer actions. -->
+            <!-- As on every list screen: the one filled primary fills the row, then the secondary, then "...". -->
             <Grid x:Name="ActionsRow" feat:Edge.Top="{DynamicResource Space.16}">
               <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
               </Grid.ColumnDefinitions>
               <Button x:Name="PrintButton" Style="{DynamicResource Button.Primary}" Command="{Binding PrintCommand}" feat:Edge.Right="{DynamicResource Space.8}" AutomationProperties.Name="Print a copy"
@@ -214,7 +214,7 @@
                   <TextBlock Text="Print" VerticalAlignment="Center" />
                 </StackPanel>
               </Button>
-              <Button x:Name="SourceButton" Grid.Column="1" Style="{DynamicResource Button.Secondary}" Command="{Binding OpenSourceCommand}" HorizontalAlignment="Left"
+              <Button x:Name="SourceButton" Grid.Column="1" Style="{DynamicResource Button.Secondary}" Command="{Binding OpenSourceCommand}"
                       AutomationProperties.Name="{Binding SourceActionText}">
                 <StackPanel Orientation="Horizontal">
                   <TextBlock Text="{Binding SourceActionText}" VerticalAlignment="Center" />

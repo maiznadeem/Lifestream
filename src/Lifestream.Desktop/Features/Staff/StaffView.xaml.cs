@@ -11,7 +11,7 @@ namespace Lifestream.Desktop.Features.Staff;
 /// The Staff screen. A row's thumbnail is requested when the row is first shown (a recycled row asks again for its new person): the list itself
 /// carries no photo bytes (FEAT-20). Enter on a row moves into its side panel and Esc closes the panel (asking first when a form has changes). A compact
 /// window drops the Shift column (the panel still shows it), folds Add staff member to its icon and narrows the panel. While the panel is open the page
-/// header's Add staff member is a secondary button, so the panel's Reset password is the one filled button. The salary chip opens the range popup.
+/// header's Add staff member is a secondary button, so the panel's Edit is the one filled button. The salary chip opens the range popup.
 /// </summary>
 public partial class StaffView : UserControl
 {

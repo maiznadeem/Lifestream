@@ -211,11 +211,17 @@ public sealed class ListScreenRenderTests
             var view = new AppointmentsView { DataContext = vm };
             using var host = Hosted.Create(PageArea(view, width, height, out var area), area.Width, area.Height);
             Hosted.Await(() => vm.LoadAsync());
-            // The Today agenda with nothing open: Next and Check in on the first appointment still to come, Record donation on the later ones.
+            // The Today agenda with nothing open: Record donation on every appointment still to come, emphasised on the Next one and quiet on the later ones.
             host.Settle(400);
             Save(host, $"appointments-today-{size}-{theme}.png");
-            var checkIns = host.All<Button>().Count(b => b.IsVisible && AutomationProperties.GetName(b) == "Check in");
-            var records = host.All<Button>().Count(b => b.IsVisible && AutomationProperties.GetName(b) == "Record donation");
+            var checkIns = host.All<Button>().Count(b => b.IsVisible && AutomationProperties.GetName(b) == "Check in")
+                + host.All<TextBlock>().Count(t => t.IsVisible && t.Text == "Check in");
+            var recordButtons = host.All<Button>().Where(b => b.IsVisible && AutomationProperties.GetName(b) == "Record donation").ToList();
+            var records = recordButtons.Count;
+            var emphasised = recordButtons.Where(b => ReferenceEquals(b.Style, b.TryFindResource("Button.Secondary.Small"))).ToList();
+            var nextRow = host.All<DataGridRow>().FirstOrDefault(r => r.IsVisible && r.Item is Lifestream.Contracts.Appointments.AppointmentListItem { DonorName: "Asher Devereux" });
+            var emphasisedOnNext = emphasised.Count == 1 && nextRow is not null && nextRow.IsAncestorOf(emphasised[0]);
+            var quiet = recordButtons.Count(b => ReferenceEquals(b.Style, b.TryFindResource("Button.Subtle.Small")));
             Hosted.Await(() =>
             {
                 vm.SelectedItem = vm.Items.First(a => a.DonorName == "Asher Devereux");
@@ -229,7 +235,7 @@ public sealed class ListScreenRenderTests
             var dayTexts = host.All<TextBlock>().Where(t => t.IsVisible && t.Text.StartsWith("Today,", StringComparison.Ordinal)).ToList();
             var todayInk = dayTexts.All(t => ReferenceEquals(t.Foreground, t.TryFindResource("Brush.Ink")));
             var facts = (PanelWidth: panel.ActualWidth, Panel: Hosted.BoundsOf(panel, host.Element), area, Texts: texts, Badges: badges, Banner: vm.DonorEligibility.Headline,
-                CheckIns: checkIns, Records: records, TodayInk: todayInk, DayHeaders: dayTexts.Count, UpcomingTexts: new List<string>(), UpcomingError: (string?)null);
+                CheckIns: checkIns, Records: records, EmphasisedOnNext: emphasisedOnNext, Quiet: quiet, TodayInk: todayInk, DayHeaders: dayTexts.Count, UpcomingTexts: new List<string>(), UpcomingError: (string?)null);
 
             // The Upcoming tab: the days after today, grouped by day.
             vm.CloseDetailCommand.Execute(null);
@@ -261,8 +267,10 @@ public sealed class ListScreenRenderTests
         Assert.Contains("Past 2", facts.Texts);
         Assert.Contains("Next", facts.Texts);
         Assert.Contains("First-time", facts.Badges);
-        Assert.Equal(1, facts.CheckIns);
-        Assert.Equal(3, facts.Records); // Gideon, Elio and Anders (Asher is Next)
+        Assert.Equal(0, facts.CheckIns); // the API has no check-in state: no button or text says "Check in"
+        Assert.Equal(4, facts.Records); // Asher (Next), Gideon, Elio and Anders
+        Assert.True(facts.EmphasisedOnNext, "the Next row's Record donation is not the one emphasised (secondary) button");
+        Assert.Equal(3, facts.Quiet); // the later rows keep the quiet button
         Assert.True(facts.UpcomingError is null, facts.UpcomingError);
         Assert.Contains("Tomorrow, Fri 20 Nov", facts.UpcomingTexts);
         Assert.DoesNotContain("Today, Thu 19 Nov", facts.UpcomingTexts);
@@ -496,6 +504,7 @@ public sealed class ListScreenRenderTests
 
     private static byte[] Save(Hosted host, string name)
     {
+        RenderChecks.Check(host, name);
         var png = host.Capture();
         System.IO.Directory.CreateDirectory(Directory);
         File.WriteAllBytes(Path.Combine(Directory, name), png);

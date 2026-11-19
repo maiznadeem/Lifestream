@@ -9,7 +9,9 @@
   <!-- Windows 11 style overlay scroll bars (direction A). The ScrollViewer template puts the content and both bars in the same grid cell, so a bar
        showing, hiding or widening never moves the layout. A bar is a 12 DIP transparent strip on the right / bottom edge of the content. At rest it
        shows only a 2 DIP thumb (ink3 at 55 %, inset 3 from the edge). With the pointer on the strip (Controls/OverlayScroll.cs sets
-       OverlayScroll.IsExpanded) the well appears and the thumb widens to 6 DIP at 85 %; while dragging the thumb is ink2 at 100 %. The auto-hide
+       OverlayScroll.IsExpanded) the well appears and the thumb widens to 6 DIP at 85 %; while dragging the thumb is ink2 at 100 %. The resting thumb is
+       quiet on purpose (about 2:1); a thumb in use is not: while the pointer is on the strip, the thumb is dragged, or keyboard focus is inside the viewer
+       (OverlayScroll.IsEmphasized, set with or without animations) it is ink3 at 85 % or stronger, 3:1 or more against every surface. The auto-hide
        (fade after 1.2 s idle) lives in OverlayScroll.cs and is switched on by the implicit ScrollViewer style below; with Windows animations off
        nothing fades or widens (the durations here are zero and IsExpanded is never set).
        Styles: implicit ScrollViewer (overlay + auto-hide), ScrollViewer.Plain (overlay, always visible at rest width, for small popups),
@@ -26,6 +28,7 @@
           <Grid Background="Transparent">
             <Grid x:Name="Pill" HorizontalAlignment="Right" Width="{StaticResource Size.ScrollThumbRest}" Margin="0,0,3,0">
               <Border x:Name="Rest" Background="{DynamicResource Brush.Ink3}" CornerRadius="3" Opacity="0.55" />
+              <Border x:Name="Strong" Background="{DynamicResource Brush.Ink3}" CornerRadius="3" Opacity="0" />
               <Border x:Name="Drag" Background="{DynamicResource Brush.Ink2}" CornerRadius="3" Opacity="0" />
             </Grid>
           </Grid>
@@ -48,6 +51,12 @@
                 </BeginStoryboard>
               </DataTrigger.ExitActions>
             </DataTrigger>
+            <!-- In use (pointer on the strip, dragging, keyboard focus in the viewer): the emphasised layer replaces the resting one. Set, not animated, so it
+                 also holds with animations off. -->
+            <DataTrigger Binding="{Binding Path=(controls:OverlayScroll.IsEmphasized), RelativeSource={RelativeSource AncestorType=ScrollBar}}" Value="True">
+              <Setter TargetName="Rest" Property="Visibility" Value="Hidden" />
+              <Setter TargetName="Strong" Property="Opacity" Value="0.85" />
+            </DataTrigger>
             <Trigger Property="IsDragging" Value="True">
               <Setter TargetName="Drag" Property="Opacity" Value="1" />
             </Trigger>
@@ -67,6 +76,7 @@
           <Grid Background="Transparent">
             <Grid x:Name="Pill" VerticalAlignment="Bottom" Height="{StaticResource Size.ScrollThumbRest}" Margin="0,0,0,3">
               <Border x:Name="Rest" Background="{DynamicResource Brush.Ink3}" CornerRadius="3" Opacity="0.55" />
+              <Border x:Name="Strong" Background="{DynamicResource Brush.Ink3}" CornerRadius="3" Opacity="0" />
               <Border x:Name="Drag" Background="{DynamicResource Brush.Ink2}" CornerRadius="3" Opacity="0" />
             </Grid>
           </Grid>
@@ -88,6 +98,12 @@
                   </Storyboard>
                 </BeginStoryboard>
               </DataTrigger.ExitActions>
+            </DataTrigger>
+            <!-- In use (pointer on the strip, dragging, keyboard focus in the viewer): the emphasised layer replaces the resting one. Set, not animated, so it
+                 also holds with animations off. -->
+            <DataTrigger Binding="{Binding Path=(controls:OverlayScroll.IsEmphasized), RelativeSource={RelativeSource AncestorType=ScrollBar}}" Value="True">
+              <Setter TargetName="Rest" Property="Visibility" Value="Hidden" />
+              <Setter TargetName="Strong" Property="Opacity" Value="0.85" />
             </DataTrigger>
             <Trigger Property="IsDragging" Value="True">
               <Setter TargetName="Drag" Property="Opacity" Value="1" />
@@ -261,6 +277,18 @@
   <Style TargetType="ScrollViewer">
     <Setter Property="Template" Value="{StaticResource ScrollViewer.Overlay}" />
     <Setter Property="controls:OverlayScroll.IsEnabled" Value="True" />
+  </Style>
+
+  <!-- A scrolling body inside a side panel (Controls/SidePanel marks everything in it with SidePanel.IsInside). The viewer reaches through the panel's 24 DIP
+       right padding to the panel's edge and pads its content by the same 24: the content keeps its width and its 24 DIP right padding whether or not it
+       scrolls, and the bar's 12 DIP strip lies in that padding, never over the content. Outside a side panel the style changes nothing. -->
+  <Style x:Key="ScrollViewer.Panel" TargetType="ScrollViewer" BasedOn="{StaticResource {x:Type ScrollViewer}}">
+    <Style.Triggers>
+      <Trigger Property="controls:SidePanel.IsInside" Value="True">
+        <Setter Property="Margin" Value="{StaticResource Inset.RN24}" />
+        <Setter Property="Padding" Value="{StaticResource Inset.R24}" />
+      </Trigger>
+    </Style.Triggers>
   </Style>
 
   <!-- Overlay bars that never fade or widen: always visible at rest width when the content scrolls. For small popups. -->

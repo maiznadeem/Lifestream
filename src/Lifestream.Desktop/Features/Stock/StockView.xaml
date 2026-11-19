@@ -73,10 +73,9 @@
     <Grid x:Name="Page" KeyboardNavigation.TabNavigation="Local">
       <Grid.Style>
         <Style TargetType="Grid">
-          <Setter Property="Margin" Value="{DynamicResource Pad.PageA}" />
           <Style.Triggers>
-            <DataTrigger Binding="{Binding (controls:Responsive.Breakpoint), RelativeSource={RelativeSource Self}}" Value="Compact">
-              <Setter Property="Margin" Value="{DynamicResource Pad.PageCompact}" />
+            <DataTrigger Binding="{Binding IsPanelOpen}" Value="True">
+              <Setter Property="Margin" Value="{DynamicResource Inset.R24}" />
             </DataTrigger>
           </Style.Triggers>
         </Style>
@@ -184,42 +183,42 @@
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
                 <!-- The six age bands: headers come from the API's band definitions (StockAges.Bands), set in code-behind. -->
-                <DataGridTemplateColumn x:Name="Band0" Width="*" MinWidth="48" MaxWidth="96" CanUserSort="False">
+                <DataGridTemplateColumn x:Name="Band0" Width="*" MinWidth="48" MaxWidth="96" CanUserSort="False" controls:ColumnAssist.HeaderAlignment="Center">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate DataType="{x:Type stock:StockTile}">
                       <ContentControl Content="{Binding AgeCells[0]}" ContentTemplate="{StaticResource AgeCell}" Focusable="False" IsTabStop="False" />
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn x:Name="Band1" Width="*" MinWidth="48" MaxWidth="96" CanUserSort="False">
+                <DataGridTemplateColumn x:Name="Band1" Width="*" MinWidth="48" MaxWidth="96" CanUserSort="False" controls:ColumnAssist.HeaderAlignment="Center">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate DataType="{x:Type stock:StockTile}">
                       <ContentControl Content="{Binding AgeCells[1]}" ContentTemplate="{StaticResource AgeCell}" Focusable="False" IsTabStop="False" />
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn x:Name="Band2" Width="*" MinWidth="48" MaxWidth="96" CanUserSort="False">
+                <DataGridTemplateColumn x:Name="Band2" Width="*" MinWidth="48" MaxWidth="96" CanUserSort="False" controls:ColumnAssist.HeaderAlignment="Center">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate DataType="{x:Type stock:StockTile}">
                       <ContentControl Content="{Binding AgeCells[2]}" ContentTemplate="{StaticResource AgeCell}" Focusable="False" IsTabStop="False" />
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn x:Name="Band3" Width="*" MinWidth="48" MaxWidth="96" CanUserSort="False">
+                <DataGridTemplateColumn x:Name="Band3" Width="*" MinWidth="48" MaxWidth="96" CanUserSort="False" controls:ColumnAssist.HeaderAlignment="Center">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate DataType="{x:Type stock:StockTile}">
                       <ContentControl Content="{Binding AgeCells[3]}" ContentTemplate="{StaticResource AgeCell}" Focusable="False" IsTabStop="False" />
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn x:Name="Band4" Width="*" MinWidth="48" MaxWidth="96" CanUserSort="False">
+                <DataGridTemplateColumn x:Name="Band4" Width="*" MinWidth="48" MaxWidth="96" CanUserSort="False" controls:ColumnAssist.HeaderAlignment="Center">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate DataType="{x:Type stock:StockTile}">
                       <ContentControl Content="{Binding AgeCells[4]}" ContentTemplate="{StaticResource AgeCell}" Focusable="False" IsTabStop="False" />
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn x:Name="Band5" Width="*" MinWidth="48" MaxWidth="96" CanUserSort="False">
+                <DataGridTemplateColumn x:Name="Band5" Width="*" MinWidth="48" MaxWidth="96" CanUserSort="False" controls:ColumnAssist.HeaderAlignment="Center">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate DataType="{x:Type stock:StockTile}">
                       <ContentControl Content="{Binding AgeCells[5]}" ContentTemplate="{StaticResource AgeCell}" Focusable="False" IsTabStop="False" />
@@ -276,10 +275,9 @@
 
     <!-- The selected group's panel. -->
     <controls:SidePanel x:Name="Panel" Grid.Column="1" IsOpen="{Binding IsPanelOpen}" Overline="{Binding PanelOverline}" CloseCommand="{Binding ClosePanelCommand}"
-                        AutomationProperties.Name="Blood group details">
-      <ScrollViewer VerticalScrollBarVisibility="Auto" Focusable="False">
-        <!-- The right gutter keeps the overlay scroll bar off the content (the tag, the bag list). -->
-        <StackPanel x:Name="PanelBody" feat:Edge.Bottom="{DynamicResource Space.24}" feat:Edge.Right="{DynamicResource Space.12}">
+                        lists:PanelBleed.IsEnabled="True" AutomationProperties.Name="Blood group details">
+      <ScrollViewer Style="{DynamicResource ScrollViewer.Panel}" VerticalScrollBarVisibility="Auto" Focusable="False">
+        <StackPanel x:Name="PanelBody" feat:Edge.Bottom="{DynamicResource Space.24}">
           <Grid DataContext="{Binding SelectedTile}">
             <Grid.ColumnDefinitions>
               <ColumnDefinition Width="*" />
@@ -294,22 +292,27 @@
             <controls:BloodGroupTag Grid.Column="1" Text="{Binding GroupText}" IsLarge="True" VerticalAlignment="Top" feat:Edge.Left="{DynamicResource Space.12}" />
           </Grid>
 
-          <!-- Actions: one primary (the page header's Refresh is secondary), then the group's requests. -->
-          <WrapPanel feat:Edge.Top="{DynamicResource Space.16}" Visibility="{Binding CanNavigate, Converter={StaticResource BoolToVisibility}}">
-            <Button x:Name="FindDonorsButton" Style="{DynamicResource Button.Primary}" Command="{Binding FindDonorsCommand}" feat:Edge.Right="{DynamicResource Space.8}" feat:Edge.Bottom="{DynamicResource Space.8}"
+          <!-- Actions, as on every list screen: the one filled primary fills the row (the page header's Refresh is secondary), then the group's requests.
+               A blood group has nothing to edit or delete, so there is no "..." menu. -->
+          <Grid x:Name="ActionsRow" feat:Edge.Top="{DynamicResource Space.16}" feat:Edge.Bottom="{DynamicResource Space.8}" Visibility="{Binding CanNavigate, Converter={StaticResource BoolToVisibility}}">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <Button x:Name="FindDonorsButton" Style="{DynamicResource Button.Primary}" Command="{Binding FindDonorsCommand}" feat:Edge.Right="{DynamicResource Space.8}"
                     AutomationProperties.Name="Find donors of this group">
               <StackPanel Orientation="Horizontal">
                 <controls:Icon Kind="Donor" Size="16" VerticalAlignment="Center" feat:Edge.Right="{DynamicResource Space.8}" />
                 <TextBlock VerticalAlignment="Center"><Run Text="Find " /><Run Text="{Binding SelectedTile.GroupText, Mode=OneWay}" /><Run Text=" donors" /></TextBlock>
               </StackPanel>
             </Button>
-            <Button Style="{DynamicResource Button.Secondary}" Command="{Binding OpenRequestsCommand}" feat:Edge.Bottom="{DynamicResource Space.8}" AutomationProperties.Name="Open requests for this group">
+            <Button Grid.Column="1" Style="{DynamicResource Button.Secondary}" Command="{Binding OpenRequestsCommand}" AutomationProperties.Name="Open requests for this group">
               <StackPanel Orientation="Horizontal">
                 <controls:Icon Kind="Request" Size="16" VerticalAlignment="Center" feat:Edge.Right="{DynamicResource Space.8}" />
                 <TextBlock Text="Requests" VerticalAlignment="Center" />
               </StackPanel>
             </Button>
-          </WrapPanel>
+          </Grid>
 
           <!-- Shelf life and compatibility: label and value, as in every A panel. -->
           <TextBlock Style="{DynamicResource Text.Heading}" Text="Details" feat:Edge.Top="{DynamicResource Space.16}" feat:Edge.Bottom="{DynamicResource Space.8}" AutomationProperties.HeadingLevel="Level3" />

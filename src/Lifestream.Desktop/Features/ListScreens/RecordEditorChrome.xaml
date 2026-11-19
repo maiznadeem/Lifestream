@@ -56,7 +56,7 @@
         </controls:CrispBorder>
         <TextBlock Style="{DynamicResource Text.Caption}" Foreground="{DynamicResource Brush.Critical}" Text="{Binding ErrorSummary}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Assertive" />
       </StackPanel>
-      <ScrollViewer x:Name="FieldsScroll" Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+      <ScrollViewer x:Name="FieldsScroll" Grid.Row="2" Style="{DynamicResource ScrollViewer.Panel}" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
         <ContentControl Focusable="False" IsTabStop="False" Margin="{StaticResource Editor.FieldsPad}" Content="{Binding Fields, RelativeSource={RelativeSource AncestorType=UserControl}}" />
       </ScrollViewer>
       <Border Grid.Row="3" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="0,1,0,0" Padding="{StaticResource Editor.Footer}" SnapsToDevicePixels="True">

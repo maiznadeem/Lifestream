@@ -126,7 +126,7 @@
                                          lists:ListColumns.IsResponsive="True" lists:ListKeys.Panel="{Binding ElementName=Panel}"
                                          AutomationProperties.Name="Requests">
               <DataGrid.Columns>
-                <DataGridTemplateColumn Header="Patient" Width="1.6*" MinWidth="170" MaxWidth="320" CanUserSort="False">
+                <DataGridTemplateColumn Header="Patient" Width="Auto" MinWidth="170" MaxWidth="320" CanUserSort="False">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
                       <Grid VerticalAlignment="Center">
@@ -155,21 +155,21 @@
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="Units" Width="64" CanUserSort="False" lists:ListColumns.IsNumeric="True" lists:ListColumns.HideBelow="600">
+                <DataGridTemplateColumn Header="Units" Width="64" CanUserSort="False" controls:ColumnAssist.HeaderAlignment="Right" lists:ListColumns.HideBelow="600">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
                       <TextBlock Style="{DynamicResource DataGrid.TextCell}" Text="{Binding Units}" HorizontalAlignment="Right" />
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="Needed by" Width="*" MinWidth="110" MaxWidth="200" SortMemberPath="requiredBy" lists:ListColumns.HideBelow="600">
+                <DataGridTemplateColumn Header="Needed by" Width="*" MinWidth="110" SortMemberPath="requiredBy" lists:ListColumns.HideBelow="600">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
                       <TextBlock Style="{DynamicResource DataGrid.TextCell}" Text="{Binding RequiredBy, Converter={StaticResource DateText}}" />
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn x:Name="UrgencyColumn" Header="Urgency" Width="*" MinWidth="154" MaxWidth="220" CanUserSort="False"
+                <DataGridTemplateColumn x:Name="UrgencyColumn" Header="Urgency" Width="*" MinWidth="154" CanUserSort="False"
                                         lists:ListColumns.IsShown="{Binding Data.ShowOpenColumns, Source={StaticResource Model}}">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
@@ -201,7 +201,7 @@
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn x:Name="CoverColumn" Header="Cover" Width="*" MinWidth="118" MaxWidth="200" CanUserSort="False"
+                <DataGridTemplateColumn x:Name="CoverColumn" Header="Cover" Width="*" MinWidth="118" CanUserSort="False"
                                         lists:ListColumns.IsShown="{Binding Data.ShowOpenColumns, Source={StaticResource Model}}">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
@@ -234,7 +234,7 @@
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn x:Name="StatusColumn" Header="Status" Width="*" MinWidth="120" MaxWidth="200" CanUserSort="False"
+                <DataGridTemplateColumn x:Name="StatusColumn" Header="Status" Width="*" MinWidth="120" CanUserSort="False"
                                         lists:ListColumns.IsShown="{Binding Data.ShowStatusColumn, Source={StaticResource Model}}">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
@@ -244,7 +244,7 @@
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
                 <!-- At Wide: when the request was placed (a useful extra column instead of stretching the others) -->
-                <DataGridTemplateColumn Header="Placed" Width="*" MinWidth="120" MaxWidth="200" SortMemberPath="placed" lists:ListColumns.HideBelow="1100">
+                <DataGridTemplateColumn Header="Placed" Width="*" MinWidth="120" SortMemberPath="placed" lists:ListColumns.HideBelow="1100">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
                       <TextBlock Style="{DynamicResource DataGrid.TextCell}" Foreground="{DynamicResource Brush.Ink2}" Text="{Binding PlacedAtUtc, Converter={StaticResource UtcDate}}" />

@@ -47,10 +47,13 @@ public sealed class Phase2bRenderTests
     }
 
     /// <summary>The extra answers of the fix round: stock with its age bands, the bags of a group in use-first order, and the receipt tab counts.</summary>
-    internal static void Dress(Client.Tests.Fakes.Rig rig, BloodType bagsOf = BloodType.ANeg)
+    /// <param name="rig">The rig whose fake API answers.</param>
+    /// <param name="bagsOf">The group whose bags the fake API lists.</param>
+    /// <param name="source">The stock to dress with age bands; the part 2 demo stock when null.</param>
+    internal static void Dress(Client.Tests.Fakes.Rig rig, BloodType bagsOf = BloodType.ANeg, IEnumerable<Contracts.Stock.StockItem>? source = null)
     {
         ArgumentNullException.ThrowIfNull(rig);
-        var stock = DemoData.Stock().Select(s => s with { AgeBands = Bands(s) }).ToList();
+        var stock = (source ?? DemoData.Stock()).Select(s => s with { AgeBands = Bands(s) }).ToList();
         rig.Api.On("GetStockAsync", Client.Api.ApiResult<IReadOnlyList<Contracts.Stock.StockItem>>.Ok(stock));
         var group = stock.Single(s => s.BloodType == bagsOf);
         var today = DateTime.UtcNow.Date;
@@ -93,6 +96,21 @@ public sealed class Phase2bRenderTests
         _ => (1024 - 52, 700 - TitleBar, Breakpoint.Compact),
     };
 
+    /// <summary>
+    /// The page as the shell hosts it at this size: the canvas, the shell's page padding and the breakpoint of the window (the side panel bleeds through the
+    /// padding to the window's edges), the same stage the list-screen renders use.
+    /// </summary>
+    private static FrameworkElement Stage(UserControl view, string size)
+    {
+        var (width, height) = size switch
+        {
+            "1440" => (1440, 900),
+            "max" => (1920, 1080),
+            _ => (1024, 700),
+        };
+        return ListScreenRenderTests.PageArea(view, width, height, out _);
+    }
+
     [Theory]
     [MemberData(nameof(Screens))]
     public void Screen_RendersDirectionA(string screen, string size, string theme)
@@ -106,14 +124,14 @@ public sealed class Phase2bRenderTests
                 using var rig = Part2Harness.NewRig();
                 Dress(rig);
                 var view = Build(screen, rig);
-                Responsive.SetBreakpoint(view, breakpoint);
-                using var host = Hosted.Create(Part2Harness.OnCanvas(view, view.DataContext), width, height);
+                using var host = Hosted.Create(Stage(view, size), width, height);
                 Load(screen, view, host);
                 var panel = host.All<SidePanel>().SingleOrDefault();
                 host.Settle(600);
                 var png = host.Capture();
                 System.IO.Directory.CreateDirectory(Directory);
                 File.WriteAllBytes(Path.Combine(Directory, $"{screen}-{size}-{theme}.png"), png);
+                RenderChecks.Check(host, $"{screen}-{size}-{theme}");
                 var panelBounds = panel is { IsVisible: true } ? Hosted.BoundsOf(panel, host.Element) : Rect.Empty;
                 return (Png: png, Canvas: ThemeService.ColorOf("Color.Canvas"), PanelOpen: panel?.IsVisible == true, Panel: panelBounds, PanelWidth: panel?.ActualWidth ?? 0);
             }
@@ -236,12 +254,13 @@ public sealed class Phase2bRenderTests
                 load = () => receipts.LoadAsync();
             }
 
-            using var host = Hosted.Create(Part2Harness.OnCanvas(view, view.DataContext), width, height);
+            using var host = Hosted.Create(Stage(view, "1440"), width, height);
             Hosted.Await(load);
             host.Settle(500);
             var png = host.Capture();
             System.IO.Directory.CreateDirectory(Directory);
             File.WriteAllBytes(Path.Combine(Directory, $"{state}-1440-light.png"), png);
+            RenderChecks.Check(host, state);
             return (Empty: host.All<EmptyState>().Any(e => e.IsVisible), Error: host.All<ErrorState>().Any(e => e.IsVisible));
         });
 
@@ -267,7 +286,7 @@ public sealed class Phase2bRenderTests
     [InlineData("profile-changed-max", "light")]
     public void FixState_Renders(string state, string theme)
     {
-        var (width, height, breakpoint) = PageArea(state.EndsWith("-max", StringComparison.Ordinal) ? "max" : "1440");
+        var (width, height, _) = PageArea(state.EndsWith("-max", StringComparison.Ordinal) ? "max" : "1440");
         var facts = StaHost.Run(() =>
         {
             ThemeService.Apply(theme == "dark" ? ThemeMode.Dark : ThemeMode.Light);
@@ -277,8 +296,7 @@ public sealed class Phase2bRenderTests
                 Dress(rig);
                 var screen = state.Split('-')[0];
                 var view = Build(screen, rig);
-                Responsive.SetBreakpoint(view, breakpoint);
-                using var host = Hosted.Create(Part2Harness.OnCanvas(view, view.DataContext), width, height);
+                using var host = Hosted.Create(Stage(view, state.EndsWith("-max", StringComparison.Ordinal) ? "max" : "1440"), width, height);
                 var texts = new List<string>();
                 switch (view.DataContext)
                 {
@@ -308,6 +326,7 @@ public sealed class Phase2bRenderTests
                 var png = host.Capture();
                 System.IO.Directory.CreateDirectory(Directory);
                 File.WriteAllBytes(Path.Combine(Directory, $"{state}-{(state.EndsWith("-max", StringComparison.Ordinal) ? "max" : "1440")}-{theme}.png".Replace("-max-max", "-max", StringComparison.Ordinal)), png);
+                RenderChecks.Check(host, state);
                 texts.AddRange(host.All<TextBlock>().Where(t => t.IsVisible).Select(t => new System.Windows.Documents.TextRange(t.ContentStart, t.ContentEnd).Text));
                 var trimmed = host.All<TextBlock>().Where(t => t.IsVisible && TruncationTooltip.IsTrimmed(t) && !TruncationTooltip.GetIsEnabled(t))
                     .Select(t => t.Text).ToList();

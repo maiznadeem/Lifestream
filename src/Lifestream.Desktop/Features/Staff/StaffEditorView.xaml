@@ -12,8 +12,7 @@
   </UserControl.Resources>
   <lists:RecordEditorChrome>
     <lists:RecordEditorChrome.Fields>
-      <!-- The right gutter keeps the panel's overlay scroll bar off the fields. -->
-      <StackPanel feat:Edge.Right="{DynamicResource Space.12}">
+      <StackPanel>
         <TextBlock Style="{DynamicResource Text.Heading}" Text="Personal details" feat:Edge.Bottom="{DynamicResource Space.12}" AutomationProperties.HeadingLevel="Level2" />
         <controls:FormField Label="Full name" IsRequired="True" controls:FormFocus.FieldName="DisplayName" Error="{Binding [DisplayName]}">
           <TextBox Text="{Binding DisplayName, UpdateSourceTrigger=PropertyChanged}" MaxLength="100" AutomationProperties.Name="Full name" />

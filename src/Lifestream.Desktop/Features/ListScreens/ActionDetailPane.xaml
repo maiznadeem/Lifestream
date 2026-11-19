@@ -34,7 +34,7 @@
         </Grid>
         <ContentControl x:Name="ActionsHost" Grid.Row="1" Focusable="False" IsTabStop="False" HorizontalContentAlignment="Stretch" Margin="{StaticResource Pane.ActionsGap}"
                         Content="{Binding Actions, RelativeSource={RelativeSource AncestorType=lists:ActionDetailPane}}" />
-        <ScrollViewer x:Name="BodyScroll" Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+        <ScrollViewer x:Name="BodyScroll" Grid.Row="2" Style="{DynamicResource ScrollViewer.Panel}" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
           <StackPanel>
             <ContentControl Focusable="False" IsTabStop="False" Content="{Binding Body, RelativeSource={RelativeSource AncestorType=lists:ActionDetailPane}}" />
             <lists:FactGrid x:Name="Facts" />

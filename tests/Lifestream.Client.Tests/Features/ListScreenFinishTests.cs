@@ -319,7 +319,7 @@ public sealed class ListScreenFinishTests
     }
 
     [Fact]
-    public async Task Appointments_CheckIn_OpensTheAppointment_RecordDonationForARow_OpensItsDialog()
+    public async Task Appointments_RecordDonationForARow_OpensTheAppointment_AndItsDialog()
     {
         var rig = new Part2Rig();
         var row = Samples2.AppointmentRow(5, 42);
@@ -328,12 +328,12 @@ public sealed class ListScreenFinishTests
         var vm = rig.Appointments();
         await vm.LoadAsync();
 
-        await vm.CheckInCommand.ExecuteAsync(vm.Items[0]);
+        Assert.Empty(rig.Forms.Shown);
+
+        // The agenda's one inline action (on the Next row and on the later ones): the row's appointment opens in the panel and its donation dialog is shown.
+        await vm.RecordDonationForCommand.ExecuteAsync(vm.Items[0]);
         Assert.Same(vm.Items[0], vm.SelectedItem);
         Assert.Equal(5, vm.Detail?.Id);
-        Assert.Empty(rig.Forms.Shown); // checking in opens the panel, no dialog
-
-        await vm.RecordDonationForCommand.ExecuteAsync(vm.Items[0]);
         Assert.IsType<RecordDonationDialogViewModel>(Assert.Single(rig.Forms.Shown));
     }
 

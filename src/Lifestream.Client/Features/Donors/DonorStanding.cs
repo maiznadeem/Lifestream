@@ -48,5 +48,5 @@ public sealed record DonorStanding(DonorStandingKind Kind, string Text, DateOnly
     }
 
     /// <summary>The donor's code as the screens show it, "D-0175".</summary>
-    public static string Code(int id) => $"D-{id:0000}";
+    public static string Code(int id) => Receipts.RecordCodes.Donor(id);
 }

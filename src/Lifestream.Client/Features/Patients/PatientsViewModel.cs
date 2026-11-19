@@ -125,7 +125,7 @@ public sealed class PatientsViewModel : SortedRecordListViewModel<PatientListIte
     public override string PageTitle => "Patients";
 
     /// <summary>The patient's code as the screens show it, "P-0051".</summary>
-    public static string Code(int id) => $"P-{id:0000}";
+    public static string Code(int id) => Receipts.RecordCodes.Patient(id);
 
     /// <summary>The side panel's overline, "Patient P-0051".</summary>
     public string? DetailCode => Detail is { } p ? "Patient " + Code(p.Id) : null;

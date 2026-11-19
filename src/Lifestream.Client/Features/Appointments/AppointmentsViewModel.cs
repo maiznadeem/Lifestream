@@ -97,13 +97,6 @@ public sealed class AppointmentsViewModel : SortedRecordListViewModel<Appointmen
             }
         });
         ViewReceiptCommand = Command(_ => Detail?.ReceiptId is { } id ? _receipts.ShowAsync(id, isDuplicate: true) : Task.CompletedTask, () => Detail?.ReceiptId is not null, opensModal: true);
-        CheckInCommand = Command(async (parameter, _) =>
-        {
-            if (parameter is AppointmentListItem item)
-            {
-                await OpenRowAsync(item).ConfigureAwait(true);
-            }
-        });
         RecordDonationForCommand = Command(async (parameter, _) =>
         {
             // This command is itself the modal-opening operation (as Record donation is), so it records the donation directly rather than through that command,
@@ -171,10 +164,10 @@ public sealed class AppointmentsViewModel : SortedRecordListViewModel<Appointmen
     public string? DetailCode => Detail is { } a ? "Appointment " + Code(a.Id) : null;
 
     /// <summary>An appointment's code as the screens show it, "A-0905".</summary>
-    public static string Code(int id) => RecordFormatting.Code("A", id);
+    public static string Code(int id) => RecordCodes.Appointment(id);
 
     /// <summary>A receipt's code, "RC-0012".</summary>
-    private static string ReceiptCode(int id) => RecordFormatting.Code("RC", id);
+    private static string ReceiptCode(int id) => RecordCodes.Receipt(id);
 
     // ---- the saved views ----
 
@@ -204,7 +197,7 @@ public sealed class AppointmentsViewModel : SortedRecordListViewModel<Appointmen
 
     public bool IsCancelledView { get => _view == AppointmentView.Cancelled; set => SetViewFromTab(value, AppointmentView.Cancelled); }
 
-    /// <summary>True on the Today tab: the list is the day's agenda, with Next, done and first-time marks and the inline Check in and Record donation.</summary>
+    /// <summary>True on the Today tab: the list is the day's agenda, with Next, done and first-time marks and the inline Record donation.</summary>
     public bool IsAgenda => _view == AppointmentView.Today;
 
     /// <summary>How many appointments each view holds (the tabs' counts), with the same search and filters; null until known or when the count call failed.</summary>
@@ -269,9 +262,6 @@ public sealed class AppointmentsViewModel : SortedRecordListViewModel<Appointmen
 
     /// <summary>Changes each time the agenda's marks were worked out again (a binding source for the rows' agenda cells).</summary>
     public int AgendaVersion { get; private set; }
-
-    /// <summary>"Check in" on the next row of the agenda: opens the appointment in the side panel (the donor's eligibility today, and "Record donation"). No call of its own.</summary>
-    public AsyncRelayCommand CheckInCommand { get; }
 
     /// <summary>"Record donation" on a row of the agenda: opens that appointment and records its donation (the same dialog as the panel's).</summary>
     public AsyncRelayCommand RecordDonationForCommand { get; }
@@ -495,7 +485,7 @@ public sealed class AppointmentsViewModel : SortedRecordListViewModel<Appointmen
     {
         var facts = new List<DetailFact>
         {
-            new("Donor", RecordFormatting.NameWithId(a.DonorName, a.DonorId)),
+            new("Donor", RecordFormatting.NameWithCode(a.DonorName, RecordCodes.Donor(a.DonorId))),
             new("Blood type", a.DonorBloodType.ToDisplay()),
             new("Appointment", RecordFormatting.When(a.SlotStartUtc, Zone)),
             new("Status", StatusText(a.Status)),

@@ -82,6 +82,8 @@
   <Thickness x:Key="Inset.Neg3">-3</Thickness>
   <Thickness x:Key="Inset.Neg4">-4</Thickness>
   <Thickness x:Key="Inset.R12">0,0,12,0</Thickness>
+  <Thickness x:Key="Inset.R24">0,0,24,0</Thickness>
+  <Thickness x:Key="Inset.RN24">0,0,-24,0</Thickness>
   <Thickness x:Key="Inset.R16">0,0,16,0</Thickness>
   <Thickness x:Key="Inset.R4">0,0,4,0</Thickness>
   <Thickness x:Key="Inset.R6">0,0,6,0</Thickness>

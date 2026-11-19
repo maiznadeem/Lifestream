@@ -281,7 +281,10 @@
     </Setter>
   </Style>
 
-  <!-- Load surface: skeleton, content, empty and error in one cell; the waking banner is InfoSoft with a Stroke edge. -->
+  <!-- Load surface: skeleton, content, empty and error in one cell; the waking banner is InfoSoft with a Stroke edge. Only the state on show takes room: the
+       skeleton is collapsed outside Loading and Waking and the content is collapsed in Empty and Error, so the empty and error states start at the top of
+       the surface (where the list's first row would be) on every screen, whatever height the skeleton or a hidden table would have had. While loading, the
+       content stays hidden (not collapsed), so a surface that sizes to its content keeps its place. -->
   <Style TargetType="local:LoadSurface">
     <Setter Property="Focusable" Value="False" />
     <Setter Property="IsTabStop" Value="False" />
@@ -292,7 +295,7 @@
         <ControlTemplate TargetType="local:LoadSurface">
           <Grid>
             <ContentPresenter x:Name="PART_Content" />
-            <local:Skeleton x:Name="PART_Skeleton" Visibility="Hidden" Kind="{TemplateBinding SkeletonKind}" ColumnWidths="{TemplateBinding SkeletonColumns}" />
+            <local:Skeleton x:Name="PART_Skeleton" Visibility="Collapsed" Kind="{TemplateBinding SkeletonKind}" ColumnWidths="{TemplateBinding SkeletonColumns}" />
             <controls:CrispBorder x:Name="PART_WakingBanner" Visibility="Collapsed" VerticalAlignment="Top" HorizontalAlignment="Center" Margin="{StaticResource Inset.T16}"
                                   Padding="{StaticResource Inset.H16V12}" Background="{DynamicResource Brush.InfoSoft}" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="1"
                                   CornerRadius="{StaticResource Radius.Panel}">
@@ -304,9 +307,9 @@
                 <Button x:Name="PART_CancelWaking" Style="{StaticResource Button.Subtle.Small}" Content="Cancel" />
               </StackPanel>
             </controls:CrispBorder>
-            <local:EmptyState x:Name="PART_Empty" Visibility="Collapsed" Icon="{TemplateBinding EmptyIcon}" Glyph="{TemplateBinding EmptyGlyph}" Title="{TemplateBinding EmptyTitle}"
+            <local:EmptyState x:Name="PART_Empty" Visibility="Collapsed" VerticalAlignment="Top" Icon="{TemplateBinding EmptyIcon}" Glyph="{TemplateBinding EmptyGlyph}" Title="{TemplateBinding EmptyTitle}"
                               Message="{TemplateBinding EmptyMessage}" ActionText="{TemplateBinding EmptyActionText}" ActionCommand="{TemplateBinding EmptyActionCommand}" />
-            <local:ErrorState x:Name="PART_Error" Visibility="Collapsed" Message="{TemplateBinding ErrorMessage}" Detail="{TemplateBinding ErrorDetail}"
+            <local:ErrorState x:Name="PART_Error" Visibility="Collapsed" VerticalAlignment="Top" Message="{TemplateBinding ErrorMessage}" Detail="{TemplateBinding ErrorDetail}"
                               RetryCommand="{TemplateBinding RetryCommand}" />
           </Grid>
           <ControlTemplate.Triggers>
@@ -320,11 +323,11 @@
               <Setter TargetName="PART_WakingBanner" Property="Visibility" Value="Visible" />
             </Trigger>
             <Trigger Property="State" Value="Empty">
-              <Setter TargetName="PART_Content" Property="Visibility" Value="Hidden" />
+              <Setter TargetName="PART_Content" Property="Visibility" Value="Collapsed" />
               <Setter TargetName="PART_Empty" Property="Visibility" Value="Visible" />
             </Trigger>
             <Trigger Property="State" Value="Error">
-              <Setter TargetName="PART_Content" Property="Visibility" Value="Hidden" />
+              <Setter TargetName="PART_Content" Property="Visibility" Value="Collapsed" />
               <Setter TargetName="PART_Error" Property="Visibility" Value="Visible" />
             </Trigger>
           </ControlTemplate.Triggers>

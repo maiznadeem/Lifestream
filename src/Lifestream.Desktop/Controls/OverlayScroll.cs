@@ -17,6 +17,9 @@ namespace Lifestream.Desktop.Controls;
 /// (and the widened thumb, <see cref="IsExpandedProperty"/>) while the pointer is on a strip or a thumb is being dragged.
 /// With Windows "Animation effects" off nothing fades or widens: the bars are simply shown at rest width whenever the content scrolls.
 /// Bars of a viewer whose content fits are collapsed by the template, so this never shows them.
+/// The thumb is quiet at rest (below 3:1 on purpose). It is emphasised (<see cref="IsEmphasizedProperty"/>: 3:1 or more against every surface) whenever it
+/// is being used or looked for: the pointer is on the strip, the thumb is dragged, or keyboard focus is inside the viewer and the last input was the
+/// keyboard. That does not depend on animations, and bars are not faded while the keyboard holds them.
 /// </summary>
 public static class OverlayScroll
 {
@@ -27,6 +30,14 @@ public static class OverlayScroll
     /// <summary>On a ScrollBar (set by the behaviour): the pointer is on the bar's strip or its thumb is being dragged, so the track shows and the thumb is wide.</summary>
     public static readonly DependencyProperty IsExpandedProperty =
         DependencyProperty.RegisterAttached("IsExpanded", typeof(bool), typeof(OverlayScroll), new PropertyMetadata(false));
+
+    /// <summary>
+    /// On a ScrollBar (set by the behaviour): the thumb takes its emphasised colour, which reaches 3:1 against every surface. True while the pointer is on the
+    /// bar's strip, its thumb is dragged, or keyboard focus is inside the viewer after keyboard input; unlike <see cref="IsExpandedProperty"/> it is also set
+    /// when animations are off.
+    /// </summary>
+    public static readonly DependencyProperty IsEmphasizedProperty =
+        DependencyProperty.RegisterAttached("IsEmphasized", typeof(bool), typeof(OverlayScroll), new PropertyMetadata(false));
 
     private static readonly DependencyProperty ControllerProperty =
         DependencyProperty.RegisterAttached("Controller", typeof(Controller), typeof(OverlayScroll), new PropertyMetadata(null));
@@ -57,6 +68,20 @@ public static class OverlayScroll
     {
         ArgumentNullException.ThrowIfNull(element);
         element.SetValue(IsExpandedProperty, value);
+    }
+
+    /// <summary>Gets whether a ScrollBar's thumb is emphasised (3:1 against every surface).</summary>
+    public static bool GetIsEmphasized(DependencyObject element)
+    {
+        ArgumentNullException.ThrowIfNull(element);
+        return (bool)element.GetValue(IsEmphasizedProperty);
+    }
+
+    /// <summary>Sets whether a ScrollBar's thumb is emphasised; the behaviour does this, templates only read it.</summary>
+    public static void SetIsEmphasized(DependencyObject element, bool value)
+    {
+        ArgumentNullException.ThrowIfNull(element);
+        element.SetValue(IsEmphasizedProperty, value);
     }
 
     private static void OnIsEnabledChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -95,6 +120,10 @@ public static class OverlayScroll
         private readonly MouseEventHandler _barLeft;
         private readonly DragStartedEventHandler _dragStarted;
         private readonly DragCompletedEventHandler _dragCompleted;
+        private readonly DependencyPropertyChangedEventHandler _focusWithinChanged;
+        private readonly KeyEventHandler _keyPressed;
+        private readonly MouseButtonEventHandler _mousePressed;
+        private bool _keyboard;
         private DispatcherTimer? _idle;
         private ScrollBar? _vertical;
         private ScrollBar? _horizontal;
@@ -113,6 +142,9 @@ public static class OverlayScroll
             _barLeft = OnBarLeft;
             _dragStarted = OnDragStarted;
             _dragCompleted = OnDragCompleted;
+            _focusWithinChanged = (_, e) => SetKeyboard((bool)e.NewValue && FocusAssist.LastInputWasKeyboard);
+            _keyPressed = (_, _) => SetKeyboard(true); // a key event reaches the viewer only while focus is inside it
+            _mousePressed = (_, _) => SetKeyboard(false);
         }
 
         /// <summary>The behaviour only runs while the viewer is in a loaded visual tree; the timer is stopped and every hook removed on Unloaded.</summary>
@@ -165,6 +197,11 @@ public static class OverlayScroll
             _viewer.PreviewMouseMove += _pointerMoved;
             _viewer.AddHandler(Thumb.DragStartedEvent, _dragStarted, true);
             _viewer.AddHandler(Thumb.DragCompletedEvent, _dragCompleted, true);
+
+            // The keyboard holds the bars from a key press inside the viewer, or focus arriving in it by keyboard, until a mouse press in it or focus leaving.
+            _viewer.IsKeyboardFocusWithinChanged += _focusWithinChanged;
+            _viewer.AddHandler(UIElement.PreviewKeyDownEvent, _keyPressed, true);
+            _viewer.AddHandler(UIElement.PreviewMouseDownEvent, _mousePressed, true);
             _viewer.ApplyTemplate();
             EnsureBars();
 
@@ -187,6 +224,10 @@ public static class OverlayScroll
             _viewer.PreviewMouseMove -= _pointerMoved;
             _viewer.RemoveHandler(Thumb.DragStartedEvent, _dragStarted);
             _viewer.RemoveHandler(Thumb.DragCompletedEvent, _dragCompleted);
+            _viewer.IsKeyboardFocusWithinChanged -= _focusWithinChanged;
+            _viewer.RemoveHandler(UIElement.PreviewKeyDownEvent, _keyPressed);
+            _viewer.RemoveHandler(UIElement.PreviewMouseDownEvent, _mousePressed);
+            _keyboard = false;
             Rebind(ref _vertical, null);
             Rebind(ref _horizontal, null);
             _hoverBar = null;
@@ -216,6 +257,7 @@ public static class OverlayScroll
                 slot.MouseEnter -= _barEntered;
                 slot.MouseLeave -= _barLeft;
                 SetExpanded(slot, false);
+                SetIsEmphasized(slot, false);
             }
 
             slot = found;
@@ -223,6 +265,23 @@ public static class OverlayScroll
             {
                 found.MouseEnter += _barEntered;
                 found.MouseLeave += _barLeft;
+                SetIsEmphasized(found, _keyboard);
+            }
+        }
+
+        /// <summary>While the keyboard is in use inside the viewer, the thumbs are emphasised and stay shown.</summary>
+        private void SetKeyboard(bool keyboard)
+        {
+            if (keyboard == _keyboard)
+            {
+                return;
+            }
+
+            _keyboard = keyboard;
+            UpdateExpanded();
+            if (IsScrollable)
+            {
+                Reveal();
             }
         }
 
@@ -292,10 +351,23 @@ public static class OverlayScroll
         {
             SetExpanded(_vertical, IsHeld(_vertical));
             SetExpanded(_horizontal, IsHeld(_horizontal));
+            SetEmphasized(_vertical);
+            SetEmphasized(_horizontal);
         }
 
         private bool IsHeld(ScrollBar? bar) =>
-            bar is not null && MotionSettings.AnimationsEnabled && (ReferenceEquals(_hoverBar, bar) || ReferenceEquals(_dragBar, bar));
+            bar is not null && MotionSettings.AnimationsEnabled && IsUnderPointerOrDragged(bar);
+
+        private bool IsUnderPointerOrDragged(ScrollBar bar) => ReferenceEquals(_hoverBar, bar) || ReferenceEquals(_dragBar, bar);
+
+        /// <summary>The emphasised colour does not wait for animations: a thumb in use reaches 3:1 also when nothing widens or fades.</summary>
+        private void SetEmphasized(ScrollBar? bar)
+        {
+            if (bar is not null)
+            {
+                SetIsEmphasized(bar, _keyboard || IsUnderPointerOrDragged(bar));
+            }
+        }
 
         private static void SetExpanded(ScrollBar? bar, bool value)
         {
@@ -326,7 +398,7 @@ public static class OverlayScroll
             }
 
             _lastActivity = Stopwatch.GetTimestamp();
-            if (_hoverBar is null && _dragBar is null && _idle is not { IsEnabled: true })
+            if (_hoverBar is null && _dragBar is null && !_keyboard && _idle is not { IsEnabled: true })
             {
                 Arm(MotionSettings.ScrollIdle);
             }
@@ -348,7 +420,7 @@ public static class OverlayScroll
         private void OnIdleTick(object? sender, EventArgs e)
         {
             _idle?.Stop();
-            if (!_shown || _hoverBar is not null || _dragBar is not null || !MotionSettings.AnimationsEnabled)
+            if (!_shown || _hoverBar is not null || _dragBar is not null || _keyboard || !MotionSettings.AnimationsEnabled)
             {
                 return;
             }

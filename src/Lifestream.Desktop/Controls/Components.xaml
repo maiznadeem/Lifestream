@@ -168,11 +168,18 @@
         <ControlTemplate TargetType="controls:Badge">
           <controls:CrispBorder Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1"
                                 CornerRadius="{StaticResource Radius.Small}" Padding="{StaticResource Components.Pad.Badge}">
-            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+            <!-- The dot and the icon keep their size; the label takes the rest. A badge is normally as wide as its words (its column is budgeted for it); if it
+                 is ever given less, the label ends in an ellipsis and the badge shows the whole text as its tooltip (Badge.UpdateTrimTip): never cut mid-letter. -->
+            <Grid VerticalAlignment="Center">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
               <Ellipse x:Name="Dot" Width="6" Height="6" Fill="{TemplateBinding Foreground}" VerticalAlignment="Center" Margin="{StaticResource Inset.R6}" Visibility="Collapsed" />
-              <controls:Icon x:Name="Glyph" Kind="{TemplateBinding Icon}" Size="13" VerticalAlignment="Center" Margin="{StaticResource Inset.R6}" />
-              <TextBlock x:Name="Label" Text="{TemplateBinding Text}" TextWrapping="NoWrap" VerticalAlignment="Center" />
-            </StackPanel>
+              <controls:Icon x:Name="Glyph" Grid.Column="1" Kind="{TemplateBinding Icon}" Size="13" VerticalAlignment="Center" Margin="{StaticResource Inset.R6}" />
+              <TextBlock x:Name="Label" Grid.Column="2" Text="{TemplateBinding Text}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+            </Grid>
           </controls:CrispBorder>
           <ControlTemplate.Triggers>
             <Trigger Property="ShowDot" Value="True">

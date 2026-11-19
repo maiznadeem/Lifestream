@@ -230,6 +230,8 @@ public static class TruncationTooltip
             new System.Windows.Media.Typeface(block.FontFamily, block.FontStyle, block.FontWeight, block.FontStretch),
             block.FontSize,
             System.Windows.Media.Brushes.Black,
+            null,
+            System.Windows.Media.TextOptions.GetTextFormattingMode(block), // as the block itself is drawn: Display in the app's windows
             System.Windows.Media.VisualTreeHelper.GetDpi(block).PixelsPerDip);
         return formatted.WidthIncludingTrailingWhitespace > block.ActualWidth + 0.5;
     }

@@ -227,7 +227,11 @@ public sealed class Badge : Control
 {
     /// <summary>The label.</summary>
     public static readonly DependencyProperty TextProperty =
-        DependencyProperty.Register(nameof(Text), typeof(string), typeof(Badge), new FrameworkPropertyMetadata(string.Empty, (d, e) => ComponentHelpers.SetName(d, e.NewValue as string)));
+        DependencyProperty.Register(nameof(Text), typeof(string), typeof(Badge), new FrameworkPropertyMetadata(string.Empty, (d, e) =>
+        {
+            ComponentHelpers.SetName(d, e.NewValue as string);
+            ((Badge)d).UpdateTrimTip();
+        }));
 
     /// <summary>The colour family.</summary>
     public static readonly DependencyProperty KindProperty =
@@ -252,6 +256,42 @@ public sealed class Badge : Control
 
     /// <summary>The icon before the text.</summary>
     public IconKind Icon { get => (IconKind)GetValue(IconProperty); set => SetValue(IconProperty, value); }
+
+    private TextBlock? _label;
+    private bool _trimTip;
+
+    /// <inheritdoc />
+    public override void OnApplyTemplate()
+    {
+        base.OnApplyTemplate();
+        _label = GetTemplateChild("Label") as TextBlock;
+    }
+
+    /// <inheritdoc />
+    protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
+    {
+        base.OnRenderSizeChanged(sizeInfo);
+        UpdateTrimTip();
+    }
+
+    /// <summary>
+    /// A badge given less room than its words ends them in an ellipsis; it then shows the whole text as its tooltip, and drops that tooltip when the text fits
+    /// again. A tooltip the screen set on the badge is left alone.
+    /// </summary>
+    private void UpdateTrimTip()
+    {
+        var trimmed = _label is not null && TruncationTooltip.IsTrimmed(_label);
+        if (trimmed && (_trimTip || ReadLocalValue(ToolTipProperty) == DependencyProperty.UnsetValue))
+        {
+            ToolTip = Text;
+            _trimTip = true;
+        }
+        else if (!trimmed && _trimTip)
+        {
+            ClearValue(ToolTipProperty);
+            _trimTip = false;
+        }
+    }
 
     /// <inheritdoc />
     protected override AutomationPeer OnCreateAutomationPeer() => new ComponentAutomationPeer(this, AutomationControlType.Text, nameof(Badge));
@@ -411,6 +451,13 @@ public sealed class SidePanel : ContentControl
     public static readonly DependencyProperty PanelWidthProperty =
         DependencyProperty.Register(nameof(PanelWidth), typeof(double), typeof(SidePanel), new FrameworkPropertyMetadata(420.0));
 
+    /// <summary>
+    /// True on a side panel and on everything inside it (inherited; the panel sets it on itself). A scrolling body styled <c>ScrollViewer.Panel</c> reads it
+    /// to reach through the panel's right padding, so the scroll bar lies in the padding and the content keeps its 24 DIP right edge.
+    /// </summary>
+    public static readonly DependencyProperty IsInsideProperty =
+        DependencyProperty.RegisterAttached("IsInside", typeof(bool), typeof(SidePanel), new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.Inherits));
+
     private Button? _closeButton;
     private FrameworkElement? _host;
     private TranslateTransform? _slide;
@@ -421,7 +468,12 @@ public sealed class SidePanel : ContentControl
     {
         Visibility = Visibility.Collapsed;
         Focusable = false;
+        SetIsInside(this, true);
     }
+
+    public static bool GetIsInside(DependencyObject element) => (bool)(element ?? throw new ArgumentNullException(nameof(element))).GetValue(IsInsideProperty);
+
+    public static void SetIsInside(DependencyObject element, bool value) => (element ?? throw new ArgumentNullException(nameof(element))).SetValue(IsInsideProperty, value);
 
     /// <summary>True while the panel is open.</summary>
     public bool IsOpen { get => (bool)GetValue(IsOpenProperty); set => SetValue(IsOpenProperty, value); }

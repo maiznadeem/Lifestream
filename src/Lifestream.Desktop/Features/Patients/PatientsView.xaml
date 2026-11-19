@@ -88,7 +88,7 @@
                                          lists:ListColumns.IsResponsive="True" lists:ListKeys.Panel="{Binding ElementName=Panel}"
                                          AutomationProperties.Name="Patients">
               <DataGrid.Columns>
-                <DataGridTemplateColumn Header="Name" SortMemberPath="name" Width="1.6*" MinWidth="200" MaxWidth="320">
+                <DataGridTemplateColumn Header="Name" SortMemberPath="name" Width="Auto" MinWidth="200" MaxWidth="320">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
                       <Grid VerticalAlignment="Center">
@@ -112,7 +112,7 @@
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="Requests" Width="*" MinWidth="120" MaxWidth="220" CanUserSort="False">
+                <DataGridTemplateColumn Header="Requests" Width="*" MinWidth="120" CanUserSort="False">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
                       <Grid VerticalAlignment="Center">
@@ -128,21 +128,21 @@
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="Phone" Width="*" MinWidth="130" MaxWidth="220" CanUserSort="False" lists:ListColumns.HideBelow="620">
+                <DataGridTemplateColumn Header="Phone" Width="*" MinWidth="130" CanUserSort="False" lists:ListColumns.HideBelow="620">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
                       <TextBlock Style="{DynamicResource DataGrid.TextCell}" Text="{Binding Phone}" />
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="Date of birth" Width="*" MinWidth="120" MaxWidth="200" CanUserSort="False" lists:ListColumns.HideBelow="760">
+                <DataGridTemplateColumn Header="Date of birth" Width="*" MinWidth="120" CanUserSort="False" lists:ListColumns.HideBelow="760">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
                       <TextBlock Style="{DynamicResource DataGrid.TextCell}" Text="{Binding DateOfBirth, Converter={StaticResource DateText}}" />
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="Gender" Width="*" MinWidth="90" MaxWidth="160" CanUserSort="False" lists:ListColumns.HideBelow="900">
+                <DataGridTemplateColumn Header="Gender" Width="*" MinWidth="90" CanUserSort="False" lists:ListColumns.HideBelow="900">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
                       <TextBlock Style="{DynamicResource DataGrid.TextCell}" Text="{Binding Gender}" />

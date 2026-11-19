@@ -27,7 +27,7 @@ public sealed class InitialsConverter : IValueConverter
 public sealed class RecordCodeConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
-        value is int id ? $"{parameter as string ?? "#"}-{id.ToString("0000", CultureInfo.InvariantCulture)}" : string.Empty;
+        value is int id && parameter is string prefix ? Lifestream.Client.Features.Receipts.RecordCodes.Of(prefix, id) : string.Empty;
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => throw new NotSupportedException();
 }

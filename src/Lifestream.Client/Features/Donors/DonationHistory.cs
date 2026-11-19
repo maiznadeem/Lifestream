@@ -24,7 +24,7 @@ public sealed record DonationHistoryRow(string DateText, string CodeText, string
 public static class DonationHistory
 {
     /// <summary>The bag's code as the screens show it, "B-0187" (the bag's real id: the schema has no donation number).</summary>
-    public static string BagCode(int id) => $"B-{id.ToString("0000", CultureInfo.InvariantCulture)}";
+    public static string BagCode(int id) => Receipts.RecordCodes.Bag(id);
 
     /// <summary>"11 donations, 12 units in all", or "None yet".</summary>
     public static string TotalText(DonorDonations history)

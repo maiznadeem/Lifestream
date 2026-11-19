@@ -90,6 +90,12 @@
         <Setter TargetName="BusyLabel" Property="Visibility" Value="Collapsed" />
         <Setter TargetName="Spinner" Property="Margin" Value="0" />
       </Trigger>
+      <!-- A button that asks for no busy text (BusyText="": a short label such as "Edit", which a progressive verb would widen) turns busy with the spinner
+           alone, centred like an icon-only button's. -->
+      <Trigger Property="assist:ButtonAssist.BusyText" Value="">
+        <Setter TargetName="BusyLabel" Property="Visibility" Value="Collapsed" />
+        <Setter TargetName="Spinner" Property="Margin" Value="0" />
+      </Trigger>
       <Trigger Property="IsEnabled" Value="False">
         <Setter TargetName="Sheen" Property="Visibility" Value="Collapsed" />
       </Trigger>

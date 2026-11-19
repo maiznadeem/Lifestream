@@ -41,7 +41,7 @@
           </Grid.ColumnDefinitions>
           <ContentControl x:Name="RelatedHost" Focusable="False" IsTabStop="False" HorizontalContentAlignment="Stretch" Margin="{DynamicResource Inset.R8}"
                           Content="{Binding RelatedActions, RelativeSource={RelativeSource AncestorType=lists:RecordDetailPane}}" />
-          <Button x:Name="EditButton" Grid.Column="1" Style="{DynamicResource Button.Secondary}" Command="{Binding EditCommand}" AutomationProperties.Name="Edit" ToolTip="Edit">
+          <Button x:Name="EditButton" Grid.Column="1" Style="{DynamicResource Button.Secondary}" Command="{Binding EditCommand}" controls:ButtonAssist.BusyText="" AutomationProperties.Name="Edit" ToolTip="Edit">
             <StackPanel Orientation="Horizontal">
               <controls:Icon Kind="Edit" Size="16" VerticalAlignment="Center" />
               <TextBlock x:Name="EditText" Text="Edit" VerticalAlignment="Center" Margin="{DynamicResource Inset.L8}" />
@@ -61,7 +61,7 @@
             </lists:MenuButton.ContextMenu>
           </lists:MenuButton>
         </Grid>
-        <ScrollViewer x:Name="BodyScroll" Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+        <ScrollViewer x:Name="BodyScroll" Grid.Row="2" Style="{DynamicResource ScrollViewer.Panel}" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
           <StackPanel>
             <ContentControl Focusable="False" IsTabStop="False" Content="{Binding Body, RelativeSource={RelativeSource AncestorType=lists:RecordDetailPane}}" />
             <lists:FactGrid x:Name="Facts" />

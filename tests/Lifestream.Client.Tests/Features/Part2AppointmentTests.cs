@@ -484,7 +484,7 @@ public sealed class Part2AppointmentTests
         var row = vm.Items.Single();
 
         Assert.Equal("Omar Haddad", row.DonorName);
-        Assert.Equal("#42", RecordFormatting.IdText(row.DonorId));
+        Assert.Equal("D-0042", Lifestream.Client.Features.Receipts.RecordCodes.Donor(row.DonorId)); // the one code style, never "#42"
 
         await vm.OpenDonorCommand.ExecuteAsync(row);
 

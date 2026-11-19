@@ -28,16 +28,22 @@ public static class DesignData
 
     public static SessionUser User => new(7, "Hana Greenleaf", Role.Admin, false, true);
 
+    /// <summary>The design clinic's stock: six of eight groups below the minimum of 10, two of them empty, and eight units of A+ expiring.</summary>
+    public static IReadOnlyList<StockItem> Stock() =>
+    [
+        .. new (BloodType Type, int Units, int Expiring)[]
+        {
+            (BloodType.APos, 17, 8), (BloodType.ANeg, 3, 0), (BloodType.BPos, 1, 0), (BloodType.BNeg, 1, 0),
+            (BloodType.ABPos, 4, 0), (BloodType.ABNeg, 0, 0), (BloodType.OPos, 11, 0), (BloodType.ONeg, 0, 0),
+        }.Select(s => new StockItem(s.Type, s.Units, s.Expiring, 10, s.Units < 10)),
+    ];
+
     public static void Configure(FakeApiClient api)
     {
         ArgumentNullException.ThrowIfNull(api);
         var months = Enumerable.Range(0, 12).Select(i => new DateOnly(2025, 12, 1).AddMonths(i)).ToList();
         var series = BloodTypeExtensions.All.Select(t => t == BloodType.APos ? new BloodTypeSeries(t, Donated, Issued) : new BloodTypeSeries(t, new int[12], new int[12])).ToList();
-        var stock = new (BloodType Type, int Units, int Expiring)[]
-        {
-            (BloodType.APos, 17, 8), (BloodType.ANeg, 3, 0), (BloodType.BPos, 1, 0), (BloodType.BNeg, 1, 0),
-            (BloodType.ABPos, 4, 0), (BloodType.ABNeg, 0, 0), (BloodType.OPos, 11, 0), (BloodType.ONeg, 0, 0),
-        }.Select(s => new StockItem(s.Type, s.Units, s.Expiring, 10, s.Units < 10)).ToList();
+        var stock = Stock();
 
         api.On("GetDashboardAsync", ApiResult<DashboardResponse>.Ok(new DashboardResponse(
             new DashboardKpis(40, 35, 5, 40, 37, 8), months, series, [new GenderCount(Gender.Male, 18), new GenderCount(Gender.Female, 20), new GenderCount(Gender.Other, 2)],

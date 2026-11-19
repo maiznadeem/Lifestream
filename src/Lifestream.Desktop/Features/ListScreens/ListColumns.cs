@@ -7,6 +7,9 @@ namespace Lifestream.Desktop.Features.ListScreens;
 /// Columns that fold away when the table gets narrow (direction A, "column priority"): set <c>lists:ListColumns.HideBelow="700"</c> on a column and
 /// <c>lists:ListColumns.IsResponsive="True"</c> on its grid. The column is hidden while the grid is narrower than that many DIP (a compact window, or the
 /// side panel taking its share), and shown again when it is wider.
+/// The name column of a list is <c>Width="Auto"</c> with a cap of 320: it takes what its names need before the detail columns (star) share the rest, so a
+/// name is not cut while another column has room to spare. If the columns on show then need more than the table has (long names in a narrow table), the
+/// lowest-priority column still on show, the one with the highest <c>HideBelow</c>, folds away too (<see cref="Fit"/>): a column goes before a name is cut.
 /// </summary>
 public static class ListColumns
 {
@@ -40,39 +43,11 @@ public static class ListColumns
         if (Owners.TryGetValue(column, out var grid) && grid.ActualWidth > 0)
         {
             Apply(grid, grid.ActualWidth);
+            FitLater(grid, shareAgain: true);
         }
         else
         {
             column.Visibility = (bool)e.NewValue ? Visibility.Visible : Visibility.Collapsed;
-        }
-    }
-
-    /// <summary>A column of numbers (design system 5.14): its header sits at the right, over the right-aligned values. Read when the grid is responsive.</summary>
-    public static readonly DependencyProperty IsNumericProperty =
-        DependencyProperty.RegisterAttached("IsNumeric", typeof(bool), typeof(ListColumns), new PropertyMetadata(false));
-
-    public static bool GetIsNumeric(DependencyObject column) => (bool)(column ?? throw new ArgumentNullException(nameof(column))).GetValue(IsNumericProperty);
-
-    public static void SetIsNumeric(DependencyObject column, bool value) => (column ?? throw new ArgumentNullException(nameof(column))).SetValue(IsNumericProperty, value);
-
-    /// <summary>Gives each numeric column a header style based on the grid's own header style, aligned right.</summary>
-    public static void AlignNumericHeaders(DataGrid grid)
-    {
-        ArgumentNullException.ThrowIfNull(grid);
-        if (grid.TryFindResource("DataGridColumnHeader.Lifestream") is not Style header)
-        {
-            return;
-        }
-
-        foreach (var column in grid.Columns)
-        {
-            if (GetIsNumeric(column) && column.HeaderStyle is null)
-            {
-                var style = new Style(typeof(System.Windows.Controls.Primitives.DataGridColumnHeader), header);
-                style.Setters.Add(new Setter(Control.HorizontalContentAlignmentProperty, HorizontalAlignment.Right));
-                style.Seal();
-                column.HeaderStyle = style;
-            }
         }
     }
 
@@ -145,17 +120,15 @@ public static class ListColumns
         }
 
         grid.SizeChanged -= OnSizeChanged;
-        grid.Loaded -= OnGridLoaded;
+        grid.LoadingRow -= OnLoadingRow;
         if ((bool)e.NewValue)
         {
             grid.SizeChanged += OnSizeChanged;
-            grid.Loaded += OnGridLoaded;
+            grid.LoadingRow += OnLoadingRow; // a row with a longer name can widen the name column
             Apply(grid, grid.ActualWidth);
             RestoreWidths(grid);
         }
     }
-
-    private static void OnGridLoaded(object sender, RoutedEventArgs e) => AlignNumericHeaders((DataGrid)sender);
 
     private static void OnSizeChanged(object sender, SizeChangedEventArgs e)
     {
@@ -165,6 +138,155 @@ public static class ListColumns
             Apply(grid, e.NewSize.Width);
             // After the grid has shared out the new width among its columns (it does so in its own layout pass, after this event).
             grid.Dispatcher.BeginInvoke(() => RestoreWidths(grid), System.Windows.Threading.DispatcherPriority.Loaded);
+            FitLater(grid, shareAgain: true);
         }
+    }
+
+    private static void OnLoadingRow(object? sender, DataGridRowEventArgs e) => FitLater((DataGrid)sender!, shareAgain: false);
+
+    /// <summary>True while a <see cref="Fit"/> is queued for the grid (rows arrive many at a time; one pass serves them all).</summary>
+    private static readonly DependencyProperty FitQueuedProperty =
+        DependencyProperty.RegisterAttached("FitQueued", typeof(bool), typeof(ListColumns), new PropertyMetadata(false));
+
+    /// <summary>True when the queued <see cref="Fit"/> follows a change of the columns on show, so the star columns must share the room again.</summary>
+    private static readonly DependencyProperty ShareAgainProperty =
+        DependencyProperty.RegisterAttached("ShareAgain", typeof(bool), typeof(ListColumns), new PropertyMetadata(false));
+
+    private static void FitLater(DataGrid grid, bool shareAgain)
+    {
+        if (shareAgain)
+        {
+            grid.SetValue(ShareAgainProperty, true);
+        }
+
+        if ((bool)grid.GetValue(FitQueuedProperty))
+        {
+            return;
+        }
+
+        grid.SetValue(FitQueuedProperty, true);
+        grid.Dispatcher.BeginInvoke(
+            () =>
+            {
+                var share = (bool)grid.GetValue(ShareAgainProperty);
+                grid.ClearValue(FitQueuedProperty);
+                grid.ClearValue(ShareAgainProperty);
+                Fit(grid, share);
+            },
+            System.Windows.Threading.DispatcherPriority.Loaded);
+    }
+
+    /// <summary>
+    /// While the columns on show need more than the table has (the name column what its names need, up to its cap; a detail column its minimum; a fixed column
+    /// its width), hides the lowest-priority column still on show, the one with the highest <see cref="HideBelowProperty"/>. Then a name column that the grid
+    /// had squeezed gets its width back. (WPF's DataGrid never overflows on its own: it takes the missing width out of the auto column, which is how names
+    /// were cut while the table still looked full.) Columns come back when the table's width changes: <see cref="Apply"/> shows what the width allows, then
+    /// this runs again.
+    /// </summary>
+    /// <param name="grid">The table.</param>
+    /// <param name="shareAgain">
+    /// True after the columns on show changed (a width change, a column bound to what the screen shows): the detail (star) columns then share the room afresh.
+    /// WPF leaves them as they were when a column comes back: the returning column at its minimum and one neighbour paying for all of it.
+    /// </param>
+    public static void Fit(DataGrid grid, bool shareAgain = true)
+    {
+        ArgumentNullException.ThrowIfNull(grid);
+        if (!grid.IsLoaded || grid.ActualWidth <= 0)
+        {
+            return;
+        }
+
+        var room = grid.ActualWidth - grid.BorderThickness.Left - grid.BorderThickness.Right - grid.Padding.Left - grid.Padding.Right;
+        for (var pass = 0; pass < grid.Columns.Count; pass++)
+        {
+            var shown = grid.Columns.Where(c => c.Visibility == Visibility.Visible).ToList();
+            if (shown.Sum(Need) <= room + 0.5)
+            {
+                break;
+            }
+
+            var lowest = shown.Where(c => GetHideBelow(c) > 0).OrderByDescending(GetHideBelow).FirstOrDefault();
+            if (lowest is null)
+            {
+                break; // nothing left that may fold away
+            }
+
+            lowest.Visibility = Visibility.Collapsed;
+            shareAgain = true;
+            grid.UpdateLayout();
+        }
+
+        // The grid hands freed width to the star columns only: an auto column it had squeezed is sized to its content again.
+        foreach (var column in grid.Columns)
+        {
+            if (column.Visibility == Visibility.Visible && column.Width.IsAuto && column.ActualWidth + 0.5 < Need(column))
+            {
+                column.Width = DataGridLength.Auto;
+                shareAgain = true;
+            }
+        }
+
+        // With no detail column on show to take the spare width (a narrow table: only fixed columns are left beside the name), the name column takes it,
+        // up to its cap, instead of leaving a blank strip at the table's right edge. It sizes to its names again as soon as a detail column is back.
+        var detailOnShow = grid.Columns.Any(c => c.Visibility == Visibility.Visible && c.Width.IsStar && !IsStretched(c));
+        foreach (var column in grid.Columns)
+        {
+            if (column.Visibility != Visibility.Visible)
+            {
+                continue;
+            }
+
+            if (!detailOnShow && column.Width.IsAuto)
+            {
+                column.SetValue(StretchedNeedProperty, Need(column));
+                column.Width = new DataGridLength(1, DataGridLengthUnitType.Star);
+            }
+            else if (detailOnShow && IsStretched(column))
+            {
+                column.ClearValue(StretchedNeedProperty);
+                column.Width = DataGridLength.Auto;
+                shareAgain = true;
+            }
+        }
+
+        if (shareAgain)
+        {
+            foreach (var column in grid.Columns)
+            {
+                if (column.Visibility == Visibility.Visible && column.Width.IsStar && !IsStretched(column))
+                {
+                    column.Width = new DataGridLength(column.Width.Value, DataGridLengthUnitType.Star); // a fresh star width: the grid works the shares out again
+                }
+            }
+        }
+    }
+
+    /// <summary>On a name column that is filling the table's spare width for now: what its names needed when it started to (NaN otherwise).</summary>
+    private static readonly DependencyProperty StretchedNeedProperty =
+        DependencyProperty.RegisterAttached("StretchedNeed", typeof(double), typeof(ListColumns), new PropertyMetadata(double.NaN));
+
+    private static bool IsStretched(DataGridColumn column) => !double.IsNaN((double)column.GetValue(StretchedNeedProperty));
+
+    /// <summary>The least width a column can be shown at without cutting what it is for.</summary>
+    private static double Need(DataGridColumn column)
+    {
+        if (IsStretched(column))
+        {
+            return (double)column.GetValue(StretchedNeedProperty);
+        }
+
+        if (column.Width.IsStar)
+        {
+            return column.MinWidth;
+        }
+
+        if (column.Width.IsAbsolute)
+        {
+            return column.ReadLocalValue(DeclaredWidthProperty) is double declared && !double.IsNaN(declared) ? declared : column.Width.Value;
+        }
+
+        // Auto (or size to cells or header): what its content asked for, within the column's own limits.
+        var desired = double.IsNaN(column.Width.DesiredValue) ? column.ActualWidth : column.Width.DesiredValue;
+        return Math.Clamp(desired, column.MinWidth, double.IsInfinity(column.MaxWidth) ? double.MaxValue : column.MaxWidth);
     }
 }

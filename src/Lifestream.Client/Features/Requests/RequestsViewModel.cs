@@ -152,7 +152,7 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
     public string? DetailCode => Detail is { } r ? "Request " + Code(r.Id) : null;
 
     /// <summary>The request's code as the screens show it, "R-0148".</summary>
-    public static string Code(int id) => RecordFormatting.Code("R", id);
+    public static string Code(int id) => RecordCodes.Request(id);
 
     /// <summary>"3 units, needed by 19 Nov": the side panel's header line (the year only when it is not this year, so the line stays short in a narrow panel).</summary>
     public string? DetailSubtitle => Detail is { } r
@@ -208,7 +208,7 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
     }
 
     /// <summary>A receipt's code, "RC-0012".</summary>
-    public static string ReceiptCode(int id) => RecordFormatting.Code("RC", id);
+    public static string ReceiptCode(int id) => RecordCodes.Receipt(id);
 
     public override string PageTitle => "Requests";
 
@@ -491,7 +491,7 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
     {
         var facts = new List<DetailFact>
         {
-            new("Patient", RecordFormatting.NameWithId(r.PatientName, r.PatientId)),
+            new("Patient", RecordFormatting.NameWithCode(r.PatientName, RecordCodes.Patient(r.PatientId))),
             new("Blood type", r.BloodType.ToDisplay()),
             new("Units", RecordFormatting.Units(r.Units)),
             new("Needed by", Formatting.Date(r.RequiredBy)),

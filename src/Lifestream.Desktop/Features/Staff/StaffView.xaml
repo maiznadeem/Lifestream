@@ -11,7 +11,7 @@
   <!-- Staff (direction A): the page header with Add staff member (secondary while the panel is open, its label folded to the icon in a compact window),
        one line for the read-only demo account, a toolbar (search with Ctrl F and a "+ Salary" chip whose popup takes a range, digits only), the table
        (avatar with initials until a photo arrives, lazily, row by row; job title, shift and a role badge; no password anywhere), and the selected person's
-       side panel: who they are, role and access badges, Reset password (the one primary), Edit and a "..." menu with Delete staff member, then what the
+       side panel: who they are, role and access badges, Edit (the one primary), Reset password and a "..." menu with Delete staff member, then what the
        role can do and their details. The add and edit form opens in the same panel. -->
   <UserControl.Resources>
     <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
@@ -39,10 +39,9 @@
     <Grid x:Name="Page" KeyboardNavigation.TabNavigation="Local">
       <Grid.Style>
         <Style TargetType="Grid">
-          <Setter Property="Margin" Value="{DynamicResource Pad.PageA}" />
           <Style.Triggers>
-            <DataTrigger Binding="{Binding (controls:Responsive.Breakpoint), RelativeSource={RelativeSource Self}}" Value="Compact">
-              <Setter Property="Margin" Value="{DynamicResource Pad.PageCompact}" />
+            <DataTrigger Binding="{Binding IsPanelOpen}" Value="True">
+              <Setter Property="Margin" Value="{DynamicResource Inset.R24}" />
             </DataTrigger>
           </Style.Triggers>
         </Style>
@@ -150,7 +149,7 @@
                                          SortColumn="{Binding SortColumn, Mode=OneWay}" SortDescending="{Binding SortDescending, Mode=OneWay}"
                                          AutomationProperties.Name="Staff" KeyDown="OnGridKeyDown">
               <DataGrid.Columns>
-                <DataGridTemplateColumn Header="Name" Width="2*" MinWidth="220" MaxWidth="320" SortMemberPath="name">
+                <DataGridTemplateColumn Header="Name" Width="Auto" MinWidth="220" MaxWidth="320" SortMemberPath="name">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate DataType="{x:Type vm:StaffRow}">
                       <Grid VerticalAlignment="Center">
@@ -208,12 +207,12 @@
 
     <!-- The selected person, or the add / edit form. -->
     <controls:SidePanel x:Name="Panel" Grid.Column="1" IsOpen="{Binding IsPanelOpen}" Overline="{Binding PanelOverline}" CloseCommand="{Binding ClosePanelCommand}" lists:DetailPaneFrame.IsInPanel="True"
-                        AutomationProperties.Name="Staff member details">
+                        lists:PanelBleed.IsEnabled="True" AutomationProperties.Name="Staff member details">
       <Grid>
         <Grid Visibility="{Binding Editor, Converter={StaticResource NullToVisible}}">
           <controls:Skeleton Kind="Detail" Visibility="{Binding ShowDetailSkeleton, Converter={StaticResource BoolToVisibility}}" />
           <controls:ErrorState Message="{Binding DetailError}" RetryCommand="{Binding RetryDetailCommand}" Visibility="{Binding HasDetailError, Converter={StaticResource BoolToVisibility}}" />
-          <ScrollViewer x:Name="PanelBody" VerticalScrollBarVisibility="Auto" Focusable="False" Visibility="{Binding HasDetail, Converter={StaticResource BoolToVisibility}}">
+          <ScrollViewer x:Name="PanelBody" Style="{DynamicResource ScrollViewer.Panel}" VerticalScrollBarVisibility="Auto" Focusable="False" Visibility="{Binding HasDetail, Converter={StaticResource BoolToVisibility}}">
             <StackPanel feat:Edge.Bottom="{DynamicResource Space.24}">
               <!-- Who: the avatar (photo once loaded), the name, what they do, and their role and account badges. -->
               <Grid>
@@ -239,25 +238,25 @@
                                 Visibility="{Binding DetailIsProtected, Converter={StaticResource BoolToVisibility}}" ToolTip="The owner account can't be deleted or lose its administrator role." />
               </WrapPanel>
 
-              <!-- Actions: Reset password (the one primary), Edit, and a "..." menu with Delete staff member (it says why when it can't be used: your own or a
-                   protected account, or the demo account; the delete asks first). -->
+              <!-- Actions, as on every list screen: the one filled primary (Edit, which fills the row), then Reset password, and a "..." menu with Delete staff
+                   member (it says why when it can't be used: your own or a protected account, or the demo account; the delete asks first). -->
               <Grid x:Name="ActionsRow" feat:Edge.Top="{DynamicResource Space.16}">
                 <Grid.ColumnDefinitions>
-                  <ColumnDefinition Width="Auto" />
                   <ColumnDefinition Width="*" />
                   <ColumnDefinition Width="Auto" />
+                  <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <Button x:Name="ResetButton" Style="{DynamicResource Button.Primary}" Command="{Binding ResetPasswordCommand}" feat:Edge.Right="{DynamicResource Space.8}" AutomationProperties.Name="Reset password">
-                  <StackPanel Orientation="Horizontal">
-                    <controls:Icon Kind="Key" Size="16" VerticalAlignment="Center" feat:Edge.Right="{DynamicResource Space.8}" />
-                    <TextBlock Text="Reset password" VerticalAlignment="Center" />
-                  </StackPanel>
-                </Button>
-                <Button x:Name="EditButton" Grid.Column="1" Style="{DynamicResource Button.Secondary}" Command="{Binding EditCommand}" IsEnabled="{Binding CanManageStaff}" HorizontalAlignment="Left"
+                <Button x:Name="EditButton" Style="{DynamicResource Button.Primary}" Command="{Binding EditCommand}" IsEnabled="{Binding CanManageStaff}" feat:Edge.Right="{DynamicResource Space.8}"
                         AutomationProperties.Name="Edit">
                   <StackPanel Orientation="Horizontal">
                     <controls:Icon Kind="Edit" Size="16" VerticalAlignment="Center" feat:Edge.Right="{DynamicResource Space.8}" />
                     <TextBlock Text="Edit" VerticalAlignment="Center" />
+                  </StackPanel>
+                </Button>
+                <Button x:Name="ResetButton" Grid.Column="1" Style="{DynamicResource Button.Secondary}" Command="{Binding ResetPasswordCommand}" AutomationProperties.Name="Reset password">
+                  <StackPanel Orientation="Horizontal">
+                    <controls:Icon Kind="Key" Size="16" VerticalAlignment="Center" feat:Edge.Right="{DynamicResource Space.8}" />
+                    <TextBlock Text="Reset password" VerticalAlignment="Center" />
                   </StackPanel>
                 </Button>
                 <lists:MenuButton x:Name="MoreButton" Grid.Column="2" Style="{DynamicResource Button.Icon}" feat:Edge.Left="{DynamicResource Space.8}" AutomationProperties.Name="More actions" ToolTip="More actions">
