@@ -3,8 +3,12 @@
                      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                      xmlns:chrome="clr-namespace:Lifestream.Desktop.Chrome"
                      xmlns:services="clr-namespace:Lifestream.Desktop.Services"
-                     Title="Lifestream" Width="560" MaxHeight="760" SizeToContent="Height" IsDialog="True" ResizeMode="NoResize"
+                     Title="Lifestream" Width="624" MaxHeight="824" SizeToContent="Height" IsDialog="True" ResizeMode="NoResize"
+                     WindowStyle="None" AllowsTransparency="True" Background="Transparent" ExtendsContentIntoTitleBar="True" TitleBarHeight="88"
                      WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
-  <!-- The one window every form dialog (record a donation, fulfil a request, change a password, a receipt) is shown in. The view of the dialog's view model is found by name. -->
-  <ContentControl Content="{Binding}" ContentTemplateSelector="{x:Static services:ViewLocator.Instance}" IsTabStop="False" Focusable="False" />
+  <!-- The one window every form dialog (record a donation, fulfil a request, change a password, a receipt) is shown in. The window itself is
+       transparent: the dialog's DialogSurface (Features/Dialogs/DialogFrame) draws the 12 px corners, the 1 px stroke and the dialog shadow behind
+       itself, so the window keeps 32 px of room around it for the shadow (Width 624 = the 560 surface + 2 x 32). The top 88 px (the shadow room and the
+       title row) drag the window; the frame's close button opts out. The view of the dialog's view model is found by name. -->
+  <ContentControl x:Name="Host" Margin="{DynamicResource Pad.32}" Content="{Binding}" ContentTemplateSelector="{x:Static services:ViewLocator.Instance}" IsTabStop="False" Focusable="False" />
 </chrome:ChromeWindow>

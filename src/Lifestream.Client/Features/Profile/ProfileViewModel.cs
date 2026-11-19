@@ -45,6 +45,7 @@ public sealed partial class ProfileViewModel : FormViewModelBase, INavigationPar
 
     protected override IToastService? SessionToasts => _toasts;
     private readonly IChangePasswordPrompt _passwords;
+    private readonly UiPreferences? _preferences;
     private ProfileResponse? _fetched;
     private byte[]? _fetchedPhoto;
     private string _rowVersion = string.Empty;
@@ -53,9 +54,16 @@ public sealed partial class ProfileViewModel : FormViewModelBase, INavigationPar
     private byte[]? _replacedPhoto;
     private bool _openPasswordDialog;
 
-    public ProfileViewModel(ILifestreamApiClient api, IToastService toasts, IPhotoPicker photos, IChangePasswordPrompt passwords)
+    /// <summary>Creates the screen; <paramref name="preferences"/> holds the appearance choice (light, dark or match Windows), which the app applies at once (without it the Appearance section is hidden).</summary>
+    public ProfileViewModel(ILifestreamApiClient api, IToastService toasts, IPhotoPicker photos, IChangePasswordPrompt passwords, UiPreferences? preferences = null)
     {
         _api = api;
+        _preferences = preferences;
+        if (preferences is not null)
+        {
+            preferences.PropertyChanged += OnPreferencesChanged;
+        }
+
         _toasts = toasts;
         _photos = photos;
         _passwords = passwords;
@@ -142,6 +150,60 @@ public sealed partial class ProfileViewModel : FormViewModelBase, INavigationPar
 
     public bool PhotoWasReplaced => _replacedPhoto is not null;
 
+    /// <summary>The avatar's letters when there is no photo.</summary>
+    public string Initials => Staff.StaffText.Initials(DisplayName);
+
+    /// <summary>True when the avatar shows a photo (the stored one or a new one).</summary>
+    public bool HasPhoto => PhotoBytes is { Length: > 0 };
+
+    // ---- appearance -------------------------------------------------------------------------------------------------
+
+    /// <summary>True when this screen can change the appearance (the app gave it the preferences).</summary>
+    public bool CanChooseTheme => _preferences is not null;
+
+    /// <summary>The light theme.</summary>
+    public bool IsLightTheme
+    {
+        get => _preferences?.Theme == ThemeMode.Light;
+        set => SetTheme(value, ThemeMode.Light, nameof(IsLightTheme));
+    }
+
+    /// <summary>The dark theme.</summary>
+    public bool IsDarkTheme
+    {
+        get => _preferences?.Theme == ThemeMode.Dark;
+        set => SetTheme(value, ThemeMode.Dark, nameof(IsDarkTheme));
+    }
+
+    /// <summary>Follow the Windows app mode (the default).</summary>
+    public bool IsSystemTheme
+    {
+        get => _preferences is null || _preferences.Theme == ThemeMode.System;
+        set => SetTheme(value, ThemeMode.System, nameof(IsSystemTheme));
+    }
+
+    private void SetTheme(bool chosen, ThemeMode mode, string option)
+    {
+        if (chosen && _preferences is not null && _preferences.Theme != mode)
+        {
+            _preferences.Theme = mode; // saved at once; the app swaps the colours of every open window
+        }
+        else
+        {
+            OnPropertyChanged(option); // unchecked by its group, or nothing to change: re-read
+        }
+    }
+
+    private void OnPreferencesChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(UiPreferences.Theme))
+        {
+            OnPropertyChanged(nameof(IsLightTheme));
+            OnPropertyChanged(nameof(IsDarkTheme));
+            OnPropertyChanged(nameof(IsSystemTheme));
+        }
+    }
+
     public override bool HasUnsavedChanges => IsDirty;
 
     private bool IsDirty => State == LoadState.Ready && (DisplayName.Trim() != _baselineName || NormalisePhone(Phone) != _baselinePhone || _replacedPhoto is not null);
@@ -203,8 +265,11 @@ public sealed partial class ProfileViewModel : FormViewModelBase, INavigationPar
 
     // ---- editing ----------------------------------------------------------------------------------------------------
 
+    partial void OnPhotoBytesChanged(byte[]? value) => OnPropertyChanged(nameof(HasPhoto));
+
     partial void OnDisplayNameChanged(string value)
     {
+        OnPropertyChanged(nameof(Initials));
         ClearError(nameof(DisplayName));
         FormError = null;
         ChangesChanged();
@@ -408,6 +473,10 @@ public sealed partial class ProfileViewModel : FormViewModelBase, INavigationPar
         if (disposing)
         {
             _replacedPhoto = null;
+            if (_preferences is not null)
+            {
+                _preferences.PropertyChanged -= OnPreferencesChanged;
+            }
         }
 
         base.Dispose(disposing);

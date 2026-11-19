@@ -48,6 +48,15 @@ public sealed class ReceiptRow
 
     public string StaffName => Item.StaffName;
 
+    /// <summary>The issuing staff member's initials, for the compact "Issued by" avatar (the full name is its tooltip).</summary>
+    public string StaffInitials => Staff.StaffText.Initials(Item.StaffName);
+
+    /// <summary>True for a blood issue receipt, false for a donation receipt (the kind pill's icon and colour).</summary>
+    public bool IsIssue => Item.Kind == ReceiptKind.Issue;
+
+    /// <summary>The group as set in type (A−).</summary>
+    public string GroupText => Item.BloodType.ToTypographic();
+
     public string StaffIdText => RecordFormatting.IdText(Item.StaffId);
 }
 
@@ -63,8 +72,10 @@ public sealed class ReceiptsViewModel : SortedRecordListViewModel<ReceiptRow, Re
     private readonly ILifestreamApiClient _api;
     private readonly IReceiptViewer _viewer;
     private readonly INavigationService _navigation;
+    private readonly IReceiptPrinter? _printer;
     private FilterOption<ReceiptKind> _kindFilter;
 
+    /// <summary>Creates the screen; <paramref name="printer"/> lets the side panel print the selected receipt, or save it as a PDF, without opening it first.</summary>
     public ReceiptsViewModel(
         ILifestreamApiClient api,
         IListViewStateStore states,
@@ -72,10 +83,60 @@ public sealed class ReceiptsViewModel : SortedRecordListViewModel<ReceiptRow, Re
         IDialogService dialogs,
         IReceiptViewer viewer,
         INavigationService navigation,
-        IUiDispatcher ui)
+        IUiDispatcher ui,
+        IReceiptPrinter? printer = null)
         : base(states, "receipts", toasts, dialogs, ui)
     {
         _api = api;
+        _printer = printer;
+        PrintCommand = Command(_ => SendAsync(save: false), () => Detail is not null && _printer is not null && !IsBusy);
+        SavePdfCommand = Command(_ => SendAsync(save: true), () => Detail is not null && _printer is not null && !IsBusy);
+        ClosePanelCommand = Command(_ =>
+        {
+            SelectedItem = null;
+            return LoadDetailAsync(null); // also closes a receipt opened by id from another screen
+        });
+        PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(Detail))
+            {
+                Preview = Detail is { BagIds: not null } receipt ? ReceiptDocument.From(receipt, isDuplicate: false, Clock, Zone) : null;
+                PrintCommand.RaiseCanExecuteChanged();
+                SavePdfCommand.RaiseCanExecuteChanged();
+                OnPropertyChanged(nameof(PanelOverline));
+                OnPropertyChanged(nameof(DetailPartyName));
+                OnPropertyChanged(nameof(DetailSubtitle));
+                OnPropertyChanged(nameof(DetailGroupText));
+                OnPropertyChanged(nameof(SourceActionText));
+                OpenSourceCommand?.RaiseCanExecuteChanged(); // null only while the constructor runs
+            }
+            if (e.PropertyName is nameof(SelectedItem) or nameof(Detail) or nameof(DetailState))
+            {
+                OnPropertyChanged(nameof(IsPanelOpen));
+            }
+
+            if (e.PropertyName == nameof(BloodTypeFilter))
+            {
+                OnPropertyChanged(nameof(BloodTypeChipText));
+                OnPropertyChanged(nameof(HasBloodTypeFilter));
+            }
+
+            if (e.PropertyName == nameof(KindFilter))
+            {
+                OnPropertyChanged(nameof(IsAllKinds));
+                OnPropertyChanged(nameof(IsDonationKind));
+                OnPropertyChanged(nameof(IsIssueKind));
+            }
+        };
+        ChooseBloodTypeCommand = Command((parameter, _) =>
+        {
+            if (parameter is FilterOption<BloodType> option)
+            {
+                BloodTypeFilter = option;
+            }
+
+            return Task.CompletedTask;
+        });
         _viewer = viewer;
         _navigation = navigation;
         KindOptions = SharedLists.WithAll(SharedLists.ReceiptKinds, "All receipts");
@@ -98,16 +159,20 @@ public sealed class ReceiptsViewModel : SortedRecordListViewModel<ReceiptRow, Re
         OpenSourceCommand = Command(async (parameter, _) =>
         {
             // The appointment or request the receipt was issued for, opened by its id.
-            if (parameter is ReceiptRow { Item: { } item })
+            // A row from the list, or (from the side panel, with no parameter) the receipt the panel shows.
+            (ReceiptKind? kind, int? appointmentId, int? requestId) = parameter switch
             {
-                if (item.Kind == ReceiptKind.Donation && item.AppointmentId is { } appointment)
-                {
-                    await _navigation.NavigateTo<AppointmentsViewModel>(new ListPrefilter(RecordId: appointment)).ConfigureAwait(true);
-                }
-                else if (item.Kind == ReceiptKind.Issue && item.RequestId is { } request)
-                {
-                    await _navigation.NavigateTo<RequestsViewModel>(new ListPrefilter(RecordId: request)).ConfigureAwait(true);
-                }
+                ReceiptRow { Item: { } item } => (item.Kind, item.AppointmentId, item.RequestId),
+                null when Detail is { } shown => (shown.Kind, shown.AppointmentId, shown.RequestId),
+                _ => ((ReceiptKind?)null, (int?)null, (int?)null),
+            };
+            if (kind == ReceiptKind.Donation && appointmentId is { } appointment)
+            {
+                await _navigation.NavigateTo<AppointmentsViewModel>(new ListPrefilter(RecordId: appointment)).ConfigureAwait(true);
+            }
+            else if (kind == ReceiptKind.Issue && requestId is { } request)
+            {
+                await _navigation.NavigateTo<RequestsViewModel>(new ListPrefilter(RecordId: request)).ConfigureAwait(true);
             }
         });
     }
@@ -163,6 +228,115 @@ public sealed class ReceiptsViewModel : SortedRecordListViewModel<ReceiptRow, Re
     public AsyncRelayCommand OpenPartyCommand { get; }
 
     public AsyncRelayCommand OpenSourceCommand { get; }
+
+    /// <summary>Prints the selected receipt as a duplicate copy (it was issued before).</summary>
+    public AsyncRelayCommand PrintCommand { get; }
+
+    /// <summary>Saves the selected receipt as a PDF (a duplicate copy).</summary>
+    public AsyncRelayCommand SavePdfCommand { get; }
+
+    /// <summary>Closes the side panel (clears the selection).</summary>
+    public AsyncRelayCommand ClosePanelCommand { get; }
+
+    /// <summary>True when the side panel shows a receipt: a row is selected, or one was opened by id (loading, shown, or failed to load).</summary>
+    public bool IsPanelOpen => SelectedItem is not null || Detail is not null || DetailState != LoadState.Ready;
+
+    /// <summary>"Donation receipt #12": the panel's header line.</summary>
+    public string? PanelOverline => Detail is { } receipt ? $"{(receipt.Kind == ReceiptKind.Donation ? "Donation" : "Blood issue")} receipt {RecordFormatting.IdText(receipt.Id)}" : null;
+
+    /// <summary>The donor of the donation or the patient of the issue: the panel's heading.</summary>
+    public string? DetailPartyName => Detail?.PartyName;
+
+    /// <summary>"2 units, 12 Nov 2026 10:24": what was given and when, under the heading.</summary>
+    public string? DetailSubtitle => Detail is { } receipt ? $"{receipt.Units} {(receipt.Units == 1 ? "unit" : "units")}, {RecordFormatting.When(receipt.CreatedAtUtc, Zone)}" : null;
+
+    /// <summary>The receipt's group as set in type (A−).</summary>
+    public string? DetailGroupText => Detail?.BloodType.ToTypographic();
+
+    /// <summary>"Open appointment" or "Open request": the panel's link to the record the receipt was issued for.</summary>
+    public string SourceActionText => Detail?.Kind == ReceiptKind.Issue ? "Open request" : "Open appointment";
+
+    /// <summary>The selected receipt as it prints, for the panel's preview (the same document the printer gets, without the duplicate line).</summary>
+    public ReceiptDocument? Preview
+    {
+        get;
+        private set => SetProperty(ref field, value);
+    }
+
+    private async Task SendAsync(bool save)
+    {
+        if (Detail is not { } receipt || _printer is null)
+        {
+            return;
+        }
+
+        var document = ReceiptDocument.From(receipt, isDuplicate: true, Clock, Zone);
+        PrintOutcome outcome;
+        try
+        {
+            outcome = save ? await _printer.SaveAsPdfAsync(document).ConfigureAwait(true) : await _printer.PrintAsync(document).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or IOException)
+        {
+            Toasts.Show(ToastKind.Error, "The receipt could not be printed. Check the printer and try again.");
+            return;
+        }
+
+        switch (outcome)
+        {
+            case PrintOutcome.Done:
+                Toasts.Show(ToastKind.Success, save ? "Sent to the PDF printer. Choose where to save the file." : "Receipt sent to the printer.");
+                break;
+            case PrintOutcome.Unavailable:
+                Toasts.Show(ToastKind.Error, save
+                    ? "Save as PDF isn't available: the 'Microsoft Print to PDF' printer isn't installed. Use Print and choose another PDF printer."
+                    : "No printer is available. Connect or install a printer and try again.");
+                break;
+        }
+    }
+
+    // ---- the view tabs (All / Donations / Blood issues) and the blood group chip ----------------------------------------
+
+    /// <summary>The All tab: every kind of receipt.</summary>
+    public bool IsAllKinds
+    {
+        get => _kindFilter.Value is null;
+        set => ChooseKind(value, null, nameof(IsAllKinds));
+    }
+
+    /// <summary>The Donations tab.</summary>
+    public bool IsDonationKind
+    {
+        get => _kindFilter.Value == ReceiptKind.Donation;
+        set => ChooseKind(value, ReceiptKind.Donation, nameof(IsDonationKind));
+    }
+
+    /// <summary>The Blood issues tab.</summary>
+    public bool IsIssueKind
+    {
+        get => _kindFilter.Value == ReceiptKind.Issue;
+        set => ChooseKind(value, ReceiptKind.Issue, nameof(IsIssueKind));
+    }
+
+    private void ChooseKind(bool chosen, ReceiptKind? kind, string tab)
+    {
+        if (chosen && _kindFilter.Value != kind)
+        {
+            KindFilter = KindOptions.First(o => o.Value == kind);
+        }
+        else
+        {
+            OnPropertyChanged(tab); // unchecked by its group, or already chosen: re-read
+        }
+    }
+
+    /// <summary>The filter chip's words: "Blood group" while every group shows, "Blood group: O−" when one is chosen.</summary>
+    public string BloodTypeChipText => BloodTypeFilter.Value is { } type ? $"Blood group: {type.ToTypographic()}" : "Blood group";
+
+    public bool HasBloodTypeFilter => BloodTypeFilter.Value is not null;
+
+    /// <summary>Chooses a group from the chip's menu (the parameter is one of the blood type options).</summary>
+    public AsyncRelayCommand ChooseBloodTypeCommand { get; }
 
     public FilterOption<ReceiptKind> KindFilter
     {

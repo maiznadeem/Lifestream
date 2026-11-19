@@ -6,7 +6,7 @@
              xmlns:dialogs="clr-namespace:Lifestream.Desktop.Features.Dialogs"
              xmlns:receipts="clr-namespace:Lifestream.Desktop.Features.Receipts"
              Focusable="False" IsTabStop="False">
-  <!-- The receipt dialog: the printable page with Print and Save as PDF. They can be used again and again, so a duplicate receipt can always be produced. The data context is the ReceiptViewerViewModel. -->
+  <!-- The receipt dialog (direction A DialogSurface): Print and Save as PDF above the printable page. They can be used again and again, so a duplicate receipt can always be produced. The data context is the ReceiptViewerViewModel. -->
   <UserControl.Resources>
     <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
   </UserControl.Resources>
@@ -22,23 +22,26 @@
           </Grid.RowDefinitions>
           <StackPanel Orientation="Horizontal" feat:Edge.Bottom="{DynamicResource Space.12}">
             <Button Style="{DynamicResource Button.Primary}" Command="{Binding PrintCommand}" feat:Edge.Right="{DynamicResource Space.8}" AutomationProperties.Name="Print"
-                    controls:ButtonAssist.IsBusy="{Binding PrintCommand.IsRunning}" controls:ButtonAssist.BusyText="Printing...">
+                    controls:ButtonAssist.IsBusy="{Binding PrintCommand.IsRunning}" controls:ButtonAssist.BusyText="Printing">
               <StackPanel Orientation="Horizontal">
-                <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE749;" feat:Edge.Right="{DynamicResource Space.8}" VerticalAlignment="Center" />
+                <controls:Icon Kind="Print" Size="16" feat:Edge.Right="{DynamicResource Space.8}" VerticalAlignment="Center" />
                 <TextBlock Text="Print" VerticalAlignment="Center" />
               </StackPanel>
             </Button>
             <Button Style="{DynamicResource Button.Secondary}" Command="{Binding SavePdfCommand}" AutomationProperties.Name="Save as PDF"
-                    controls:ButtonAssist.IsBusy="{Binding SavePdfCommand.IsRunning}" controls:ButtonAssist.BusyText="Saving...">
+                    controls:ButtonAssist.IsBusy="{Binding SavePdfCommand.IsRunning}" controls:ButtonAssist.BusyText="Saving">
               <StackPanel Orientation="Horizontal">
-                <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE74E;" feat:Edge.Right="{DynamicResource Space.8}" VerticalAlignment="Center" />
+                <controls:Icon Kind="Receipt" Size="16" feat:Edge.Right="{DynamicResource Space.8}" VerticalAlignment="Center" />
                 <TextBlock Text="Save as PDF" VerticalAlignment="Center" />
               </StackPanel>
             </Button>
-            <TextBlock Style="{DynamicResource Text.Body}" Foreground="{DynamicResource Brush.StatusSuccess}" Text="{Binding Notice}" VerticalAlignment="Center" feat:Edge.Left="{DynamicResource Space.12}"
+            <TextBlock Style="{DynamicResource Text.Body}" Foreground="{DynamicResource Brush.Success}" Text="{Binding Notice}" VerticalAlignment="Center" feat:Edge.Left="{DynamicResource Space.12}"
                        Visibility="{Binding HasNotice, Converter={StaticResource BoolToVisibility}}" AutomationProperties.LiveSetting="Polite" TextWrapping="Wrap" MaxWidth="260" />
           </StackPanel>
-          <receipts:ReceiptPrintView Grid.Row="1" Receipt="{Binding Document}" />
+          <!-- The page as it prints: white paper with dark text in either theme. -->
+          <controls:CrispBorder Grid.Row="1" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="1" CornerRadius="{DynamicResource Radius.Small}" ClipToBounds="True">
+            <receipts:ReceiptPrintView Receipt="{Binding Document}" />
+          </controls:CrispBorder>
         </Grid>
       </Grid>
     </dialogs:DialogFrame.Fields>

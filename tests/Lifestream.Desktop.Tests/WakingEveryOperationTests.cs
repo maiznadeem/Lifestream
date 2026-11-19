@@ -110,6 +110,12 @@ public sealed class WakingEveryOperationTests
         ["DiscardCommand"] = "resets the form to what was loaded",
         ["PickPhotoCommand"] = "opens the file picker",
         [nameof(ProfileViewModel.ChangePasswordCommand)] = "opens the password dialog",
+        ["ClosePanelCommand"] = "closes the side panel (clears the selection; Staff asks first when its form has changes)",
+        ["ChooseBloodTypeCommand"] = "the blood group chip's menu: with no group chosen it does nothing; a chosen group goes through the filter (Receipts reloads, Stock filters what is loaded)",
+        ["Stock.FindDonorsCommand"] = "navigates to Donors with the group (a fake navigation here)",
+        ["Stock.OpenRequestsCommand"] = "navigates to Requests with the group (a fake navigation here)",
+        ["Receipts.PrintCommand"] = "prints the receipt already loaded in the panel (the printer, no API call)",
+        ["Receipts.SavePdfCommand"] = "saves the receipt already loaded in the panel as a PDF (the printer, no API call)",
     };
 
     /// <summary>Commands that are disabled on a freshly loaded screen with the first record selected, each with the reason; they make no call of their own.</summary>
