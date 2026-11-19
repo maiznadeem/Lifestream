@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Media;
@@ -217,6 +218,89 @@ public sealed class ListScreenRenderTests
         Assert.Contains("Fulfil this request", facts.Texts);
         Assert.Contains("In stock: 4 units of AB+", facts.Texts);
         Assert.True(facts.Closed);
+    }
+
+    public static TheoryData<string, string, int, int> EditorSizes => new()
+    {
+        { "light", "1440", 1440, 900 },
+        { "dark", "narrow", 1024, 700 },
+    };
+
+    /// <summary>The donor form opens in the side panel, in place of the details: it fits the panel and its Save is on screen.</summary>
+    [Theory]
+    [MemberData(nameof(EditorSizes))]
+    public void DonorEditor_InTheSidePanel(string theme, string size, int width, int height)
+    {
+        var facts = StaHost.Run(() =>
+        {
+            ThemeService.Apply(theme == "dark" ? ThemeMode.Dark : ThemeMode.Light);
+            using var rig = new Rig(dispatcher: WpfTestUi.Dispatcher());
+            ListScreensDesignData.ConfigureDonors(rig.Api);
+            var vm = ActivatorUtilities.CreateInstance<DonorsViewModel>(rig.Provider);
+            vm.Attach(null, new ListScreensClock());
+            var view = new DonorsView { DataContext = vm };
+            using var host = Hosted.Create(PageArea(view, width, height, out var area), area.Width, area.Height);
+            Hosted.Await(() => vm.LoadAsync());
+            Hosted.Await(() =>
+            {
+                vm.SelectedItem = vm.Items[0];
+                return vm.PendingDetail;
+            });
+            Hosted.Await(() => vm.EditCommand.ExecuteAsync());
+            host.Settle(600);
+            Save(host, $"donors-editor-{size}-{theme}.png");
+            var panel = host.Find<SidePanel>("Panel");
+            var save = host.All<Button>().First(b => b.IsVisible && (b.Content as string ?? AutomationProperties.GetName(b))?.StartsWith("Save", StringComparison.Ordinal) == true);
+            var fieldsRight = host.All<Control>().Where(c => c.IsVisible && c is TextBox or ComboBox && c.IsDescendantOf(panel)).Max(c => Hosted.BoundsOf(c, host.Element).Right);
+            return (Editing: vm.IsEditing, Panel: Hosted.BoundsOf(panel, host.Element), Save: Hosted.BoundsOf(save, host.Element), area, FieldsRight: fieldsRight);
+        });
+
+        Assert.True(facts.Editing);
+        Assert.True(facts.Save.Right <= facts.Panel.Right && facts.Save.Left >= facts.Panel.Left, $"Save is outside the panel: {facts.Save} in {facts.Panel}");
+        Assert.True(facts.Save.Bottom <= facts.area.Height, $"Save is below the window: {facts.Save}");
+        Assert.True(facts.FieldsRight <= facts.Panel.Right - 23, $"a field runs past the panel's padding: right edge {facts.FieldsRight} in {facts.Panel}");
+    }
+
+    /// <summary>The keyboard of the list and its panel: Enter on a selected row moves the focus into the panel (its primary action); Esc in the table closes the panel.</summary>
+    [Fact]
+    public void Donors_EnterFocusesThePanel_EscClosesIt()
+    {
+        var facts = StaHost.Run(() =>
+        {
+            using var rig = new Rig(dispatcher: WpfTestUi.Dispatcher());
+            ListScreensDesignData.ConfigureDonors(rig.Api);
+            var vm = ActivatorUtilities.CreateInstance<DonorsViewModel>(rig.Provider);
+            vm.Attach(null, new ListScreensClock());
+            var view = new DonorsView { DataContext = vm };
+            using var host = Hosted.Create(PageArea(view, 1440, 900, out var area), area.Width, area.Height);
+            Hosted.Await(() => vm.LoadAsync());
+            Hosted.Await(() =>
+            {
+                vm.SelectedItem = vm.Items[0];
+                return vm.PendingDetail;
+            });
+            host.Settle(300);
+            var grid = host.Find<LifestreamDataGrid>("Grid");
+            var source = PresentationSource.FromVisual(grid)!;
+            grid.RaiseEvent(new System.Windows.Input.KeyEventArgs(System.Windows.Input.Keyboard.PrimaryDevice, source, 0, System.Windows.Input.Key.Enter)
+            {
+                RoutedEvent = UIElement.PreviewKeyDownEvent,
+            });
+            host.Settle(200);
+            var panel = host.Find<SidePanel>("Panel");
+            var first = ListKeys.FirstFocusable((DependencyObject)panel.Content);
+            var focusedName = first is null ? null : AutomationProperties.GetName(first);
+            grid.RaiseEvent(new System.Windows.Input.KeyEventArgs(System.Windows.Input.Keyboard.PrimaryDevice, source, 0, System.Windows.Input.Key.Escape)
+            {
+                RoutedEvent = UIElement.PreviewKeyDownEvent,
+            });
+            host.Settle(200);
+            return (focusedName, FocusWithin: first?.IsKeyboardFocusWithin == true || first?.IsFocused == true, Open: vm.IsDetailOpen, Selected: vm.SelectedItem);
+        });
+
+        Assert.Equal("Book appointment", facts.focusedName); // the panel's first control is its primary action
+        Assert.False(facts.Open); // Esc closed the panel
+        Assert.Null(facts.Selected);
     }
 
     /// <summary>

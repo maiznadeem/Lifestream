@@ -12,9 +12,9 @@
     <TextBlock Style="{DynamicResource Text.Heading}" Text="Personal details" feat:Edge.Bottom="{DynamicResource Space.12}" AutomationProperties.HeadingLevel="Level2" />
     <Grid>
       <Grid.ColumnDefinitions>
-        <ColumnDefinition Width="*" MinWidth="150" />
+        <ColumnDefinition Width="*" MinWidth="128" />
         <ColumnDefinition Width="16" />
-        <ColumnDefinition Width="*" MinWidth="150" />
+        <ColumnDefinition Width="*" MinWidth="128" />
       </Grid.ColumnDefinitions>
       <Grid.RowDefinitions>
         <RowDefinition Height="Auto" />
@@ -46,9 +46,9 @@
     <TextBlock Style="{DynamicResource Text.Heading}" Text="Contact" feat:Edge.Top="{DynamicResource Space.16}" feat:Edge.Bottom="{DynamicResource Space.12}" AutomationProperties.HeadingLevel="Level2" />
     <Grid>
       <Grid.ColumnDefinitions>
-        <ColumnDefinition Width="*" MinWidth="150" />
+        <ColumnDefinition Width="*" MinWidth="128" />
         <ColumnDefinition Width="16" />
-        <ColumnDefinition Width="*" MinWidth="150" />
+        <ColumnDefinition Width="*" MinWidth="128" />
       </Grid.ColumnDefinitions>
       <controls:FormField Label="Phone" Hint="Digits only; a leading + is allowed" controls:FormFocus.FieldName="Phone" Error="{Binding [Phone]}">
         <TextBox x:Name="PhoneBox" Text="{Binding Phone, UpdateSourceTrigger=PropertyChanged}" MaxLength="21" AutomationProperties.Name="Phone" />
