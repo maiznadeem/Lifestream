@@ -4,32 +4,36 @@
              Focusable="False" AutomationProperties.Name="Notification">
   <UserControl.Resources>
     <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+    <!-- Toast of direction A: padding 12 14, gap 12 -->
+    <Thickness x:Key="Toast.Padding">14,12,14,12</Thickness>
   </UserControl.Resources>
-  <controls:CrispBorder MaxWidth="440" MinWidth="280" Margin="{DynamicResource Inset.T8}" Background="{DynamicResource Brush.SurfaceRaised}" BorderBrush="{DynamicResource Brush.BorderSubtle}"
-          BorderThickness="1" CornerRadius="{DynamicResource Radius.Card}">
-    <Grid>
-      <Grid.ColumnDefinitions>
-        <ColumnDefinition Width="4" />
-        <ColumnDefinition Width="*" />
-      </Grid.ColumnDefinitions>
-      <!-- Kind accent: always present, so a toast never changes size with its kind. -->
-      <Border x:Name="Accent" CornerRadius="{DynamicResource Radius.Left8}" />
-      <Grid Grid.Column="1" Margin="{DynamicResource Inset.L12T8R4B8}">
+  <!-- The flyout shadow is a Border behind the toast (no text inside it); the toast itself carries no effect. -->
+  <Grid MaxWidth="470" MinWidth="280" Margin="{DynamicResource Inset.T8}">
+    <Border Background="{DynamicResource Brush.Layer}" CornerRadius="{DynamicResource Radius.Panel}" IsHitTestVisible="False">
+      <Border.Effect>
+        <DropShadowEffect Direction="270" Color="{DynamicResource Color.Shadow}" BlurRadius="{DynamicResource Elevation.Flyout.Blur}"
+                          ShadowDepth="{DynamicResource Elevation.Flyout.Offset}" Opacity="{DynamicResource Elevation.Flyout.Opacity}" />
+      </Border.Effect>
+    </Border>
+    <controls:CrispBorder Background="{DynamicResource Brush.Layer}" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="1" CornerRadius="{DynamicResource Radius.Panel}"
+                          Padding="{StaticResource Toast.Padding}">
+      <Grid>
         <Grid.ColumnDefinitions>
           <ColumnDefinition Width="Auto" />
           <ColumnDefinition Width="*" />
           <ColumnDefinition Width="Auto" />
           <ColumnDefinition Width="Auto" />
         </Grid.ColumnDefinitions>
-        <controls:IconText x:Name="Icon" Style="{DynamicResource Text.Icon}" VerticalAlignment="Center" Margin="{DynamicResource Inset.R12}" />
-        <TextBlock x:Name="MessageText" Grid.Column="1" Style="{DynamicResource Text.Body}" Text="{Binding Message}" VerticalAlignment="Center"
+        <controls:Icon x:Name="Icon" Size="20" VerticalAlignment="Center" Margin="{DynamicResource Inset.R12}" />
+        <TextBlock x:Name="MessageText" Grid.Column="1" Style="{DynamicResource Text.BodyStrong}" Text="{Binding Message}" VerticalAlignment="Center"
                    AutomationProperties.LiveSetting="Polite" />
-        <Button Grid.Column="2" Style="{DynamicResource Button.Ghost}" Content="{Binding ActionLabel}" Command="{Binding ActionCommand}" Margin="{DynamicResource Inset.L8}"
-                Visibility="{Binding HasAction, Converter={StaticResource BoolToVisibility}}" />
-        <Button Grid.Column="3" Style="{DynamicResource Button.Icon}" Command="{Binding DismissCommand}" AutomationProperties.Name="Dismiss notification" ToolTip="Dismiss">
-          <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE711;" FontSize="12" />
+        <Button Grid.Column="2" Style="{DynamicResource Button.Subtle.Small}" Content="{Binding ActionLabel}" Command="{Binding ActionCommand}" Margin="{DynamicResource Inset.L12}"
+                VerticalAlignment="Center" Visibility="{Binding HasAction, Converter={StaticResource BoolToVisibility}}" />
+        <Button Grid.Column="3" Style="{DynamicResource Button.Icon.Small}" Command="{Binding DismissCommand}" AutomationProperties.Name="Dismiss notification" ToolTip="Dismiss"
+                Foreground="{DynamicResource Brush.Ink3}" Margin="{DynamicResource Inset.L12}" VerticalAlignment="Center">
+          <controls:Icon Kind="X" Size="15" />
         </Button>
       </Grid>
-    </Grid>
-  </controls:CrispBorder>
+    </controls:CrispBorder>
+  </Grid>
 </UserControl>

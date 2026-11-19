@@ -1,0 +1,189 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <!-- Light colour tokens of direction A, "Ward" (docs/design-system.md). The ONLY place, with Colors.Dark.xaml, where a colour literal may appear.
+       Both files define exactly the same keys; ThemeService swaps one for the other at runtime, so every view refers to brushes with DynamicResource.
+       Section 1 is the token set; section 2 maps the 2.0 key names onto it so screens not yet rebuilt follow the theme too. -->
+
+  <!-- 1. Tokens -->
+  <Color x:Key="Color.Canvas">#F1F3F6</Color>
+  <Color x:Key="Color.Layer">#FFFFFF</Color>
+  <Color x:Key="Color.Layer2">#F7F8FA</Color>
+  <Color x:Key="Color.Stroke">#E1E5EB</Color>
+  <Color x:Key="Color.Stroke2">#C8CFD9</Color>
+  <!-- The bottom edge of a text field: ink at 45 % over Stroke2 -->
+  <Color x:Key="Color.StrokeStrong">#767D86</Color>
+  <Color x:Key="Color.Ink">#121820</Color>
+  <Color x:Key="Color.Ink2">#47515F</Color>
+  <Color x:Key="Color.Ink3">#677382</Color>
+  <Color x:Key="Color.Hover">#F2F4F7</Color>
+  <Color x:Key="Color.Selected">#EAF0F7</Color>
+  <Color x:Key="Color.SelectedBar">#1B2533</Color>
+  <Color x:Key="Color.Primary">#1B2533</Color>
+  <Color x:Key="Color.PrimaryHover">#2B3749</Color>
+  <Color x:Key="Color.PrimaryPressed">#0D131B</Color>
+  <Color x:Key="Color.OnPrimary">#FFFFFF</Color>
+  <Color x:Key="Color.OnPrimaryPressed">#CCFFFFFF</Color>
+  <Color x:Key="Color.Focus">#1B2533</Color>
+  <Color x:Key="Color.Blood">#B4162E</Color>
+  <Color x:Key="Color.BloodSoft">#FBE8EB</Color>
+  <Color x:Key="Color.Critical">#B4162E</Color>
+  <Color x:Key="Color.CriticalSoft">#FBE8EB</Color>
+  <!-- Danger button edge: critical at 45 % over Stroke2; pressed fill: critical at 18 % over Layer -->
+  <Color x:Key="Color.CriticalStroke">#BF7C8C</Color>
+  <Color x:Key="Color.CriticalPressed">#F2D5D9</Color>
+  <Color x:Key="Color.Success">#0F6E45</Color>
+  <Color x:Key="Color.SuccessSoft">#E2F3EA</Color>
+  <Color x:Key="Color.SuccessStroke">#A2C1B9</Color>
+  <Color x:Key="Color.Warning">#8F5200</Color>
+  <Color x:Key="Color.WarningSoft">#FCEFD9</Color>
+  <Color x:Key="Color.Info">#1D5BB8</Color>
+  <Color x:Key="Color.InfoSoft">#E5EEFB</Color>
+  <!-- Marks drawn on blood: the wave in the logo -->
+  <Color x:Key="Color.OnBlood">#FFFFFF</Color>
+  <Color x:Key="Color.CloseHover">#C42B1C</Color>
+  <Color x:Key="Color.OnCloseHover">#FFFFFF</Color>
+  <!-- Ink at 9 % and 5 %: window caption buttons, and other quiet hover tints over Mica -->
+  <Color x:Key="Color.CaptionHover">#17121820</Color>
+  <Color x:Key="Color.CaptionPressed">#0D121820</Color>
+  <!-- Ink at 6 %: the overlay scrollbar track, the segmented control's well -->
+  <Color x:Key="Color.Well">#0F121820</Color>
+  <!-- Layer at 75 % and 80 %: the title-bar search field and the active sidebar item, both on Mica -->
+  <Color x:Key="Color.LayerOnMica">#BFFFFFFF</Color>
+  <Color x:Key="Color.NavActive">#CCFFFFFF</Color>
+  <Color x:Key="Color.Skeleton1">#ECEFF3</Color>
+  <Color x:Key="Color.Skeleton2">#F7F8FA</Color>
+  <Color x:Key="Color.Scrim">#66121820</Color>
+  <Color x:Key="Color.Shadow">#0F1720</Color>
+  <!-- The Mica fallback (Windows 10, renders, Mica unavailable): a faint cool-to-warm wash -->
+  <Color x:Key="Color.MicaStart">#EEF1F6</Color>
+  <Color x:Key="Color.MicaMid">#F3F1F3</Color>
+  <Color x:Key="Color.MicaEnd">#EFF2F5</Color>
+
+  <SolidColorBrush x:Key="Brush.Canvas" Color="{StaticResource Color.Canvas}" />
+  <SolidColorBrush x:Key="Brush.Layer" Color="{StaticResource Color.Layer}" />
+  <SolidColorBrush x:Key="Brush.Layer2" Color="{StaticResource Color.Layer2}" />
+  <SolidColorBrush x:Key="Brush.Stroke" Color="{StaticResource Color.Stroke}" />
+  <SolidColorBrush x:Key="Brush.Stroke2" Color="{StaticResource Color.Stroke2}" />
+  <SolidColorBrush x:Key="Brush.StrokeStrong" Color="{StaticResource Color.StrokeStrong}" />
+  <SolidColorBrush x:Key="Brush.Ink" Color="{StaticResource Color.Ink}" />
+  <SolidColorBrush x:Key="Brush.Ink2" Color="{StaticResource Color.Ink2}" />
+  <SolidColorBrush x:Key="Brush.Ink3" Color="{StaticResource Color.Ink3}" />
+  <SolidColorBrush x:Key="Brush.Hover" Color="{StaticResource Color.Hover}" />
+  <SolidColorBrush x:Key="Brush.Selected" Color="{StaticResource Color.Selected}" />
+  <SolidColorBrush x:Key="Brush.SelectedBar" Color="{StaticResource Color.SelectedBar}" />
+  <SolidColorBrush x:Key="Brush.Primary" Color="{StaticResource Color.Primary}" />
+  <SolidColorBrush x:Key="Brush.PrimaryHover" Color="{StaticResource Color.PrimaryHover}" />
+  <SolidColorBrush x:Key="Brush.PrimaryPressed" Color="{StaticResource Color.PrimaryPressed}" />
+  <SolidColorBrush x:Key="Brush.OnPrimary" Color="{StaticResource Color.OnPrimary}" />
+  <SolidColorBrush x:Key="Brush.OnPrimaryPressed" Color="{StaticResource Color.OnPrimaryPressed}" />
+  <SolidColorBrush x:Key="Brush.Focus" Color="{StaticResource Color.Focus}" />
+  <SolidColorBrush x:Key="Brush.Blood" Color="{StaticResource Color.Blood}" />
+  <SolidColorBrush x:Key="Brush.BloodSoft" Color="{StaticResource Color.BloodSoft}" />
+  <SolidColorBrush x:Key="Brush.Critical" Color="{StaticResource Color.Critical}" />
+  <SolidColorBrush x:Key="Brush.CriticalSoft" Color="{StaticResource Color.CriticalSoft}" />
+  <SolidColorBrush x:Key="Brush.CriticalStroke" Color="{StaticResource Color.CriticalStroke}" />
+  <SolidColorBrush x:Key="Brush.CriticalPressed" Color="{StaticResource Color.CriticalPressed}" />
+  <SolidColorBrush x:Key="Brush.Success" Color="{StaticResource Color.Success}" />
+  <SolidColorBrush x:Key="Brush.SuccessSoft" Color="{StaticResource Color.SuccessSoft}" />
+  <SolidColorBrush x:Key="Brush.SuccessStroke" Color="{StaticResource Color.SuccessStroke}" />
+  <SolidColorBrush x:Key="Brush.Warning" Color="{StaticResource Color.Warning}" />
+  <SolidColorBrush x:Key="Brush.WarningSoft" Color="{StaticResource Color.WarningSoft}" />
+  <SolidColorBrush x:Key="Brush.Info" Color="{StaticResource Color.Info}" />
+  <SolidColorBrush x:Key="Brush.InfoSoft" Color="{StaticResource Color.InfoSoft}" />
+  <SolidColorBrush x:Key="Brush.OnBlood" Color="{StaticResource Color.OnBlood}" />
+  <SolidColorBrush x:Key="Brush.CloseHover" Color="{StaticResource Color.CloseHover}" />
+  <SolidColorBrush x:Key="Brush.OnCloseHover" Color="{StaticResource Color.OnCloseHover}" />
+  <SolidColorBrush x:Key="Brush.CaptionHover" Color="{StaticResource Color.CaptionHover}" />
+  <SolidColorBrush x:Key="Brush.CaptionPressed" Color="{StaticResource Color.CaptionPressed}" />
+  <SolidColorBrush x:Key="Brush.Well" Color="{StaticResource Color.Well}" />
+  <SolidColorBrush x:Key="Brush.LayerOnMica" Color="{StaticResource Color.LayerOnMica}" />
+  <SolidColorBrush x:Key="Brush.NavActive" Color="{StaticResource Color.NavActive}" />
+  <SolidColorBrush x:Key="Brush.Skeleton1" Color="{StaticResource Color.Skeleton1}" />
+  <SolidColorBrush x:Key="Brush.Skeleton2" Color="{StaticResource Color.Skeleton2}" />
+  <SolidColorBrush x:Key="Brush.Scrim" Color="{StaticResource Color.Scrim}" />
+  <!-- Expiring units on a stock meter: diagonal warning stripes -->
+  <VisualBrush x:Key="Brush.WarningHatch" TileMode="Tile" Viewport="0,0,6,6" ViewportUnits="Absolute" Viewbox="0,0,6,6" ViewboxUnits="Absolute">
+    <VisualBrush.Visual>
+      <Canvas Width="6" Height="6" Background="{StaticResource Brush.Warning}">
+        <Path Data="M-1,1 L1,-1 M-1,7 L7,-1 M5,7 L7,5" Stroke="#8CFFFFFF" StrokeThickness="1.6" />
+      </Canvas>
+    </VisualBrush.Visual>
+  </VisualBrush>
+  <LinearGradientBrush x:Key="Brush.Mica" StartPoint="0,0.25" EndPoint="1,0.75">
+    <GradientStop Color="{StaticResource Color.MicaStart}" Offset="0" />
+    <GradientStop Color="{StaticResource Color.MicaMid}" Offset="0.55" />
+    <GradientStop Color="{StaticResource Color.MicaEnd}" Offset="1" />
+  </LinearGradientBrush>
+
+  <!-- Charts: Skia paints read these colours when they draw (Features/Dashboard). Donated is blood, issued is info. -->
+  <Color x:Key="Color.Chart1">#B4162E</Color>
+  <Color x:Key="Color.Chart2">#1D5BB8</Color>
+  <Color x:Key="Color.ChartGrid">#E1E5EB</Color>
+  <Color x:Key="Color.ChartText">#677382</Color>
+  <SolidColorBrush x:Key="Brush.Chart1" Color="{StaticResource Color.Chart1}" />
+  <SolidColorBrush x:Key="Brush.Chart2" Color="{StaticResource Color.Chart2}" />
+
+  <!-- The picture shown for a person without a photo (Services/ViewServices.cs): a head and shoulders in Ink3 on Selected. -->
+  <DrawingImage x:Key="Image.DefaultAvatar">
+    <DrawingImage.Drawing>
+      <DrawingGroup>
+        <GeometryDrawing Brush="{StaticResource Brush.Selected}">
+          <GeometryDrawing.Geometry>
+            <EllipseGeometry Center="16,16" RadiusX="16" RadiusY="16" />
+          </GeometryDrawing.Geometry>
+        </GeometryDrawing>
+        <GeometryDrawing Brush="{StaticResource Brush.Ink3}">
+          <GeometryDrawing.Geometry>
+            <EllipseGeometry Center="16,12.5" RadiusX="5.5" RadiusY="5.5" />
+          </GeometryDrawing.Geometry>
+        </GeometryDrawing>
+        <GeometryDrawing Brush="{StaticResource Brush.Ink3}" Geometry="M 6,27 C 7,21 11,19 16,19 C 21,19 25,21 26,27 A 16,16 0 0 1 6,27 Z" />
+      </DrawingGroup>
+    </DrawingImage.Drawing>
+  </DrawingImage>
+
+  <!-- 2. The 2.0 names, mapped onto the tokens (kept so every existing screen follows the theme; new code uses section 1) -->
+  <Color x:Key="Color.SurfaceCanvas">#F1F3F6</Color>
+  <Color x:Key="Color.SurfaceRaised">#FFFFFF</Color>
+  <Color x:Key="Color.SurfaceHover">#F2F4F7</Color>
+  <Color x:Key="Color.SurfacePressed">#EAF0F7</Color>
+  <Color x:Key="Color.SurfaceSelected">#EAF0F7</Color>
+  <Color x:Key="Color.SurfaceInputHover">#F7F8FA</Color>
+  <Color x:Key="Color.SurfaceInputFocus">#FFFFFF</Color>
+  <Color x:Key="Color.TextPrimary">#121820</Color>
+  <Color x:Key="Color.TextSecondary">#47515F</Color>
+  <Color x:Key="Color.TextMuted">#677382</Color>
+  <Color x:Key="Color.TextDisabled">#677382</Color>
+  <Color x:Key="Color.TextOnPrimary">#FFFFFF</Color>
+  <Color x:Key="Color.BorderSubtle">#E1E5EB</Color>
+  <Color x:Key="Color.SkeletonBase">#ECEFF3</Color>
+  <Color x:Key="Color.SkeletonHighlight">#F7F8FA</Color>
+  <SolidColorBrush x:Key="Brush.SurfaceCanvas" Color="{StaticResource Color.Canvas}" />
+  <SolidColorBrush x:Key="Brush.SurfaceRaised" Color="{StaticResource Color.Layer}" />
+  <SolidColorBrush x:Key="Brush.SurfaceHover" Color="{StaticResource Color.Hover}" />
+  <SolidColorBrush x:Key="Brush.SurfacePressed" Color="{StaticResource Color.Selected}" />
+  <SolidColorBrush x:Key="Brush.SurfaceSelected" Color="{StaticResource Color.Selected}" />
+  <SolidColorBrush x:Key="Brush.SurfaceInputHover" Color="{StaticResource Color.Layer2}" />
+  <SolidColorBrush x:Key="Brush.SurfaceInputFocus" Color="{StaticResource Color.Layer}" />
+  <SolidColorBrush x:Key="Brush.SurfaceAccent" Color="{StaticResource Color.Layer}" />
+  <SolidColorBrush x:Key="Brush.SurfaceAccentHover" Color="{StaticResource Color.Hover}" />
+  <SolidColorBrush x:Key="Brush.SurfaceAccentPressed" Color="{StaticResource Color.Selected}" />
+  <SolidColorBrush x:Key="Brush.SurfaceInfo" Color="{StaticResource Color.InfoSoft}" />
+  <SolidColorBrush x:Key="Brush.SurfaceDanger" Color="{StaticResource Color.CriticalSoft}" />
+  <SolidColorBrush x:Key="Brush.BorderCard" Color="{StaticResource Color.Stroke}" />
+  <SolidColorBrush x:Key="Brush.BorderSubtle" Color="{StaticResource Color.Stroke}" />
+  <SolidColorBrush x:Key="Brush.BorderInput" Color="{StaticResource Color.Stroke2}" />
+  <SolidColorBrush x:Key="Brush.TextPrimary" Color="{StaticResource Color.Ink}" />
+  <SolidColorBrush x:Key="Brush.TextSecondary" Color="{StaticResource Color.Ink2}" />
+  <SolidColorBrush x:Key="Brush.TextMuted" Color="{StaticResource Color.Ink3}" />
+  <SolidColorBrush x:Key="Brush.TextDisabled" Color="{StaticResource Color.Ink3}" />
+  <SolidColorBrush x:Key="Brush.TextOnPrimary" Color="{StaticResource Color.OnPrimary}" />
+  <SolidColorBrush x:Key="Brush.FocusRing" Color="{StaticResource Color.Focus}" />
+  <SolidColorBrush x:Key="Brush.DangerHover" Color="{StaticResource Color.CriticalSoft}" />
+  <SolidColorBrush x:Key="Brush.DangerPressed" Color="{StaticResource Color.CriticalPressed}" />
+  <SolidColorBrush x:Key="Brush.StatusDanger" Color="{StaticResource Color.Critical}" />
+  <SolidColorBrush x:Key="Brush.StatusSuccess" Color="{StaticResource Color.Success}" />
+  <SolidColorBrush x:Key="Brush.StatusWarning" Color="{StaticResource Color.Warning}" />
+  <SolidColorBrush x:Key="Brush.StatusInfo" Color="{StaticResource Color.Info}" />
+  <SolidColorBrush x:Key="Brush.SkeletonBase" Color="{StaticResource Color.Skeleton1}" />
+</ResourceDictionary>

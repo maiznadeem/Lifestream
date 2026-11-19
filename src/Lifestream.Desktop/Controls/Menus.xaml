@@ -2,46 +2,61 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
   <ResourceDictionary.MergedDictionaries>
     <ResourceDictionary Source="/Lifestream;component/Theme/Tokens.xaml" />
+    <ResourceDictionary Source="/Lifestream;component/Theme/Motion.xaml" />
     <ResourceDictionary Source="/Lifestream;component/Theme/Typography.xaml" />
   </ResourceDictionary.MergedDictionaries>
 
-  <!-- Menus (SHELL-26). WPF's own menu styles take the system menu font (Segoe UI, 12) from the system settings, so every menu the user can open is themed
+  <!-- Menus (SHELL-26) of direction A. WPF's own menu styles take the system menu font (Segoe UI, 12) from the system settings, so every menu the user can open is themed
        here: the account menu, the Cut/Copy/Paste menu of every text field, and the Copy/Select all menu of the receipt. The styles are implicit (a menu or an
-       item with no style of its own gets them) and name the family and the body size themselves, so they never depend on what a popup inherits. -->
+       item with no style of its own gets them) and name the family and the body size themselves, so they never depend on what a popup inherits.
+       The surface is Layer with a 1 px Stroke, radius 8 and padding 4; its shadow (0 8 16 at 14 %) is a separate Border behind it inside a Grid whose margin gives the
+       blur room, so the popup (which allows transparency) does not clip it and no effect ever touches text. -->
   <Style x:Key="MenuItem.Lifestream" TargetType="MenuItem">
     <Setter Property="FontFamily" Value="{DynamicResource Font.Family}" />
     <Setter Property="FontSize" Value="{StaticResource FontSize.Body}" />
-    <Setter Property="Foreground" Value="{DynamicResource Brush.TextPrimary}" />
-    <Setter Property="MinHeight" Value="{StaticResource Height.Compact}" />
-    <Setter Property="Padding" Value="{DynamicResource Inset.H12V4}" />
+    <Setter Property="Foreground" Value="{DynamicResource Brush.Ink}" />
+    <Setter Property="MinHeight" Value="{StaticResource Height.Control}" />
+    <Setter Property="Padding" Value="{StaticResource Pad.Field}" />
     <Setter Property="FocusVisualStyle" Value="{x:Null}" />
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="MenuItem">
-          <Border x:Name="Bd" Background="Transparent" Padding="{TemplateBinding Padding}" CornerRadius="{StaticResource Radius.Control}" MinHeight="32" SnapsToDevicePixels="True">
+          <Border x:Name="Bd" Background="Transparent" Padding="{TemplateBinding Padding}" CornerRadius="{StaticResource Radius.Small}"
+                  MinHeight="{TemplateBinding MinHeight}" SnapsToDevicePixels="True">
             <Grid>
               <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
               </Grid.ColumnDefinitions>
-              <controls:IconText x:Name="Check" Text="&#xE73E;" Style="{DynamicResource Text.Icon}" Visibility="Collapsed" VerticalAlignment="Center" Margin="{DynamicResource Inset.R8}" />
+              <!-- The optional icon column: the Icon property (an Icon element). It takes no room when there is none. -->
+              <ContentPresenter x:Name="IconHost" ContentSource="Icon" Margin="0,0,10,0" VerticalAlignment="Center" />
               <ContentPresenter Grid.Column="1" ContentSource="Header" VerticalAlignment="Center" RecognizesAccessKey="True" />
-              <TextBlock Grid.Column="2" Style="{DynamicResource Text.Caption}" Text="{TemplateBinding InputGestureText}" VerticalAlignment="Center" Margin="{DynamicResource Inset.L24}" />
+              <TextBlock x:Name="Gesture" Grid.Column="2" Text="{TemplateBinding InputGestureText}" FontFamily="{DynamicResource Font.Family}"
+                         FontSize="{StaticResource FontSize.Caption}" Foreground="{DynamicResource Brush.Ink3}" VerticalAlignment="Center" Margin="24,0,0,0" />
+              <controls:Icon x:Name="Check" Grid.Column="3" Kind="Check" Size="15" Margin="12,0,0,0" VerticalAlignment="Center" Visibility="Collapsed" />
             </Grid>
           </Border>
           <ControlTemplate.Triggers>
+            <Trigger Property="Icon" Value="{x:Null}">
+              <Setter TargetName="IconHost" Property="Visibility" Value="Collapsed" />
+            </Trigger>
+            <Trigger Property="InputGestureText" Value="">
+              <Setter TargetName="Gesture" Property="Visibility" Value="Collapsed" />
+            </Trigger>
             <Trigger Property="IsChecked" Value="True">
               <Setter TargetName="Check" Property="Visibility" Value="Visible" />
+              <Setter Property="FontWeight" Value="SemiBold" />
             </Trigger>
             <Trigger Property="IsHighlighted" Value="True">
-              <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.SurfaceHover}" />
+              <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Hover}" />
             </Trigger>
-            <Trigger Property="IsKeyboardFocused" Value="True">
-              <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.SurfacePressed}" />
+            <Trigger Property="IsPressed" Value="True">
+              <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Selected}" />
             </Trigger>
             <Trigger Property="IsEnabled" Value="False">
-              <Setter Property="Foreground" Value="{DynamicResource Brush.TextDisabled}" />
+              <Setter Property="Foreground" Value="{DynamicResource Brush.Ink3}" />
             </Trigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>
@@ -52,25 +67,37 @@
   <Style x:Key="ContextMenu.Lifestream" TargetType="ContextMenu">
     <Setter Property="FontFamily" Value="{DynamicResource Font.Family}" />
     <Setter Property="FontSize" Value="{StaticResource FontSize.Body}" />
-    <Setter Property="Foreground" Value="{DynamicResource Brush.TextPrimary}" />
+    <Setter Property="Foreground" Value="{DynamicResource Brush.Ink}" />
+    <Setter Property="HasDropShadow" Value="False" />
+    <!-- The popup starts where the shadow room starts: pull it back so the visible surface sits on the placement point. -->
+    <Setter Property="HorizontalOffset" Value="-12" />
+    <Setter Property="VerticalOffset" Value="-2" />
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="ContextMenu">
-          <controls:CrispBorder Background="{DynamicResource Brush.SurfaceRaised}" BorderBrush="{DynamicResource Brush.BorderInput}" BorderThickness="1" Padding="{DynamicResource Pad.4}"
-                  CornerRadius="{StaticResource Radius.Card}" MinWidth="200">
-            <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle" />
-          </controls:CrispBorder>
+          <Grid Margin="12,6,12,20" SnapsToDevicePixels="True">
+            <Border Background="{DynamicResource Brush.Layer}" CornerRadius="{StaticResource Radius.Panel}" IsHitTestVisible="False">
+              <Border.Effect>
+                <DropShadowEffect BlurRadius="{StaticResource Elevation.Flyout.Blur}" ShadowDepth="{StaticResource Elevation.Flyout.Offset}" Direction="270"
+                                  Opacity="{StaticResource Elevation.Flyout.Opacity}" Color="{DynamicResource Color.Shadow}" />
+              </Border.Effect>
+            </Border>
+            <controls:CrispBorder Background="{DynamicResource Brush.Layer}" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="1" Padding="{StaticResource Pad.4}"
+                    CornerRadius="{StaticResource Radius.Panel}" MinWidth="200">
+              <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle" />
+            </controls:CrispBorder>
+          </Grid>
         </ControlTemplate>
       </Setter.Value>
     </Setter>
   </Style>
 
   <Style x:Key="{x:Static MenuItem.SeparatorStyleKey}" TargetType="Separator">
-    <Setter Property="Margin" Value="{DynamicResource Inset.V4}" />
+    <Setter Property="Margin" Value="{StaticResource Inset.V4}" />
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="Separator">
-          <Border Height="1" Background="{DynamicResource Brush.BorderSubtle}" />
+          <Border Height="1" Background="{DynamicResource Brush.Stroke}" SnapsToDevicePixels="True" />
         </ControlTemplate>
       </Setter.Value>
     </Setter>

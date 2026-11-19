@@ -23,6 +23,9 @@ public sealed class LoadSurface : ContentControl
     public static readonly DependencyProperty RetryCommandProperty = DependencyProperty.Register(nameof(RetryCommand), typeof(ICommand), typeof(LoadSurface), new FrameworkPropertyMetadata(null));
     public static readonly DependencyProperty CancelCommandProperty = DependencyProperty.Register(nameof(CancelCommand), typeof(ICommand), typeof(LoadSurface), new FrameworkPropertyMetadata(null, (d, _) => ((LoadSurface)d).BindCancel()));
     public static readonly DependencyProperty EmptyGlyphProperty = DependencyProperty.Register(nameof(EmptyGlyph), typeof(string), typeof(LoadSurface), new FrameworkPropertyMetadata(""));
+
+    /// <summary>The icon of the empty state (Inbox by default); <see cref="IconKind.None"/> falls back to <see cref="EmptyGlyph"/>.</summary>
+    public static readonly DependencyProperty EmptyIconProperty = DependencyProperty.Register(nameof(EmptyIcon), typeof(IconKind), typeof(LoadSurface), new FrameworkPropertyMetadata(IconKind.Inbox));
     public static readonly DependencyProperty EmptyTitleProperty = DependencyProperty.Register(nameof(EmptyTitle), typeof(string), typeof(LoadSurface), new FrameworkPropertyMetadata("Nothing here yet"));
     public static readonly DependencyProperty EmptyMessageProperty = DependencyProperty.Register(nameof(EmptyMessage), typeof(string), typeof(LoadSurface), new FrameworkPropertyMetadata(null));
     public static readonly DependencyProperty EmptyActionTextProperty = DependencyProperty.Register(nameof(EmptyActionText), typeof(string), typeof(LoadSurface), new FrameworkPropertyMetadata(null));
@@ -44,6 +47,9 @@ public sealed class LoadSurface : ContentControl
     public ICommand? CancelCommand { get => (ICommand?)GetValue(CancelCommandProperty); set => SetValue(CancelCommandProperty, value); }
 
     public string EmptyGlyph { get => (string)GetValue(EmptyGlyphProperty); set => SetValue(EmptyGlyphProperty, value); }
+
+    /// <summary>The icon of the empty state.</summary>
+    public IconKind EmptyIcon { get => (IconKind)GetValue(EmptyIconProperty); set => SetValue(EmptyIconProperty, value); }
 
     public string EmptyTitle { get => (string)GetValue(EmptyTitleProperty); set => SetValue(EmptyTitleProperty, value); }
 
@@ -85,12 +91,18 @@ public sealed class LoadSurface : ContentControl
 public sealed class EmptyState : Control
 {
     public static readonly DependencyProperty GlyphProperty = DependencyProperty.Register(nameof(Glyph), typeof(string), typeof(EmptyState), new FrameworkPropertyMetadata(""));
+
+    /// <summary>The 32 px icon (Inbox by default); <see cref="IconKind.None"/> falls back to <see cref="Glyph"/>.</summary>
+    public static readonly DependencyProperty IconProperty = DependencyProperty.Register(nameof(Icon), typeof(IconKind), typeof(EmptyState), new FrameworkPropertyMetadata(IconKind.Inbox));
     public static readonly DependencyProperty TitleProperty = DependencyProperty.Register(nameof(Title), typeof(string), typeof(EmptyState), new FrameworkPropertyMetadata(string.Empty));
     public static readonly DependencyProperty MessageProperty = DependencyProperty.Register(nameof(Message), typeof(string), typeof(EmptyState), new FrameworkPropertyMetadata(null));
     public static readonly DependencyProperty ActionTextProperty = DependencyProperty.Register(nameof(ActionText), typeof(string), typeof(EmptyState), new FrameworkPropertyMetadata(null));
     public static readonly DependencyProperty ActionCommandProperty = DependencyProperty.Register(nameof(ActionCommand), typeof(ICommand), typeof(EmptyState), new FrameworkPropertyMetadata(null));
 
     public string Glyph { get => (string)GetValue(GlyphProperty); set => SetValue(GlyphProperty, value); }
+
+    /// <summary>The icon shown above the title.</summary>
+    public IconKind Icon { get => (IconKind)GetValue(IconProperty); set => SetValue(IconProperty, value); }
 
     public string Title { get => (string)GetValue(TitleProperty); set => SetValue(TitleProperty, value); }
 
@@ -161,6 +173,12 @@ public sealed class StatusChip : Control
     public static readonly DependencyProperty DisplayTextProperty = DependencyProperty.Register(nameof(DisplayText), typeof(string), typeof(StatusChip), new FrameworkPropertyMetadata("Pending"));
     public static readonly DependencyProperty AccentBrushProperty = DependencyProperty.Register(nameof(AccentBrush), typeof(Brush), typeof(StatusChip), new FrameworkPropertyMetadata(null));
 
+    /// <summary>The badge colour family of the status (Pending Info, Completed Success, Cancelled Neutral, Incomplete and Expiring Warning, LowStock Critical).</summary>
+    public static readonly DependencyProperty KindProperty = DependencyProperty.Register(nameof(Kind), typeof(BadgeKind), typeof(StatusChip), new FrameworkPropertyMetadata(BadgeKind.Info));
+
+    /// <summary>The badge icon of the status.</summary>
+    public static readonly DependencyProperty IconProperty = DependencyProperty.Register(nameof(Icon), typeof(IconKind), typeof(StatusChip), new FrameworkPropertyMetadata(IconKind.Clock));
+
     /// <summary>Replaces the chip's text when the record's own word is more exact ("No show", "Fulfilled"); the icon and colour stay those of <see cref="Status"/>.</summary>
     public static readonly DependencyProperty LabelProperty = DependencyProperty.Register(nameof(Label), typeof(string), typeof(StatusChip), new FrameworkPropertyMetadata(null, OnStatusChanged));
 
@@ -180,6 +198,24 @@ public sealed class StatusChip : Control
 
     public Brush? AccentBrush { get => (Brush?)GetValue(AccentBrushProperty); private set => SetValue(AccentBrushProperty, value); }
 
+    /// <summary>The badge colour family of <see cref="Status"/>.</summary>
+    public BadgeKind Kind { get => (BadgeKind)GetValue(KindProperty); private set => SetValue(KindProperty, value); }
+
+    /// <summary>The badge icon of <see cref="Status"/>.</summary>
+    public IconKind Icon { get => (IconKind)GetValue(IconProperty); private set => SetValue(IconProperty, value); }
+
+    /// <summary>The badge colour family and icon of each status.</summary>
+    public static (BadgeKind Kind, IconKind Icon) DescribeBadge(StatusKind status) => status switch
+    {
+        StatusKind.Pending => (BadgeKind.Info, IconKind.Clock),
+        StatusKind.Completed => (BadgeKind.Success, IconKind.Checkc),
+        StatusKind.Cancelled => (BadgeKind.Neutral, IconKind.X),
+        StatusKind.Incomplete => (BadgeKind.Warning, IconKind.Alert),
+        StatusKind.LowStock => (BadgeKind.Critical, IconKind.Alert),
+        StatusKind.Expiring => (BadgeKind.Warning, IconKind.Clock),
+        _ => throw new ArgumentOutOfRangeException(nameof(status)),
+    };
+
     /// <summary>The icon, text and token key of each status.</summary>
     public static (string Glyph, string Text, string BrushKey) Describe(StatusKind status) => status switch
     {
@@ -198,6 +234,7 @@ public sealed class StatusChip : Control
     {
         var (glyph, text, key) = Describe(Status);
         Glyph = glyph;
+        (Kind, Icon) = DescribeBadge(Status);
         DisplayText = string.IsNullOrEmpty(Label) ? text : Label;
         AccentBrush = TryFindResource(key) as Brush;
         AutomationProperties.SetName(this, DisplayText);
@@ -430,6 +467,12 @@ public sealed class ChartFrame : ContentControl
     public static readonly DependencyProperty TableProperty = DependencyProperty.Register(nameof(Table), typeof(ChartTable), typeof(ChartFrame), new FrameworkPropertyMetadata(null, (d, _) => ((ChartFrame)d).RebuildTable()));
     public static readonly DependencyProperty IsTableShownProperty = DependencyProperty.Register(nameof(IsTableShown), typeof(bool), typeof(ChartFrame), new FrameworkPropertyMetadata(false));
 
+    /// <summary>The muted text after the title (a period or a total); hidden when empty.</summary>
+    public static readonly DependencyProperty SubtitleProperty = DependencyProperty.Register(nameof(Subtitle), typeof(string), typeof(ChartFrame), new FrameworkPropertyMetadata(null));
+
+    /// <summary>Content shown right-aligned in the header row before the "View as table" toggle (the chart legend); hidden when null.</summary>
+    public static readonly DependencyProperty LegendProperty = DependencyProperty.Register(nameof(Legend), typeof(object), typeof(ChartFrame), new FrameworkPropertyMetadata(null));
+
     public ChartFrame() => Focusable = false;
 
     public string Title { get => (string)GetValue(TitleProperty); set => SetValue(TitleProperty, value); }
@@ -437,6 +480,12 @@ public sealed class ChartFrame : ContentControl
     public ChartTable? Table { get => (ChartTable?)GetValue(TableProperty); set => SetValue(TableProperty, value); }
 
     public bool IsTableShown { get => (bool)GetValue(IsTableShownProperty); set => SetValue(IsTableShownProperty, value); }
+
+    /// <summary>The muted text after the title.</summary>
+    public string? Subtitle { get => (string?)GetValue(SubtitleProperty); set => SetValue(SubtitleProperty, value); }
+
+    /// <summary>The legend shown before the table toggle.</summary>
+    public object? Legend { get => GetValue(LegendProperty); set => SetValue(LegendProperty, value); }
 
     /// <summary>The table grid of the template (for tests).</summary>
     public LifestreamDataGrid? TableGrid => GetTemplateChild("PART_Table") as LifestreamDataGrid;

@@ -55,6 +55,16 @@ public sealed class App : Application
 
         var startupLog = provider.GetRequiredService<ILoggerFactory>().CreateLogger("Lifestream.Startup");
         FontSetup.Warn = message => StartupLog.Warning(startupLog, message);
+        // The theme follows the saved choice (light, dark or Windows) from the first window on, and changes at once when the person picks another.
+        var preferences = provider.GetRequiredService<UiPreferences>();
+        ThemeService.Apply(preferences.Theme);
+        preferences.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(UiPreferences.Theme))
+            {
+                ThemeService.Apply(preferences.Theme);
+            }
+        };
         Resources.MergedDictionaries.Add(ThemeLoader.Resources);
         _ = Features.Dashboard.ChartWarmUp.Start(Dispatcher); // the first dashboard's one-time cost is paid while the sign-in window is idle, before the dashboard is shown (FEAT-27)
 
@@ -73,7 +83,8 @@ public sealed class App : Application
     private static void Configure(IConfiguration configuration, IServiceCollection services)
     {
         var address = configuration["Api:BaseAddress"] ?? throw new InvalidOperationException("Api:BaseAddress is not configured.");
-        var version = Assembly.GetEntryAssembly()?.GetName().Version ?? new Version(2, 0, 2);
+        var version = Assembly.GetEntryAssembly()?.GetName().Version ?? new Version(2, 1, 0);
+        services.AddSingleton<IPreferencesStore>(_ => new FilePreferencesStore(FilePreferencesStore.DefaultPath));
         services.AddLifestreamClient(new Uri(address), version);
         services.AddSingleton<IUiDispatcher>(_ => new WpfUiDispatcher(Current.Dispatcher));
         services.AddSingleton<IWindowHost, WpfWindowHost>();

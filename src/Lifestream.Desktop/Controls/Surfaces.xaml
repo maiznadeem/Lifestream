@@ -8,24 +8,105 @@
     <ResourceDictionary Source="/Lifestream;component/Controls/Buttons.xaml" />
   </ResourceDictionary.MergedDictionaries>
 
-  <!-- Empty state: icon, one-line cause, one action. -->
+  <!-- Surfaces of direction A, "Ward": empty and error states, status chip, form field, chart frame, load surface. Colours are DynamicResource brushes. -->
+
+  <!-- Spacing used only here (the shared tokens have no exact match) -->
+  <Thickness x:Key="Surfaces.Pad.Frame">20,26,20,26</Thickness>
+  <Thickness x:Key="Surfaces.Gap.Action">0,14,0,0</Thickness>
+  <Thickness x:Key="Surfaces.Gap.Label">0,0,0,6</Thickness>
+  <Thickness x:Key="Surfaces.Gap.Help">0,6,0,0</Thickness>
+  <Thickness x:Key="Surfaces.Gap.Subtitle">10,0,0,0</Thickness>
+  <Thickness x:Key="Surfaces.Gap.Legend">0,0,14,0</Thickness>
+
+  <!-- A subtle text toggle (Button.Subtle.Small look: Hover fill, Selected fill while on) for "Details" and "View as table". -->
+  <Style x:Key="Surfaces.SubtleToggle" TargetType="ToggleButton">
+    <Setter Property="FocusVisualStyle" Value="{StaticResource FocusVisual.None}" />
+    <Setter Property="FontFamily" Value="{DynamicResource Font.Family}" />
+    <Setter Property="FontSize" Value="{StaticResource FontSize.Label}" />
+    <Setter Property="FontWeight" Value="Medium" />
+    <Setter Property="Foreground" Value="{DynamicResource Brush.Ink}" />
+    <Setter Property="MinHeight" Value="{StaticResource Height.Compact}" />
+    <Setter Property="Padding" Value="{StaticResource Pad.ButtonSmall}" />
+    <Setter Property="Cursor" Value="Hand" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="ToggleButton">
+          <Grid x:Name="Host" SnapsToDevicePixels="True" Background="Transparent">
+            <VisualStateManager.VisualStateGroups>
+              <VisualStateGroup x:Name="CommonStates">
+                <VisualState x:Name="Normal">
+                  <Storyboard>
+                    <DoubleAnimation Storyboard.TargetName="HoverLayer" Storyboard.TargetProperty="Opacity" To="0" Duration="{StaticResource Motion.Fast}" />
+                    <DoubleAnimation Storyboard.TargetName="PressedLayer" Storyboard.TargetProperty="Opacity" To="0" Duration="{StaticResource Motion.Fast}" />
+                  </Storyboard>
+                </VisualState>
+                <VisualState x:Name="MouseOver">
+                  <Storyboard>
+                    <DoubleAnimation Storyboard.TargetName="HoverLayer" Storyboard.TargetProperty="Opacity" To="1" Duration="{StaticResource Motion.Fast}" />
+                    <DoubleAnimation Storyboard.TargetName="PressedLayer" Storyboard.TargetProperty="Opacity" To="0" Duration="{StaticResource Motion.Fast}" />
+                  </Storyboard>
+                </VisualState>
+                <VisualState x:Name="Pressed">
+                  <Storyboard>
+                    <DoubleAnimation Storyboard.TargetName="HoverLayer" Storyboard.TargetProperty="Opacity" To="1" Duration="{StaticResource Motion.Fast}" />
+                    <DoubleAnimation Storyboard.TargetName="PressedLayer" Storyboard.TargetProperty="Opacity" To="1" Duration="{StaticResource Motion.Fast}" />
+                  </Storyboard>
+                </VisualState>
+                <VisualState x:Name="Disabled" />
+              </VisualStateGroup>
+            </VisualStateManager.VisualStateGroups>
+            <Border x:Name="CheckedLayer" Opacity="0" Background="{DynamicResource Brush.Selected}" CornerRadius="{StaticResource Radius.Control}" IsHitTestVisible="False" />
+            <Border x:Name="HoverLayer" Opacity="0" Background="{DynamicResource Brush.Hover}" CornerRadius="{StaticResource Radius.Control}" IsHitTestVisible="False" />
+            <Border x:Name="PressedLayer" Opacity="0" Background="{DynamicResource Brush.Selected}" CornerRadius="{StaticResource Radius.Control}" IsHitTestVisible="False" />
+            <ContentPresenter x:Name="Content" Margin="{TemplateBinding Padding}" HorizontalAlignment="Center" VerticalAlignment="Center" RecognizesAccessKey="True" />
+            <controls:CrispBorder x:Name="FocusRing" Margin="{DynamicResource Inset.Neg4}" CornerRadius="{StaticResource Radius.FocusRing}" BorderThickness="{StaticResource Thickness.FocusRing}"
+                                  BorderBrush="{DynamicResource Brush.Focus}" Visibility="Collapsed" IsHitTestVisible="False" />
+          </Grid>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsChecked" Value="True">
+              <Setter TargetName="CheckedLayer" Property="Opacity" Value="1" />
+            </Trigger>
+            <Trigger Property="controls:FocusAssist.ShowRing" Value="True">
+              <Setter TargetName="FocusRing" Property="Visibility" Value="Visible" />
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter Property="Foreground" Value="{DynamicResource Brush.Ink3}" />
+              <Setter Property="Cursor" Value="Arrow" />
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <!-- Empty state (.empty): a dashed Stroke2 frame (a Rectangle, since a border cannot dash) on Layer; Icon (or the old Glyph when Icon is None), title, message, action. -->
   <Style TargetType="local:EmptyState">
     <Setter Property="Focusable" Value="False" />
-    <Setter Property="HorizontalAlignment" Value="Center" />
+    <Setter Property="HorizontalAlignment" Value="Stretch" />
     <Setter Property="VerticalAlignment" Value="Center" />
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="local:EmptyState">
-          <StackPanel MaxWidth="420" Margin="{StaticResource Pad.32}">
-            <controls:IconText Style="{StaticResource Text.Icon}" Text="{TemplateBinding Glyph}" FontSize="40" Foreground="{DynamicResource Brush.TextMuted}"
-                       HorizontalAlignment="Center" Margin="{DynamicResource Gap.Field}" />
-            <TextBlock Style="{StaticResource Text.Heading}" Text="{TemplateBinding Title}" TextAlignment="Center" />
-            <TextBlock x:Name="MessageText" Style="{StaticResource Text.Body}" Foreground="{DynamicResource Brush.TextSecondary}"
-                       Text="{TemplateBinding Message}" TextAlignment="Center" Margin="{DynamicResource Inset.T8}" />
-            <Button x:Name="ActionButton" Style="{StaticResource Button.Primary}" Content="{TemplateBinding ActionText}" Command="{TemplateBinding ActionCommand}"
-                    HorizontalAlignment="Center" Margin="{DynamicResource Inset.T24}" />
-          </StackPanel>
+          <Grid>
+            <Rectangle Fill="{DynamicResource Brush.Layer}" Stroke="{DynamicResource Brush.Stroke2}" StrokeThickness="1" StrokeDashArray="3 3" RadiusX="8" RadiusY="8"
+                       SnapsToDevicePixels="False" IsHitTestVisible="False" />
+            <StackPanel Margin="{StaticResource Surfaces.Pad.Frame}" HorizontalAlignment="Center">
+              <controls:Icon x:Name="IconPart" Kind="{TemplateBinding Icon}" Size="32" IsFilled="True" Foreground="{DynamicResource Brush.Ink3}" HorizontalAlignment="Center" />
+              <controls:IconText x:Name="GlyphPart" Style="{StaticResource Text.Icon}" Text="{TemplateBinding Glyph}" FontSize="32" Foreground="{DynamicResource Brush.Ink3}"
+                                 HorizontalAlignment="Center" Visibility="Collapsed" />
+              <TextBlock Style="{StaticResource Text.BodyStrong}" Text="{TemplateBinding Title}" TextAlignment="Center" Margin="{StaticResource Inset.T12}" />
+              <TextBlock x:Name="MessageText" Style="{StaticResource Text.Secondary}" MaxWidth="360" Text="{TemplateBinding Message}" TextAlignment="Center"
+                         Margin="{StaticResource Inset.T4}" />
+              <Button x:Name="ActionButton" Style="{StaticResource Button.Secondary.Small}" Content="{TemplateBinding ActionText}" Command="{TemplateBinding ActionCommand}"
+                      HorizontalAlignment="Center" Margin="{StaticResource Surfaces.Gap.Action}" />
+            </StackPanel>
+          </Grid>
           <ControlTemplate.Triggers>
+            <Trigger Property="Icon" Value="None">
+              <Setter TargetName="IconPart" Property="Visibility" Value="Collapsed" />
+              <Setter TargetName="GlyphPart" Property="Visibility" Value="Visible" />
+            </Trigger>
             <Trigger Property="Message" Value="{x:Null}">
               <Setter TargetName="MessageText" Property="Visibility" Value="Collapsed" />
             </Trigger>
@@ -38,55 +119,35 @@
     </Setter>
   </Style>
 
-  <!-- Error state: plain cause, Retry, technical detail behind Details. -->
+  <!-- Error state: the empty state's frame with a solid Stroke2 edge, a Critical alert icon, plain cause, Retry, technical detail behind Details. -->
   <Style TargetType="local:ErrorState">
     <Setter Property="Focusable" Value="False" />
-    <Setter Property="HorizontalAlignment" Value="Center" />
+    <Setter Property="HorizontalAlignment" Value="Stretch" />
     <Setter Property="VerticalAlignment" Value="Center" />
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="local:ErrorState">
-          <StackPanel MaxWidth="480" Margin="{StaticResource Pad.32}">
-            <controls:IconText Style="{StaticResource Text.Icon}" Text="&#xE783;" FontSize="40" Foreground="{DynamicResource Brush.StatusDanger}"
-                       HorizontalAlignment="Center" Margin="{DynamicResource Gap.Field}" />
-            <TextBlock x:Name="PART_Message" Style="{StaticResource Text.Heading}" Text="{TemplateBinding Message}" TextAlignment="Center"
-                       AutomationProperties.LiveSetting="Assertive" />
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="{DynamicResource Inset.T24}">
-              <Button x:Name="RetryButton" Style="{StaticResource Button.Primary}" Content="Retry" Command="{TemplateBinding RetryCommand}" Margin="{DynamicResource Inset.R8}" />
-              <ToggleButton x:Name="DetailsToggle" Content="Details" IsChecked="{Binding IsDetailOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
-                            AutomationProperties.Name="Details">
-                <ToggleButton.Template>
-                  <ControlTemplate TargetType="ToggleButton">
-                    <controls:CrispBorder x:Name="Bd" MinHeight="{StaticResource Height.Control}" Padding="{DynamicResource Inset.H16}" CornerRadius="{StaticResource Radius.Control}"
-                            Background="Transparent" BorderBrush="{DynamicResource Brush.BorderInput}" BorderThickness="1">
-                      <TextBlock Text="{TemplateBinding Content}" Style="{StaticResource Text.Label}" Foreground="{DynamicResource Brush.TextPrimary}"
-                                 VerticalAlignment="Center" />
-                    </controls:CrispBorder>
-                    <ControlTemplate.Triggers>
-                      <Trigger Property="IsMouseOver" Value="True">
-                        <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.SurfaceHover}" />
-                      </Trigger>
-                      <Trigger Property="IsChecked" Value="True">
-                        <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.SurfacePressed}" />
-                      </Trigger>
-                      <Trigger Property="IsKeyboardFocused" Value="True">
-                        <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Brush.FocusRing}" />
-                        <Setter TargetName="Bd" Property="BorderThickness" Value="2" />
-                      </Trigger>
-                    </ControlTemplate.Triggers>
-                  </ControlTemplate>
-                </ToggleButton.Template>
-              </ToggleButton>
-            </StackPanel>
-            <Border x:Name="DetailPanel" Visibility="Collapsed" Margin="{DynamicResource Inset.T16}" Padding="{DynamicResource Pad.12}" Background="{DynamicResource Brush.SurfaceRaised}"
-                    CornerRadius="{StaticResource Radius.Control}">
-              <StackPanel>
-                <TextBox x:Name="PART_Detail" Text="{Binding Detail, RelativeSource={RelativeSource TemplatedParent}, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap"
-                         MinHeight="0" Padding="{DynamicResource Pad.8}" AutomationProperties.Name="Technical details" />
-                <Button Style="{StaticResource Button.Ghost}" Content="Copy" Command="{Binding CopyDetailCommand, RelativeSource={RelativeSource TemplatedParent}}" HorizontalAlignment="Left" Margin="{DynamicResource Inset.T8}" />
+          <controls:CrispBorder Background="{DynamicResource Brush.Layer}" BorderBrush="{DynamicResource Brush.Stroke2}" BorderThickness="1" CornerRadius="{StaticResource Radius.Panel}">
+            <StackPanel MaxWidth="480" Margin="{StaticResource Surfaces.Pad.Frame}" HorizontalAlignment="Center">
+              <controls:Icon Kind="Alert" Size="32" Foreground="{DynamicResource Brush.Critical}" HorizontalAlignment="Center" />
+              <TextBlock x:Name="PART_Message" Style="{StaticResource Text.Body}" Text="{TemplateBinding Message}" TextAlignment="Center" Margin="{StaticResource Inset.T12}"
+                         AutomationProperties.LiveSetting="Assertive" />
+              <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="{StaticResource Surfaces.Gap.Action}">
+                <Button x:Name="RetryButton" Style="{StaticResource Button.Secondary.Small}" Content="Retry" Command="{TemplateBinding RetryCommand}" Margin="{StaticResource Inset.R8}" />
+                <ToggleButton x:Name="DetailsToggle" Style="{StaticResource Surfaces.SubtleToggle}" Content="Details"
+                              IsChecked="{Binding IsDetailOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}" AutomationProperties.Name="Details" />
               </StackPanel>
-            </Border>
-          </StackPanel>
+              <controls:CrispBorder x:Name="DetailPanel" Visibility="Collapsed" Margin="{StaticResource Inset.T16}" Padding="{StaticResource Pad.12}" Background="{DynamicResource Brush.Layer2}"
+                                    BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="1" CornerRadius="{StaticResource Radius.Control}">
+                <StackPanel>
+                  <TextBox x:Name="PART_Detail" Text="{Binding Detail, RelativeSource={RelativeSource TemplatedParent}, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap"
+                           MinHeight="0" Padding="{StaticResource Pad.8}" AutomationProperties.Name="Technical details" />
+                  <Button Style="{StaticResource Button.Subtle.Small}" Content="Copy" Command="{Binding CopyDetailCommand, RelativeSource={RelativeSource TemplatedParent}}"
+                          HorizontalAlignment="Left" Margin="{StaticResource Inset.T8}" />
+                </StackPanel>
+              </controls:CrispBorder>
+            </StackPanel>
+          </controls:CrispBorder>
           <ControlTemplate.Triggers>
             <Trigger Property="IsDetailOpen" Value="True">
               <Setter TargetName="DetailPanel" Property="Visibility" Value="Visible" />
@@ -103,7 +164,7 @@
     </Setter>
   </Style>
 
-  <!-- Status chip: icon + text + token colour. -->
+  <!-- Status chip: the Badge look (soft fill by status) with the status icon; the chip carries the accessible name. -->
   <Style TargetType="local:StatusChip">
     <Setter Property="Focusable" Value="False" />
     <Setter Property="HorizontalAlignment" Value="Left" />
@@ -111,21 +172,13 @@
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="local:StatusChip">
-          <controls:CrispBorder MinHeight="24" Padding="{DynamicResource Inset.H8}" CornerRadius="{StaticResource Radius.Pill}" Background="{DynamicResource Brush.SurfaceRaised}"
-                  BorderBrush="{TemplateBinding AccentBrush}" BorderThickness="1">
-            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-              <controls:IconText Style="{StaticResource Text.Icon}" Text="{TemplateBinding Glyph}" FontSize="12" Foreground="{TemplateBinding AccentBrush}"
-                         VerticalAlignment="Center" Margin="{DynamicResource Inset.R6}" />
-              <TextBlock Style="{StaticResource Text.Caption}" Foreground="{DynamicResource Brush.TextPrimary}" Text="{TemplateBinding DisplayText}"
-                         TextWrapping="NoWrap" VerticalAlignment="Center" />
-            </StackPanel>
-          </controls:CrispBorder>
+          <controls:Badge Text="{TemplateBinding DisplayText}" Kind="{TemplateBinding Kind}" Icon="{TemplateBinding Icon}" />
         </ControlTemplate>
       </Setter.Value>
     </Setter>
   </Style>
 
-  <!-- Form field: label above, hint, error with icon below. -->
+  <!-- Form field: label (13 Medium Ink2) 6 above, the input, hint (12 Ink3) 6 below, or the error (12 Critical with a 14 alert icon). -->
   <Style TargetType="local:FormField">
     <Setter Property="Focusable" Value="False" />
     <Setter Property="IsTabStop" Value="False" />
@@ -134,13 +187,13 @@
       <Setter.Value>
         <ControlTemplate TargetType="local:FormField">
           <StackPanel>
-            <TextBlock x:Name="PART_Label" Style="{StaticResource Text.Label}" Text="{TemplateBinding Label}" Margin="{DynamicResource Inset.B4}" />
+            <TextBlock x:Name="PART_Label" Style="{StaticResource Text.Label}" Text="{TemplateBinding Label}" Margin="{StaticResource Surfaces.Gap.Label}" />
             <ContentPresenter />
-            <TextBlock x:Name="HintText" Style="{StaticResource Text.Caption}" Text="{TemplateBinding Hint}" Margin="{DynamicResource Inset.T4}" />
-            <StackPanel x:Name="ErrorRow" Orientation="Horizontal" Margin="{DynamicResource Inset.T4}">
-              <controls:IconText Style="{StaticResource Text.Icon}" Text="&#xE783;" FontSize="12" Foreground="{DynamicResource Brush.StatusDanger}" VerticalAlignment="Top" Margin="{DynamicResource Inset.T2R6}" />
-              <TextBlock x:Name="PART_Error" Style="{StaticResource Text.Caption}" Foreground="{DynamicResource Brush.StatusDanger}" Text="{TemplateBinding Error}"
-                         AutomationProperties.LiveSetting="Assertive" />
+            <TextBlock x:Name="HintText" Style="{StaticResource Text.Caption}" Text="{TemplateBinding Hint}" Margin="{StaticResource Surfaces.Gap.Help}" />
+            <StackPanel x:Name="ErrorRow" Orientation="Horizontal" Margin="{StaticResource Surfaces.Gap.Help}">
+              <controls:Icon Kind="Alert" Size="14" Foreground="{DynamicResource Brush.Critical}" VerticalAlignment="Center" Margin="{StaticResource Inset.R6}" />
+              <TextBlock x:Name="PART_Error" Style="{StaticResource Text.Caption}" Foreground="{DynamicResource Brush.Critical}" Text="{TemplateBinding Error}"
+                         VerticalAlignment="Center" AutomationProperties.LiveSetting="Assertive" />
             </StackPanel>
           </StackPanel>
           <ControlTemplate.Triggers>
@@ -165,58 +218,55 @@
     </Setter>
   </Style>
 
-  <!-- Chart frame: the chart, or the same numbers as a table. -->
+  <!-- Chart frame: the Section look (Layer panel, 15 SemiBold heading, a subtle "View as table" toggle), then the chart or the same numbers as a table. -->
   <Style TargetType="local:ChartFrame">
     <Setter Property="Focusable" Value="False" />
+    <Setter Property="Padding" Value="{StaticResource Pad.PanelBody}" />
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="local:ChartFrame">
-          <controls:Card Background="{DynamicResource Brush.SurfaceRaised}" BorderBrush="{DynamicResource Brush.BorderCard}" BorderThickness="1" CornerRadius="{StaticResource Radius.Card}" Padding="{DynamicResource Pad.16}">
+          <controls:CrispBorder Background="{DynamicResource Brush.Layer}" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="1" CornerRadius="{StaticResource Radius.Panel}">
             <Grid>
               <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
               </Grid.RowDefinitions>
-              <Grid Margin="{DynamicResource Inset.B12}">
+              <Grid Margin="{StaticResource Pad.PanelHeader}">
                 <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="Auto" />
+                  <ColumnDefinition Width="Auto" />
                   <ColumnDefinition Width="*" />
                   <ColumnDefinition Width="Auto" />
+                  <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <TextBlock Style="{StaticResource Text.Heading}" Text="{TemplateBinding Title}" VerticalAlignment="Center" />
-                <ToggleButton x:Name="TableToggle" Grid.Column="1" IsChecked="{Binding IsTableShown, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
-                              AutomationProperties.Name="View as table" ToolTip="View as table">
-                  <ToggleButton.Template>
-                    <ControlTemplate TargetType="ToggleButton">
-                      <controls:CrispBorder x:Name="Bd" MinHeight="32" MinWidth="40" Padding="{DynamicResource Inset.H12}" CornerRadius="{StaticResource Radius.Control}" Background="Transparent"
-                              BorderBrush="{DynamicResource Brush.BorderInput}" BorderThickness="1">
-                        <local:IconText x:Name="Glyph" Style="{StaticResource Text.Icon}" Text="&#xE9D9;" VerticalAlignment="Center" HorizontalAlignment="Center"
-                                        Foreground="{DynamicResource Brush.TextPrimary}" />
-                      </controls:CrispBorder>
-                      <ControlTemplate.Triggers>
-                        <Trigger Property="IsChecked" Value="True">
-                          <Setter TargetName="Glyph" Property="Text" Value="&#xE9D2;" />
-                          <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.SurfacePressed}" />
-                        </Trigger>
-                        <Trigger Property="IsMouseOver" Value="True">
-                          <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.SurfaceHover}" />
-                        </Trigger>
-                        <Trigger Property="IsKeyboardFocused" Value="True">
-                          <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Brush.FocusRing}" />
-                          <Setter TargetName="Bd" Property="BorderThickness" Value="2" />
-                        </Trigger>
-                      </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                  </ToggleButton.Template>
-                </ToggleButton>
+                <TextBlock Style="{StaticResource Text.Heading}" Text="{TemplateBinding Title}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                           AutomationProperties.HeadingLevel="Level2" />
+                <TextBlock x:Name="SubtitleText" Grid.Column="1" Style="{StaticResource Text.Secondary}" Foreground="{DynamicResource Brush.Ink3}" Text="{TemplateBinding Subtitle}"
+                           TextWrapping="NoWrap" VerticalAlignment="Center" Margin="{StaticResource Surfaces.Gap.Subtitle}" />
+                <ContentPresenter x:Name="LegendHost" Grid.Column="3" Content="{TemplateBinding Legend}" VerticalAlignment="Center" Margin="{StaticResource Surfaces.Gap.Legend}" />
+                <ToggleButton x:Name="TableToggle" Grid.Column="4" Style="{StaticResource Surfaces.SubtleToggle}" Content="View as table"
+                              IsChecked="{Binding IsTableShown, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}" AutomationProperties.Name="View as table" />
               </Grid>
-              <ContentPresenter x:Name="ChartHost" Grid.Row="1" />
-              <local:LifestreamDataGrid x:Name="PART_Table" Grid.Row="1" Visibility="Collapsed" AutomationProperties.Name="Chart data table" />
+              <Grid Grid.Row="1" Margin="{TemplateBinding Padding}">
+                <ContentPresenter x:Name="ChartHost" />
+                <local:LifestreamDataGrid x:Name="PART_Table" Visibility="Collapsed" AutomationProperties.Name="Chart data table" />
+              </Grid>
             </Grid>
-          </controls:Card>
+          </controls:CrispBorder>
           <ControlTemplate.Triggers>
+            <Trigger Property="Subtitle" Value="{x:Null}">
+              <Setter TargetName="SubtitleText" Property="Visibility" Value="Collapsed" />
+            </Trigger>
+            <Trigger Property="Subtitle" Value="">
+              <Setter TargetName="SubtitleText" Property="Visibility" Value="Collapsed" />
+            </Trigger>
+            <Trigger Property="Legend" Value="{x:Null}">
+              <Setter TargetName="LegendHost" Property="Visibility" Value="Collapsed" />
+            </Trigger>
             <Trigger Property="IsTableShown" Value="True">
               <Setter TargetName="ChartHost" Property="Visibility" Value="Hidden" />
               <Setter TargetName="PART_Table" Property="Visibility" Value="Visible" />
+              <Setter TargetName="TableToggle" Property="Content" Value="View as chart" />
               <Setter TargetName="TableToggle" Property="AutomationProperties.Name" Value="View as chart" />
             </Trigger>
           </ControlTemplate.Triggers>
@@ -225,7 +275,7 @@
     </Setter>
   </Style>
 
-  <!-- Load surface: skeleton, content, empty and error in one cell. -->
+  <!-- Load surface: skeleton, content, empty and error in one cell; the waking banner is InfoSoft with a Stroke edge. -->
   <Style TargetType="local:LoadSurface">
     <Setter Property="Focusable" Value="False" />
     <Setter Property="IsTabStop" Value="False" />
@@ -237,18 +287,18 @@
           <Grid>
             <ContentPresenter x:Name="PART_Content" />
             <local:Skeleton x:Name="PART_Skeleton" Visibility="Hidden" Kind="{TemplateBinding SkeletonKind}" ColumnWidths="{TemplateBinding SkeletonColumns}" />
-            <controls:CrispBorder x:Name="PART_WakingBanner" Visibility="Collapsed" VerticalAlignment="Top" HorizontalAlignment="Center" Margin="{DynamicResource Inset.T16}" Padding="{DynamicResource Inset.H16V12}"
-                    Background="{DynamicResource Brush.SurfacePressed}" BorderBrush="{DynamicResource Brush.StatusInfo}" BorderThickness="1"
-                    CornerRadius="{StaticResource Radius.Card}">
+            <controls:CrispBorder x:Name="PART_WakingBanner" Visibility="Collapsed" VerticalAlignment="Top" HorizontalAlignment="Center" Margin="{StaticResource Inset.T16}"
+                                  Padding="{StaticResource Inset.H16V12}" Background="{DynamicResource Brush.InfoSoft}" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="1"
+                                  CornerRadius="{StaticResource Radius.Panel}">
               <StackPanel Orientation="Horizontal">
-                <controls:IconText Style="{StaticResource Text.Icon}" Text="&#xE895;" Foreground="{DynamicResource Brush.StatusInfo}" VerticalAlignment="Center" Margin="{DynamicResource Inset.R12}" />
-                <TextBlock Style="{StaticResource Text.Body}" Text="Waking up the server, this can take up to a minute" VerticalAlignment="Center" Margin="{DynamicResource Inset.R16}"
+                <controls:Icon Kind="Sync" Size="16" Foreground="{DynamicResource Brush.Info}" VerticalAlignment="Center" Margin="{StaticResource Inset.R12}" />
+                <TextBlock Style="{StaticResource Text.Body}" Text="Waking up the server, this can take up to a minute" VerticalAlignment="Center" Margin="{StaticResource Inset.R16}"
                            TextWrapping="NoWrap" />
-                <Button Style="{StaticResource Button.Secondary}" Content="Retry" Command="{TemplateBinding RetryCommand}" MinHeight="32" Margin="{DynamicResource Inset.R8}" />
-                <Button x:Name="PART_CancelWaking" Style="{StaticResource Button.Ghost}" Content="Cancel" />
+                <Button Style="{StaticResource Button.Secondary.Small}" Content="Retry" Command="{TemplateBinding RetryCommand}" Margin="{StaticResource Inset.R8}" />
+                <Button x:Name="PART_CancelWaking" Style="{StaticResource Button.Subtle.Small}" Content="Cancel" />
               </StackPanel>
             </controls:CrispBorder>
-            <local:EmptyState x:Name="PART_Empty" Visibility="Collapsed" Glyph="{TemplateBinding EmptyGlyph}" Title="{TemplateBinding EmptyTitle}"
+            <local:EmptyState x:Name="PART_Empty" Visibility="Collapsed" Icon="{TemplateBinding EmptyIcon}" Glyph="{TemplateBinding EmptyGlyph}" Title="{TemplateBinding EmptyTitle}"
                               Message="{TemplateBinding EmptyMessage}" ActionText="{TemplateBinding EmptyActionText}" ActionCommand="{TemplateBinding EmptyActionCommand}" />
             <local:ErrorState x:Name="PART_Error" Visibility="Collapsed" Message="{TemplateBinding ErrorMessage}" Detail="{TemplateBinding ErrorDetail}"
                               RetryCommand="{TemplateBinding RetryCommand}" />

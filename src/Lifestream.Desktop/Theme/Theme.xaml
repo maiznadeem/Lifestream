@@ -1,6 +1,7 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-  <!-- Everything a window needs, in dependency order. Loaded once per UI thread by ThemeLoader and shared by every window. -->
+  <!-- Everything a window needs, in dependency order, except the colours: ThemeLoader puts Colors.Light.xaml or Colors.Dark.xaml in front of these at
+       load time and ThemeService swaps it at runtime. Loaded once per UI thread and shared by every window. -->
   <ResourceDictionary.MergedDictionaries>
     <ResourceDictionary Source="/Lifestream;component/Theme/Tokens.xaml" />
     <ResourceDictionary Source="/Lifestream;component/Theme/Motion.xaml" />
@@ -10,8 +11,10 @@
     <ResourceDictionary Source="/Lifestream;component/Controls/Buttons.xaml" />
     <ResourceDictionary Source="/Lifestream;component/Controls/Menus.xaml" />
     <ResourceDictionary Source="/Lifestream;component/Controls/Inputs.xaml" />
+    <ResourceDictionary Source="/Lifestream;component/Controls/Selection.xaml" />
     <ResourceDictionary Source="/Lifestream;component/Controls/Calendar.xaml" />
     <ResourceDictionary Source="/Lifestream;component/Controls/Surfaces.xaml" />
+    <ResourceDictionary Source="/Lifestream;component/Controls/Components.xaml" />
     <ResourceDictionary Source="/Lifestream;component/Controls/DataGridStyles.xaml" />
     <ResourceDictionary Source="/Lifestream;component/Controls/PasswordField.xaml" />
     <ResourceDictionary Source="/Lifestream;component/Controls/Toast.xaml" />

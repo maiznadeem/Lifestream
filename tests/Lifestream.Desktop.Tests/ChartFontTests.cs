@@ -44,7 +44,7 @@ public sealed class ChartFontTests
             var shipped = host.Pixels();
             _ = host.Capture("Dashboard_ChartText_Inter.png");
 
-            Restyle(chart, ChartFont.Inter);
+            Restyle(chart, ChartFont.Typeface);
             host.Settle(600);
             var inter = host.Pixels();
 
@@ -53,7 +53,7 @@ public sealed class ChartFontTests
             var segoe = host.Pixels();
             _ = host.Capture("Dashboard_ChartText_SegoeUi_control.png");
             ChartFont.Apply();
-            return (shipped, inter, segoe, SKTypeface.Default.FamilyName, ChartFont.Inter.FamilyName);
+            return (shipped, inter, segoe, SKTypeface.Default.FamilyName, ChartFont.Typeface.FamilyName);
         });
 
         var againstInter = Hosted.Differences(asShipped, explicitInter);

@@ -54,18 +54,17 @@ public partial class ToastView : UserControl
             return;
         }
 
-        var (glyph, brushKey) = Item.Kind switch
+        var (kind, brushKey) = Item.Kind switch
         {
-            ToastKind.Success => ("", "Brush.StatusSuccess"),
-            ToastKind.Warning => ("", "Brush.StatusWarning"),
-            ToastKind.Error => ("", "Brush.StatusDanger"),
-            _ => ("", "Brush.StatusInfo"),
+            ToastKind.Success => (IconKind.Checkc, "Brush.Success"),
+            ToastKind.Warning => (IconKind.Alert, "Brush.Warning"),
+            ToastKind.Error => (IconKind.Alert, "Brush.Critical"),
+            _ => (IconKind.Info, "Brush.Info"),
         };
-        Icon.Text = glyph;
+        Icon.Kind = kind;
         if (TryFindResource(brushKey) is System.Windows.Media.Brush brush)
         {
             Icon.Foreground = brush;
-            Accent.Background = brush;
         }
 
         AutomationProperties.SetName(this, $"{Item.Kind} notification");

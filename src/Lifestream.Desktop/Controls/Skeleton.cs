@@ -22,7 +22,7 @@ public enum SkeletonKind
 
 /// <summary>
 /// A placeholder in the shape of the surface it stands in for: <c>&lt;controls:Skeleton Kind="List" ColumnWidths="2*,*,90"/&gt;</c>.
-/// It shimmers (1.2 s) unless Windows animation effects are off, in which case it is static. It never takes focus and is
+/// It shimmers (1.4 s) unless Windows animation effects are off, in which case it is static. It never takes focus and is
 /// hidden from UI Automation except for one polite "Loading" name.
 /// </summary>
 public sealed class Skeleton : Decorator
@@ -38,7 +38,7 @@ public sealed class Skeleton : Decorator
         DependencyProperty.Register(nameof(RowCount), typeof(int), typeof(Skeleton), new PropertyMetadata(10, (d, _) => ((Skeleton)d).Rebuild()));
 
     /// <summary>Every bar is this many DIP tall inside a row; also the tile and avatar sizes derive from the row height token.</summary>
-    public const double BarHeight = 12;
+    public const double BarHeight = 10;
 
     private LinearGradientBrush? _shimmer;
     private TranslateTransform? _slide;

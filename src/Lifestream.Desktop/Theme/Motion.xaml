@@ -6,6 +6,9 @@
        "Animation effects" is off. -->
   <x:Static x:Key="Motion.Fast" Member="theme:MotionSettings.Fast" />
   <x:Static x:Key="Motion.Standard" Member="theme:MotionSettings.Standard" />
+  <x:Static x:Key="Motion.Page" Member="theme:MotionSettings.Page" />
+  <x:Static x:Key="Motion.PanelOpen" Member="theme:MotionSettings.PanelOpen" />
+  <x:Static x:Key="Motion.PanelClose" Member="theme:MotionSettings.PanelClose" />
   <x:Static x:Key="Motion.Shimmer" Member="theme:MotionSettings.Shimmer" />
   <x:Static x:Key="Motion.SpinnerTurn" Member="theme:MotionSettings.SpinnerTurn" />
   <x:Static x:Key="Motion.SpinnerRepeat" Member="theme:MotionSettings.SpinnerRepeat" />

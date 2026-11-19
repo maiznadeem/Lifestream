@@ -22,9 +22,18 @@ public static class MotionSettings
 
     public static Duration Standard => Resolve("Motion.Standard.Milliseconds");
 
+    public static Duration Page => Resolve("Motion.Page.Milliseconds");
+
+    public static Duration PanelOpen => Resolve("Motion.PanelOpen.Milliseconds");
+
+    public static Duration PanelClose => Resolve("Motion.PanelClose.Milliseconds");
+
     public static Duration Shimmer => Resolve("Motion.Shimmer.Milliseconds");
 
     public static Duration SpinnerTurn => Resolve("Motion.SpinnerTurn.Milliseconds");
+
+    /// <summary>How long an idle overlay scrollbar stays before it fades. Not an animation, so it does not drop to zero.</summary>
+    public static TimeSpan ScrollIdle => TimeSpan.FromMilliseconds((double)Tokens["Motion.ScrollIdle.Milliseconds"]);
 
     /// <summary>The spinner turns forever, or sits still (one run of zero length) when animations are off.</summary>
     public static RepeatBehavior SpinnerRepeat => AnimationsEnabled ? RepeatBehavior.Forever : new RepeatBehavior(1);

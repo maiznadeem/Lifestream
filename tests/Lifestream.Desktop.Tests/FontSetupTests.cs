@@ -168,12 +168,12 @@ public sealed class FontSetupTests
         var first = StaHost.Run(() =>
         {
             _ = ThemeLoader.Resources;
-            return ChartFont.Inter;
+            return ChartFont.Typeface;
         });
         var second = StaHost.Run(() =>
         {
             _ = ThemeLoader.Resources;
-            return ChartFont.Inter;
+            return ChartFont.Typeface;
         });
 
         Assert.Same(first, second);
@@ -187,7 +187,7 @@ public sealed class FontSetupTests
             .GetProperty("FallbackTypeface", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)?.GetValue(null);
 
         Assert.NotNull(latched);
-        Assert.Same(StaHost.Run(() => ChartFont.Inter), latched);
+        Assert.Same(StaHost.Run(() => ChartFont.Typeface), latched);
     }
 
     [Fact]
