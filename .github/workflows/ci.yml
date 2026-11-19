@@ -64,10 +64,12 @@ jobs:
         shell: pwsh
         run: |
           $failed = 0
-          foreach ($t in 'Domain', 'Client', 'Api') {
-            ./tools/run-logged.ps1 -Log "$env:RUNNER_TEMP/test-logs/$($t.ToLower()).log" -Command "dotnet test tests/Lifestream.$t.Tests -c Release --no-build"
-            if ($LASTEXITCODE -ne 0) { $failed++ }
-          }
+          ./tools/run-logged.ps1 -Log "$env:RUNNER_TEMP/test-logs/domain.log" -Command "dotnet test tests/Lifestream.Domain.Tests -c Release --no-build"
+          if ($LASTEXITCODE -ne 0) { $failed++ }
+          ./tools/run-logged.ps1 -Log "$env:RUNNER_TEMP/test-logs/client.log" -Command "dotnet test tests/Lifestream.Client.Tests -c Release --no-build"
+          if ($LASTEXITCODE -ne 0) { $failed++ }
+          ./tools/run-logged.ps1 -Log "$env:RUNNER_TEMP/test-logs/api.log" -Command "dotnet test tests/Lifestream.Api.Tests -c Release --no-build"
+          if ($LASTEXITCODE -ne 0) { $failed++ }
           if ($failed -gt 0) { exit 1 }
 
       - name: Scan the test logs for credentials

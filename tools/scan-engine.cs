@@ -941,7 +941,10 @@ namespace LifestreamScan
                     using (var output = new MemoryStream())
                     {
                         CopyLimited(ds, output, 256L * 1024 * 1024);
-                        if (output.Length >= 8) { kind = k; return output.ToArray(); }
+                        // Accepted as real when a header matched (gzip, zlib) or, for brotli and raw deflate (no header), when the
+                        // stream ended exactly at the end of the blob. Either way the original bytes were scanned already.
+                        bool headed = k == "gzip" || k == "zlib";
+                        if (output.Length >= 8 && (headed || input.Position == input.Length)) { kind = k; return output.ToArray(); }
                     }
                 }
                 catch (EntryTooLargeException e) { Errors.Add("skipped a " + k + " resource in " + ctx.Label + " (" + e.Message + ")"); return null; }
@@ -1176,7 +1179,15 @@ namespace LifestreamScan
                 if (text.IndexOf('\0') < 0) { ScanString(text, ctx, "metadata:resource-text", offset); return; }
             }
             catch (DecoderFallbackException) { }
-            // Not text: a compressed embedded resource (gzip, zlib, brotli, raw deflate) is inflated and scanned as a file of its own.
+            // The ORIGINAL bytes are always scanned (a blob that merely happens to inflate must not hide what it holds): as binary content
+            // (UTF-8 and UTF-16 at both alignments) under their own label, and as length-prefixed strings.
+            var slice = new byte[end - start];
+            Array.Copy(data, start, slice, 0, slice.Length);
+            var raw = Child(ctx, "(resource)");
+            FilesScanned++;
+            ScanBuffer(slice, slice.Length, offset, raw, false);
+            ScanLengthPrefixed(slice, ctx, "metadata:resource-stream", offset);
+            // EXTRA: a compressed embedded resource (gzip, zlib, brotli, raw deflate) is also inflated and scanned as a file of its own.
             if (ctx.Depth < MaxArchiveDepth)
             {
                 string kind;
@@ -1187,12 +1198,8 @@ namespace LifestreamScan
                     child.Inflated = true;
                     FilesScanned++;
                     using (var ms = new MemoryStream(inflated, false)) ScanStream(ms, child, ctx.Depth + 1);
-                    return;
                 }
             }
-            var slice = new byte[end - start];
-            Array.Copy(data, start, slice, 0, slice.Length);
-            ScanLengthPrefixed(slice, ctx, "metadata:resource-stream", offset);
         }
 
         // Every UTF-8 string preceded by its length, in the ECMA-335 compressed form (custom-attribute SerString) or the 7-bit

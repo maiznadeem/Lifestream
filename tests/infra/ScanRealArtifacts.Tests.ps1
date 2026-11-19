@@ -187,7 +187,7 @@ Describe 'INFRA-01 real artifacts: planted builds fail, clean builds and the sto
         @($own.encoding) | Should -Contain 'UTF-8'
         @($own.encoding) | Should -Contain 'metadata:custom-attribute'
         @($own.encoding) | Should -Contain 'metadata:resource-stream'
-        @($r.Report.findings | Where-Object { $_.file -notlike '*\Lifestream.dll' }) | Should -BeNullOrEmpty -Because 'only the plant is a credential'
+        @($r.Report.findings | Where-Object { $_.file -notlike '*\Lifestream.dll' -and $_.file -notlike '*\Lifestream.dll!/(resource)' }) | Should -BeNullOrEmpty -Because 'only the plant is a credential (its own resource bytes are scanned under the label (resource))'
         $r.Output | Should -Not -Match $script:Val
     }
 
@@ -258,6 +258,25 @@ Describe 'INFRA-01 real artifacts: planted builds fail, clean builds and the sto
         $r = Invoke-Scan @($out) (Join-Path $TestDrive 'rep-bundle.json') @('-SkipGitleaks')
         $r.ExitCode | Should -Be 1 -Because $r.Output
         @($r.Report.findings | Where-Object { $_.file -like '*Bundle.exe!/Bundle.dll' }).Count | Should -BeGreaterThan 0 -Because $r.Output
+    }
+
+    It 'still flags a resource that happens to inflate to junk but holds a credential after its deflate stream (the original bytes are always scanned, the inflate is an extra)' {
+        $dir = Join-Path $script:Work 'trail'; New-Item -ItemType Directory -Force -Path $dir | Out-Null
+        Set-Content (Join-Path $dir 'TrailLib.csproj') '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net11.0</TargetFramework></PropertyGroup><ItemGroup><EmbeddedResource Include="trail.bin" /></ItemGroup></Project>'
+        Set-Content (Join-Path $dir 'Class1.cs') 'namespace TrailLib { public class C { } }'
+        $junk = [byte[]](1..96 | ForEach-Object { 0x41 + ($_ % 7) })
+        $ms = [IO.MemoryStream]::new(); $z = [IO.Compression.DeflateStream]::new($ms, [IO.Compression.CompressionLevel]::Optimal, $true); $z.Write($junk, 0, $junk.Length); $z.Dispose()
+        $tail = [Text.Encoding]::UTF8.GetBytes('Server=tcp:db.internal,1433;Database=trail;User ' + 'ID=app;Pass' + 'word=' + $script:V3.A + ';')
+        $blob = $ms.ToArray() + $tail
+        [IO.File]::WriteAllBytes((Join-Path $dir 'trail.bin'), $blob)
+        # the premise: the blob inflates to 8 or more junk bytes (a raw deflate stream stops at its final block and ignores what follows)
+        $back = [IO.MemoryStream]::new(); $d = [IO.Compression.DeflateStream]::new([IO.MemoryStream]::new($blob), [IO.Compression.CompressionMode]::Decompress); $d.CopyTo($back)
+        $back.Length | Should -BeGreaterOrEqual 8
+        $out = Join-Path $script:Work 'trail-out'
+        Wait-Tool (Start-Tool (Join-Path $script:DotnetDir 'dotnet.exe') @('build', $dir, '-c', 'Release', '--nologo', '-o', $out) (Join-Path $script:Work 'trail.log'))
+        $r = Invoke-Scan @($out) (Join-Path $TestDrive 'rep-trail.json') @('-SkipGitleaks')
+        $r.ExitCode | Should -Be 1 -Because $r.Output
+        @($r.Report.findings | Where-Object { $_.file -like '*TrailLib.dll!/(resource)' }).Count | Should -BeGreaterThan 0 -Because "the resource's own bytes must be scanned, not only its inflated junk`n$($r.Output)"
     }
 
     It 'has zero findings on the clean Desktop publish, and scans it in under 2 minutes' {
