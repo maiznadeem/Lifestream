@@ -14,7 +14,9 @@ using Lifestream.Contracts.Patients;
 using Lifestream.Contracts.Receipts;
 using Lifestream.Contracts.Requests;
 using Lifestream.Contracts.Staff;
+using Lifestream.Desktop.Controls;
 using Lifestream.Desktop.Features.Appointments;
+using Lifestream.Desktop.Shell;
 using Lifestream.Desktop.Features.Donors;
 using Lifestream.Desktop.Features.Patients;
 using Lifestream.Desktop.Features.Receipts;
@@ -30,8 +32,8 @@ namespace Lifestream.Desktop.Tests.Features;
 [Collection("Wpf")]
 public sealed class ListCellFitRenderTests
 {
-    private const int Width = 1366;
-    private const int Height = 736;
+    private const int WideWidth = 1366;
+    private const int WideHeight = 736;
     private const string LongName = "Maximiliana Konstantinopoulos-Vandenberghe Montgomery-Featherstonehaugh";
 
     private static void UseLongNames(Lifestream.Client.Tests.Fakes.FakeApiClient api)
@@ -73,25 +75,68 @@ public sealed class ListCellFitRenderTests
         return problems;
     }
 
-    [Fact]
-    public void EveryListScreen_WithLongNames_NoCellTextExtendsBeyondItsRow_FakeApi()
+    /// <summary>
+    /// The size a list screen gets at the smallest window the app allows, read from the app: the main window's minimum, less the sidebar and the page margins of the shell
+    /// (the same tokens ShellView uses). The height is the window minimum itself (taller than the page really is, which does not change a cell's width).
+    /// </summary>
+    private static (int Width, int Height) SmallestListArea()
     {
-        var problems = StaHost.Run(() =>
+        var window = new MainWindow();
+        var margin = (Thickness)window.FindResource("Inset.L24R24B24");
+        var sidebar = (double)window.FindResource("Width.Sidebar");
+        return ((int)(window.MinWidth - sidebar - margin.Left - margin.Right), (int)window.MinHeight);
+    }
+
+    /// <summary>The full text of a block, including text inside a Hyperlink.</summary>
+    private static string FullText(TextBlock block) => new System.Windows.Documents.TextRange(block.ContentStart, block.ContentEnd).Text;
+
+    /// <summary>Every truncated text element in a grid cell (a block whose text does not fit) that does not carry its full text as its tooltip, as "screen: 'text' (tooltip ...)".</summary>
+    private static List<string> TrimmedWithoutTooltip(Hosted host, string screen, ref int trimmedSeen, ref int trimmedLinks)
+    {
+        var problems = new List<string>();
+        foreach (var cell in host.All<DataGridCell>().Where(c => c.IsVisible))
+        {
+            foreach (var text in Hosted.Descendants(cell).OfType<TextBlock>().Where(t => t.IsVisible && TruncationTooltip.IsTrimmed(t)))
+            {
+                trimmedSeen++;
+                var full = FullText(text);
+                if (text.Inlines.OfType<System.Windows.Documents.Hyperlink>().Any())
+                {
+                    trimmedLinks++;
+                }
+
+                if (text.ToolTip as string != full)
+                {
+                    problems.Add($"{screen}: '{full}' is cut off and its tooltip is {(text.ToolTip is null ? "missing" : $"'{text.ToolTip}'")}");
+                }
+            }
+        }
+
+        return problems;
+    }
+
+    private static (List<string> Overflow, List<string> Tooltips, int TrimmedSeen, int TrimmedLinks) RenderAllLists(int width, int height, string suffix)
+    {
+        return StaHost.Run(() =>
         {
             using var rig = Part2Harness.NewRig();
             UseLongNames(rig.Api);
-            var found = new List<string>();
+            var overflow = new List<string>();
+            var tooltips = new List<string>();
+            var trimmed = 0;
+            var links = 0;
 
             void Check<TView, TModel>(string screen, Func<TView> view, Func<TModel, Task> load)
                 where TView : UserControl
                 where TModel : Lifestream.Client.Common.ViewModelBase
             {
                 var vm = Part2Harness.Create<TModel>(rig);
-                using var host = Hosted.Create(Part2Harness.OnCanvas(view(), vm), Width, Height);
+                using var host = Hosted.Create(Part2Harness.OnCanvas(view(), vm), width, height);
                 Hosted.Await(() => load(vm));
                 host.Settle(300);
-                Part2Harness.Save(host, $"ListCellFit_{screen}.png");
-                found.AddRange(Overflows(host, screen));
+                Part2Harness.Save(host, $"ListCellFit_{screen}{suffix}.png");
+                overflow.AddRange(Overflows(host, screen));
+                tooltips.AddRange(TrimmedWithoutTooltip(host, screen, ref trimmed, ref links));
             }
 
             Check("Donors", () => new DonorsView(), (DonorsViewModel vm) => vm.LoadAsync());
@@ -100,8 +145,38 @@ public sealed class ListCellFitRenderTests
             Check("Requests", () => new RequestsView(), (RequestsViewModel vm) => vm.LoadAsync());
             Check("Receipts", () => new ReceiptsView(), (ReceiptsViewModel vm) => vm.LoadAsync());
             Check("Staff", () => new StaffView(), (StaffViewModel vm) => vm.LoadAsync());
-            return found;
+            return (overflow, tooltips, trimmed, links);
         });
+    }
+
+    [Fact]
+    public void EveryListScreen_WithLongNames_NoCellTextExtendsBeyondItsRow_FakeApi()
+    {
+        var (problems, _, _, _) = RenderAllLists(WideWidth, WideHeight, "");
+        Assert.True(problems.Count == 0, string.Join(Environment.NewLine, problems.Take(12)));
+    }
+
+    [Fact]
+    public void EveryListScreen_AtTheSmallestWindow_NoCellTextExtendsBeyondItsRow_FakeApi()
+    {
+        var (width, height) = StaHost.Run(SmallestListArea);
+        var (problems, _, _, _) = RenderAllLists(width, height, "_Smallest");
+        Assert.True(problems.Count == 0, string.Join(Environment.NewLine, problems.Take(12)));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void EveryTruncatedListText_OnAllSixListScreens_ShowsItsFullTextInATooltip_FakeApi(bool smallestWindow)
+    {
+        var (width, height) = smallestWindow ? StaHost.Run(SmallestListArea) : (WideWidth, WideHeight);
+        var (_, problems, trimmedSeen, trimmedLinks) = RenderAllLists(width, height, smallestWindow ? "_SmallestTips" : "_WideTips");
+
+        Assert.True(trimmedSeen > 0, "the long names were not cut off at all, so there was nothing to check");
+        if (smallestWindow)
+        {
+            Assert.True(trimmedLinks >= 3, $"the person-name links of the appointments, requests and receipts lists should be cut off at the smallest window (saw {trimmedLinks})");
+        }
 
         Assert.True(problems.Count == 0, string.Join(Environment.NewLine, problems.Take(12)));
     }

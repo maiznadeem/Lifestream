@@ -11,11 +11,13 @@ What changed for users is in [CHANGELOG.md](CHANGELOG.md).
 2. Check the download. In PowerShell, in the folder you saved it to:
 
    ```powershell
-   (Get-FileHash .\Lifestream-win-Setup.exe -Algorithm SHA256).Hash.ToLower()
-   Select-String 'Lifestream-win-Setup.exe' .\SHA256SUMS.txt
+   $expected = (Get-Content .\SHA256SUMS.txt | Where-Object { $_ -like '*Lifestream-win-Setup.exe' } | Select-Object -First 1) -split ' ' | Select-Object -First 1
+   $actual = (Get-FileHash .\Lifestream-win-Setup.exe -Algorithm SHA256).Hash
+   if ($actual -eq $expected) { 'MATCH: the download is intact' } else { 'NO MATCH: delete the file and download it again' }
    ```
 
-   The 64 hexadecimal characters of the first line must be the same as the ones at the start of the second line. If they differ, delete the file and download it again.
+   It prints `MATCH` when the SHA-256 of your download is the one listed in `SHA256SUMS.txt`, and `NO MATCH` otherwise. If it does not match, delete the file and download it again.
+
 3. Run the installer. The installer is **not code-signed** (a certificate costs money every year), so Windows SmartScreen may say "Windows protected your PC": choose **More info**, then **Run anyway**. The app installs for your user only, needs no administrator rights, and updates itself when a newer release is published.
 4. Start Lifestream and press **Try the demo** (see below): no account, user name or password is needed.
 

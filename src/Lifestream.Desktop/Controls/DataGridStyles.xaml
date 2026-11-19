@@ -79,6 +79,8 @@
     <Setter Property="BorderThickness" Value="0" />
     <Setter Property="Padding" Value="0" />
     <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+    <!-- Inherited: every text block in a cell (a name link, a two-part caption, any future cell) shows its whole text in a tooltip when it is cut off, so no view can miss it (FEAT-14). -->
+    <Setter Property="local:TruncationTooltip.IsEnabled" Value="True" />
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="DataGridCell">
