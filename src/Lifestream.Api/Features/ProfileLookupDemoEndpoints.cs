@@ -100,7 +100,7 @@ public static class ProfileEndpoints
         // The guess is counted, and the lock checked, before the password is: a locked account is refused (429) without any check,
         // so a stolen access token cannot be used to guess the password, however many requests arrive at once.
         var attempt = await auth.ReserveAttemptAsync(id, ct);
-        if (!PasswordHashing.Verify(current.PasswordHash, r.CurrentPassword))
+        if (!await CredentialWork.RunAsync(() => PasswordHashing.Verify(current.PasswordHash, r.CurrentPassword)))
         {
             if (attempt.LockedNow)
             {
@@ -111,7 +111,7 @@ public static class ProfileEndpoints
             throw ApiException.Validation("currentPassword", "is not correct");
         }
 
-        var hash = PasswordHashing.Hash(r.NewPassword);
+        var hash = await CredentialWork.RunAsync(() => PasswordHashing.Hash(r.NewPassword));
         await db.RunAsync(async token =>
         {
             // Only the credential row changes: the profile record the person has open keeps its row version.

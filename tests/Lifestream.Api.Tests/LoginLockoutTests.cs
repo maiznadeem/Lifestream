@@ -1,9 +1,11 @@
 using System.Diagnostics;
+using System.Net;
 using System.Text.Json;
 using Lifestream.Api.Tests.Support;
 using Lifestream.Contracts;
 using Lifestream.Contracts.Auth;
 using Lifestream.Domain;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
@@ -24,6 +26,33 @@ public sealed class DefaultLimitsFixture : ApiFixture
 public sealed class HighLockoutFixture : ApiFixture
 {
     protected override void Configure(Dictionary<string, string?> settings) => settings["Auth:MaxFailedAttempts"] = "1000";
+}
+
+/// <summary>
+/// A lock threshold of 1000 and a password check that holds the thread it runs on until <see cref="ReleaseChecks"/>: on a loaded machine a 0.3 s
+/// PBKDF2 check takes seconds (the full suite measured up to 5 s), and this makes that state exact instead of depending on the machine. Every guess
+/// sent to this host is wrong, so a released check answers false without spending PBKDF2 time on it.
+/// </summary>
+public sealed class HeldChecksFixture : ApiFixture
+{
+    private readonly ManualResetEventSlim _checks = new();
+
+    public void ReleaseChecks() => _checks.Set();
+
+    protected override void Configure(Dictionary<string, string?> settings) => settings["Auth:MaxFailedAttempts"] = "1000";
+
+    protected override void ConfigureTestServices(IServiceCollection services) => services.AddSingleton<Lifestream.Api.Auth.ICredentialHasher>(new HeldHasher(_checks));
+
+    private sealed class HeldHasher(ManualResetEventSlim release) : Lifestream.Api.Auth.ICredentialHasher
+    {
+        public string Hash(string password) => SharedPbkdf2Work.Instance.Hash(password);
+
+        public bool Verify(string hash, string password)
+        {
+            release.Wait(TimeSpan.FromMinutes(2));
+            return false;
+        }
+    }
 }
 
 /// <summary>Makes every write of a sign-in counter (the UPDATE of a StaffCredential row) fail while <see cref="Mode"/> is set: a clash with another writer, or a plain failure.</summary>
@@ -61,14 +90,17 @@ public sealed class LoginLockoutConcurrencyTests(ApiFixture fx) : IClassFixture<
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    internal static async Task<(int Status, string? Code, string? RetryAfter)[]> BurstAsync(ApiFixture fx, string username, IReadOnlyList<string> passwords, Func<int, string> ipFor)
+    internal static Task<(int Status, string? Code, string? RetryAfter)[]> BurstAsync(ApiFixture fx, string username, IReadOnlyList<string> passwords, Func<int, string> ipFor) =>
+        BurstAsync(fx, [.. passwords.Select((password, i) => (username, password, ipFor(i)))]);
+
+    internal static async Task<(int Status, string? Code, string? RetryAfter)[]> BurstAsync(ApiFixture fx, IReadOnlyList<(string Username, string Password, string Ip)> guesses)
     {
         // Clients are created up front: the fixture's client list is not thread safe.
-        var clients = passwords.Select((_, i) => fx.NewClient(ip: ipFor(i))).ToList();
-        return await Task.WhenAll(passwords.Select((password, i) => Task.Run(
+        var clients = guesses.Select(g => fx.NewClient(ip: g.Ip)).ToList();
+        return await Task.WhenAll(guesses.Select((guess, i) => Task.Run(
             async () =>
             {
-                using var response = await clients[i].PostApi(ApiRoutes.AuthLogin, new LoginRequest(username, password));
+                using var response = await clients[i].PostApi(ApiRoutes.AuthLogin, new LoginRequest(guess.Username, guess.Password));
                 var text = await response.Content.ReadAsStringAsync(Ct);
                 var code = response.IsSuccessStatusCode ? null : JsonElement.Parse(text).GetProperty("code").GetString();
                 return ((int)response.StatusCode, code, response.Headers.TryGetValues("Retry-After", out var v) ? v.Single() : null);
@@ -126,6 +158,74 @@ public sealed class LoginLockoutConcurrencyTests(ApiFixture fx) : IClassFixture<
 
         Assert.All(results, r => Assert.Equal(401, r.Status));
         Assert.Equal(30, await fixture.Db.ScalarAsync<int>($"SELECT FailedCount FROM StaffCredential WHERE StaffId = {user.Id}", Ct));
+    }
+
+    [Fact]
+    public async Task Login_ConcurrentGuessesAreAllCounted_WhilePasswordChecksAreSlow()
+    {
+        // Thirty wrong guesses at one account and ninety at unknown names, all at once, while every password check is held. Counting a guess
+        // must not wait for anyone's password check: all thirty at the account are counted before a single check is let go, and then every
+        // guess is a 401 (no 409 "busy" because the account's lock queue outlasted its wait).
+        await using var fixture = new HeldChecksFixture();
+        await fixture.InitializeAsync();
+        var user = await fixture.AddStaffAsync(Role.Staff);
+        List<(string, string, string)> guesses =
+        [
+            .. Enumerable.Range(0, 30).Select(i => (user.Username, "held-guess-" + i, $"192.0.2.{i + 1}")),
+            .. Enumerable.Range(0, 90).Select(i => (fixture.NextName("nobody"), "held-guess-" + i, $"198.51.100.{i + 1}")),
+        ];
+
+        var counted = 0;
+        (int Status, string? Code, string? RetryAfter)[] results;
+        var sent = BurstAsync(fixture, guesses);
+        try
+        {
+            var deadline = Stopwatch.StartNew();
+            while ((counted = await fixture.Db.ScalarAsync<int>($"SELECT FailedCount FROM StaffCredential WHERE StaffId = {user.Id}", Ct)) < 30 && deadline.Elapsed < TimeSpan.FromSeconds(30))
+            {
+                await Task.Delay(50, Ct);
+            }
+        }
+        finally
+        {
+            fixture.ReleaseChecks();
+            results = await sent;
+        }
+
+        var seen = string.Join(", ", results.GroupBy(r => $"{r.Status} {r.Code}").Select(g => $"{g.Key} x{g.Count()}"));
+        Assert.True(results.All(r => r.Status == 401), $"expected 120 x 401; got {seen}");
+        Assert.True(counted == 30, $"only {counted} of 30 guesses at the account were counted while the password checks were held; got {seen}");
+        Assert.Equal(30, await fixture.Db.ScalarAsync<int>($"SELECT FailedCount FROM StaffCredential WHERE StaffId = {user.Id}", Ct));
+    }
+
+    [Fact]
+    public async Task Login_WhileTheAccountLockIsHeldLongerThanOtherLocksWait_TheGuessWaitsAndIsCounted()
+    {
+        // On a busy server the queue for one account's lock can take longer than any fixed wait; a guess in it is counted (401) or refused as
+        // locked (429), never answered 409 "busy". Here the account's lock is held from outside for longer than the 15 s other locks wait.
+        var user = await fx.AddStaffAsync(Role.Staff);
+        await using var holder = new SqlConnection(fx.Db.ConnectionString);
+        await holder.OpenAsync(Ct);
+        await using var transaction = (SqlTransaction)await holder.BeginTransactionAsync(Ct);
+        await using (var take = new SqlCommand("EXEC sp_getapplock @Resource = @resource, @LockMode = 'Exclusive', @LockOwner = 'Transaction'", holder, transaction))
+        {
+            take.Parameters.AddWithValue("@resource", $"login:{user.Id}");
+            await take.ExecuteNonQueryAsync(Ct);
+        }
+
+        using var client = fx.NewClient(ip: "203.0.113.150");
+        var guess = client.PostApi(ApiRoutes.AuthLogin, new LoginRequest(user.Username, "wrong-while-held"));
+        await Task.Delay(TimeSpan.FromSeconds(16), Ct);
+        if (guess.IsCompleted)
+        {
+            using var early = await guess;
+            Assert.Fail($"the guess stopped waiting for the account's lock: {(int)early.StatusCode} {await early.Content.ReadAsStringAsync(Ct)}");
+        }
+
+        await transaction.RollbackAsync(Ct);
+        using var response = await guess;
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Equal(1, await fx.Db.ScalarAsync<int>($"SELECT FailedCount FROM StaffCredential WHERE StaffId = {user.Id}", Ct));
     }
 
     [Fact]

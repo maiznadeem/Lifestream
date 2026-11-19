@@ -245,7 +245,7 @@ public static class StaffEndpoints
         StaffService.CheckNewPassword(check, "initialPassword", r.InitialPassword);
         check.ThrowIfInvalid();
 
-        var hash = PasswordHashing.Hash(r.InitialPassword);
+        var hash = await CredentialWork.RunAsync(() => PasswordHashing.Hash(r.InitialPassword));
         var username = r.Username.Trim();
         var staff = await db.RunAsync(async token =>
         {
@@ -466,7 +466,7 @@ public static class StaffEndpoints
         var check = new Check();
         StaffService.CheckNewPassword(check, "temporaryPassword", request.TemporaryPassword);
         check.ThrowIfInvalid();
-        var hash = PasswordHashing.Hash(request.TemporaryPassword);
+        var hash = await CredentialWork.RunAsync(() => PasswordHashing.Hash(request.TemporaryPassword));
         await db.RunAsync(async token =>
         {
             var entity = await db.Staff.FirstOrDefaultAsync(s => s.Id == id && !s.IsDemo, token) ?? throw ApiException.NotFound("The staff member");
