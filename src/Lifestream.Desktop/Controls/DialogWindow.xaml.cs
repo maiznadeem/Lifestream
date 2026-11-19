@@ -4,9 +4,9 @@ using Lifestream.Desktop.Chrome;
 namespace Lifestream.Desktop.Controls;
 
 /// <summary>
-/// The one dialog window: a confirmation (SHELL-31) or an error report. A confirmation names the record in its title and body,
-/// puts initial focus on Cancel, closes on Esc (Cancel is the cancel button), and labels its danger button with the verb and
-/// the object, for example "Delete donor".
+/// The one dialog window: a confirmation (SHELL-31) or an error report, on direction A's <see cref="DialogSurface"/> like the form dialogs. A
+/// confirmation names the record in its title and body, puts initial focus on Cancel, closes on Esc (Cancel is the cancel button), and labels its
+/// danger button with the verb and the object, for example "Delete donor" or "Cancel appointment".
 /// </summary>
 public partial class DialogWindow : ChromeWindow
 {
@@ -16,6 +16,19 @@ public partial class DialogWindow : ChromeWindow
         // Initial focus is on Cancel, so Enter or Space never confirms a destructive action by accident.
         System.Windows.Input.FocusManager.SetFocusedElement(this, CancelButton);
         Loaded += (_, _) => CancelButton.Focus();
+    }
+
+    /// <summary>
+    /// The window draws no caption of its own: the surface's title stands in for it, so the window chrome's caption buttons are hidden (Esc and the
+    /// Cancel or Close button close the dialog).
+    /// </summary>
+    public override void OnApplyTemplate()
+    {
+        base.OnApplyTemplate();
+        if (GetTemplateChild("CaptionButtons") is UIElement buttons)
+        {
+            buttons.Visibility = Visibility.Collapsed;
+        }
     }
 
     /// <summary>True when the user chose the primary (danger) button.</summary>
@@ -36,7 +49,7 @@ public partial class DialogWindow : ChromeWindow
     public DialogWindow ConfigureConfirm(string title, string body, string dangerVerb)
     {
         Title = title;
-        HeadingText.Text = title;
+        Surface.Title = title;
         BodyText.Text = body;
         PrimaryButton.Content = dangerVerb;
         PrimaryButton.Style = (Style)FindResource("Button.Danger");
@@ -48,7 +61,7 @@ public partial class DialogWindow : ChromeWindow
     public DialogWindow ConfigureError(string title, string message, string? details)
     {
         Title = "Lifestream";
-        HeadingText.Text = title;
+        Surface.Title = title;
         BodyText.Text = message;
         PrimaryButton.Visibility = Visibility.Collapsed;
         CancelButton.Content = "Close";

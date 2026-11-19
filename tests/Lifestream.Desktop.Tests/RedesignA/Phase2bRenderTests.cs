@@ -227,6 +227,66 @@ public sealed class Phase2bRenderTests
         }
     }
 
+    /// <summary>
+    /// The confirmation of a destructive menu action (there is no inline confirm: "Delete staff member" and "Cancel appointment" ask in this dialog), as
+    /// its window draws it: direction A's dialog surface with 32 DIP of shadow room, the record named in the body, and the full action on the danger button
+    /// with Cancel before it.
+    /// </summary>
+    [Theory]
+    [InlineData("delete", "light")]
+    [InlineData("delete", "dark")]
+    [InlineData("cancel", "light")]
+    [InlineData("cancel", "dark")]
+    public void ConfirmDialog_IsOnTheDialogSurface_NamesTheRecord_AndItsButtonCarriesTheFullAction(string action, string theme)
+    {
+        var (title, body, verb) = action == "delete"
+            ? ("Delete staff member?", "Staff member 'Sofia Sharma' will be removed from the list. You can undo this for a few seconds afterwards.", "Delete staff member")
+            : ("Cancel appointment?", "The appointment of 'Asher Devereux' on 19 Nov 2026 11:00 will be cancelled and the time becomes free for someone else.", "Cancel appointment");
+        var facts = StaHost.Run(() =>
+        {
+            ThemeService.Apply(theme == "dark" ? ThemeMode.Dark : ThemeMode.Light);
+            try
+            {
+                // The dialog is a window; its content is drawn in the off-screen host (no window is shown).
+                var dialog = DialogWindow.CreateConfirm(title, body, verb);
+                var content = (FrameworkElement)dialog.Content;
+                dialog.Content = null;
+                var canvas = new Grid();
+                canvas.SetResourceReference(Panel.BackgroundProperty, "Brush.Canvas");
+                canvas.Children.Add(new Border { Child = content, VerticalAlignment = VerticalAlignment.Top });
+                using var host = Hosted.Create(canvas, dialog.Width, 300);
+                host.Settle(300);
+                var png = host.Capture();
+                System.IO.Directory.CreateDirectory(Directory);
+                File.WriteAllBytes(Path.Combine(Directory, $"dialog-confirm-{action}-{theme}.png"), png);
+                RenderChecks.Check(host, $"dialog-confirm-{action}-{theme}");
+                var surface = host.All<DialogSurface>().Single();
+                var buttons = host.All<Button>().Where(b => b.IsVisible).OrderBy(b => Hosted.BoundsOf(b, host.Element).Left).ToList();
+                var texts = host.All<TextBlock>().Where(t => t.IsVisible).Select(t => t.Text).ToList();
+                dialog.Close();
+                return (
+                    Surface: Hosted.BoundsOf(surface, host.Element),
+                    surface.Title,
+                    Texts: texts,
+                    Buttons: buttons.Select(b => b.Content as string).ToList(),
+                    Danger: ReferenceEquals(buttons[^1].Style, buttons[^1].TryFindResource("Button.Danger")),
+                    Layer: StaHost.CountPixelsNear(png, ThemeService.ColorOf("Color.Layer").R, ThemeService.ColorOf("Color.Layer").G, ThemeService.ColorOf("Color.Layer").B, 1));
+            }
+            finally
+            {
+                ThemeService.Apply(ThemeMode.Light);
+            }
+        });
+
+        Assert.Equal(32, facts.Surface.Left, 0); // the shadow room around the surface
+        Assert.Equal(480, facts.Surface.Width, 0);
+        Assert.True(facts.Layer > 20000, "the dialog's layer colour is missing");
+        Assert.Equal(title, facts.Title);
+        Assert.Contains(body, facts.Texts); // names the record
+        Assert.Equal(["Cancel", verb], facts.Buttons); // the full action, never a bare "Delete" or "OK"
+        Assert.True(facts.Danger);
+    }
+
     /// <summary>The empty and error states of the stock and receipts pages (LoadSurface), light, at 1440 x 900.</summary>
     [Theory]
     [InlineData("stock-empty")]

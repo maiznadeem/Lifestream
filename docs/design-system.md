@@ -441,7 +441,8 @@ disabled so a running command does not look dead. The default `BusyText` is "Wor
 
 A button whose content shows no text (an icon alone, or an icon with a label that a compact window has collapsed) turns busy with the spinner alone
 and stays as wide as its icon. The template's root (`ButtonHost`) finds this out each time the button is measured and sets the read-only
-`ButtonAssist.HasLabel`; nothing needs setting in the view (an empty `BusyText` is not needed for it).
+`ButtonAssist.HasLabel`; nothing needs setting in the view (an empty `BusyText` is not needed for it). `BusyText=""` is a choice, not a workaround: a
+button with a short label ("Edit", "Reschedule") that a progressive verb would widen turns busy with the spinner alone, centred.
 
 `Button.Subtle` has no fill of its own, so it sits on a panel, on the page canvas or on Mica. Its hover and pressed fills are tints of ink
 (`Well`, then `CaptionHover` over it), which show on all three; the opaque `Hover` token is within a shade of the canvas and would vanish there.
@@ -611,6 +612,9 @@ a dot.
 <controls:Badge Text="40" Kind="Neutral" />   <!-- a count -->
 ```
 
+A badge is as wide as its words, and a column that holds badges is budgeted for them (`MinWidth`). If a badge is ever given less, its label ends in an
+ellipsis and the badge shows the whole text as its tooltip (a tooltip you set on the badge is left alone): never cut mid-letter.
+
 ### 5.9 BloodGroupTag
 
 `controls:BloodGroupTag`: `Blood` text on `BloodSoft`, 12 SemiBold, at least 34 wide and 22 high. `IsLarge="True"` makes it 32
@@ -764,8 +768,12 @@ Cell text styles: `DataGrid.TextCell` (14 `Ink`, one line, ellipsis, tooltip whe
 
 A row is exactly `Height.Row` (44) tall with its separator: the 1 px line is drawn over the row's last pixel row, it does not add one.
 
-`controls:ColumnAssist.HeaderAlignment="Right"` on a column puts its header over right-aligned numbers (the grid applies it when it loads; a view
-cannot name the grid's header style before it is in a window).
+`controls:ColumnAssist.HeaderAlignment="Right"` on a column puts its header over right-aligned numbers, and `"Center"` over centred values (the Stock
+age bands); the grid applies it when it loads (a view cannot name the grid's header style before it is in a window). Every numeric column sets it:
+do not build a header style in a view. The render tests check each such header against its values (`RenderChecks`).
+
+`TruncationTooltip.IsTrimmed` measures a text in the mode it is drawn in (Display in the app's windows), so a text that fits exactly is not taken for
+a cut one.
 
 Not built: `ColumnPriority` (see the screen guide), a column chooser, and the Compact (34 DIP) row height. `MinRowHeight` is fixed at `Height.Row`.
 
@@ -785,6 +793,11 @@ layer). It is collapsed while closed, so an `Auto` grid column holding it takes 
 The panel pads its content 24,24,24,20 (the 20 below keeps a form's sticky footer, with its divider above the buttons, clear of the window's bottom
 edge) and shows a close button (`Button.Icon.Small`, name "Close panel", tooltip "Close (Esc)"). The content is yours;
 see section 7.6 for the standard layout.
+
+**A scrolling body in a panel** uses `Style="{DynamicResource ScrollViewer.Panel}"`. The panel marks everything inside it (`SidePanel.IsInside`,
+inherited); the style then lets the viewer reach through the panel's 24 right padding and pads its content by the same 24. So the content keeps its
+width and its 24 right edge whether or not it scrolls, and the scroll bar lies in the padding, never over a tag, a banner or a bag number. Do not
+add a gutter of your own. Outside a side panel the style changes nothing.
 
 ### 5.16 DialogSurface and ModalOverlay
 
@@ -862,7 +875,9 @@ Normally you do not place these yourself; `LoadSurface` shows them.
 ### 5.20 LoadSurface and skeletons
 
 `controls:LoadSurface` shows exactly one of four things in one cell (SHELL-28): the skeleton, the content, an empty state or an error state. Because they
-share a cell, the skeleton is replaced in place and nothing shifts. Bind it to a view model's `State` (`LoadState`: `Loading`, `Ready`, `Empty`,
+share a cell, the skeleton is replaced in place and nothing shifts. Only the state on show takes room: the skeleton is collapsed outside `Loading` and
+`Waking`, and the content is collapsed in `Empty` and `Error`, so those two states start at the top of the surface, where the list's first row would
+be, on every screen (while loading the content stays hidden, not collapsed, so a surface that sizes to its content keeps its place). Bind it to a view model's `State` (`LoadState`: `Loading`, `Ready`, `Empty`,
 `Error`, `Waking`).
 
 | Property | Meaning |
@@ -932,7 +947,10 @@ the "..." menu of a panel) is themed. Show a shortcut with `InputGestureText="Ct
 `Theme/ScrollBars.xaml` restyles every `ScrollViewer` (implicit style) and every `ScrollBar`. The bar sits in the same grid cell as the content, so it
 never shifts the layout. At rest a 2 DIP thumb (`Ink3` at 55 %) shows 3 DIP in from the edge; with the pointer on the 12 DIP strip a `Well` track appears
 and the thumb widens to 6 DIP over 120 ms; while dragging the thumb is `Ink2`. After 1.2 s idle the bars fade (`OverlayScroll`, switched on by the
-implicit style). A viewer whose content fits shows no bar. You normally write nothing: put content in a `ScrollViewer` with
+implicit style). The resting thumb is quiet on purpose (about 2:1). A thumb in use is not: while the pointer is on the strip, the thumb is dragged, or
+the keyboard is in use inside the viewer (a key press in it, or focus arriving by keyboard, until a mouse press or focus leaving), the bar is
+`OverlayScroll.IsEmphasized`: the thumb is `Ink3` at 85 % or stronger, 3:1 or more against `Canvas`, `Layer`, `Layer2`, `Hover` and `Selected` in both
+themes (`ScrollBarThemeTests`), with Windows animations on or off, and the bars do not fade while the keyboard holds them. A viewer whose content fits shows no bar. You normally write nothing: put content in a `ScrollViewer` with
 `VerticalScrollBarVisibility="Auto"`.
 
 | Style | Use |
@@ -966,7 +984,7 @@ glyph in the font. It is left as it is.
 
 An overlay scroll bar is drawn over the right 12 DIP of its viewer. So that it never lies over content, give the viewer that strip: the dashboard's
 page viewer reaches 14 into the page's right padding (`Inset.RN14`) and insets its content by the same (`Inset.R14`); a list inside a panel keeps
-18 at its right inside the viewer (the dashboard's appointments).
+18 at its right inside the viewer (the dashboard's appointments). A side panel's body does this with one style, `ScrollViewer.Panel` (5.15).
 
 ## 6. Window and shell
 
@@ -1230,9 +1248,14 @@ private void OnFocusSearch(object? sender, EventArgs e) { SearchBox.Focus(); Sea
   `Height.RowCompact` (34) and `Height.Compact` (28) exist, but **no style reads the preference yet**: the grid's `MinRowHeight` is fixed at
   `Height.Row`. Do not hard-code 34; wait for the settings work to wire it, and build rows so they do not depend on a fixed height (`MinHeight`, not
   `Height`).
-- **ColumnPriority (planned, not built).** The pattern is an attached property `controls:ColumnPriority.Value` (1 to 3) on each column. At Compact,
-  columns with priority 3 hide, at Standard all of 1 and 2 show, at Wide the extra columns appear. It does not exist in the code today. Until it
-  does, keep the column set small enough for 1024 DIP, and order columns by importance (name, group, status, then detail columns).
+- **Column widths.** The name column is `Width="Auto"` with a `MinWidth` and `MaxWidth="320"`: it takes what its names need. Detail columns are
+  `Width="*"` with a `MinWidth` and no cap: they share what is left, so the table is always full and a name is not cut while another column has room.
+  Fixed columns (a blood group tag, a count, a date) have a pixel width.
+- **Column priority** is `lists:ListColumns.HideBelow="700"` on a column with `lists:ListColumns.IsResponsive="True"` on the grid: the column folds
+  away while the table is narrower than that. On top of the thresholds, when the columns on show still need more than the table has (long names in a
+  narrow table), the lowest-priority column on show (the highest `HideBelow`) folds away too, and when no detail column is left the name column takes
+  the spare width (`ListColumns.Fit`). A column goes before a name is cut. Order columns by importance (name, group, status, then detail columns)
+  and give every detail column a threshold. (`controls:ColumnPriority` from the plan was not built; this is what there is.)
 - **Wide tables** may reveal extra columns at 1600 DIP and above; reading layouts keep their max width.
 - **Max content widths:** dashboard 1600 (`MaxWidth.Dashboard`), forms 720 (`MaxWidth.Form`), settings and profile 960 (`MaxWidth.Settings`). List
   screens fill the width.
@@ -1242,6 +1265,9 @@ private void OnFocusSearch(object? sender, EventArgs e) { SearchBox.Focus(); Sea
 - Chips are `Button.Chip` (dashed edge, 34 high) opening a popup checklist or range. The built-in style is the "unset" look ("+ Blood group"); the
   "set" look ("Blood group: O−, O+", filled) is not built, so until it is, show the chosen values as the chip text and keep the dashed edge.
 - When filters are active, a `Button.Subtle` "Clear filters" appears (`ClearFiltersCommand`); the empty state offers the same action.
+- `lists:ListToolbar` wraps: while the chips fit beside the search field they stay there; when they do not (a compact window with the side panel open)
+  the whole chip row moves under the field and has the list's full width. Give it your chips in `Filters` (one chip, or a panel of chips): it moves
+  them into its own row, so each wraps on its own. No chip may run off the list's edge.
 - In a Compact window the chips fold into one **Filters** button (`Filter` icon) that opens the same choices in a popup: planned, not built. Build it
   with a `DataTrigger` on `Responsive.Breakpoint` that collapses `FilterChips` and shows the button.
 - Search applies after a 300 ms pause (`ListDefaults.SearchDebounce`) or at once on Enter (`SearchNowCommand`).
@@ -1268,11 +1294,14 @@ Standard layout of the content of a `SidePanel` (420 DIP, 352 in Compact), top t
 1. **Header block:** `Avatar` (40, `IsBlood="True"` for donors), the name (`Text.Section`, 20/28 SemiBold), a `BloodGroupTag` (`IsLarge`), and a subtitle
    (`Text.Secondary`: id, phone, age). Set `SidePanel.Overline` to the kind and id ("Donor D-0175"). Put the "..." menu button in
    `SidePanel.HeaderActions`.
-2. **Actions:** one `Button.Primary` for the main thing you do with this record (Donor: "Record donation"; Patient: "New request"; Request: "Fulfil"),
-   a `Button.Secondary` "Edit", and a `Button.Icon` with the `More` icon (name "More actions") opening a `ContextMenu` (Book appointment, Delete donor...).
-   Only one primary per view: while a panel is open, the page's primary action stays in the page header, so make the panel's main button
-   `Button.Secondary` if the page header already shows a primary, or keep the panel's action primary and demote the header's. Decide per screen and test
-   with the one-primary rule.
+2. **Actions:** one row, the same on every list screen: the one filled `Button.Primary` for the main thing you do with this record (Donor: "Book
+   appointment"; Patient: "New request"; Request: "Fulfil request"; Staff: "Edit"; Receipt: "Print"), which fills the row; then a `Button.Secondary`
+   ("Edit", or the screen's second action); then a `Button.Icon` with the `More` icon (name "More actions") opening a `ContextMenu` with the destructive
+   and rare actions under their full labels ("Delete staff member", "Cancel appointment"). A screen with nothing to edit or delete (Stock) has no menu.
+   Only one filled button per screen: while the panel is open the page header's action is `Button.Secondary` (`lists:HeaderAction.IsDemoted`).
+   A destructive action asks first in the confirmation dialog (`IDialogService.ConfirmAsync`; `Controls/DialogWindow`, on the `DialogSurface` like the
+   form dialogs): the body names the record, Cancel has the focus, and the danger button carries the full action. There is no inline confirm control.
+   Record codes ("D-0175", "A-0905", "B-0412") come from `RecordCodes` (Client/Features/Receipts): never put a code together in a view or a view model.
 3. **Key/value grid:** a two-column `Grid` of `Text.Label` (key, `Ink2`) and `Text.Body` (value), 8 DIP between rows. Missing values show an en dash,
    never a blank.
 4. **History:** a `Section`-like list (donation number, date, where each bag went), newest first, each row a name line and a `Text.Caption` line, with a

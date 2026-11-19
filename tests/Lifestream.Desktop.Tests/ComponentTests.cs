@@ -357,7 +357,7 @@ public sealed class ComponentTests
             var panel = (StackPanel)dialog.FindName("DetailsPanel");
             var box = (TextBox)dialog.FindName("DetailsBox");
             var toggle = (System.Windows.Controls.Primitives.ToggleButton)dialog.FindName("DetailsToggle");
-            return (((TextBlock)dialog.FindName("HeadingText")).Text, panel.Visibility == Visibility.Visible, toggle.IsChecked != true && box.Visibility == Visibility.Collapsed, dialog.Primary.Visibility == Visibility.Collapsed);
+            return (((DialogSurface)dialog.FindName("Surface")).Title, panel.Visibility == Visibility.Visible, toggle.IsChecked != true && box.Visibility == Visibility.Collapsed, dialog.Primary.Visibility == Visibility.Collapsed);
         });
 
         Assert.Equal("Something went wrong", heading);
