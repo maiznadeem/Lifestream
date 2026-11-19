@@ -87,15 +87,6 @@ public sealed class EqualsToVisibleConverter : IValueConverter
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => throw new NotSupportedException();
 }
 
-/// <summary>The side panel's width for a breakpoint: Width.PanelCompact (352) in a compact window, Width.Panel (420) otherwise.</summary>
-public sealed class PanelWidthConverter : IValueConverter
-{
-    public object Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
-        Lifestream.Desktop.Theme.ThemeTokens.Space(value is Breakpoint.Compact ? "Width.PanelCompact" : "Width.Panel");
-
-    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => throw new NotSupportedException();
-}
-
 /// <summary>Visible when the bound value is not null and not an empty string or list (a section with something in it).</summary>
 public sealed class HasContentToVisibleConverter : IValueConverter
 {

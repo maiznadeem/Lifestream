@@ -49,15 +49,9 @@
                   <ColumnDefinition Width="Auto" />
                   <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
-                <!-- Initials, with the photo drawn over them when there is one (the shared Avatar can't show a Source yet). -->
-                <Grid Width="72" Height="72" VerticalAlignment="Center" feat:Edge.Right="{DynamicResource Space.20}">
-                  <controls:Avatar x:Name="ProfileAvatar" Size="72" Initials="{Binding Initials}" AutomationProperties.Name="Your photo" />
-                  <Ellipse x:Name="ProfilePhoto" Visibility="{Binding HasPhoto, Converter={StaticResource BoolToVisibility}}" IsHitTestVisible="False">
-                    <Ellipse.Fill>
-                      <ImageBrush ImageSource="{Binding PhotoBytes, Converter={StaticResource Photo}}" Stretch="UniformToFill" />
-                    </Ellipse.Fill>
-                  </Ellipse>
-                </Grid>
+                <!-- Initials, or the photo when there is one. -->
+                <controls:Avatar x:Name="ProfileAvatar" Size="72" Initials="{Binding Initials}" Source="{Binding PhotoBytes, Converter={StaticResource Photo}}"
+                                 AutomationProperties.Name="Your photo" VerticalAlignment="Center" feat:Edge.Right="{DynamicResource Space.20}" />
                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
                   <TextBlock Style="{DynamicResource Text.Section}" Text="{Binding DisplayName}" TextWrapping="Wrap" AutomationProperties.HeadingLevel="Level2" />
                   <TextBlock Style="{DynamicResource Text.Secondary}" TextWrapping="Wrap" feat:Edge.Top="{DynamicResource Space.4}">

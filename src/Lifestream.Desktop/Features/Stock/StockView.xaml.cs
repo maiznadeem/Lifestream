@@ -132,13 +132,5 @@ public partial class StockView : UserControl
         RefreshLabel.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
         UnitsColumn.Visibility = compact ? Visibility.Collapsed : Visibility.Visible; // the count with its meter
         UnitsCompactColumn.Visibility = compact ? Visibility.Visible : Visibility.Collapsed; // the count alone
-        if (compact)
-        {
-            Panel.SetResourceReference(SidePanel.PanelWidthProperty, "Width.PanelCompact");
-        }
-        else
-        {
-            Panel.ClearValue(SidePanel.PanelWidthProperty);
-        }
     }
 }

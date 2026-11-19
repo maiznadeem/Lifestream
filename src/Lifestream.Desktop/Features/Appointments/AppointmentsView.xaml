@@ -22,7 +22,6 @@
     <lists:TypographicBloodTypeConverter x:Key="BloodGroup" />
     <lists:InitialsConverter x:Key="Initials" />
     <lists:RecordCodeConverter x:Key="Code" />
-    <lists:PanelWidthConverter x:Key="PanelWidth" />
     <lists:CompactCollapsedConverter x:Key="CompactCollapsed" />
     <lists:CountTextConverter x:Key="CountText" />
     <lists:DataProxy x:Key="Model" Data="{Binding}" />
@@ -66,7 +65,7 @@
       <controls:PageHeader x:Name="Header" Title="{Binding PageTitle}" Count="{Binding HeaderCount}">
         <controls:PageHeader.Actions>
           <Button x:Name="AddButton" Style="{DynamicResource Button.Primary}" lists:HeaderAction.IsDemoted="{Binding IsDetailOpen}" Command="{Binding AddCommand}"
-                  controls:ButtonAssist.BusyText="" AutomationProperties.Name="Book appointment" ToolTip="Book appointment (Ctrl+N)">
+                  AutomationProperties.Name="Book appointment" ToolTip="Book appointment (Ctrl+N)">
             <StackPanel Orientation="Horizontal">
               <controls:Icon Kind="Calplus" Size="16" VerticalAlignment="Center" />
               <TextBlock x:Name="AddLabel" Text="Book appointment" VerticalAlignment="Center" Margin="{DynamicResource Inset.L8}">
@@ -305,7 +304,7 @@
 
     <!-- The selected appointment, or the booking (or rescheduling) form -->
     <controls:SidePanel x:Name="Panel" Grid.Column="2" IsOpen="{Binding IsDetailOpen, Mode=OneWay}" CloseCommand="{Binding CloseDetailCommand}" Overline="{Binding DetailCode}"
-                        PanelWidth="{Binding (controls:Responsive.Breakpoint), RelativeSource={RelativeSource Self}, Converter={StaticResource PanelWidth}}" lists:PanelBleed.IsEnabled="True" lists:DetailPaneFrame.IsInPanel="True">
+                        lists:PanelBleed.IsEnabled="True" lists:DetailPaneFrame.IsInPanel="True">
       <Grid>
         <lists:ActionDetailPane x:Name="DetailPane" FactsSource="{Binding PanelFacts}" Visibility="{Binding Editor, Converter={StaticResource NullToVisible}}">
           <lists:ActionDetailPane.Header>

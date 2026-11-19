@@ -1,11 +1,9 @@
-using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using Lifestream.Client.Common;
 using Lifestream.Client.Features.Receipts;
-using Lifestream.Desktop.Controls;
 using Lifestream.Domain;
 
 namespace Lifestream.Desktop.Features.Receipts;
@@ -13,25 +11,16 @@ namespace Lifestream.Desktop.Features.Receipts;
 /// <summary>
 /// The Receipts screen. Double-clicking a row, or pressing Enter on it, opens that receipt's printable view (FEAT-18); Esc closes the side panel. The
 /// blood group chip opens its menu on a click. The "Issued by" column folds away while the table is narrower than 860 DIP (a compact window, or the panel
-/// open; the panel names who issued the receipt), and a compact window narrows the panel.
+/// open; the panel names who issued the receipt).
 /// </summary>
 public partial class ReceiptsView : UserControl
 {
-    private static readonly DependencyPropertyDescriptor BreakpointDescriptor = DependencyPropertyDescriptor.FromProperty(Responsive.BreakpointProperty, typeof(UserControl));
-
     public ReceiptsView()
     {
         InitializeComponent();
-        MoreButton.ContextMenu.SetBinding(FrameworkElement.DataContextProperty, new System.Windows.Data.Binding(nameof(DataContext)) { Source = this });
 
         // The "..." menu lives outside the visual tree: give it the screen's model, so its commands are bound before it opens.
-        Loaded += (_, _) =>
-        {
-            BreakpointDescriptor.AddValueChanged(this, OnBreakpointChanged);
-            ApplyBreakpoint();
-            AlignNumericHeaders();
-        };
-        Unloaded += (_, _) => BreakpointDescriptor.RemoveValueChanged(this, OnBreakpointChanged);
+        MoreButton.ContextMenu.SetBinding(FrameworkElement.DataContextProperty, new System.Windows.Data.Binding(nameof(DataContext)) { Source = this });
     }
 
     private void OnRowDoubleClick(object sender, MouseButtonEventArgs e)
@@ -76,32 +65,6 @@ public partial class ReceiptsView : UserControl
         if (e.OriginalSource is MenuItem { DataContext: FilterOption<BloodType> option } && DataContext is ReceiptsViewModel vm)
         {
             vm.ChooseBloodTypeCommand.Execute(option);
-        }
-    }
-
-    /// <summary>The Units header sits right, over its right-aligned numbers (the grid's own header style, with the alignment changed).</summary>
-    private void AlignNumericHeaders()
-    {
-        if (UnitsColumn.HeaderStyle is null && Grid.ColumnHeaderStyle is { } baseStyle)
-        {
-            var style = new Style(typeof(DataGridColumnHeader), baseStyle);
-            style.Setters.Add(new Setter(HorizontalContentAlignmentProperty, HorizontalAlignment.Right));
-            UnitsColumn.HeaderStyle = style;
-        }
-    }
-
-    private void OnBreakpointChanged(object? sender, EventArgs e) => ApplyBreakpoint();
-
-    private void ApplyBreakpoint()
-    {
-        var compact = Responsive.GetBreakpoint(this) == Breakpoint.Compact;
-        if (compact)
-        {
-            Panel.SetResourceReference(SidePanel.PanelWidthProperty, "Width.PanelCompact");
-        }
-        else
-        {
-            Panel.ClearValue(SidePanel.PanelWidthProperty);
         }
     }
 

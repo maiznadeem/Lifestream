@@ -20,7 +20,6 @@
     <lists:TypographicBloodTypeConverter x:Key="BloodGroup" />
     <lists:InitialsConverter x:Key="Initials" />
     <lists:RecordCodeConverter x:Key="Code" />
-    <lists:PanelWidthConverter x:Key="PanelWidth" />
     <lists:IsCompactConverter x:Key="IsCompact" />
     <lists:HasContentToVisibleConverter x:Key="HasContent" />
     <lists:EqualsToVisibleConverter x:Key="EqualsToVisible" />
@@ -53,7 +52,7 @@
       <controls:PageHeader x:Name="Header" Title="{Binding PageTitle}" Count="{Binding HeaderCount}">
         <controls:PageHeader.Actions>
           <Button x:Name="AddButton" Style="{DynamicResource Button.Primary}" lists:HeaderAction.IsDemoted="{Binding IsDetailOpen}" Command="{Binding AddCommand}"
-                  controls:ButtonAssist.BusyText="" AutomationProperties.Name="{Binding NewActionLabel}" ToolTip="Add patient (Ctrl+N)">
+                  AutomationProperties.Name="{Binding NewActionLabel}" ToolTip="Add patient (Ctrl+N)">
             <StackPanel Orientation="Horizontal">
               <controls:Icon Kind="Userplus" Size="16" VerticalAlignment="Center" />
               <TextBlock x:Name="AddLabel" Text="{Binding NewActionLabel}" VerticalAlignment="Center" Margin="{DynamicResource Inset.L8}">
@@ -163,7 +162,7 @@
 
     <!-- The selected patient, or the patient form -->
     <controls:SidePanel x:Name="Panel" Grid.Column="2" IsOpen="{Binding IsDetailOpen, Mode=OneWay}" CloseCommand="{Binding CloseDetailCommand}" Overline="{Binding DetailCode}"
-                        PanelWidth="{Binding (controls:Responsive.Breakpoint), RelativeSource={RelativeSource Self}, Converter={StaticResource PanelWidth}}" lists:PanelBleed.IsEnabled="True" lists:DetailPaneFrame.IsInPanel="True">
+                        lists:PanelBleed.IsEnabled="True" lists:DetailPaneFrame.IsInPanel="True">
       <Grid>
         <lists:RecordDetailPane x:Name="DetailPane" FactsSource="{Binding PanelFacts}" DeleteText="Delete patient"
                                 IsCompact="{Binding (controls:Responsive.Breakpoint), RelativeSource={RelativeSource Self}, Converter={StaticResource IsCompact}}" Visibility="{Binding Editor, Converter={StaticResource NullToVisible}}">

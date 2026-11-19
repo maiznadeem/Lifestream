@@ -154,7 +154,7 @@
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn x:Name="UnitsColumn" Header="Units" Width="70" CanUserSort="False">
+                <DataGridTemplateColumn x:Name="UnitsColumn" Header="Units" Width="70" CanUserSort="False" controls:ColumnAssist.HeaderAlignment="Right">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate DataType="{x:Type vm:ReceiptRow}">
                       <TextBlock Text="{Binding UnitsText}" Style="{DynamicResource DataGrid.TextCell}" HorizontalAlignment="Right" Typography.NumeralAlignment="Tabular" />

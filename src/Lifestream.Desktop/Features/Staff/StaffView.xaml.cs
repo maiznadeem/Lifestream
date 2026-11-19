@@ -128,13 +128,5 @@ public partial class StaffView : UserControl
         var compact = Responsive.GetBreakpoint(this) == Breakpoint.Compact;
         ShiftColumn.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
         AddLabel.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
-        if (compact)
-        {
-            Panel.SetResourceReference(SidePanel.PanelWidthProperty, "Width.PanelCompact");
-        }
-        else
-        {
-            Panel.ClearValue(SidePanel.PanelWidthProperty);
-        }
     }
 }

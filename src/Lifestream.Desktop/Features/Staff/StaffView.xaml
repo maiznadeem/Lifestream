@@ -58,7 +58,7 @@
       <controls:PageHeader Title="Staff" Count="{Binding Total}">
         <controls:PageHeader.Actions>
           <!-- Button.Primary, or Button.Secondary while the panel is open (one filled button per screen: then the panel's action is the filled one); set in code-behind. -->
-          <Button x:Name="AddButton" Style="{DynamicResource Button.Primary}" Command="{Binding AddCommand}" IsEnabled="{Binding CanManageStaff}" controls:ButtonAssist.BusyText=""
+          <Button x:Name="AddButton" Style="{DynamicResource Button.Primary}" Command="{Binding AddCommand}" IsEnabled="{Binding CanManageStaff}"
                   AutomationProperties.Name="Add staff member" ToolTip="Add staff member (Ctrl+N)" ToolTipService.ShowOnDisabled="True">
             <StackPanel Orientation="Horizontal">
               <controls:Icon Kind="Userplus" Size="16" VerticalAlignment="Center" />
@@ -158,15 +158,9 @@
                           <ColumnDefinition Width="Auto" />
                           <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <!-- Initials, with the photo drawn over them once it arrives (see PhotoOverlay in the record: the shared Avatar can't show a Source yet). -->
-                        <Grid Width="28" Height="28" feat:Edge.Right="{DynamicResource Space.12}">
-                          <controls:Avatar Size="28" Initials="{Binding Initials}" Loaded="OnAvatarShown" AutomationProperties.Name="Photo" />
-                          <Ellipse Visibility="{Binding Photo, Converter={StaticResource NullToCollapsed}}" IsHitTestVisible="False">
-                            <Ellipse.Fill>
-                              <ImageBrush ImageSource="{Binding Photo, Converter={StaticResource Photo}}" Stretch="UniformToFill" />
-                            </Ellipse.Fill>
-                          </Ellipse>
-                        </Grid>
+                        <!-- Initials, or the photo once it arrives. -->
+                        <controls:Avatar Size="28" Initials="{Binding Initials}" Source="{Binding Photo, Converter={StaticResource Photo}}" Loaded="OnAvatarShown"
+                                         AutomationProperties.Name="Photo" feat:Edge.Right="{DynamicResource Space.12}" />
                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
                           <TextBlock Style="{DynamicResource DataGrid.PrimaryLine}" Text="{Binding DisplayName}" />
                           <TextBlock Style="{DynamicResource DataGrid.SecondaryLine}" Foreground="{DynamicResource Brush.Ink3}">
@@ -227,14 +221,8 @@
                   <ColumnDefinition Width="Auto" />
                   <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
-                <Grid Width="52" Height="52" VerticalAlignment="Top" feat:Edge.Right="{DynamicResource Space.16}">
-                  <controls:Avatar x:Name="PanelAvatar" Size="52" Initials="{Binding DetailInitials}" />
-                  <Ellipse Visibility="{Binding SelectedItem.Photo, Converter={StaticResource NullToCollapsed}}" IsHitTestVisible="False">
-                    <Ellipse.Fill>
-                      <ImageBrush ImageSource="{Binding SelectedItem.Photo, Converter={StaticResource Photo}}" Stretch="UniformToFill" />
-                    </Ellipse.Fill>
-                  </Ellipse>
-                </Grid>
+                <controls:Avatar x:Name="PanelAvatar" Size="52" Initials="{Binding DetailInitials}" Source="{Binding SelectedItem.Photo, Converter={StaticResource Photo}}"
+                                 VerticalAlignment="Top" feat:Edge.Right="{DynamicResource Space.16}" />
                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
                   <TextBlock x:Name="PanelName" Style="{DynamicResource Text.Section}" Text="{Binding Detail.DisplayName}" TextWrapping="Wrap" AutomationProperties.HeadingLevel="Level2" />
                   <TextBlock x:Name="PanelSubtitle" Style="{DynamicResource Text.Secondary}" Text="{Binding DetailSubtitle}" TextWrapping="Wrap" feat:Edge.Top="{DynamicResource Space.4}" />

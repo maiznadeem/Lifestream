@@ -90,7 +90,7 @@
 
       <controls:PageHeader Title="Stock" Count="{Binding UnitsCountText}">
         <controls:PageHeader.Actions>
-          <Button x:Name="RefreshButton" Style="{DynamicResource Button.Secondary}" Command="{Binding RetryCommand}" controls:ButtonAssist.BusyText="" AutomationProperties.Name="Refresh stock" ToolTip="Fetch the latest stock">
+          <Button x:Name="RefreshButton" Style="{DynamicResource Button.Secondary}" Command="{Binding RetryCommand}" AutomationProperties.Name="Refresh stock" ToolTip="Fetch the latest stock">
             <StackPanel Orientation="Horizontal">
               <controls:Icon Kind="Sync" Size="16" VerticalAlignment="Center" />
               <TextBlock x:Name="RefreshLabel" Text="Refresh" VerticalAlignment="Center" feat:Edge.Left="{DynamicResource Space.8}" />
