@@ -15,7 +15,7 @@
 
   Writes:
     src/Lifestream.Desktop/Assets/Lifestream.ico            16, 20, 24, 32, 40, 48, 64, 256 px (32-bit, PNG-compressed frames)
-    src/Lifestream.Desktop/Assets/Lifestream-<size>.png     16, 24, 32, 48, 64, 256, 512
+    packaging/icon/Lifestream-<size>.png             16, 24, 32, 48, 64, 256, 512
     packaging/store/Assets/StoreLogo.png (50), Square44x44Logo.png (44), Square150x150Logo.png (150, mark at 60%)
   packaging/store/build-msix.ps1 prefers the files in packaging/store/Assets over its generated placeholders.
 #>
@@ -27,6 +27,8 @@ Add-Type -AssemblyName PresentationCore, PresentationFramework, WindowsBase
 $root = Resolve-Path (Join-Path $PSScriptRoot '..')
 $assets = Join-Path $root 'src/Lifestream.Desktop/Assets'
 $store = Join-Path $root 'packaging/store/Assets'
+$pngs = Join-Path $root 'packaging/icon'   # PNG renders for the README and other artwork; not shipped in the app
+New-Item -ItemType Directory -Path $pngs -Force | Out-Null
 New-Item -ItemType Directory -Force $assets, $store | Out-Null
 
 $dropPath = 'M128,14 C128,14 40,108 40,166 A88,88 0 0 0 216,166 C216,108 128,14 128,14 Z'
@@ -73,7 +75,7 @@ function New-MarkPng([int]$Size, [double]$Scale = 1.0) {
 }
 
 foreach ($size in 16, 24, 32, 48, 64, 256, 512) {
-    [IO.File]::WriteAllBytes((Join-Path $assets "Lifestream-$size.png"), (New-MarkPng $size))
+    [IO.File]::WriteAllBytes((Join-Path $pngs "Lifestream-$size.png"), (New-MarkPng $size))
 }
 
 [IO.File]::WriteAllBytes((Join-Path $store 'StoreLogo.png'), (New-MarkPng 50))
