@@ -49,10 +49,31 @@ public abstract partial class ViewModelBase : ObservableObject, IDisposable
     private AsyncRelayCommand? _cancelOperationCommand;
 
     /// <summary>Creates a command that runs through <see cref="Operations"/>; every command of a view model is made with this (or <see cref="NoOperationRunnerAttribute"/> says why not).</summary>
-    protected AsyncRelayCommand Command(Func<CancellationToken, Task> execute, Func<bool>? canExecute = null) => new(execute, canExecute, Operations);
+    /// <param name="execute">The work.</param>
+    /// <param name="canExecute">Extra condition for <see cref="AsyncRelayCommand.CanExecute"/>.</param>
+    /// <param name="opensModal">True when the command opens a modal dialog (a confirmation, a form, a viewer): it is disabled while any operation of this view model runs, so the screen's "Waking up the server" notice and its Cancel can never be hidden behind a modal (SHELL-07).</param>
+    protected AsyncRelayCommand Command(Func<CancellationToken, Task> execute, Func<bool>? canExecute = null, bool opensModal = false) =>
+        Track(new(execute, opensModal ? () => !Operations.IsRunning && (canExecute?.Invoke() ?? true) : canExecute, Operations), opensModal);
 
     /// <summary>Creates a command with a parameter that runs through <see cref="Operations"/>.</summary>
-    protected AsyncRelayCommand Command(Func<object?, CancellationToken, Task> execute, Func<object?, bool>? canExecute = null, bool allowConcurrent = false) => new(execute, canExecute, allowConcurrent, Operations);
+    protected AsyncRelayCommand Command(Func<object?, CancellationToken, Task> execute, Func<object?, bool>? canExecute = null, bool allowConcurrent = false, bool opensModal = false) =>
+        Track(new(execute, opensModal ? p => !Operations.IsRunning && (canExecute?.Invoke(p) ?? true) : canExecute, allowConcurrent, Operations), opensModal);
+
+    private readonly List<AsyncRelayCommand> _modalCommands = [];
+
+    /// <summary>The commands of this view model that open a modal dialog; each is disabled while any operation of the view model runs (the <c>opensModal</c> flag of <c>Command</c>).</summary>
+    public IReadOnlyList<AsyncRelayCommand> ModalCommands => _modalCommands;
+    private bool _operationRunning;
+
+    private AsyncRelayCommand Track(AsyncRelayCommand command, bool opensModal)
+    {
+        if (opensModal)
+        {
+            _modalCommands.Add(command);
+        }
+
+        return command;
+    }
 
     /// <summary>Runs API work off the UI thread inside an operation of this view model (a detail pane, a lookup, a photo).</summary>
     protected Task<T> RunOperationAsync<T>(Func<CancellationToken, Task<T>> work, CancellationToken ct = default) => Operations.RunAsync(work, ct);
@@ -70,6 +91,16 @@ public abstract partial class ViewModelBase : ObservableObject, IDisposable
     private void OnOperationsChanged(object? sender, EventArgs e) =>
         Post(() =>
         {
+            var running = Operations.IsRunning;
+            if (running != _operationRunning)
+            {
+                _operationRunning = running;
+                foreach (var command in _modalCommands)
+                {
+                    command.RaiseCanExecuteChanged();
+                }
+            }
+
             var waking = Operations.IsWaking;
             if (waking == _operationWaking)
             {
@@ -380,8 +411,12 @@ public abstract partial class ViewModelBase : ObservableObject, IDisposable
         }
     }
 
+    /// <summary>True once the view model was disposed (the user left the screen); work that finishes later must not touch it.</summary>
+    protected bool IsDisposed { get; private set; }
+
     public void Dispose()
     {
+        IsDisposed = true;
         Dispose(true);
         GC.SuppressFinalize(this);
     }

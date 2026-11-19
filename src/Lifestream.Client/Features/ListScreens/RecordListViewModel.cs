@@ -59,7 +59,7 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
             OpenEditor(Detail);
             return Task.CompletedTask;
         }, () => Detail is not null && !IsEditing);
-        DeleteCommand = Command(_ => DeleteSelectedAsync(), () => Detail is { } record && !IsEditing && CanDelete(record));
+        DeleteCommand = Command(_ => DeleteSelectedAsync(), () => Detail is { } record && !IsEditing && CanDelete(record), opensModal: true);
         RetryDetailCommand = Command(_ => LoadDetailAsync(_selectedId));
         CancelDetailCommand = Command(_ =>
         {
@@ -214,7 +214,7 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
     protected abstract Task<ApiResult> DeleteRecordAsync(int id, CancellationToken ct);
 
     /// <summary>Puts a deleted record back (Undo). The API restores it with the same id and every value, so nothing the list does not show (a last-donation date) is lost.</summary>
-    [RunsInOperation("UndoAsync calls it inside RunOperationAsync.")]
+    [RunsInOperation("UndoAsync calls it inside the toast action's shell-level operation (ToastService.Actions).")]
     protected abstract Task<ApiResult<TDetail>> RestoreAsync(TDetail deleted, CancellationToken ct);
 
     /// <summary>Whether the selected record may be deleted at all (the signed-in admin's own staff record may not).</summary>
@@ -512,15 +512,23 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
     private async Task UndoAsync(TDetail deleted)
     {
         var name = NameOfDetail(deleted);
-        var result = await RunOperationAsync(ct => RestoreAsync(deleted, ct)).ConfigureAwait(true);
+
+        // Runs inside the toast's own (shell-level) operation, not this screen's: the toast outlives the screen, so after the user has gone elsewhere the
+        // waking notice and its Cancel are the shell's, and this view model (disposed by then) is not needed for them (SHELL-07).
+        var result = await RestoreAsync(deleted, OperationScope.Current?.Token ?? CancellationToken.None).ConfigureAwait(true);
         if (!result.IsOk)
         {
             Toasts.Show(ToastKind.Error, $"Couldn't restore {RecordType} '{name}'. {ProblemText.For(result.Problem!, RecordType, name)}");
             return;
         }
 
-        _selectedId = IdOfDetail(result.Value);
         Toasts.ShowForRecord(ToastKind.Success, Capitalise(RecordType), name, "restored");
+        if (IsDisposed)
+        {
+            return; // the user left the screen; the next visit loads the list again
+        }
+
+        _selectedId = IdOfDetail(result.Value);
         await RefreshAfterSaveAsync().ConfigureAwait(true);
     }
 

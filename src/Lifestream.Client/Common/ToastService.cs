@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Lifestream.Client.Api;
 
 namespace Lifestream.Client.Common;
 
@@ -14,6 +15,12 @@ public enum ToastKind
 public interface IToastService
 {
     ObservableCollection<ToastItem> Toasts { get; }
+
+    /// <summary>
+    /// The shell-level runner of the toasts' actions (Undo, View, Reload). A toast outlives the screen that showed it, so its action must not depend on that
+    /// screen: it runs here, and the shell shows "Waking up the server" with a Cancel for it on whatever screen is open (SHELL-07).
+    /// </summary>
+    OperationRunner Actions { get; }
 
     /// <summary>Shows a toast. Name the affected record in <paramref name="message"/>; add an action such as View or Undo if one makes sense.</summary>
     /// <param name="kind">Success, info, warning or error.</param>
@@ -56,17 +63,22 @@ public sealed partial class ToastItem : ObservableObject, IDisposable
             Dismiss();
             return Task.CompletedTask;
         });
-        ActionCommand = new AsyncRelayCommand(async _ =>
-        {
-            Dismiss();
-            if (_action is not null)
+        ActionCommand = new AsyncRelayCommand(
+            async _ =>
             {
-                await _action().ConfigureAwait(true);
-            }
-        });
+                Dismiss();
+                if (_action is not null)
+                {
+                    await _action().ConfigureAwait(true);
+                }
+            },
+            runner: owner.Actions);
         ActionCommand.PropertyChanged += (_, _) => OnPropertyChanged(nameof(IsBusy));
         Resume();
     }
+
+    /// <summary>The shell-level runner the toast's action runs through (see <see cref="IToastService.Actions"/>).</summary>
+    public OperationRunner Operations => _owner.Actions;
 
     public ToastKind Kind { get; }
 
@@ -79,7 +91,6 @@ public sealed partial class ToastItem : ObservableObject, IDisposable
     [NoOperationRunner("It only closes the toast; it makes no API call.")]
     public AsyncRelayCommand DismissCommand { get; }
 
-    [NoOperationRunner("It runs the action the screen gave the toast (Undo), and that action runs its own API call through the screen's operation runner.")]
     public AsyncRelayCommand ActionCommand { get; }
 
     /// <summary>A toast never loads anything; present so every view model offers the same state (SHELL-11).</summary>
@@ -148,12 +159,20 @@ public sealed class ToastService : IToastService
 
     /// <param name="dispatcher">The UI thread. Every change to <see cref="Toasts"/> runs on it, whichever thread asked (SHELL-01).</param>
     /// <param name="clock">The clock for the auto-dismiss timers; tests pass a manual one.</param>
-    public ToastService(IUiDispatcher dispatcher, TimeProvider? clock = null)
+    /// <param name="serverStatus">The server's state, which decides when an action that waits shows the waking notice (SHELL-07).</param>
+    public ToastService(IUiDispatcher dispatcher, TimeProvider? clock = null, IServerStatus? serverStatus = null)
     {
         ArgumentNullException.ThrowIfNull(dispatcher);
         _dispatcher = dispatcher;
         Clock = clock ?? TimeProvider.System;
+        Actions = new OperationRunner(() => serverStatus, () => Clock);
+        if (serverStatus is not null)
+        {
+            serverStatus.Changed += (_, _) => Actions.StatusChanged(); // the service lives as long as the app, like the status
+        }
     }
+
+    public OperationRunner Actions { get; }
 
     /// <summary>How long an ordinary toast stays: inside the 6 to 10 second window the design asks for.</summary>
     public static TimeSpan Lifetime { get; } = TimeSpan.FromSeconds(8);
