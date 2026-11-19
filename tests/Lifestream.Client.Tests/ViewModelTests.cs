@@ -486,6 +486,20 @@ public sealed class ViewModelTests
     }
 
     [Fact]
+    public void CancelLoadAndDispose_WhenTheLoadJustFinishedAndDisposedItsSource_DoNotThrow()
+    {
+        // A load's last step disposes its cancellation source; a cancel or a dispose that read the field a moment earlier must find that harmless
+        // (seen as "The CancellationTokenSource has been disposed" when a screen was torn down while its first load was finishing).
+        var vm = new TestViewModel();
+        var finished = new CancellationTokenSource();
+        typeof(ViewModelBase).GetField("_loadCts", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(vm, finished);
+        finished.Dispose();
+
+        vm.CancelLoad();
+        vm.Dispose();
+    }
+
+    [Fact]
     public async Task CaptureErrors_ReceivesOnlyTheErrorsOfItsOwnFlow_NotThoseOfACommandRunningElsewhere()
     {
         // Tests that run in parallel must not see each other's command errors: a failing command started before the capture, on another flow,
