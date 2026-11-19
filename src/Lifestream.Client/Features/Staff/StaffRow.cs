@@ -12,6 +12,24 @@ public static class StaffText
 
     public static string Salary(int? salary) => salary is { } value ? value.ToString("N0", CultureInfo.InvariantCulture) : string.Empty;
 
+    /// <summary>
+    /// A job title in words. The Admin designation is an office job, not the Admin role, so it reads "Administration" and never "Admin" next to a role
+    /// badge that says "Staff".
+    /// </summary>
+    public static string JobTitle(Designation designation) => designation == Designation.Admin ? "Administration" : designation.ToString();
+
+    /// <summary>The role in words: "Administrator" or "Staff".</summary>
+    public static string Role(Role role) => role == Domain.Role.Admin ? "Administrator" : "Staff";
+
+    /// <summary>"Salary: 2,000–3,000", "Salary: from 2,000", "Salary: up to 3,000", or "Salary" with no range: the salary chip's words.</summary>
+    public static string SalaryChip(int? from, int? to) => (from, to) switch
+    {
+        ({ } f, { } t) => $"Salary: {Salary(f)}\u2013{Salary(t)}",
+        ({ } f, null) => $"Salary: from {Salary(f)}",
+        (null, { } t) => $"Salary: up to {Salary(t)}",
+        _ => "Salary",
+    };
+
     /// <summary>"HG" for "Hana Greenleaf": the first letters of the first and last words ("Dr." and similar titles are skipped); "?" for no name.</summary>
     public static string Initials(string? name)
     {
@@ -51,11 +69,14 @@ public sealed partial class StaffRow : ObservableObject
 
     public string Username => Item.Username;
 
-    public string DesignationText => Item.Designation.ToString();
+    public string DesignationText => StaffText.JobTitle(Item.Designation);
 
     public string ShiftText => StaffText.Shift(Item.Shift);
 
-    public string RoleText => Item.Role.ToString();
+    public string RoleText => StaffText.Role(Item.Role);
+
+    /// <summary>"S-0002": the person's code under their username.</summary>
+    public string CodeText => Receipts.RecordCodes.Staff(Item.Id);
 
     /// <summary>True for an administrator (the row shows the Admin role badge).</summary>
     public bool IsAdmin => Item.Role == Role.Admin;

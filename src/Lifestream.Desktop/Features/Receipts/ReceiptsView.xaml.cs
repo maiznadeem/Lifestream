@@ -12,8 +12,8 @@ namespace Lifestream.Desktop.Features.Receipts;
 
 /// <summary>
 /// The Receipts screen. Double-clicking a row, or pressing Enter on it, opens that receipt's printable view (FEAT-18); Esc closes the side panel. The
-/// blood group chip opens its menu on a click. A compact window drops the "Issued by" column (the panel's receipt still names the staff member) and
-/// narrows the panel.
+/// blood group chip opens its menu on a click. The "Issued by" column folds away while the table is narrower than 860 DIP (a compact window, or the panel
+/// open; the panel names who issued the receipt), and a compact window narrows the panel.
 /// </summary>
 public partial class ReceiptsView : UserControl
 {
@@ -22,6 +22,9 @@ public partial class ReceiptsView : UserControl
     public ReceiptsView()
     {
         InitializeComponent();
+        MoreButton.ContextMenu.SetBinding(FrameworkElement.DataContextProperty, new System.Windows.Data.Binding(nameof(DataContext)) { Source = this });
+
+        // The "..." menu lives outside the visual tree: give it the screen's model, so its commands are bound before it opens.
         Loaded += (_, _) =>
         {
             BreakpointDescriptor.AddValueChanged(this, OnBreakpointChanged);
@@ -92,7 +95,6 @@ public partial class ReceiptsView : UserControl
     private void ApplyBreakpoint()
     {
         var compact = Responsive.GetBreakpoint(this) == Breakpoint.Compact;
-        IssuedByColumn.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
         if (compact)
         {
             Panel.SetResourceReference(SidePanel.PanelWidthProperty, "Width.PanelCompact");

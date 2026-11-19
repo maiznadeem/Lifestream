@@ -104,6 +104,19 @@ public sealed partial class ProfileViewModel : FormViewModelBase, INavigationPar
 
     public string SaveText => "Save changes";
 
+    /// <summary>The keyboard shortcuts of the main window, for the Shortcuts section (the same keys the shell binds).</summary>
+    public IReadOnlyList<ShortcutInfo> Shortcuts { get; } =
+    [
+        new(["Ctrl", "K"], "Search records or run a command"),
+        new(["Ctrl", "F"], "Search the list on this page"),
+        new(["Ctrl", "N"], "Add a record on this page"),
+        new(["Ctrl", "D"], "Record a donation for the next appointment today"),
+        new(["Ctrl", "B"], "Collapse or expand the sidebar"),
+        new(["Alt", "1–8"], "Open a page of the sidebar"),
+        new(["F6"], "Move between the title bar, the sidebar and the page"),
+        new(["Esc"], "Close the side panel, the dialog or the palette"),
+    ];
+
     public string SaveBusyText => "Saving...";
 
     private const string NotRecorded = "Not recorded";
@@ -241,7 +254,7 @@ public sealed partial class ProfileViewModel : FormViewModelBase, INavigationPar
 
         _rowVersion = profile.RowVersion;
         Username = profile.Username;
-        DesignationText = profile.Designation.ToString();
+        DesignationText = StaffText.JobTitle(profile.Designation);
         ShiftText = StaffText.Shift(profile.Shift);
         DateOfBirthText = profile.DateOfBirth == default ? NotRecorded : Formatting.Date(profile.DateOfBirth);
         MemberSinceText = profile.MemberSinceUtc == default ? NotRecorded : Formatting.Date(DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(profile.MemberSinceUtc, DateTimeKind.Utc), TimeZoneInfo.Local)));
@@ -481,4 +494,10 @@ public sealed partial class ProfileViewModel : FormViewModelBase, INavigationPar
 
         base.Dispose(disposing);
     }
+}
+
+/// <summary>One keyboard shortcut: its keys ("Ctrl", "K") and what it does.</summary>
+public sealed record ShortcutInfo(IReadOnlyList<string> Keys, string Action)
+{
+    public string AutomationName => $"{string.Join(" ", Keys)}: {Action}";
 }

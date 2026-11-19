@@ -215,15 +215,17 @@ public sealed class Part2RequestReceiptTests
 
         var donation = vm.Items[0];
         Assert.Equal("Dr. Staff Member", donation.StaffName); // the staff name, with the id only as secondary text
-        Assert.Equal("#1", donation.StaffIdText);
+        Assert.Equal("S-0001", donation.StaffIdText);
         Assert.Equal("Ayşe Nur Öztürk", donation.PartyName);
         Assert.Equal("Appointment", donation.SourceKindText);
-        Assert.Equal("#5", donation.SourceIdText);
+        Assert.Equal("A-0005", donation.SourceIdText);
         var issue = vm.Items[1];
         Assert.Equal("Request", issue.SourceKindText);
-        Assert.Equal("#7", issue.SourceIdText);
+        Assert.Equal("R-0007", issue.SourceIdText);
         Assert.Equal("Issue", issue.KindText);
         Assert.Equal("19 Nov 2026 14:30", donation.WhenText);
+        Assert.Equal(("19 Nov 2026", "14:30"), (donation.DateText, donation.TimeText)); // the cell's date line over its time line
+        Assert.Equal("RC-0090", donation.CodeText);
 
         vm.SearchText = "Haddad";
         await vm.SearchNowCommand.ExecuteAsync();
@@ -263,7 +265,7 @@ public sealed class Part2RequestReceiptTests
         Assert.Equal("Donation receipt", donation.Title);
         Assert.Contains(donation.Lines, l => l is { Label: "Donor", Value: "Ayşe Nur Öztürk-Abdulrahman" });
         Assert.Contains(donation.Lines, l => l is { Label: "Appointment" } && l.Value.StartsWith("Ayşe", StringComparison.Ordinal));
-        Assert.Contains(donation.Lines, l => l is { Label: "Issued by", Value: "Dr. Staff Member (#1)" });
+        Assert.Contains(donation.Lines, l => l is { Label: "Issued by", Value: "Dr. Staff Member (S-0001)" });
         Assert.Contains(donation.Lines, l => l is { Label: "Date", Value: "19 Nov 2026 14:30" });
         Assert.Null(donation.CopyNotice);
 

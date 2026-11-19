@@ -154,4 +154,10 @@ public interface ILifestreamApiClient
     Task<ApiResult<EnumLookups>> GetEnumLookupsAsync(CancellationToken ct = default);
 
     Task<ApiResult> ResetDemoAsync(CancellationToken ct = default);
+
+    /// <summary>The available bags of one group in use-first order (oldest collection first), for the Stock screen's panel.</summary>
+    Task<ApiResult<StockBagList>> GetStockBagsAsync(Lifestream.Domain.BloodType bloodType, CancellationToken ct = default);
+
+    /// <summary>The receipts matching the list's filters, in all and by kind (the Receipts tabs' counts).</summary>
+    Task<ApiResult<ReceiptCounts>> GetReceiptCountsAsync(ReceiptCountQuery query, CancellationToken ct = default);
 }

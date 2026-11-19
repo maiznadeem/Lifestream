@@ -24,8 +24,9 @@ public static class StockEndpoints
         return [.. rows.Select(r => new StockItem(r.BloodType, r.Available, r.ExpiringSoon, threshold, r.Available < threshold))];
     }
 
+    // The stock screen's call also carries each group's age bands (StockBagEndpoints.LoadWithAgesAsync: the same counts, from one query).
     private static async Task<List<StockItem>> GetAsync(LifestreamDbContext db, TimeProvider time, IOptions<StockSettings> stock, CancellationToken ct) =>
-        await LoadAsync(db, time, stock.Value.Threshold, ct);
+        await StockBagEndpoints.LoadWithAgesAsync(db, time, stock.Value.Threshold, ct);
 }
 
 public static class DashboardEndpoints

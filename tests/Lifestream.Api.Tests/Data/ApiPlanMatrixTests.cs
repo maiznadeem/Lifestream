@@ -174,6 +174,13 @@ public sealed class ApiPlanMatrixTests(ScaleApiFixture fx) : IClassFixture<Scale
         data.Add("dashboard|offset");
         data.Add("eligibility|donor");
         data.Add("slots|today");
+        data.Add("stock-bags|OPos");
+        data.Add("stock-bags|ABNeg");
+        data.Add("receipt-counts|");
+        data.Add("receipt-counts|bloodType=OPos");
+        data.Add("receipt-counts|search=a");
+        data.Add("receipt-counts|search=Al&bloodType=APos");
+        data.Add("receipt-counts|fromUtc={from}&toUtc={to}");
         return data;
     }
 
@@ -357,6 +364,10 @@ public sealed class ApiPlanMatrixTests(ScaleApiFixture fx) : IClassFixture<Scale
                 return ApiRoutes.Path(ApiRoutes.DonorEligibility, donorId);
             case "slots":
                 return ApiRoutes.Path(ApiRoutes.AppointmentSlots) + "?date=" + DateTime.UtcNow.AddDays(1).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+            case "stock-bags":
+                return ApiRoutes.Path(ApiRoutes.StockBags) + "?bloodType=" + parts[1];
+            case "receipt-counts":
+                return ApiRoutes.Path(ApiRoutes.ReceiptCounts) + (parts[1].Length == 0 ? "" : "?" + Fill(parts[1]));
             default:
                 var shape = Lists[parts[0]];
                 var query = new List<string>();

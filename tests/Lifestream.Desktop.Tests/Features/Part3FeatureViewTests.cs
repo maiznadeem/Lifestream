@@ -128,7 +128,8 @@ public sealed class Part3FeatureViewTests
             return (
                 ReceiptDates: receiptDates.Count,
                 ReceiptTrimmed: receiptDates.Where(IsClipped).Select(t => t.Text).ToList(),
-                ReceiptDateWithTime: receiptDates.Any(t => t.Text.Contains(':', StringComparison.Ordinal)),
+                // The time is its own line under the date ("18 Nov 2026" over "16:42"), so neither is cut.
+                ReceiptDateWithTime: receiptsHost.All<TextBlock>().Any(t => t.IsVisible && t.DataContext is ReceiptRow && System.Text.RegularExpressions.Regex.IsMatch(t.Text, @"^\d{2}:\d{2}$") && !IsClipped(t)),
                 NeededByDates: neededBy.Count,
                 NeededByTrimmed: neededBy.Where(IsClipped).Select(t => t.Text).ToList());
         });

@@ -99,6 +99,9 @@ public sealed class AuthorizationMatrixTests(ApiFixture fx) : IClassFixture<ApiF
 
         // The demo account's own action; running it from the matrix would wipe the fixture, so DemoTests runs it for real.
         new(ApiRoutes.DemoReset, HttpMethod.Post, [Who.Demo], SkipAllowedCheck: true),
+
+        new(ApiRoutes.StockBags, HttpMethod.Get, Everyone),
+        new(ApiRoutes.ReceiptCounts, HttpMethod.Get, Everyone),
     ];
 
     private static string PathFor(Endpoint e)

@@ -96,10 +96,10 @@ public sealed partial class StaffViewModel : SortedRecordListViewModel<StaffRow,
     /// <summary>True when the side panel is open: a person is selected or opened by id, or the add or edit form is open.</summary>
     public bool IsPanelOpen => SelectedItem is not null || Detail is not null || DetailState != LoadState.Ready || Editor is not null;
 
-    /// <summary>The panel's header line: "Staff member #12", or what the form is doing.</summary>
+    /// <summary>The panel's header line: "Staff member S-0012", or what the form is doing.</summary>
     public string PanelOverline => Editor is not null
-        ? (Detail is { } editing && IsEditing ? $"Editing {RecordFormatting.IdText(editing.Id)}" : "New staff member")
-        : Detail is { } staff ? $"Staff member {RecordFormatting.IdText(staff.Id)}" : "Staff member";
+        ? (Detail is { } editing && IsEditing ? $"Editing {Receipts.RecordCodes.Staff(editing.Id)}" : "New staff member")
+        : Detail is { } staff ? $"Staff member {Receipts.RecordCodes.Staff(staff.Id)}" : "Staff member";
 
     /// <summary>The selected person's initials, for the panel's avatar.</summary>
     public string DetailInitials => StaffText.Initials(Detail?.DisplayName);
@@ -114,7 +114,7 @@ public sealed partial class StaffViewModel : SortedRecordListViewModel<StaffRow,
     public string DetailStaffAccessText => DetailIsAdmin ? "Staff accounts: add, change and reset passwords" : "Staff list, view only";
 
     /// <summary>"Doctor, morning shift": what the person does, under their name.</summary>
-    public string DetailSubtitle => Detail is { } s ? $"{s.Designation}, {(s.Shift == Lifestream.Domain.Shift.FullTime ? "full time" : $"{s.Shift.ToString().ToLowerInvariant()} shift")}" : string.Empty;
+    public string DetailSubtitle => Detail is { } s ? $"{StaffText.JobTitle(s.Designation)}, {(s.Shift == Lifestream.Domain.Shift.FullTime ? "full time" : $"{s.Shift.ToString().ToLowerInvariant()} shift")}" : string.Empty;
 
     /// <summary>The one line the read-only account sees above the list, instead of disabled buttons everywhere.</summary>
     public bool IsReadOnly => !CanManageStaff;
@@ -167,6 +167,20 @@ public sealed partial class StaffViewModel : SortedRecordListViewModel<StaffRow,
 
     private int? SalaryTo => ParseDigits(SalaryToText);
 
+    /// <summary>The salary chip's words: "Salary" with no range, else the range ("Salary: 2,000–3,000").</summary>
+    public string SalaryChipText => StaffText.SalaryChip(SalaryFrom, SalaryTo);
+
+    /// <summary>True while a salary range is set (the chip shows it as set).</summary>
+    public bool HasSalaryRange => SalaryFrom is not null || SalaryTo is not null;
+
+    /// <summary>Empties the salary range (the popup's Clear).</summary>
+    public AsyncRelayCommand ClearSalaryCommand => field ??= Command(_ =>
+    {
+        SalaryFromText = string.Empty;
+        SalaryToText = string.Empty;
+        return Task.CompletedTask;
+    });
+
     private bool HasSalaryFilter => SalaryRangeError is null && (SalaryFrom is not null || SalaryTo is not null);
 
     protected override bool HasExtraFilters => HasSalaryFilter || SalaryRangeError is not null;
@@ -195,6 +209,8 @@ public sealed partial class StaffViewModel : SortedRecordListViewModel<StaffRow,
 
     private void SalaryRangeChanged()
     {
+        OnPropertyChanged(nameof(SalaryChipText));
+        OnPropertyChanged(nameof(HasSalaryRange));
         if (SalaryFrom is { } from && SalaryTo is { } to && from > to)
         {
             SalaryRangeError = "From can't be higher than To.";
@@ -241,11 +257,13 @@ public sealed partial class StaffViewModel : SortedRecordListViewModel<StaffRow,
             return;
         }
 
-        if (State is LoadState.Loading or LoadState.Waking || CurrentServerStatus?.State == ServerState.Waking)
+        if (State is LoadState.Loading or LoadState.Waking || IsOperationWaking || CurrentServerStatus?.State == ServerState.Waking)
         {
-            // No thumbnail request STARTS while the list is (re)loading or the server is waking: a row that scrolls into view then (or appears when the
-            // layout changes, as it does when a toast leaves) would add a request after the user pressed Cancel, one that no Cancel on screen stops.
-            // The row waits and is fetched once the list is ready and the server answers again (OnStateChangedForPhotos, OnServerAwake).
+            // No thumbnail request STARTS while the list is (re)loading, a call of this screen waits on the waking server, or the server is waking: a row
+            // that is first shown then (it scrolls into view, an Undo reloads the list, a page is drawn late, the layout changes when a toast leaves)
+            // would add a request after the user pressed Cancel, one that no Cancel on screen stops.
+            // The row waits and is fetched once the list is ready and the server answers again (OnStateChangedForPhotos, OnServerAwake,
+            // OnOperationWakingChanged).
             _deferredPhotos.Add(row);
             WatchForServerAwake();
             return;
@@ -299,6 +317,19 @@ public sealed partial class StaffViewModel : SortedRecordListViewModel<StaffRow,
         {
             _resumeWatch = status;
             status.Changed += OnServerAwake;
+        }
+    }
+
+    /// <summary>
+    /// The screen's waking notice left (the call answered, or the user cancelled it). Rows deferred while it showed are asked for again here when no
+    /// server watch does it; a row asked while the server is still waking is deferred once more, so this starts no request on a waking server.
+    /// </summary>
+    protected override void OnOperationWakingChanged(bool isWaking)
+    {
+        base.OnOperationWakingChanged(isWaking);
+        if (!isWaking && !_disposed && _resumeWatch is null)
+        {
+            OnStateChangedForPhotos();
         }
     }
 
@@ -370,8 +401,7 @@ public sealed partial class StaffViewModel : SortedRecordListViewModel<StaffRow,
         List<DetailFact> facts =
         [
             new("Username", s.Username),
-            new("Role", s.Role.ToString()),
-            new("Designation", s.Designation.ToString()),
+            new("Job title", StaffText.JobTitle(s.Designation)),
             new("Shift", StaffText.Shift(s.Shift)),
             new("Gender", s.Gender.ToString()),
             new("Date of birth", Formatting.Date(s.DateOfBirth)),

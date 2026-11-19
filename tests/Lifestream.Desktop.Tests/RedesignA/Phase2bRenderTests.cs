@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using Lifestream.Client.Features.Profile;
 using Lifestream.Client.Features.Receipts;
@@ -18,7 +19,8 @@ namespace Lifestream.Desktop.Tests.RedesignA;
 
 /// <summary>
 /// Renders of direction A's Stock, Receipts, Staff and Profile screens and the form dialogs, light and dark, through the real view models and views
-/// from the fake API (off-screen; no window is shown). A screen is drawn at the size of the shell's page area in a 1440 x 900 window, maximized on a
+/// from the fake API (off-screen; no window is shown). The fake API also answers the stock age bands, a group's bags and the receipt counts
+/// (<see cref="Dress"/>), so the stock-by-age matrix, the panel's bag list and the tab counts render with figures. A screen is drawn at the size of the shell's page area in a 1440 x 900 window, maximized on a
 /// 1920 x 1080 screen and in a 1024 x 700 window (the window less the sidebar, or the rail when compact, and the 44 DIP title bar), with the breakpoint
 /// the shell gives that window. Each render is saved for review and checked for what a broken layout loses: the side panel inside the page, the theme's
 /// canvas colour, and the compact column folding.
@@ -29,10 +31,43 @@ public sealed class Phase2bRenderTests
 {
     private const double TitleBar = 44;
 
-    /// <summary>Where the renders go: LIFESTREAM_CAPTURE_DIR, else the run's phase 2 captures folder, else the test output.</summary>
+    /// <summary>Where the renders go: LIFESTREAM_CAPTURE_DIR, else the run's fix-round captures folder, else the test output.</summary>
     public static string Directory { get; } = Environment.GetEnvironmentVariable("LIFESTREAM_CAPTURE_DIR") is { Length: > 0 } env
         ? env
-        : System.IO.Directory.Exists(@"G:\Claude\workspace\lifestream\run") ? @"G:\Claude\workspace\lifestream\run\captures\redesign-a\phase2" : Hosted.CaptureDirectory;
+        : System.IO.Directory.Exists(@"G:\Claude\workspace\lifestream\run") ? @"G:\Claude\workspace\lifestream\run\captures\redesign-a\fix" : Hosted.CaptureDirectory;
+
+    /// <summary>How the demo stock splits over the six age bands: the expiring units in the last band, the rest spread over the first five, newest first.</summary>
+    private static int[] Bands(Contracts.Stock.StockItem item)
+    {
+        var rest = item.Available - item.ExpiringSoon;
+        int[] weights = [3, 3, 2, 1, 1];
+        var bands = weights.Select(w => rest * w / 10).ToArray();
+        bands[0] += rest - bands.Sum();
+        return [.. bands, item.ExpiringSoon];
+    }
+
+    /// <summary>The extra answers of the fix round: stock with its age bands, the bags of a group in use-first order, and the receipt tab counts.</summary>
+    internal static void Dress(Client.Tests.Fakes.Rig rig, BloodType bagsOf = BloodType.ANeg)
+    {
+        ArgumentNullException.ThrowIfNull(rig);
+        var stock = DemoData.Stock().Select(s => s with { AgeBands = Bands(s) }).ToList();
+        rig.Api.On("GetStockAsync", Client.Api.ApiResult<IReadOnlyList<Contracts.Stock.StockItem>>.Ok(stock));
+        var group = stock.Single(s => s.BloodType == bagsOf);
+        var today = DateTime.UtcNow.Date;
+        var bags = new List<Contracts.Stock.StockBag>();
+        for (var band = Contracts.Stock.StockAges.BandCount - 1; band >= 0; band--)
+        {
+            for (var k = 0; k < group.AgeBands![band]; k++)
+            {
+                var age = Contracts.Stock.StockAges.Bands[band].ToDay - k;
+                var collected = today.AddDays(-age).AddHours(9 + k);
+                bags.Add(new(4100 + bags.Count * 7, DateTime.SpecifyKind(collected, DateTimeKind.Utc), DateOnly.FromDateTime(collected).AddDays(BloodRules.ShelfLifeDays)));
+            }
+        }
+
+        rig.Api.On("GetStockBagsAsync", Client.Api.ApiResult<Contracts.Stock.StockBagList>.Ok(new(bagsOf, bags, false)));
+        rig.Api.On("GetReceiptCountsAsync", Client.Api.ApiResult<Contracts.Receipts.ReceiptCounts>.Ok(new(120, 84, 36)));
+    }
 
     public static TheoryData<string, string, string> Screens()
     {
@@ -69,6 +104,7 @@ public sealed class Phase2bRenderTests
             try
             {
                 using var rig = Part2Harness.NewRig();
+                Dress(rig);
                 var view = Build(screen, rig);
                 Responsive.SetBreakpoint(view, breakpoint);
                 using var host = Hosted.Create(Part2Harness.OnCanvas(view, view.DataContext), width, height);
@@ -154,7 +190,9 @@ public sealed class Phase2bRenderTests
                 File.WriteAllBytes(Path.Combine(Directory, $"dialog-{dialog}-{theme}.png"), png);
                 var surface = host.All<DialogSurface>().Single();
                 var layer = ThemeService.ColorOf("Color.Layer");
-                return (Png: png, Layer: layer, Surface: Hosted.BoundsOf(surface, host.Element), Primary: host.All<Button>().Any(b => b.IsVisible && b.Name == "PrimaryButton"));
+                var footer = host.All<Button>().Where(b => b.IsVisible && Hosted.BoundsOf(b, host.Element).Top > Hosted.BoundsOf(surface, host.Element).Bottom - 80)
+                    .OrderBy(b => Hosted.BoundsOf(b, host.Element).Left).Select(b => AutomationProperties.GetName(b)).ToList();
+                return (Png: png, Layer: layer, Surface: Hosted.BoundsOf(surface, host.Element), Primary: host.All<Button>().Any(b => b.IsVisible && b.Name == "PrimaryButton"), Footer: footer);
             }
             finally
             {
@@ -164,7 +202,11 @@ public sealed class Phase2bRenderTests
 
         Assert.Equal(32, facts.Surface.Left, 0); // the shadow room
         Assert.True(StaHost.CountPixelsNear(facts.Png, facts.Layer.R, facts.Layer.G, facts.Layer.B, 1) > 20000, "the dialog's layer colour is missing");
-        Assert.Equal(dialog != "receipt", facts.Primary); // the receipt dialog has Print and Save as PDF in its body and Close in the footer
+        Assert.Equal(dialog != "receipt", facts.Primary); // the receipt dialog has no form primary: its own Print is the primary, last in the footer
+        if (dialog == "receipt")
+        {
+            Assert.Equal(["Save as PDF", "Close", "Print"], facts.Footer);
+        }
     }
 
     /// <summary>The empty and error states of the stock and receipts pages (LoadSurface), light, at 1440 x 900.</summary>
@@ -207,6 +249,114 @@ public sealed class Phase2bRenderTests
         Assert.Equal(state == "receipts-error", facts.Error);
     }
 
+    /// <summary>
+    /// The new states of the fix round, at 1440 x 900 (and dark where the colour matters): the stock matrix and the receipts list without a panel (all
+    /// columns), receipts maximized (Issued by in full), a salary range set on Staff and its popup's content, and Profile with a change (the save bar).
+    /// </summary>
+    [Theory]
+    [InlineData("stock-matrix", "light")]
+    [InlineData("stock-matrix", "dark")]
+    [InlineData("receipts-list", "light")]
+    [InlineData("receipts-list-max", "light")]
+    [InlineData("staff-salary", "light")]
+    [InlineData("staff-salary", "dark")]
+    [InlineData("staff-editor", "light")]
+    [InlineData("staff-editor", "dark")]
+    [InlineData("profile-changed", "light")]
+    [InlineData("profile-changed", "dark")]
+    [InlineData("profile-changed-max", "light")]
+    public void FixState_Renders(string state, string theme)
+    {
+        var (width, height, breakpoint) = PageArea(state.EndsWith("-max", StringComparison.Ordinal) ? "max" : "1440");
+        var facts = StaHost.Run(() =>
+        {
+            ThemeService.Apply(theme == "dark" ? ThemeMode.Dark : ThemeMode.Light);
+            try
+            {
+                using var rig = Part2Harness.NewRig();
+                Dress(rig);
+                var screen = state.Split('-')[0];
+                var view = Build(screen, rig);
+                Responsive.SetBreakpoint(view, breakpoint);
+                using var host = Hosted.Create(Part2Harness.OnCanvas(view, view.DataContext), width, height);
+                var texts = new List<string>();
+                switch (view.DataContext)
+                {
+                    case StockViewModel stock:
+                        Hosted.Await(() => stock.LoadAsync());
+                        break;
+                    case ReceiptsViewModel receipts:
+                        Hosted.Await(() => receipts.LoadAsync());
+                        break;
+                    case StaffViewModel staff when state == "staff-editor":
+                        Hosted.Await(() => staff.LoadAsync());
+                        Hosted.Await(() => staff.AddCommand.ExecuteAsync());
+                        break;
+                    case StaffViewModel staff:
+                        Hosted.Await(() => staff.LoadAsync());
+                        staff.SalaryFromText = "2000";
+                        staff.SalaryToText = "3500";
+                        break;
+                    case ProfileViewModel profile:
+                        Hosted.Await(() => profile.LoadAsync());
+                        host.Settle(200);
+                        profile.DisplayName = "Test User Lindqvist";
+                        break;
+                }
+
+                host.Settle(700);
+                var png = host.Capture();
+                System.IO.Directory.CreateDirectory(Directory);
+                File.WriteAllBytes(Path.Combine(Directory, $"{state}-{(state.EndsWith("-max", StringComparison.Ordinal) ? "max" : "1440")}-{theme}.png".Replace("-max-max", "-max", StringComparison.Ordinal)), png);
+                texts.AddRange(host.All<TextBlock>().Where(t => t.IsVisible).Select(t => new System.Windows.Documents.TextRange(t.ContentStart, t.ContentEnd).Text));
+                var trimmed = host.All<TextBlock>().Where(t => t.IsVisible && TruncationTooltip.IsTrimmed(t) && !TruncationTooltip.GetIsEnabled(t))
+                    .Select(t => t.Text).ToList();
+
+                if (view is StaffView staffView && staffView.FindName("SalaryPopup") is System.Windows.Controls.Primitives.Popup popup && popup.Child is FrameworkElement child)
+                {
+                    // The popup's content, drawn in the page's own off-screen host (a popup would open a window of its own).
+                    popup.Child = null;
+                    child.DataContext = view.DataContext;
+                    var stage = new Grid();
+                    stage.SetResourceReference(Panel.BackgroundProperty, "Brush.Canvas");
+                    stage.Children.Add(new Border { Child = child, HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top });
+                    using var popupHost = Hosted.Create(stage, 340, 240);
+                    popupHost.Settle(300);
+                    File.WriteAllBytes(Path.Combine(Directory, $"staff-salary-popup-{theme}.png"), popupHost.Capture());
+                }
+
+                return (Png: png, Canvas: ThemeService.ColorOf("Color.Canvas"), Texts: texts, Trimmed: trimmed);
+            }
+            finally
+            {
+                ThemeService.Apply(ThemeMode.Light);
+            }
+        });
+
+        Assert.True(StaHost.CountPixelsNear(facts.Png, facts.Canvas.R, facts.Canvas.G, facts.Canvas.B, 1) > 5000, "the theme's canvas colour is missing");
+        Assert.True(facts.Trimmed.Count == 0, "cut off without a tooltip: " + string.Join(" | ", facts.Trimmed));
+        switch (state)
+        {
+            case "stock-matrix":
+                Assert.Contains("35–42", facts.Texts); // the band headers come from the API's band definitions
+                Assert.Contains("42 units", facts.Texts);
+                break;
+            case "receipts-list" or "receipts-list-max":
+                Assert.Contains("All 120", facts.Texts); // tab counts from the API
+                Assert.Contains("Donations 84", facts.Texts);
+                break;
+            case "staff-salary":
+                Assert.Contains("Salary: 2,000–3,500", facts.Texts);
+                break;
+            case "staff-editor":
+                Assert.Contains("New staff member", facts.Texts);
+                break;
+            default:
+                Assert.Contains("You have unsaved changes.", facts.Texts);
+                break;
+        }
+    }
+
     private static UserControl Build(string screen, Client.Tests.Fakes.Rig rig) => screen switch
     {
         "stock" => new StockView { DataContext = Part2Harness.Create<StockViewModel>(rig) },
@@ -223,6 +373,7 @@ public sealed class Phase2bRenderTests
                 Hosted.Await(() => stock.LoadAsync());
                 host.Settle(200);
                 stock.SelectedTile = stock.Tiles.Single(t => t.BloodType == BloodType.ANeg); // a group below its minimum
+                Hosted.Await(() => stock.PendingBags);
                 break;
             case ReceiptsViewModel receipts:
                 Hosted.Await(() => receipts.LoadAsync());

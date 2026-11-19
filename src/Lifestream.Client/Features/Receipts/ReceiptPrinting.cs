@@ -46,7 +46,7 @@ public sealed record ReceiptDocument(string Title, string Number, IReadOnlyList<
         var donation = receipt.Kind == ReceiptKind.Donation;
         var lines = new List<DetailFact>
         {
-            new("Receipt", RecordFormatting.IdText(receipt.Id)),
+            new("Receipt", RecordCodes.Receipt(receipt.Id)),
             new("Date", RecordFormatting.When(receipt.CreatedAtUtc, zone)),
             new(donation ? "Donor" : "Patient", receipt.PartyName),
             new("Blood type", receipt.BloodType.ToDisplay()),
@@ -54,24 +54,24 @@ public sealed record ReceiptDocument(string Title, string Number, IReadOnlyList<
         };
         if (receipt.AppointmentId is { } appointment)
         {
-            lines.Add(new DetailFact("Appointment", $"{receipt.PartyName} ({RecordFormatting.IdText(appointment)})"));
+            lines.Add(new DetailFact("Appointment", $"{receipt.PartyName} ({RecordCodes.Appointment(appointment)})"));
         }
 
         if (receipt.RequestId is { } request)
         {
-            lines.Add(new DetailFact("Request", $"{receipt.PartyName} ({RecordFormatting.IdText(request)})"));
+            lines.Add(new DetailFact("Request", $"{receipt.PartyName} ({RecordCodes.Request(request)})"));
         }
 
-        lines.Add(new DetailFact("Issued by", RecordFormatting.NameWithId(receipt.StaffName, receipt.StaffId)));
+        lines.Add(new DetailFact("Issued by", $"{receipt.StaffName} ({RecordCodes.Staff(receipt.StaffId)})"));
         if (receipt.BagIds.Count > 0)
         {
-            lines.Add(new DetailFact(receipt.BagIds.Count == 1 ? "Blood bag" : "Blood bags", string.Join(", ", receipt.BagIds.Select(RecordFormatting.IdText))));
+            lines.Add(new DetailFact(receipt.BagIds.Count == 1 ? "Blood bag" : "Blood bags", string.Join(", ", receipt.BagIds.Select(RecordCodes.Bag))));
         }
 
         var printedAt = (clock ?? TimeProvider.System).GetUtcNow().UtcDateTime;
         return new ReceiptDocument(
             donation ? "Donation receipt" : "Blood issue receipt",
-            RecordFormatting.IdText(receipt.Id),
+            RecordCodes.Receipt(receipt.Id),
             lines,
             string.IsNullOrWhiteSpace(receipt.Notes) ? null : receipt.Notes,
             isDuplicate ? $"Duplicate copy printed {RecordFormatting.When(printedAt, zone)}" : null,

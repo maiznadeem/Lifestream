@@ -272,6 +272,18 @@ public sealed class LifestreamApiClient(HttpClient http, ISessionService session
     public Task<ApiResult> ResetDemoAsync(CancellationToken ct = default) =>
         SendAsync(HttpMethod.Post, ApiRoutes.Path(ApiRoutes.DemoReset), null, ct);
 
+    public Task<ApiResult<StockBagList>> GetStockBagsAsync(Lifestream.Domain.BloodType bloodType, CancellationToken ct = default) =>
+        SendAsync<StockBagList>(HttpMethod.Get, Url(ApiRoutes.StockBags, ("bloodType", bloodType)), ct: ct);
+
+    public Task<ApiResult<ReceiptCounts>> GetReceiptCountsAsync(ReceiptCountQuery query, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        return SendAsync<ReceiptCounts>(
+            HttpMethod.Get,
+            Url(ApiRoutes.ReceiptCounts, ("search", query.Search), ("bloodType", query.BloodType), ("fromUtc", query.FromUtc), ("toUtc", query.ToUtc)),
+            ct: ct);
+    }
+
     // Plumbing
 
     /// <summary>

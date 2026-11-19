@@ -223,4 +223,8 @@ public sealed class FakeApiClient : ILifestreamApiClient
     public Task<ApiResult<EnumLookups>> GetEnumLookupsAsync(CancellationToken ct = default) => Run<EnumLookups>(nameof(GetEnumLookupsAsync), ct);
 
     public Task<ApiResult> ResetDemoAsync(CancellationToken ct = default) => RunVoid(nameof(ResetDemoAsync), ct);
+
+    public Task<ApiResult<StockBagList>> GetStockBagsAsync(BloodType bloodType, CancellationToken ct = default) => Run<StockBagList>(nameof(GetStockBagsAsync), ct);
+
+    public Task<ApiResult<ReceiptCounts>> GetReceiptCountsAsync(ReceiptCountQuery query, CancellationToken ct = default) => Run<ReceiptCounts>(nameof(GetReceiptCountsAsync), ct);
 }

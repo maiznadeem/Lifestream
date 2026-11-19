@@ -425,7 +425,7 @@ public sealed class Part2StaffProfileTests
 
         Assert.Equal("Test Admin", vm.DisplayName);
         Assert.Equal("admin", vm.Username);
-        Assert.Equal("Admin", vm.DesignationText);
+        Assert.Equal("Administration", vm.DesignationText); // the Admin job title, worded so it is never read as the Admin role
         Assert.Equal("Full time", vm.ShiftText);
         Assert.False(vm.HasUnsavedChanges);
         Assert.False(vm.SaveCommand.CanExecute(null));
