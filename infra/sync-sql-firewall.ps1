@@ -22,7 +22,13 @@
   Security gate: the addresses are shared multi-tenant Azure egress, so the firewall narrows exposure but is not a tenant boundary.
   The script therefore refuses to run (changing nothing, deleting nothing) unless `az sql server ad-only-auth get` returns true.
 
-  Locks: a CanNotDelete lock on the server also blocks deleting its firewall rules. Deletion failures are reported with that hint.
+  Locks: a CanNotDelete lock on the server also blocks deleting its firewall rules (INFRA-08 puts one there). When rules have to be
+  deleted and such a lock exists, the script removes the lock, deletes the rules, and puts the identical lock back in a finally block
+  (UNLOCK and RELOCK lines in the output), so the server is never left unlocked. Adds and updates happen first and need no lock change.
+  Managing locks needs Microsoft.Authorization/locks/write and delete, which the built-in Contributor role does NOT have (only Owner and
+  User Access Administrator do). Without that right the lock removal fails, nothing is deleted, the script fails loudly with that
+  explanation, and the addresses it needs were already added. A lock at resource-group level, or a ReadOnly lock, is not handled
+  (it would also block the adds): the script fails and names it.
 
   Every az call passes --subscription explicitly. Needs the Azure CLI containerapp extension.
 
@@ -59,6 +65,24 @@ function Invoke-Az {
         $hint = if ($text -match 'ScopeLocked|locked') { ' A CanNotDelete lock on the server blocks deleting firewall rules; set enableLocks=false for the run (infra/README.md).' } else { '' }
         throw "az $($Arguments[0..3] -join ' ') failed (exit $LASTEXITCODE): $text$hint"
     }
+}
+
+# CanNotDelete locks on the server itself, as objects the script can put back. Anything else that would block the sync stops it.
+function Get-ServerLocks {
+    $serverId = "/resourceGroups/$ResourceGroup/providers/Microsoft.Sql/servers/$Server"
+    $handled = [System.Collections.Generic.List[object]]::new()
+    foreach ($lock in @(Invoke-AzJson @('lock', 'list', '--resource-group', $ResourceGroup) | Where-Object { $_ })) {
+        $id = [string]$lock.id
+        $level = if ($lock.PSObject.Properties['level']) { [string]$lock.level } else { [string]$lock.properties.level }
+        $notes = if ($lock.PSObject.Properties['notes']) { [string]$lock.notes } else { [string]$lock.properties.notes }
+        $onServer = $id -like "*$serverId/providers/Microsoft.Authorization/locks/*"
+        $onGroup = $id -like "*/resourceGroups/$ResourceGroup/providers/Microsoft.Authorization/locks/*"
+        if (-not ($onServer -or $onGroup)) { continue }
+        if ($onGroup) { throw "FAILED: lock '$($lock.name)' on resource group $ResourceGroup would block the firewall deletes and the script does not manage resource-group locks. Remove it deliberately and rerun." }
+        if ($level -ne 'CanNotDelete') { throw "FAILED: lock '$($lock.name)' on $Server has level $level, which also blocks adding rules; the script only manages CanNotDelete locks. Remove it deliberately and rerun." }
+        $handled.Add([pscustomobject]@{ Id = $id; Name = [string]$lock.name; Notes = $notes })
+    }
+    $handled.ToArray()
 }
 
 function Get-OutboundIp {
@@ -119,11 +143,32 @@ foreach ($name in $desired.Keys) {
         $updated++
     } else { $kept++ }
 }
-foreach ($rule in $existing) {
-    if ($desired.Contains([string]$rule.name)) { continue }
-    Write-Host "DELETE $($rule.name) $($rule.startIpAddress)-$($rule.endIpAddress)"
-    if (-not $WhatIfOnly) { Invoke-Az @('sql', 'server', 'firewall-rule', 'delete', '--resource-group', $ResourceGroup, '--server', $Server, '--name', [string]$rule.name, '--yes') }
-    $removed++
+$stale = @($existing | Where-Object { -not $desired.Contains([string]$_.name) })
+if ($stale.Count -gt 0) {
+    $locks = @()
+    if (-not $WhatIfOnly) { $locks = @(Get-ServerLocks) }
+    $unlocked = [System.Collections.Generic.List[object]]::new()
+    try {
+        foreach ($lock in $locks) {
+            Write-Host "UNLOCK $($lock.Name) (CanNotDelete lock on $Server blocks deleting firewall rules; it is restored below)"
+            try { Invoke-Az @('lock', 'delete', '--ids', $lock.Id) }
+            catch { throw "FAILED: could not remove lock '$($lock.Name)' to delete stale firewall rules: the identity needs Microsoft.Authorization/locks/delete (Owner or User Access Administrator; Contributor lacks it). Nothing was deleted; the addresses the API needs are already in place. Remove the stale rules by hand or with a permitted identity (infra/README.md). Detail: $($_.Exception.Message)" }
+            $unlocked.Add($lock)
+        }
+        foreach ($rule in $stale) {
+            Write-Host "DELETE $($rule.name) $($rule.startIpAddress)-$($rule.endIpAddress)"
+            if (-not $WhatIfOnly) { Invoke-Az @('sql', 'server', 'firewall-rule', 'delete', '--resource-group', $ResourceGroup, '--server', $Server, '--name', [string]$rule.name, '--yes') }
+            $removed++
+        }
+    } finally {
+        $failedRestore = @()
+        foreach ($lock in $unlocked) {
+            Write-Host "RELOCK $($lock.Name)"
+            try { Invoke-Az @('lock', 'create', '--name', $lock.Name, '--lock-type', 'CanNotDelete', '--resource-group', $ResourceGroup, '--resource-name', $Server, '--resource-type', 'Microsoft.Sql/servers', '--resource-provider-namespace', 'Microsoft.Sql', '--notes', $lock.Notes) }
+            catch { $failedRestore += "$($lock.Name): $($_.Exception.Message)" }
+        }
+        if ($failedRestore.Count -gt 0) { Write-Error "FAILED: the CanNotDelete lock(s) could not be put back, the server is UNLOCKED. Recreate with infra/main.bicep (enableLocks=true) now. $($failedRestore -join '; ')" }
+    }
 }
 
 # Post-check: read the rules back and require exactly the desired set.

@@ -70,14 +70,14 @@ Describe 'INFRA-04 SQL firewall: no allow-all, only the API environment' {
 }
 
 Describe 'INFRA-05 Entra-only authentication' {
-    It 'sets an Entra administrator and drives Entra-only from one parameter that defaults to false' {
+    It 'sets an Entra administrator and drives Entra-only from one parameter that defaults to TRUE (re-applying the template must not re-enable SQL logins)' {
         $admin = Single 'Microsoft.Sql/servers/administrators' 'the Entra admin'
         $admin.properties.administratorType | Should -Be 'ActiveDirectory'
         $only = Single 'Microsoft.Sql/servers/azureADOnlyAuthentications' 'the Entra-only switch'
         $only.name | Should -Match 'Default'
         $only.properties.azureADOnlyAuthentication | Should -Be "[parameters('entraOnlyAuthentication')]"
         $script:Template.parameters.entraOnlyAuthentication.type | Should -Be 'bool'
-        $script:Template.parameters.entraOnlyAuthentication.defaultValue | Should -Be $false
+        $script:Template.parameters.entraOnlyAuthentication.defaultValue | Should -Be $true
     }
 
     It 'ships infra/enable-entra-only.ps1 (idempotent, post-checked; behaviour in EntraOnly.Tests.ps1) and the runbook orders it after the managed identity login is proven' {
@@ -98,9 +98,18 @@ Describe 'INFRA-05 Entra-only authentication' {
         $readme | Should -Match 'Authentication is the real control'
     }
 
-    It 'lets the final apply flip the switch from the parameter file (LIFESTREAM_ENTRA_ONLY=true)' {
+    It 'the parameter file defaults Entra-only to true and only an explicit LIFESTREAM_ENTRA_ONLY=false turns it off' {
         $paramFile = Get-Content (Join-Path $script:InfraDir 'main.bicepparam') -Raw
-        $paramFile | Should -Match 'param entraOnlyAuthentication = .*LIFESTREAM_ENTRA_ONLY'
+        $paramFile | Should -Match "param entraOnlyAuthentication = toLower\(readEnvironmentVariable\('LIFESTREAM_ENTRA_ONLY', 'true'\)\) == 'true'"
+    }
+
+    It 'the runbook bootstrap step passes LIFESTREAM_ENTRA_ONLY=false explicitly, before the first az deployment group create, and the last step drops it' {
+        $readme = Get-Content (Join-Path $script:InfraDir 'README.md') -Raw
+        $set = $readme.IndexOf("`$env:LIFESTREAM_ENTRA_ONLY = 'false'")
+        $set | Should -BeGreaterThan 0
+        $set | Should -BeLessThan $readme.IndexOf('az deployment group create --subscription')
+        $readme | Should -Match 'Remove-Item Env:LIFESTREAM_ENTRA_ONLY'
+        $readme | Should -Not -Match "LIFESTREAM_ENTRA_ONLY = 'true'"
     }
 }
 
@@ -372,7 +381,7 @@ Describe 'parameter file' {
         $text | Should -Not -Match "(?im)^\s*param\s+\w*(password|key|secret)\w*\s*=\s*'"
     }
 
-    It 'compiles to parameters with the secrets filled from the environment, Entra-only off and locks on by default' {
+    It 'compiles to parameters with the secrets filled from the environment, Entra-only ON and locks on by default (nothing set for either)' {
         $paramFile = Join-Path $script:InfraDir 'main.bicepparam'
         $vars = @{
             LIFESTREAM_API_IMAGE = 'ghcr.io/example/image:test'; LIFESTREAM_ENTRA_ADMIN_LOGIN = 'admin-group'
@@ -386,7 +395,7 @@ Describe 'parameter file' {
             $LASTEXITCODE | Should -Be 0
         } finally { foreach ($k in $vars.Keys) { [Environment]::SetEnvironmentVariable($k, $old[$k]) } }
         $p = ($out | ConvertFrom-Json -Depth 50).parametersJson | ConvertFrom-Json -Depth 50
-        $p.parameters.entraOnlyAuthentication.value | Should -Be $false
+        $p.parameters.entraOnlyAuthentication.value | Should -Be $true
         $p.parameters.enableLocks.value | Should -Be $true
         $p.parameters.apiImage.value | Should -Be 'ghcr.io/example/image:test'
     }

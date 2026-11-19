@@ -43,10 +43,17 @@ No container registry (images live in GHCR), no Key Vault, no gateway, no privat
   (parameter `location`) next to the database.
 - **No VNet, so the firewall follows the outbound addresses.** The API and the migrate job reach Azure SQL from the environment's
   outbound public addresses, which Azure may change. `infra/sync-sql-firewall.ps1` makes the server's firewall exactly those addresses
-  (`aca-outbound-<n>`), deleting every other rule including "Allow anyone" and `AllowAllWindowsAzureIps`. It runs after every app
-  update in `deploy-api.yml` and weekly in `sync-sql-firewall.yml`, and it never touches the database. It fails, deleting nothing, if the
-  environment reports no addresses. A CanNotDelete lock on the server also blocks deleting firewall rules, so a sync that has to delete
-  something while `enableLocks` is true fails with that hint; set `LIFESTREAM_ENABLE_LOCKS=false` for that run (step 3). The script also refuses to add any outbound-address rule while Entra-only authentication is off (see Security trade-offs).
+  (`aca-outbound-<n>`), deleting every other rule including "Allow anyone" and `AllowAllWindowsAzureIps`. It runs **before the migration
+  job** in every `deploy-api.yml` run (the job connects from the same addresses, so a changed address must not block it) and weekly in
+  `sync-sql-firewall.yml`, and it never touches the database. It adds or updates first, deletes second. It fails, deleting nothing, if the
+  environment reports no addresses. A CanNotDelete lock on the server also blocks deleting firewall rules, so when rules must be deleted
+  and such a lock exists the script removes the lock, deletes, and puts the identical lock back in a `finally` block (`UNLOCK` and
+  `RELOCK` lines in the log). That needs `Microsoft.Authorization/locks/delete` and `write`, which the built-in **Contributor** role
+  (the `lifestream-deployer` identity) does not have: with Contributor the script fails loudly at the lock, deletes nothing, and the
+  addresses the API needs are already in place. Granting the deployer Owner or User Access Administrator just for this would be a far
+  bigger right than the problem deserves, so the supported paths are: the runbook (steps 3 and 8 do the one-time cleanup with locks off),
+  and, if Azure ever shrinks the outbound set, deleting the stale `aca-outbound-<n>` rule once by hand as the subscription owner. The script
+  also refuses to add any outbound-address rule while Entra-only authentication is off (see Security trade-offs).
 - **Backups.** The free offer with auto-pause on exhaustion limits point-in-time restore to **7 days** (Microsoft Learn,
   "Azure SQL Database free tier FAQ"); the live policy is already 7. Requirement INFRA-08 asks for 14 or more and cannot be met on
   the free offer; `backupRetentionDays` defaults to 7 and Azure rejects a larger value. Moving to a paid database to get 14 days
@@ -76,6 +83,7 @@ Each step lists what it needs and how to check it. Steps that change Azure are t
    ```
    az deployment group what-if --subscription 88f308cf-f1e5-4e4d-b0bc-3e8b14ef9c65 --resource-group Lifestream --parameters infra/main.bicepparam
    $env:LIFESTREAM_ENABLE_LOCKS = 'false'
+   $env:LIFESTREAM_ENTRA_ONLY = 'false'   # bootstrap only: the template default is true, so a later apply can never re-enable SQL logins
    az deployment group create --subscription 88f308cf-f1e5-4e4d-b0bc-3e8b14ef9c65 --resource-group Lifestream --parameters infra/main.bicepparam
    ```
    Read `outputs.apiPrincipalId`, `outputs.migratorPrincipalId`, `outputs.deployerClientId`.
@@ -109,7 +117,7 @@ Each step lists what it needs and how to check it. Steps that change Azure are t
    the job. If the environment lists no outbound address (no app has started), the script stops and changes nothing. From here on
    `deploy-api.yml` and the weekly `sync-sql-firewall.yml` keep it in sync.
 9. **Locks, and the template in step with reality**: rerun step 3 with `LIFESTREAM_ENABLE_LOCKS=true` and
-   `$env:LIFESTREAM_ENTRA_ONLY = 'true'`, with `LIFESTREAM_API_IMAGE` set to the **currently running** image
+   `Remove-Item Env:LIFESTREAM_ENTRA_ONLY` (the template and parameter file default to Entra-only on; never set it to false again), with `LIFESTREAM_API_IMAGE` set to the **currently running** image
    (`az containerapp show --subscription 88f308cf-f1e5-4e4d-b0bc-3e8b14ef9c65 -n lifestream-api -g Lifestream --query properties.template.containers[0].image`),
    because the deploy workflow moves the app to newer images and the template would otherwise move it back.
 
