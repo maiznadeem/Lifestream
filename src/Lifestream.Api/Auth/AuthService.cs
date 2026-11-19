@@ -21,12 +21,11 @@ public sealed class AuthService(
     IOptions<DemoSettings> demoSettings,
     IMemoryCache cache,
     UnknownLoginStore unknown,
+    ICredentialHasher hasher,
+    DummyHash dummyHash,
     DemoSessionDenylist demoSessions)
 {
     private const int ConcurrencyRetries = 5;
-
-    // Verified against when the user does not exist, so an unknown name costs the same time as a wrong password.
-    private static readonly Lazy<string> DummyHash = new(() => PasswordHashing.Hash("not-a-real-account"));
 
     private AuthSettings Auth => authSettings.Value;
 
@@ -54,11 +53,11 @@ public sealed class AuthService(
         await unknown.ReserveAsync(staffId, username, Auth.MaxFailedAttempts, Auth.LockoutMinutes, ct);
         if (staffId is null)
         {
-            PasswordHashing.Verify(DummyHash.Value, request.Password);
+            hasher.Verify(dummyHash.Value, request.Password);
             throw InvalidCredentials();
         }
 
-        if (!PasswordHashing.Verify(user!.PasswordHash, request.Password))
+        if (!hasher.Verify(user!.PasswordHash, request.Password))
         {
             throw InvalidCredentials();
         }
@@ -289,4 +288,42 @@ public static class RevocationCache
         cache.Set(key, state, TimeSpan.FromSeconds(20));
         return state;
     }
+}
+
+/// <summary>The password hashing the login runs (PBKDF2), behind an interface so a test can count the work.</summary>
+public interface ICredentialHasher
+{
+    string Hash(string password);
+
+    bool Verify(string hash, string password);
+}
+
+public sealed class Pbkdf2CredentialHasher : ICredentialHasher
+{
+    public string Hash(string password) => PasswordHashing.Hash(password);
+
+    public bool Verify(string hash, string password) => PasswordHashing.Verify(hash, password);
+}
+
+/// <summary>
+/// The hash a login for a name with no password account is checked against, so an unknown name costs the same work as a wrong password.
+/// It is computed when the object is created, which <see cref="LoginTimingSetup.WarmUp"/> does while the application is built, before the host accepts a request: the first unknown name
+/// after a start must not pay for one more hash than a real account does (the verifier measured 840 ms against 390 ms).
+/// </summary>
+public sealed class DummyHash(ICredentialHasher hasher)
+{
+    public string Value { get; } = hasher.Hash("not-a-real-account");
+}
+
+public static class LoginTimingSetup
+{
+    public static IServiceCollection AddLoginTimingSafeguards(this IServiceCollection services)
+    {
+        services.AddSingleton<ICredentialHasher, Pbkdf2CredentialHasher>();
+        services.AddSingleton<DummyHash>();
+        return services;
+    }
+
+    /// <summary>Creates the dummy hash now (one PBKDF2 hash), so no request ever pays for it. Called before the host starts listening.</summary>
+    public static void WarmUp(IServiceProvider services) => _ = services.GetRequiredService<DummyHash>().Value;
 }

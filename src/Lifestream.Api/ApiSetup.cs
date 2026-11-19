@@ -106,6 +106,7 @@ public static class ApiSetup
 
         services.AddSingleton<TokenService>();
         services.AddSingleton<DemoDirectory>();
+        services.AddLoginTimingSafeguards();
         services.AddScoped<UnknownLoginStore>();
         services.AddScoped<DemoSessionDenylist>();
         services.AddScoped<CurrentUser>();
@@ -178,6 +179,7 @@ public static class ApiSetup
 
     public static WebApplication UseLifestreamApi(this WebApplication app)
     {
+        LoginTimingSetup.WarmUp(app.Services); // the dummy hash for unknown names is computed before the first request, not by it
         app.UseForwardedHeaders();
         app.UseMiddleware<CorrelationMiddleware>();
         app.UseMiddleware<ProblemMiddleware>();
