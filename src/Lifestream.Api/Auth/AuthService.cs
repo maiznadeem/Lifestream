@@ -45,28 +45,20 @@ public sealed class AuthService(
         var username = request.Username.Trim();
         var user = await db.Staff.AsNoTracking()
             .Where(s => s.Username == username)
-            .Select(s => new { s.Id, s.DisplayName, s.Role, s.IsDemo, s.Credential!.PasswordHash, s.Credential.LockoutEndUtc, s.Credential.MustChangePassword })
+            .Select(s => new { s.Id, s.DisplayName, s.Role, s.IsDemo, s.Credential!.PasswordHash, s.Credential.MustChangePassword })
             .FirstOrDefaultAsync(ct);
 
-        if (user is null or { IsDemo: true })
+        // A name with no password account (and the demo account) takes exactly the same steps: the same counting in the database, then a
+        // hash check against a dummy hash, then the same answer.
+        var staffId = user is null or { IsDemo: true } ? (int?)null : user.Id;
+        await unknown.ReserveAsync(staffId, username, Auth.MaxFailedAttempts, Auth.LockoutMinutes, ct);
+        if (staffId is null)
         {
-            if (await unknown.ReserveAsync(username, Auth.MaxFailedAttempts, Auth.LockoutMinutes, ct) is { } wait)
-            {
-                throw LoginProblems.Locked(wait);
-            }
-
             PasswordHashing.Verify(DummyHash.Value, request.Password);
             throw InvalidCredentials();
         }
 
-        // Fast path for an account that is already locked: no hash is checked and nothing is written.
-        if (user.LockoutEndUtc is { } until && until > Now)
-        {
-            throw LoginProblems.Locked(until - Now);
-        }
-
-        await ReserveAttemptAsync(user.Id, ct);
-        if (!PasswordHashing.Verify(user.PasswordHash, request.Password))
+        if (!PasswordHashing.Verify(user!.PasswordHash, request.Password))
         {
             throw InvalidCredentials();
         }
@@ -77,49 +69,11 @@ public sealed class AuthService(
 
     /// <summary>
     /// Counts one password guess for a real account, atomically (an application lock per account serialises the check of the lock
-    /// and the increment; the write is audited like every other staff write). Throws 429 when the account is locked. The lock starts
+    /// and the increment; the same steps and statements as for an unknown name, see <see cref="UnknownLoginStore.ReserveAsync"/>). Throws 429 when the account is locked. The lock starts
     /// with the guess that reaches the limit, and counting restarts. A write that cannot be made is an error, never a dropped count.
     /// </summary>
-    public async Task<AttemptReservation> ReserveAttemptAsync(int staffId, CancellationToken ct)
-    {
-        for (var attempt = 1; ; attempt++)
-        {
-            try
-            {
-                return await db.RunAsync(async token =>
-                {
-                    await db.LockAsync($"login:{staffId}", token);
-                    var staff = await AttachCountersAsync(staffId, token) ?? throw InvalidCredentials();
-                    var now = Now;
-                    if (staff.LockoutEndUtc is { } until && until > now)
-                    {
-                        throw LoginProblems.Locked(until - now);
-                    }
-
-                    if (staff.FailedCount > 0 && staff.LastFailureUtc is { } last && last + UnknownLogin.Retention <= now)
-                    {
-                        staff.FailedCount = 0; // idle for the retention time: the partial count is forgotten, as an unknown name's row is purged
-                    }
-
-                    staff.FailedCount++;
-                    staff.LastFailureUtc = now;
-                    var lockedNow = staff.FailedCount >= Auth.MaxFailedAttempts;
-                    if (lockedNow)
-                    {
-                        staff.LockoutEndUtc = now.AddMinutes(Auth.LockoutMinutes);
-                        staff.FailedCount = 0;
-                    }
-
-                    await db.SaveChangesAsync(token);
-                    return new AttemptReservation(lockedNow);
-                }, ct);
-            }
-            catch (DbUpdateConcurrencyException) when (attempt < ConcurrencyRetries)
-            {
-                // Another writer changed the row between the read and the write: count again from the fresh row.
-            }
-        }
-    }
+    public Task<AttemptReservation> ReserveAttemptAsync(int staffId, CancellationToken ct) =>
+        unknown.ReserveAsync(staffId, "", Auth.MaxFailedAttempts, Auth.LockoutMinutes, ct);
 
     /// <summary>
     /// Loads only the counters and the row version of the credential (never the password hash) into a stub that EF tracks, so the save
