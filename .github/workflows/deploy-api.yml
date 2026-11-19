@@ -168,7 +168,7 @@ jobs:
       - name: Require Entra-only authentication on the SQL server
         run: |
           set -euo pipefail
-          on="$(az sql server ad-only-auth get --resource-group "$AZURE_RESOURCE_GROUP" --name "$SQL_SERVER" --subscription "$AZURE_SUBSCRIPTION_ID" \n            --query azureAdOnlyAuthentication --output tsv)"
+          on="$(az sql server ad-only-auth get --resource-group "$AZURE_RESOURCE_GROUP" --name "$SQL_SERVER" --subscription "$AZURE_SUBSCRIPTION_ID" --query azureAdOnlyAuthentication --output tsv)"
           if [ "$on" != "true" ]; then echo "REFUSING TO DEPLOY: Entra-only authentication is '$on' on $SQL_SERVER" >&2; exit 1; fi
           echo "Entra-only authentication is on for $SQL_SERVER."
 
