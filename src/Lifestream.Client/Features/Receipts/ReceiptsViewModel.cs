@@ -48,6 +48,15 @@ public sealed class ReceiptRow
 
     public string StaffName => Item.StaffName;
 
+    /// <summary>The issuing staff member's initials, for the compact "Issued by" avatar (the full name is its tooltip).</summary>
+    public string StaffInitials => Staff.StaffText.Initials(Item.StaffName);
+
+    /// <summary>True for a blood issue receipt, false for a donation receipt (the kind pill's icon and colour).</summary>
+    public bool IsIssue => Item.Kind == ReceiptKind.Issue;
+
+    /// <summary>The group as set in type (A−).</summary>
+    public string GroupText => Item.BloodType.ToTypographic();
+
     public string StaffIdText => RecordFormatting.IdText(Item.StaffId);
 }
 
@@ -63,6 +72,7 @@ public sealed class ReceiptsViewModel : SortedRecordListViewModel<ReceiptRow, Re
     private readonly ILifestreamApiClient _api;
     private readonly IReceiptViewer _viewer;
     private readonly INavigationService _navigation;
+    private readonly IReceiptPrinter? _printer;
     private FilterOption<ReceiptKind> _kindFilter;
 
     public ReceiptsViewModel(
@@ -73,9 +83,46 @@ public sealed class ReceiptsViewModel : SortedRecordListViewModel<ReceiptRow, Re
         IReceiptViewer viewer,
         INavigationService navigation,
         IUiDispatcher ui)
+        : this(api, states, toasts, dialogs, viewer, navigation, ui, null)
+    {
+    }
+
+    /// <summary>The screen as the app makes it: <paramref name="printer"/> lets the side panel print the selected receipt, or save it as a PDF, without opening it first.</summary>
+    [Microsoft.Extensions.DependencyInjection.ActivatorUtilitiesConstructor]
+    public ReceiptsViewModel(
+        ILifestreamApiClient api,
+        IListViewStateStore states,
+        IToastService toasts,
+        IDialogService dialogs,
+        IReceiptViewer viewer,
+        INavigationService navigation,
+        IUiDispatcher ui,
+        IReceiptPrinter? printer)
         : base(states, "receipts", toasts, dialogs, ui)
     {
         _api = api;
+        _printer = printer;
+        PrintCommand = Command(_ => SendAsync(save: false), () => Detail is not null && _printer is not null && !IsBusy);
+        SavePdfCommand = Command(_ => SendAsync(save: true), () => Detail is not null && _printer is not null && !IsBusy);
+        ClosePanelCommand = Command(_ =>
+        {
+            SelectedItem = null;
+            return LoadDetailAsync(null); // also closes a receipt opened by id from another screen
+        });
+        PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(Detail))
+            {
+                Preview = Detail is { } receipt ? ReceiptDocument.From(receipt, isDuplicate: false, Clock, Zone) : null;
+                PrintCommand.RaiseCanExecuteChanged();
+                SavePdfCommand.RaiseCanExecuteChanged();
+                OnPropertyChanged(nameof(PanelOverline));
+            }
+            if (e.PropertyName is nameof(SelectedItem) or nameof(Detail) or nameof(DetailState))
+            {
+                OnPropertyChanged(nameof(IsPanelOpen));
+            }
+        };
         _viewer = viewer;
         _navigation = navigation;
         KindOptions = SharedLists.WithAll(SharedLists.ReceiptKinds, "All receipts");
@@ -163,6 +210,60 @@ public sealed class ReceiptsViewModel : SortedRecordListViewModel<ReceiptRow, Re
     public AsyncRelayCommand OpenPartyCommand { get; }
 
     public AsyncRelayCommand OpenSourceCommand { get; }
+
+    /// <summary>Prints the selected receipt as a duplicate copy (it was issued before).</summary>
+    public AsyncRelayCommand PrintCommand { get; }
+
+    /// <summary>Saves the selected receipt as a PDF (a duplicate copy).</summary>
+    public AsyncRelayCommand SavePdfCommand { get; }
+
+    /// <summary>Closes the side panel (clears the selection).</summary>
+    public AsyncRelayCommand ClosePanelCommand { get; }
+
+    /// <summary>True when the side panel shows a receipt: a row is selected, or one was opened by id (loading, shown, or failed to load).</summary>
+    public bool IsPanelOpen => SelectedItem is not null || Detail is not null || DetailState != LoadState.Ready;
+
+    /// <summary>"Donation receipt #12": the panel's header line.</summary>
+    public string? PanelOverline => Detail is { } receipt ? $"{(receipt.Kind == ReceiptKind.Donation ? "Donation" : "Blood issue")} receipt {RecordFormatting.IdText(receipt.Id)}" : null;
+
+    /// <summary>The selected receipt as it prints, for the panel's preview (the same document the printer gets, without the duplicate line).</summary>
+    public ReceiptDocument? Preview
+    {
+        get;
+        private set => SetProperty(ref field, value);
+    }
+
+    private async Task SendAsync(bool save)
+    {
+        if (Detail is not { } receipt || _printer is null)
+        {
+            return;
+        }
+
+        var document = ReceiptDocument.From(receipt, isDuplicate: true, Clock, Zone);
+        PrintOutcome outcome;
+        try
+        {
+            outcome = save ? await _printer.SaveAsPdfAsync(document).ConfigureAwait(true) : await _printer.PrintAsync(document).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or IOException)
+        {
+            Toasts.Show(ToastKind.Error, "The receipt could not be printed. Check the printer and try again.");
+            return;
+        }
+
+        switch (outcome)
+        {
+            case PrintOutcome.Done:
+                Toasts.Show(ToastKind.Success, save ? "Sent to the PDF printer. Choose where to save the file." : "Receipt sent to the printer.");
+                break;
+            case PrintOutcome.Unavailable:
+                Toasts.Show(ToastKind.Error, save
+                    ? "Save as PDF isn't available: the 'Microsoft Print to PDF' printer isn't installed. Use Print and choose another PDF printer."
+                    : "No printer is available. Connect or install a printer and try again.");
+                break;
+        }
+    }
 
     public FilterOption<ReceiptKind> KindFilter
     {
