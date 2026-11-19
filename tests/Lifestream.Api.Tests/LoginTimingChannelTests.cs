@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Text.RegularExpressions;
 using Lifestream.Api.Auth;
 using Lifestream.Api.Tests.Support;
 using Lifestream.Contracts;
@@ -37,14 +36,11 @@ public sealed class CountingHasher : ICredentialHasher
 
 /// <summary>
 /// API-01 (timing side channels the verifier measured, v-04d-api V19 and V20): the dummy hash for unknown names is computed at start, not by the
-/// first unknown login; and every unknown name has an application lock of its own, like a real account. All tests here run against a real SQL Server.
+/// first unknown login; and every unknown name is serialised on its own key range, like a real account on its own lock. All tests here run against a real SQL Server.
 /// </summary>
-public sealed partial class LoginTimingChannelTests(ApiFixture fx) : IClassFixture<ApiFixture>
+public sealed class LoginTimingChannelTests(ApiFixture fx) : IClassFixture<ApiFixture>
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
-
-    [GeneratedRegex(@"^login:\d+$")]
-    private static partial Regex LockShape();
 
     private static async Task<int> LoginStatusAsync(HttpClient client, string username, string password)
     {
@@ -99,63 +95,63 @@ public sealed partial class LoginTimingChannelTests(ApiFixture fx) : IClassFixtu
         }
     }
 
-    private async Task<string> LockOfAsync(int? staffId, string username)
+    /// <summary>Holds the key-range lock (as the login's own unknown-name read takes it) on a name, in a transaction of its own, until disposed.</summary>
+    private async Task<IAsyncDisposable> HoldNameAsync(string name)
     {
-        await using var scope = fx.Factory.Services.CreateAsyncScope();
-        return await scope.ServiceProvider.GetRequiredService<UnknownLoginStore>().LockResourceAsync(staffId, username, Ct);
-    }
-
-    [Fact]
-    public async Task LockResource_DiffersPerUnknownName_HasTheShapeOfARealAccountsLock_AndIsOneForEverySpellingOfAName()
-    {
-        Assert.Contains("Microsoft SQL Server", fx.Db.ServerVersion);
-        var user = await fx.AddStaffAsync(Role.Staff);
-        var a = "ghost-lock-" + Guid.NewGuid().ToString("N")[..8];
-        var b = "ghost-lock-" + Guid.NewGuid().ToString("N")[..8];
-
-        var real = await LockOfAsync(user.Id, user.Username);
-        var unknownA = await LockOfAsync(null, a);
-        var unknownB = await LockOfAsync(null, b);
-
-        Assert.Equal($"login:{user.Id}", real);
-        Assert.NotEqual(unknownA, unknownB);
-        Assert.NotEqual("login:unknown", unknownA);
-        Assert.NotEqual(real, unknownA);
-        Assert.Matches(LockShape(), real);
-        Assert.Matches(LockShape(), unknownA);
-        Assert.Matches(LockShape(), unknownB);
-
-        // Same collation as the unknown-name table: the spellings it treats as one name (case, soft hyphen, fullwidth letters) take one lock.
-        Assert.Equal(unknownA, await LockOfAsync(null, a.ToUpperInvariant()));
-        Assert.Equal(await LockOfAsync(null, "ghostpq"), await LockOfAsync(null, "ghost­pq"));
-        Assert.Equal(await LockOfAsync(null, "ghostpq"), await LockOfAsync(null, "ghostpｑ"));
-    }
-
-    [Fact]
-    public async Task Login_ALockHeldForOneUnknownName_BlocksOnlyThatName_NotAnotherUnknownName()
-    {
-        Assert.Contains("Microsoft SQL Server", fx.Db.ServerVersion);
-        var held = "ghost-held-" + Guid.NewGuid().ToString("N")[..8];
-        var other = "ghost-free-" + Guid.NewGuid().ToString("N")[..8];
-        var resource = await LockOfAsync(null, held);
-
-        await using var connection = new SqlConnection(fx.Db.ConnectionString);
+        var connection = new SqlConnection(fx.Db.ConnectionString);
         await connection.OpenAsync(Ct);
-        await using var transaction = (SqlTransaction)await connection.BeginTransactionAsync(Ct);
-        await using (var take = new SqlCommand("DECLARE @r int; EXEC @r = sp_getapplock @Resource = @res, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 0; SELECT @r;", connection, transaction))
+        var transaction = (SqlTransaction)await connection.BeginTransactionAsync(Ct);
+        await using (var take = new SqlCommand("SELECT FailedCount FROM UnknownLogin WITH (UPDLOCK, HOLDLOCK) WHERE Name = @name", connection, transaction))
         {
-            take.Parameters.AddWithValue("@res", resource);
-            Assert.True((int)(await take.ExecuteScalarAsync(Ct))! >= 0, "the test could not take the lock");
+            take.Parameters.Add(new SqlParameter("@name", System.Data.SqlDbType.NVarChar, 100) { Value = name });
+            await take.ExecuteScalarAsync(Ct);
         }
 
-        using var client = fx.NewClient();
-        var blocked = LoginStatusAsync(client, held, "w");
-        Assert.Equal(401, await LoginStatusAsync(client, other, "w")); // another unknown name is not held up by it
-        await Task.Delay(1500, Ct);
-        Assert.False(blocked.IsCompleted, "a login for the locked name should wait for its lock");
+        return new Held(connection, transaction);
+    }
 
-        await transaction.CommitAsync(Ct);
-        Assert.Equal(401, await blocked);
+    private sealed class Held(SqlConnection connection, SqlTransaction transaction) : IAsyncDisposable
+    {
+        public async ValueTask DisposeAsync()
+        {
+            await transaction.CommitAsync();
+            await transaction.DisposeAsync();
+            await connection.DisposeAsync();
+        }
+    }
+
+    [Fact]
+    public async Task Login_TheNameRowHeldByAnotherTransaction_BlocksEveryEqualSpellingOfThatName_ButNotAnotherName()
+    {
+        Assert.Contains("Microsoft SQL Server", fx.Db.ServerVersion);
+        // Three names with rows already, in order (aaa < mmm < zzz), so the key range of one name is not the range of another.
+        var id = Guid.NewGuid().ToString("N")[..8];
+        var held = "aaa-held-" + id;
+        var other = "zzz-free-" + id;
+        foreach (var name in new[] { held, "mmm-fence-" + id, other })
+        {
+            Assert.Equal(401, await LoginStatusAsync(fx.NewClient(), name, "seed"));
+        }
+
+        var holder = await HoldNameAsync(held);
+        try
+        {
+            using var client = fx.NewClient();
+            var blocked = LoginStatusAsync(client, held.ToUpperInvariant(), "w");
+            Assert.Equal(401, await LoginStatusAsync(client, other, "w")); // another unknown name is not held up by it
+            await Task.Delay(1500, Ct);
+            Assert.False(blocked.IsCompleted, "a login for an equal spelling of the held name should wait for its key-range lock");
+            await holder.DisposeAsync();
+            holder = null!;
+            Assert.Equal(401, await blocked);
+        }
+        finally
+        {
+            if (holder is not null)
+            {
+                await holder.DisposeAsync();
+            }
+        }
     }
 
     private static double Median(List<double> values) => values.Order().ElementAt(values.Count / 2);
