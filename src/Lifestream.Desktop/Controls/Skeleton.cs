@@ -155,12 +155,12 @@ public sealed class Skeleton : Decorator
         IsAnimating = false;
     }
 
-    private Border Bar(double width = double.NaN, double height = BarHeight, double radius = 4, HorizontalAlignment align = HorizontalAlignment.Stretch) => new()
+    private Border Bar(double width = double.NaN, double height = BarHeight, HorizontalAlignment align = HorizontalAlignment.Stretch) => new()
     {
         Tag = "bar",
         Width = width,
         Height = height,
-        CornerRadius = new CornerRadius(radius),
+        CornerRadius = ThemeTokens.Radius("Radius.Control"),
         Background = _barBrush,
         HorizontalAlignment = align,
         VerticalAlignment = VerticalAlignment.Center,
@@ -174,12 +174,12 @@ public sealed class Skeleton : Decorator
         var root = new StackPanel { Orientation = Orientation.Vertical };
 
         // Toolbar: a search box and two buttons, the same height as the real toolbar controls.
-        var toolbar = new Grid { Height = Token("Height.Control", 40), Margin = new Thickness(0, 0, 0, Token("Space.16", 16)) };
+        var toolbar = new Grid { Height = Token("Height.Control", 40), Margin = ThemeTokens.Inset("Inset.B16") };
         toolbar.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(320) });
         toolbar.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         toolbar.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        toolbar.Children.Add(Bar(height: Token("Height.Control", 40), radius: 4));
-        var action = Bar(width: 128, height: Token("Height.Control", 40), radius: 4);
+        toolbar.Children.Add(Bar(height: Token("Height.Control", 40)));
+        var action = Bar(width: 128, height: Token("Height.Control", 40));
         Grid.SetColumn(action, 2);
         toolbar.Children.Add(action);
         root.Children.Add(toolbar);
@@ -200,7 +200,7 @@ public sealed class Skeleton : Decorator
             {
                 // The bar starts where the grid's cell text starts (cell padding 12) and is a little shorter than the cell.
                 var bar = Bar();
-                bar.Margin = new Thickness(12, 0, 12, 0);
+                bar.Margin = ThemeTokens.Inset("Inset.H12");
                 Grid.SetColumn(bar, column);
                 line.Children.Add(bar);
             }
@@ -216,8 +216,8 @@ public sealed class Skeleton : Decorator
 
     private StackPanel BuildDetail()
     {
-        var root = new StackPanel { Orientation = Orientation.Vertical, Margin = new Thickness(0, 0, 0, 0) };
-        root.Children.Add(new Border { Width = 72, Height = 72, CornerRadius = new CornerRadius(36), Background = _barBrush, Tag = "bar", HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 0, 0, 24) });
+        var root = new StackPanel { Orientation = Orientation.Vertical,  };
+        root.Children.Add(new Border { Width = 72, Height = 72, CornerRadius = ThemeTokens.Radius("Radius.Avatar"), Background = _barBrush, Tag = "bar", HorizontalAlignment = HorizontalAlignment.Left, Margin = ThemeTokens.Inset("Inset.B24") });
         for (var i = 0; i < 6; i++)
         {
             root.Children.Add(LabelValueRow());
@@ -229,7 +229,7 @@ public sealed class Skeleton : Decorator
     private StackPanel BuildProfile()
     {
         var root = new StackPanel { Orientation = Orientation.Vertical };
-        root.Children.Add(new Border { Width = 96, Height = 96, CornerRadius = new CornerRadius(48), Background = _barBrush, Tag = "bar", HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 0, 0, 24) });
+        root.Children.Add(new Border { Width = 96, Height = 96, CornerRadius = ThemeTokens.Radius("Radius.AvatarLarge"), Background = _barBrush, Tag = "bar", HorizontalAlignment = HorizontalAlignment.Left, Margin = ThemeTokens.Inset("Inset.B24") });
         for (var i = 0; i < 9; i++)
         {
             root.Children.Add(LabelValueRow());
@@ -244,7 +244,7 @@ public sealed class Skeleton : Decorator
         row.RowDefinitions.Add(new RowDefinition { Height = new GridLength(20) });
         row.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         row.Children.Add(Bar(width: 96, height: 10, align: HorizontalAlignment.Left));
-        var value = Bar(height: 16, radius: 4);
+        var value = Bar(height: 16);
         value.MaxWidth = 360;
         value.HorizontalAlignment = HorizontalAlignment.Left;
         value.Width = 280;
@@ -260,18 +260,22 @@ public sealed class Skeleton : Decorator
         root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(280) });
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
-        var kpis = new UniformGrid { Rows = 1, Columns = 4 };
-        for (var i = 0; i < 4; i++)
+        const int KpiCount = 4;
+        var gap = ThemeTokens.Space("Space.8");
+        var kpis = new UniformGrid { Rows = 1, Columns = KpiCount };
+        for (var i = 0; i < KpiCount; i++)
         {
-            kpis.Children.Add(Block(height: 80, margin: new Thickness(i == 0 ? 0 : 8, 0, i == 3 ? 0 : 8, 0), radius: 8));
+            var isFirst = i == 0;
+            var isLast = i == KpiCount - 1;
+            kpis.Children.Add(Block(height: 80, margin: new Thickness(isFirst ? 0 : gap, 0, isLast ? 0 : gap, 0)));
         }
 
         root.Children.Add(kpis);
-        var chart = Block(height: 264, margin: new Thickness(0, 16, 0, 0), radius: 8);
+        var chart = Block(height: 264, margin: ThemeTokens.Inset("Inset.T16"));
         Grid.SetRow(chart, 1);
         root.Children.Add(chart);
 
-        var table = new StackPanel { Margin = new Thickness(0, 16, 0, 0) };
+        var table = new StackPanel { Margin = ThemeTokens.Inset("Inset.T16") };
         for (var i = 0; i < 5; i++)
         {
             var row = new Grid { Height = Token("Height.Row", 40) };
@@ -281,7 +285,7 @@ public sealed class Skeleton : Decorator
             for (var c = 0; c < 3; c++)
             {
                 var bar = Bar();
-                bar.Margin = new Thickness(12, 0, 12, 0);
+                bar.Margin = ThemeTokens.Inset("Inset.H12");
                 Grid.SetColumn(bar, c);
                 row.Children.Add(bar);
             }
@@ -294,12 +298,12 @@ public sealed class Skeleton : Decorator
         return root;
     }
 
-    private Border Block(double height, Thickness margin, double radius) => new()
+    private Border Block(double height, Thickness margin) => new()
     {
         Tag = "bar",
         Height = height,
         Margin = margin,
-        CornerRadius = new CornerRadius(radius),
+        CornerRadius = ThemeTokens.Radius("Radius.Card"),
         Background = _barBrush,
     };
 
@@ -308,7 +312,7 @@ public sealed class Skeleton : Decorator
         var grid = new UniformGrid { Columns = 4, Rows = 2 };
         for (var i = 0; i < 8; i++)
         {
-            grid.Children.Add(Block(height: 112, margin: new Thickness(0, 0, 16, 16), radius: 8));
+            grid.Children.Add(Block(height: 112, margin: ThemeTokens.Inset("Inset.R16B16")));
         }
 
         return grid;
@@ -319,15 +323,15 @@ public sealed class Skeleton : Decorator
         var panel = new StackPanel();
         for (var i = 0; i < 3; i++)
         {
-            var row = new Grid { Height = 52, Margin = new Thickness(12, 0, 12, 0) };
+            var row = new Grid { Height = 52, Margin = ThemeTokens.Inset("Inset.H12") };
             row.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
             row.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
             var title = Bar(width: 180, height: 12, align: HorizontalAlignment.Left);
             title.VerticalAlignment = VerticalAlignment.Bottom;
-            title.Margin = new Thickness(0, 0, 0, 4);
+            title.Margin = ThemeTokens.Inset("Inset.B4");
             var subtitle = Bar(width: 120, height: 10, align: HorizontalAlignment.Left);
             subtitle.VerticalAlignment = VerticalAlignment.Top;
-            subtitle.Margin = new Thickness(0, 4, 0, 0);
+            subtitle.Margin = ThemeTokens.Inset("Inset.T4");
             Grid.SetRow(subtitle, 1);
             row.Children.Add(title);
             row.Children.Add(subtitle);

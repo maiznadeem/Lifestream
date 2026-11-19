@@ -27,7 +27,7 @@ public enum StockFilter
 /// the selected record. The editor opens in a side drawer. Delete asks first, names the record, changes the list only after the API
 /// confirms, shows a plain message on failure and offers Undo after success (FEAT-06).
 /// </summary>
-public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListViewModel<TItem>, INavigationParameterReceiver, IDirtyTracking
+public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListViewModel<TItem>, INavigationParameterReceiver, IDirtyTracking, IScrollMemory
     where TItem : class
     where TDetail : class
 {
@@ -50,11 +50,7 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
             _bloodTypeFilter = BloodTypeOptions.First(o => o.Value == remembered);
         }
 
-        AddCommand = new AsyncRelayCommand(_ =>
-        {
-            OpenEditor(null);
-            return Task.CompletedTask;
-        });
+        AddCommand = new AsyncRelayCommand(_ => AddAsync());
         EditCommand = new AsyncRelayCommand(_ =>
         {
             OpenEditor(Detail);
@@ -62,6 +58,13 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
         }, () => Detail is not null && !IsEditing);
         DeleteCommand = new AsyncRelayCommand(_ => DeleteSelectedAsync(), () => Detail is { } record && !IsEditing && CanDelete(record));
         RetryDetailCommand = new AsyncRelayCommand(_ => LoadDetailAsync(_selectedId));
+    }
+
+    /// <summary>The list's scroll position, kept in the session's <see cref="ListViewState"/> (SHELL-24).</summary>
+    double IScrollMemory.ScrollOffset
+    {
+        get => ViewState.ScrollOffset;
+        set => ViewState.ScrollOffset = value;
     }
 
     /// <summary>For the editors this screen opens.</summary>
@@ -318,8 +321,26 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
         }
     }
 
+    /// <summary>"Add" and Ctrl+N: a new record replaces the open editor, so a dirty one asks "Discard changes?" first (SHELL-24).</summary>
+    private async Task AddAsync()
+    {
+        if (HasUnsavedChanges
+            && !await Dialogs.ConfirmAsync("Discard changes?", $"You have unsaved changes to this {RecordType}. If you start a new one now they will be lost.", "Discard changes").ConfigureAwait(true))
+        {
+            return;
+        }
+
+        OpenEditor(null);
+    }
+
     private void OpenEditor(TDetail? existing)
     {
+        if (Editor is { } previous)
+        {
+            previous.Closed -= OnEditorClosed;
+            previous.Dispose();
+        }
+
         var editor = CreateEditor(existing);
         editor.Closed += OnEditorClosed;
         Editor = editor;

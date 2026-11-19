@@ -73,7 +73,7 @@ public partial class RecordPicker : UserControl
         if (child is FrameworkElement element)
         {
             element.VerticalAlignment = VerticalAlignment.Top;
-            element.Margin = new Thickness(0, 44, 0, 0);
+            element.Margin = Theme.ThemeTokens.Inset("Inset.T44");
             element.SetBinding(VisibilityProperty, new System.Windows.Data.Binding(nameof(RecordPickerViewModel.IsOpen)) { Converter = new BooleanToVisibilityConverter() });
         }
 

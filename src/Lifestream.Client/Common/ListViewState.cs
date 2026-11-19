@@ -17,6 +17,13 @@ public sealed class ListViewState
     public string? SortExpression => SortColumn is null ? null : SortDescending ? "-" + SortColumn : SortColumn;
 }
 
+/// <summary>A screen whose scroll position outlives its view: the list grid saves it here while the user scrolls and restores it when the screen is shown again (SHELL-24).</summary>
+public interface IScrollMemory
+{
+    /// <summary>The vertical offset of the list, in the grid's own scroll units.</summary>
+    double ScrollOffset { get; set; }
+}
+
 public interface IListViewStateStore
 {
     /// <summary>Returns the same state object every time for the key, for as long as the user is signed in.</summary>
