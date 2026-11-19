@@ -10,11 +10,12 @@
     <feat:NullToVisibleConverter x:Key="NullToVisible" />
   </UserControl.Resources>
   <Border Background="{DynamicResource Brush.SurfaceRaised}" CornerRadius="{DynamicResource Radius.Card}" Padding="{DynamicResource Pad.16}" AutomationProperties.Name="Details">
+    <DockPanel LastChildFill="True">
+      <controls:WakingNotice x:Name="Waking" IsActive="{Binding ShowWakingNotice}" CancelCommand="{Binding CancelWakingCommand}" DockPanel.Dock="Top" feat:Edge.Bottom="{DynamicResource Space.12}" />
     <Grid>
       <TextBlock x:Name="NoSelection" Style="{DynamicResource Text.Body}" Foreground="{DynamicResource Brush.TextSecondary}" Text="{Binding NoSelectionText}" TextWrapping="Wrap"
                  VerticalAlignment="Top" Visibility="{Binding SelectedItem, Converter={StaticResource NullToVisible}}" />
       <controls:Skeleton Kind="Detail" Visibility="{Binding ShowDetailSkeleton, Converter={StaticResource BoolToVisibility}}" />
-      <controls:WakingNotice x:Name="Waking" IsActive="{Binding IsDetailWaking}" CancelCommand="{Binding CancelDetailCommand}" VerticalAlignment="Top" />
       <controls:ErrorState Message="{Binding DetailError}" RetryCommand="{Binding RetryDetailCommand}" Visibility="{Binding HasDetailError, Converter={StaticResource BoolToVisibility}}" />
       <Grid x:Name="DetailBody" Visibility="{Binding HasDetail, Converter={StaticResource BoolToVisibility}}">
         <Grid.RowDefinitions>
@@ -39,5 +40,6 @@
         </ScrollViewer>
       </Grid>
     </Grid>
+    </DockPanel>
   </Border>
 </UserControl>

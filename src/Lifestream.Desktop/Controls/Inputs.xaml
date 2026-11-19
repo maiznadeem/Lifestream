@@ -25,6 +25,7 @@
   <Style x:Key="TextBox.Lifestream" TargetType="TextBox" BasedOn="{StaticResource Input.Base}">
     <Setter Property="CaretBrush" Value="{DynamicResource Brush.TextPrimary}" />
     <Setter Property="SelectionBrush" Value="{DynamicResource Brush.Primary}" />
+    <Setter Property="ContextMenu" Value="{DynamicResource ContextMenu.Editor}" />
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="TextBox">
@@ -59,6 +60,7 @@
   <Style x:Key="PasswordBox.Lifestream" TargetType="PasswordBox" BasedOn="{StaticResource Input.Base}">
     <Setter Property="CaretBrush" Value="{DynamicResource Brush.TextPrimary}" />
     <Setter Property="SelectionBrush" Value="{DynamicResource Brush.Primary}" />
+    <Setter Property="ContextMenu" Value="{DynamicResource ContextMenu.Paste}" />
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="PasswordBox">

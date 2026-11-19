@@ -8,7 +8,9 @@
     <ResourceDictionary Source="/Lifestream;component/Theme/Typography.xaml" />
     <ResourceDictionary Source="/Lifestream;component/Theme/Images.xaml" />
     <ResourceDictionary Source="/Lifestream;component/Controls/Buttons.xaml" />
+    <ResourceDictionary Source="/Lifestream;component/Controls/Menus.xaml" />
     <ResourceDictionary Source="/Lifestream;component/Controls/Inputs.xaml" />
+    <ResourceDictionary Source="/Lifestream;component/Controls/Calendar.xaml" />
     <ResourceDictionary Source="/Lifestream;component/Controls/Surfaces.xaml" />
     <ResourceDictionary Source="/Lifestream;component/Controls/DataGridStyles.xaml" />
     <ResourceDictionary Source="/Lifestream;component/Controls/PasswordField.xaml" />
