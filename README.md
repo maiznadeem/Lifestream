@@ -3,14 +3,26 @@
 Lifestream is a blood-bank management desktop app: donors, patients, appointments, blood requests, stock and receipts,
 with a dashboard. Version **2.0.0** is a ground-up rewrite of the original course project on .NET 11.
 
-> Status: the solution skeleton is in place (contracts, build rules, CI, desktop stack spike). The database, API
-> endpoints and screens are being built on top of it; see `docs/superpowers/plans/2026-11-19-lifestream-overhaul.md`.
+What changed for users is in [CHANGELOG.md](CHANGELOG.md).
+
+## Install
+
+1. Open the [v2.0.0 release](https://github.com/maiznadeem/lifestream/releases/tag/v2.0.0) and download `Lifestream-win-Setup.exe` (and `SHA256SUMS.txt`). Windows 10 or 11, 64-bit.
+2. Check the download. In PowerShell, in the folder you saved it to:
+
+   ```powershell
+   (Get-FileHash .\Lifestream-win-Setup.exe -Algorithm SHA256).Hash.ToLower()
+   Select-String 'Lifestream-win-Setup.exe' .\SHA256SUMS.txt
+   ```
+
+   The 64 hexadecimal characters of the first line must be the same as the ones at the start of the second line. If they differ, delete the file and download it again.
+3. Run the installer. The installer is **not code-signed** (a certificate costs money every year), so Windows SmartScreen may say "Windows protected your PC": choose **More info**, then **Run anyway**. The app installs for your user only, needs no administrator rights, and updates itself when a newer release is published.
+4. Start Lifestream and press **Try the demo** (see below): no account, user name or password is needed.
 
 ## Try it (demo login)
 
 Start the app and press **Try the demo**. No account, username or password is needed. The demo runs against synthetic
-data only (see [docs/data-retention.md](docs/data-retention.md)), is reset every day, and has a **Reset demo data**
-action. The first request after a quiet period can take up to a minute while the server wakes up.
+data only (see [docs/data-retention.md](docs/data-retention.md)) and is reset every day. The first request after a quiet period can take up to a minute while the server wakes up.
 
 ## Screenshots
 
@@ -72,8 +84,9 @@ dotnet run --project src/Lifestream.Desktop     # desktop client
 
 ## Releases
 
-Installers are published on the [GitHub Releases page](../../releases) with SHA-256 checksums. They are not code-signed,
-so Windows SmartScreen shows a "More info, Run anyway" prompt; compare the checksum before running.
+Installers are published on the [GitHub Releases page](https://github.com/maiznadeem/lifestream/releases) with SHA-256 checksums (see
+[Install](#install)). They are not code-signed, so Windows SmartScreen shows a "More info, Run anyway" prompt. The text of each release is its
+section of [CHANGELOG.md](CHANGELOG.md), attached by `release.yml`.
 
 ## Repository rules
 

@@ -75,17 +75,21 @@
               <DataGridTemplateColumn Header="Name" Width="2*" MinWidth="190" SortMemberPath="name">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate>
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" feat:Edge.Left="{DynamicResource Space.12}">
+                    <Grid VerticalAlignment="Center" feat:Edge.Left="{DynamicResource Space.12}" feat:Edge.Right="{DynamicResource Space.12}">
+                      <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                      </Grid.ColumnDefinitions>
                       <Ellipse Width="28" Height="28" feat:Edge.Right="{DynamicResource Space.12}" Loaded="OnAvatarShown" DataContextChanged="OnAvatarContextChanged" AutomationProperties.Name="Photo">
                         <Ellipse.Fill>
                           <ImageBrush ImageSource="{Binding Photo, Converter={StaticResource Avatar}}" Stretch="UniformToFill" />
                         </Ellipse.Fill>
                       </Ellipse>
-                      <StackPanel VerticalAlignment="Center">
-                        <TextBlock Style="{DynamicResource Text.Body}" Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis" />
-                        <TextBlock Style="{DynamicResource Text.Caption}" Foreground="{DynamicResource Brush.TextMuted}" Text="{Binding Username}" />
+                      <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock Style="{DynamicResource DataGrid.PrimaryLine}" Text="{Binding DisplayName}" />
+                        <TextBlock Style="{DynamicResource DataGrid.SecondaryLine}" Foreground="{DynamicResource Brush.TextMuted}" Text="{Binding Username}" />
                       </StackPanel>
-                    </StackPanel>
+                    </Grid>
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>

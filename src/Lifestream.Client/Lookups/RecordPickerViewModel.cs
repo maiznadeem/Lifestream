@@ -9,7 +9,7 @@ namespace Lifestream.Client.Lookups;
 /// <summary>
 /// Behind the record picker control (SHELL-37): a searchable async combo for donor, patient, staff, appointment and request.
 /// Typing searches the server after a short pause; while it searches the control shows skeleton rows; after a choice it shows
-/// a summary chip with "Change". It holds the chosen id, so no screen ever asks for a typed id.
+/// a summary chip with "Change" (and, as a filter, a clear). It holds the chosen id, so no screen ever asks for a typed id.
 /// </summary>
 public sealed partial class RecordPickerViewModel : ObservableObject, IDisposable
 {
@@ -37,14 +37,23 @@ public sealed partial class RecordPickerViewModel : ObservableObject, IDisposabl
         ChangeCommand = new AsyncRelayCommand((_, _) =>
         {
             Selected = null;
+            IsChoosing = true;
             IsOpen = true;
             return SearchNowAsync();
         }, runner: Operations);
         ClearCommand = new AsyncRelayCommand(_ =>
         {
             Selected = null;
+            IsChoosing = false;
+            IsOpen = false;
             return Task.CompletedTask;
         });
+        ChooseCommand = new AsyncRelayCommand((_, _) =>
+        {
+            IsChoosing = true;
+            IsOpen = true;
+            return SearchNowAsync();
+        }, runner: Operations);
         ChangeCommand.PropertyChanged += (_, _) => OnPropertyChanged(nameof(IsBusy));
         ClearCommand.PropertyChanged += (_, _) => OnPropertyChanged(nameof(IsBusy));
     }
@@ -57,6 +66,27 @@ public sealed partial class RecordPickerViewModel : ObservableObject, IDisposabl
     public ObservableCollection<RecordOption> Options { get; } = [];
 
     public AsyncRelayCommand ChangeCommand { get; }
+
+    /// <summary>"Choose" on a filter picker that has nothing chosen: opens the search box and its first page of matches.</summary>
+    public AsyncRelayCommand ChooseCommand { get; }
+
+    /// <summary>
+    /// The placeholder of a picker used as a filter ("Any donor"). When set, a picker with nothing chosen shows this text and a "Choose" action instead of the search box,
+    /// and a chosen record gets a clear (x). Null (the default) keeps the form behaviour: an empty picker is the search box.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowEmpty), nameof(ShowSearch), nameof(IsFilter))]
+    public partial string? EmptyText { get; set; }
+
+    /// <summary>True once "Choose" or "Change" opened the search box of a filter picker; "Clear" and a choice close it again.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowEmpty), nameof(ShowSearch))]
+    public partial bool IsChoosing { get; set; }
+
+    public bool IsFilter => EmptyText is not null;
+
+    /// <summary>A filter picker with nothing chosen and no search open: the placeholder and "Choose".</summary>
+    public bool ShowEmpty => Selected is null && EmptyText is not null && !IsChoosing;
 
     /// <summary>The "Cancel" of the waking state: stops the search request itself.</summary>
     [NoOperationRunner("It only cancels the search in flight; it makes no API call.")]
@@ -98,14 +128,14 @@ public sealed partial class RecordPickerViewModel : ObservableObject, IDisposabl
     public partial string? SearchError { get; set; }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(SelectedId), nameof(HasSelection), nameof(ShowSearch), nameof(SummaryText))]
+    [NotifyPropertyChangedFor(nameof(SelectedId), nameof(HasSelection), nameof(ShowSearch), nameof(ShowEmpty), nameof(SummaryText))]
     public partial RecordOption? Selected { get; set; }
 
     public int? SelectedId => Selected?.Id;
 
     public bool HasSelection => Selected is not null;
 
-    public bool ShowSearch => Selected is null;
+    public bool ShowSearch => Selected is null && !ShowEmpty;
 
     public bool HasNoMatches => !IsSearching && SearchError is null && Options.Count == 0 && SearchText.Length > 0;
 
@@ -129,6 +159,7 @@ public sealed partial class RecordPickerViewModel : ObservableObject, IDisposabl
     {
         ArgumentNullException.ThrowIfNull(option);
         Selected = option;
+        IsChoosing = false;
         IsOpen = false;
         SearchText = string.Empty;
     }

@@ -29,6 +29,15 @@ public partial class RecordPicker : UserControl
     public static readonly DependencyProperty LabelProperty =
         DependencyProperty.Register(nameof(Label), typeof(string), typeof(RecordPicker), new FrameworkPropertyMetadata(string.Empty));
 
+    public static readonly DependencyProperty EmptyTextProperty =
+        DependencyProperty.Register(nameof(EmptyText), typeof(string), typeof(RecordPicker), new FrameworkPropertyMetadata(null, (d, e) =>
+        {
+            if (((RecordPicker)d)._viewModel is { } viewModel)
+            {
+                viewModel.EmptyText = (string?)e.NewValue;
+            }
+        }));
+
     private RecordPickerViewModel? _viewModel;
     private bool _syncing;
 
@@ -54,6 +63,12 @@ public partial class RecordPicker : UserControl
 
     /// <summary>The visible label; also the accessible name of the search box.</summary>
     public string Label { get => (string)GetValue(LabelProperty); set => SetValue(LabelProperty, value); }
+
+    /// <summary>
+    /// Makes the picker a filter: with nothing chosen it shows this placeholder (for example "Any donor") and a "Choose" action, and a chosen record gets a clear (x).
+    /// Leave it null on a form field, where an empty picker is the search box.
+    /// </summary>
+    public string? EmptyText { get => (string?)GetValue(EmptyTextProperty); set => SetValue(EmptyTextProperty, value); }
 
     /// <summary>
     /// Shows the list of matches inside the control instead of in a popup window. Off-screen tests set it so that no real window
@@ -92,6 +107,7 @@ public partial class RecordPicker : UserControl
 
         _viewModel = ViewModelFactory(Kind);
         _viewModel.Label = Label;
+        _viewModel.EmptyText = EmptyText;
         _viewModel.PropertyChanged += OnViewModelChanged;
         Root.DataContext = _viewModel;
         if (SelectedOption is { } option)
@@ -205,6 +221,10 @@ public partial class RecordPicker : UserControl
                 break;
             case Key.Escape when _viewModel is { IsOpen: true }:
                 _viewModel.IsOpen = false;
+                e.Handled = true;
+                break;
+            case Key.Escape when _viewModel is { IsFilter: true, HasSelection: false }:
+                _viewModel.IsChoosing = false; // back to the placeholder
                 e.Handled = true;
                 break;
         }

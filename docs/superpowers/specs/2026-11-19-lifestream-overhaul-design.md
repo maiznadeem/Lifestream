@@ -72,10 +72,11 @@ scripts in one tool; LiveCharts2 rather than the abandoned LiveCharts 0.9.7.
         |  HTTPS + JWT (15 min access, rotating refresh)
         v
  Lifestream.Api (ASP.NET Core 11 minimal API) on Container Apps: min 0, max 1 replica, 0.25 vCPU / 0.5 GiB,
-        |   logs destination none; system-assigned managed identity; startup probe /healthz (no DB)
-        |   Container Apps environment in a VNet subnet with service endpoint Microsoft.Sql
-        v
- Azure SQL lifestream-server / BloodBank (serverless free offer, Entra-only auth, firewall: VNet rule only)
+        |   no log destination; system-assigned managed identity; startup probe /healthz (no DB)
+        |   plain Consumption environment, no VNet (a VNet bills a static public IP and load balancer, about $25 a month idle)
+        v   outbound from the environment's shared public addresses
+ Azure SQL lifestream-server / BloodBank (serverless free offer, Entra-only auth,
+        firewall: only the environment's outbound IPs, kept in sync by infra/sync-sql-firewall.ps1)
         ^
         |  EF Core migration bundle run as a Container Apps Job (manual trigger, separate identity with DDL rights)
  GitHub Actions (OIDC to Azure, no stored cloud secret): CI -> image to GHCR -> migrate job -> update app -> prune images
@@ -226,9 +227,15 @@ Server-side authorization on every endpoint (tested as a role-by-endpoint matrix
 (receipts take the staff id from the token); no password or hash in any response; masked password entry everywhere;
 admin "Reset password" instead of ever showing one; CI scans every built artifact (UTF-8 and UTF-16) and the image for
 credential patterns and fails on a hit; secret scanning and push protection on the repo; NuGet audit fails on
-high-severity advisories; Dependabot; SQL: firewall reduced to the VNet rule (the "Allow anyone" rule and the
-all-Azure rule removed), Entra-only authentication (the rotated SQL admin password stops working entirely), contained
-users: API identity with read/write/execute only, migrator identity with DDL; SQL auditing to a free target if one
+high-severity advisories; Dependabot; SQL: firewall reduced to the Container Apps environment's outbound IP addresses
+(rules `aca-outbound-<n>`, kept equal to the environment's addresses by `infra/sync-sql-firewall.ps1`, run after every
+API deploy by `deploy-api.yml` and weekly by `sync-sql-firewall.yml`; the "Allow anyone" rule and the all-Azure rule
+removed), Entra-only authentication (the rotated SQL admin password stops working entirely), contained
+users: API identity with read/write/execute only, migrator identity with DDL. Trade-off, stated plainly: there is no VNet, so
+the allowed addresses are Azure egress addresses shared with other customers' Container Apps in the region. The firewall
+narrows exposure but is not a tenant boundary; authentication is the real control (Entra-only, managed identity, least-privilege
+contained users), which is why the sync script refuses to open the firewall until Entra-only is on (`infra/README.md`,
+"Security trade-offs"). SQL auditing to a free target if one
 exists, otherwise the application audit table plus Azure activity log (Defender for SQL is paid: off); delete locks on
 the server and database.
 

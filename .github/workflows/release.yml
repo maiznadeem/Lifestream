@@ -141,6 +141,21 @@ jobs:
         shell: pwsh
         run: gh release upload "${{ steps.version.outputs.tag }}" "$env:RUNNER_TEMP/Releases/SHA256SUMS.txt" --clobber --repo maiznadeem/lifestream
 
+      # The text of the release is this version's section of CHANGELOG.md: no secrets and no paths, a test checks it (tests/Lifestream.Desktop.Tests/ReleaseConfigTests.cs).
+      - name: Release notes from CHANGELOG.md
+        shell: pwsh
+        run: |
+          $version = '${{ steps.version.outputs.version }}'
+          $lines = Get-Content CHANGELOG.md
+          $start = 0..($lines.Count - 1) | Where-Object { $lines[$_].StartsWith("## [$version]") } | Select-Object -First 1
+          if ($null -eq $start) { throw "CHANGELOG.md has no section for $version" }
+          $next = ($start + 1)..($lines.Count - 1) | Where-Object { $lines[$_] -like '## *' } | Select-Object -First 1
+          $end = if ($null -ne $next) { $next - 1 } else { $lines.Count - 1 }
+          $notes = ($lines[($start + 1)..$end] -join "`n").Trim()
+          $notes += "`n`nThe installer is not code-signed: Windows SmartScreen asks for confirmation (More info, then Run anyway). Compare its SHA-256 with SHA256SUMS.txt first; see the README, Install."
+          Set-Content -Path "$env:RUNNER_TEMP/release-notes.md" -Value $notes -Encoding utf8
+          gh release edit "${{ steps.version.outputs.tag }}" --notes-file "$env:RUNNER_TEMP/release-notes.md" --repo maiznadeem/lifestream
+
       # ---- Microsoft Store package: an extra workflow artifact, never a release asset (see packaging/store/README.md)
       - name: Build the Store MSIX
         id: msix
