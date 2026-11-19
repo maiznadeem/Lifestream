@@ -117,12 +117,39 @@ public sealed class ReceiptsViewModel : SortedRecordListViewModel<ReceiptRow, Re
                 PrintCommand.RaiseCanExecuteChanged();
                 SavePdfCommand.RaiseCanExecuteChanged();
                 OnPropertyChanged(nameof(PanelOverline));
+                OnPropertyChanged(nameof(DetailPartyName));
+                OnPropertyChanged(nameof(DetailSubtitle));
+                OnPropertyChanged(nameof(DetailGroupText));
+                OnPropertyChanged(nameof(SourceActionText));
+                OpenSourceCommand?.RaiseCanExecuteChanged(); // null only while the constructor runs
             }
             if (e.PropertyName is nameof(SelectedItem) or nameof(Detail) or nameof(DetailState))
             {
                 OnPropertyChanged(nameof(IsPanelOpen));
             }
+
+            if (e.PropertyName == nameof(BloodTypeFilter))
+            {
+                OnPropertyChanged(nameof(BloodTypeChipText));
+                OnPropertyChanged(nameof(HasBloodTypeFilter));
+            }
+
+            if (e.PropertyName == nameof(KindFilter))
+            {
+                OnPropertyChanged(nameof(IsAllKinds));
+                OnPropertyChanged(nameof(IsDonationKind));
+                OnPropertyChanged(nameof(IsIssueKind));
+            }
         };
+        ChooseBloodTypeCommand = Command((parameter, _) =>
+        {
+            if (parameter is FilterOption<BloodType> option)
+            {
+                BloodTypeFilter = option;
+            }
+
+            return Task.CompletedTask;
+        });
         _viewer = viewer;
         _navigation = navigation;
         KindOptions = SharedLists.WithAll(SharedLists.ReceiptKinds, "All receipts");
@@ -145,16 +172,20 @@ public sealed class ReceiptsViewModel : SortedRecordListViewModel<ReceiptRow, Re
         OpenSourceCommand = Command(async (parameter, _) =>
         {
             // The appointment or request the receipt was issued for, opened by its id.
-            if (parameter is ReceiptRow { Item: { } item })
+            // A row from the list, or (from the side panel, with no parameter) the receipt the panel shows.
+            (ReceiptKind? kind, int? appointmentId, int? requestId) = parameter switch
             {
-                if (item.Kind == ReceiptKind.Donation && item.AppointmentId is { } appointment)
-                {
-                    await _navigation.NavigateTo<AppointmentsViewModel>(new ListPrefilter(RecordId: appointment)).ConfigureAwait(true);
-                }
-                else if (item.Kind == ReceiptKind.Issue && item.RequestId is { } request)
-                {
-                    await _navigation.NavigateTo<RequestsViewModel>(new ListPrefilter(RecordId: request)).ConfigureAwait(true);
-                }
+                ReceiptRow { Item: { } item } => (item.Kind, item.AppointmentId, item.RequestId),
+                null when Detail is { } shown => (shown.Kind, shown.AppointmentId, shown.RequestId),
+                _ => ((ReceiptKind?)null, (int?)null, (int?)null),
+            };
+            if (kind == ReceiptKind.Donation && appointmentId is { } appointment)
+            {
+                await _navigation.NavigateTo<AppointmentsViewModel>(new ListPrefilter(RecordId: appointment)).ConfigureAwait(true);
+            }
+            else if (kind == ReceiptKind.Issue && requestId is { } request)
+            {
+                await _navigation.NavigateTo<RequestsViewModel>(new ListPrefilter(RecordId: request)).ConfigureAwait(true);
             }
         });
     }
@@ -226,6 +257,18 @@ public sealed class ReceiptsViewModel : SortedRecordListViewModel<ReceiptRow, Re
     /// <summary>"Donation receipt #12": the panel's header line.</summary>
     public string? PanelOverline => Detail is { } receipt ? $"{(receipt.Kind == ReceiptKind.Donation ? "Donation" : "Blood issue")} receipt {RecordFormatting.IdText(receipt.Id)}" : null;
 
+    /// <summary>The donor of the donation or the patient of the issue: the panel's heading.</summary>
+    public string? DetailPartyName => Detail?.PartyName;
+
+    /// <summary>"2 units, 12 Nov 2026 10:24": what was given and when, under the heading.</summary>
+    public string? DetailSubtitle => Detail is { } receipt ? $"{receipt.Units} {(receipt.Units == 1 ? "unit" : "units")}, {RecordFormatting.When(receipt.CreatedAtUtc, Zone)}" : null;
+
+    /// <summary>The receipt's group as set in type (A−).</summary>
+    public string? DetailGroupText => Detail?.BloodType.ToTypographic();
+
+    /// <summary>"Open appointment" or "Open request": the panel's link to the record the receipt was issued for.</summary>
+    public string SourceActionText => Detail?.Kind == ReceiptKind.Issue ? "Open request" : "Open appointment";
+
     /// <summary>The selected receipt as it prints, for the panel's preview (the same document the printer gets, without the duplicate line).</summary>
     public ReceiptDocument? Preview
     {
@@ -264,6 +307,45 @@ public sealed class ReceiptsViewModel : SortedRecordListViewModel<ReceiptRow, Re
                 break;
         }
     }
+
+    // ---- the view tabs (All / Donations / Blood issues) and the blood group chip ----------------------------------------
+
+    /// <summary>The All tab: every kind of receipt.</summary>
+    public bool IsAllKinds
+    {
+        get => _kindFilter.Value is null;
+        set => ChooseKind(value, null);
+    }
+
+    /// <summary>The Donations tab.</summary>
+    public bool IsDonationKind
+    {
+        get => _kindFilter.Value == ReceiptKind.Donation;
+        set => ChooseKind(value, ReceiptKind.Donation);
+    }
+
+    /// <summary>The Blood issues tab.</summary>
+    public bool IsIssueKind
+    {
+        get => _kindFilter.Value == ReceiptKind.Issue;
+        set => ChooseKind(value, ReceiptKind.Issue);
+    }
+
+    private void ChooseKind(bool chosen, ReceiptKind? kind)
+    {
+        if (chosen && _kindFilter.Value != kind)
+        {
+            KindFilter = KindOptions.First(o => o.Value == kind);
+        }
+    }
+
+    /// <summary>The filter chip's words: "Blood group" while every group shows, "Blood group: O−" when one is chosen.</summary>
+    public string BloodTypeChipText => BloodTypeFilter.Value is { } type ? $"Blood group: {type.ToTypographic()}" : "Blood group";
+
+    public bool HasBloodTypeFilter => BloodTypeFilter.Value is not null;
+
+    /// <summary>Chooses a group from the chip's menu (the parameter is one of the blood type options).</summary>
+    public AsyncRelayCommand ChooseBloodTypeCommand { get; }
 
     public FilterOption<ReceiptKind> KindFilter
     {

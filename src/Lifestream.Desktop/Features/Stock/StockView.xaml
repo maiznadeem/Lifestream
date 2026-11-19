@@ -104,14 +104,12 @@
             <controls:Icon Kind="Chevd" Size="14" VerticalAlignment="Center" feat:Edge.Left="{DynamicResource Space.8}" Foreground="{DynamicResource Brush.Ink3}" />
           </StackPanel>
           <Button.ContextMenu>
-            <ContextMenu x:Name="BloodTypeMenu" ItemsSource="{Binding BloodTypeOptions}">
-              <ContextMenu.ItemContainerStyle>
-                <Style TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}">
-                  <Setter Property="Header" Value="{Binding Converter={StaticResource GroupOptionText}}" />
-                  <Setter Property="Command" Value="{Binding PlacementTarget.DataContext.ChooseBloodTypeCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-                  <Setter Property="CommandParameter" Value="{Binding}" />
-                </Style>
-              </ContextMenu.ItemContainerStyle>
+            <ContextMenu x:Name="BloodTypeMenu" ItemsSource="{Binding BloodTypeOptions}" MenuItem.Click="OnBloodTypeChosen">
+              <ContextMenu.ItemTemplate>
+                <DataTemplate>
+                  <TextBlock Text="{Binding Converter={StaticResource GroupOptionText}}" />
+                </DataTemplate>
+              </ContextMenu.ItemTemplate>
             </ContextMenu>
           </Button.ContextMenu>
         </Button>
@@ -208,15 +206,6 @@
     <!-- The selected group's panel. -->
     <controls:SidePanel x:Name="Panel" Grid.Column="1" IsOpen="{Binding IsPanelOpen}" Overline="{Binding PanelOverline}" CloseCommand="{Binding ClosePanelCommand}"
                         AutomationProperties.Name="Blood group details">
-      <controls:SidePanel.Style>
-        <Style TargetType="controls:SidePanel" BasedOn="{StaticResource {x:Type controls:SidePanel}}">
-          <Style.Triggers>
-            <DataTrigger Binding="{Binding (controls:Responsive.Breakpoint), RelativeSource={RelativeSource Self}}" Value="Compact">
-              <Setter Property="PanelWidth" Value="{DynamicResource Width.PanelCompact}" />
-            </DataTrigger>
-          </Style.Triggers>
-        </Style>
-      </controls:SidePanel.Style>
       <ScrollViewer VerticalScrollBarVisibility="Auto" Focusable="False" DataContext="{Binding SelectedTile}">
         <StackPanel x:Name="PanelBody" feat:Edge.Bottom="{DynamicResource Space.24}">
           <Grid>

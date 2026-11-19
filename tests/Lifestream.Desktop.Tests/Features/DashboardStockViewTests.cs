@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
@@ -241,7 +241,7 @@ public sealed class DashboardStockViewTests
     // Stock (FEAT-19)
 
     [Fact]
-    public void Stock_TileBelowThreshold_HasIconTextAndToken_Rendered_FakeApi()
+    public void Stock_GroupBelowMinimum_HasIconWordsAndCriticalToken_Rendered_FakeApi()
     {
         var facts = StaHost.Run(() =>
         {
@@ -252,32 +252,28 @@ public sealed class DashboardStockViewTests
             host.Settle(400);
             FeatureHarness.Save(host, "StockView_Loaded.png");
 
-            var chips = host.All<StatusChip>().Where(c => c.IsVisible).ToList();
-            var danger = (SolidColorBrush)host.Element.TryFindResource("Brush.StatusDanger");
-            var tileTexts = host.All<TextBlock>().Where(t => t.IsVisible).Select(t => t.Text).ToList();
+            var critical = ((SolidColorBrush)host.Element.TryFindResource("Brush.Critical")).Color;
+            var badges = host.All<Badge>().Where(b => b.IsVisible).ToList();
+            var table = host.Find<LifestreamDataGrid>("Grid");
+            var counts = host.All<TextBlock>().Where(t => t.IsVisible && table.IsAncestorOf(t) && (t.Text.EndsWith(" units", StringComparison.Ordinal) || t.Text.EndsWith(" unit", StringComparison.Ordinal))).ToList();
             return (
-                Chips: chips.Select(c => (c.Status, c.DisplayText, HasGlyph: c.Glyph.Length > 0, Accent: ((SolidColorBrush)c.AccentBrush!).Color)).ToList(),
-                DangerColor: danger.Color,
-                Tiles: tileTexts.Count(t => t.EndsWith("available", StringComparison.Ordinal)),
-                Summary: tileTexts.Single(t => t.Contains("below their thresholds", StringComparison.Ordinal)),
+                Low: badges.Where(b => b.Kind == BadgeKind.Critical).Select(b => (b.Text, b.Icon)).ToList(),
+                Rows: counts.Count,
+                CriticalCounts: counts.Count(t => t.Foreground is SolidColorBrush brush && brush.Color == critical),
+                Shortage: host.All<TextBlock>().Where(t => t.IsVisible).Select(t => t.Text).Single(t => t.Contains("below the minimum", StringComparison.Ordinal)),
                 Calls: rig.Api.CountOf("GetStockAsync"));
         });
 
-        var low = facts.Chips.Where(c => c.Status == StatusKind.LowStock).ToList();
-        Assert.Equal(2, low.Count);
-        Assert.All(low, c =>
-        {
-            Assert.Equal("Low stock", c.DisplayText); // words
-            Assert.True(c.HasGlyph); // icon
-            Assert.Equal(facts.DangerColor, c.Accent); // token colour
-        });
-        Assert.Equal(8, facts.Tiles);
-        Assert.Equal("2 blood types are below their thresholds.", facts.Summary);
+        // A- has 6 of 10 and AB- has 3 of 10: words (how many short), an icon, and the Critical kind, never colour alone.
+        Assert.Equal([("Low, 4 short", IconKind.Alert), ("Low, 7 short", IconKind.Alert)], facts.Low);
+        Assert.Equal(8, facts.Rows);
+        Assert.Equal(2, facts.CriticalCounts); // the two low groups' unit counts are in the Critical token
+        Assert.Equal("2 of 8 blood groups are below the minimum.", facts.Shortage);
         Assert.Equal(1, facts.Calls);
     }
 
     [Fact]
-    public void Stock_Filter_ChangesTheVisibleTilesAtOnce_NoExtraCall_FakeApi()
+    public void Stock_Filter_ChangesTheVisibleRowsAtOnce_NoExtraCall_FakeApi()
     {
         var facts = StaHost.Run(() =>
         {
@@ -286,24 +282,61 @@ public sealed class DashboardStockViewTests
             using var host = Hosted.Create(FeatureHarness.StockView(vm), Width, Height);
             Hosted.Await(() => vm.LoadAsync());
             host.Settle(300);
-            int Tiles() => host.All<TextBlock>().Count(t => t.IsVisible && t.Text.EndsWith("available", StringComparison.Ordinal));
-            var all = Tiles();
+            int Rows() => host.All<DataGridRow>().Count(r => r.IsVisible);
+            var all = Rows();
 
             vm.ViewFilter = vm.ViewOptions.First(o => o.Value == StockFilter.BelowThreshold);
             host.Settle(100); // one dispatcher turn: no debounce
-            var low = Tiles();
+            var low = Rows();
+            var lowTabChecked = host.All<RadioButton>().Single(r => r.Name == "LowTab").IsChecked == true;
             FeatureHarness.Save(host, "StockView_Filtered.png");
 
             vm.BloodTypeFilter = vm.BloodTypeOptions.First(o => o.Value == BloodType.OPos);
             host.Settle(100);
-            var none = host.All<EmptyState>().Count(e => e.IsVisible && e.Title == "No blood types match");
-            return (all, low, none, Calls: rig.Api.CountOf("GetStockAsync"));
+            var none = host.All<EmptyState>().Count(e => e.IsVisible && e.Title == "No blood groups match");
+            return (all, low, lowTabChecked, none, Calls: rig.Api.CountOf("GetStockAsync"));
         });
 
         Assert.Equal(8, facts.all);
         Assert.Equal(2, facts.low);
+        Assert.True(facts.lowTabChecked, "the Low tab did not follow the view filter");
         Assert.Equal(1, facts.none);
         Assert.Equal(1, facts.Calls);
+    }
+
+    [Fact]
+    public void Stock_SelectingAGroup_OpensItsPanel_WithTheShelfLifeSplitAndCompatibility_EscCloses_FakeApi()
+    {
+        var facts = StaHost.Run(() =>
+        {
+            using var rig = FeatureHarness.NewRig();
+            var vm = FeatureHarness.Create<StockViewModel>(rig);
+            using var host = Hosted.Create(FeatureHarness.StockView(vm), Width, Height);
+            Hosted.Await(() => vm.LoadAsync());
+            host.Settle(300);
+            var closedAtFirst = !host.All<SidePanel>().Single().IsOpen;
+
+            vm.SelectedTile = vm.Tiles.Single(t => t.BloodType == BloodType.OPos);
+            host.Settle(300);
+            FeatureHarness.Save(host, "StockView_Panel.png");
+            // Run-built lines ("66 units in stock") are read from their inlines.
+            var texts = host.All<TextBlock>().Where(t => t.IsVisible).Select(t => new System.Windows.Documents.TextRange(t.ContentStart, t.ContentEnd).Text).ToList();
+            var open = host.All<SidePanel>().Single().IsOpen;
+
+            vm.ClosePanelCommand.Execute(null);
+            host.Settle(100);
+            return (closedAtFirst, open, texts, ClosedAgain: !host.All<SidePanel>().Single().IsOpen, Selected: vm.SelectedTile);
+        });
+
+        Assert.True(facts.closedAtFirst);
+        Assert.True(facts.open);
+        Assert.Contains("66 units in stock", facts.texts);
+        Assert.Contains("Find O+ donors", facts.texts);
+        Assert.Contains("60", facts.texts); // more than 7 days left (66 - 6)
+        Assert.Contains("6", facts.texts); // expires within 7 days
+        Assert.Contains("A+, B+, AB+, O+", facts.texts); // can be given to
+        Assert.True(facts.ClosedAgain);
+        Assert.Null(facts.Selected);
     }
 
     [Fact]

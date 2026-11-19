@@ -63,6 +63,15 @@ public partial class StockView : UserControl
         BloodTypeMenu.IsOpen = true;
     }
 
+    /// <summary>A group chosen in the chip's menu (each item's data context is one of the blood type options).</summary>
+    private void OnBloodTypeChosen(object sender, RoutedEventArgs e)
+    {
+        if (e.OriginalSource is MenuItem { DataContext: Lifestream.Client.Common.FilterOption<Lifestream.Domain.BloodType> option } && DataContext is StockViewModel vm)
+        {
+            vm.ChooseBloodTypeCommand.Execute(option);
+        }
+    }
+
     private void OnGridKeyDown(object sender, KeyEventArgs e)
     {
         if (DataContext is not StockViewModel vm)
@@ -85,6 +94,17 @@ public partial class StockView : UserControl
 
     private void OnBreakpointChanged(object? sender, EventArgs e) => ApplyBreakpoint();
 
-    private void ApplyBreakpoint() =>
-        FreshColumn.Visibility = Responsive.GetBreakpoint(this) == Breakpoint.Compact ? Visibility.Collapsed : Visibility.Visible;
+    private void ApplyBreakpoint()
+    {
+        var compact = Responsive.GetBreakpoint(this) == Breakpoint.Compact;
+        FreshColumn.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+        if (compact)
+        {
+            Panel.SetResourceReference(SidePanel.PanelWidthProperty, "Width.PanelCompact");
+        }
+        else
+        {
+            Panel.ClearValue(SidePanel.PanelWidthProperty);
+        }
+    }
 }
