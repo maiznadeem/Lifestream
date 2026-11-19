@@ -148,7 +148,7 @@
             </Grid.RowDefinitions>
             <controls:LifestreamDataGrid x:Name="Grid" ItemsSource="{Binding Items}" SelectedItem="{Binding SelectedItem, Mode=TwoWay}" SortCommand="{Binding SortCommand}"
                                          SortColumn="{Binding SortColumn, Mode=OneWay}" SortDescending="{Binding SortDescending, Mode=OneWay}"
-                                         AutomationProperties.Name="Staff" KeyDown="OnGridKeyDown" lists:ListColumns.IsResponsive="True">
+                                         AutomationProperties.Name="Staff" KeyDown="OnGridKeyDown">
               <DataGrid.Columns>
                 <DataGridTemplateColumn Header="Name" Width="2*" MinWidth="220" MaxWidth="320" SortMemberPath="name">
                   <DataGridTemplateColumn.CellTemplate>

@@ -234,16 +234,30 @@
                       <Grid VerticalAlignment="Center" AutomationProperties.Name="{Binding AutomationName}">
                         <Grid.ColumnDefinitions>
                           <ColumnDefinition Width="72" />
-                          <ColumnDefinition Width="96" />
+                          <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <TextBlock x:Name="Count" Text="{Binding UnitsText}" Style="{DynamicResource Text.Body}" FontWeight="SemiBold" VerticalAlignment="Center" />
-                        <controls:MeterBar x:Name="Bar" Grid.Column="1" VerticalAlignment="Center" Value="{Binding FillFraction}" Hatched="{Binding ExpiringFraction}" Minimum="{Binding MinimumFraction}"
+                        <controls:MeterBar x:Name="Bar" Grid.Column="1" Width="96" VerticalAlignment="Center" Value="{Binding FillFraction}" Hatched="{Binding ExpiringFraction}" Minimum="{Binding MinimumFraction}"
                                            Track="{DynamicResource Brush.Layer2}" TrackStroke="{DynamicResource Brush.Stroke}" Fill="{DynamicResource Brush.Ink2}"
                                            Hatch="{DynamicResource Brush.WarningHatch}" Tick="{DynamicResource Brush.Ink3}" />
                       </Grid>
                       <DataTemplate.Triggers>
                         <DataTrigger Binding="{Binding IsLow}" Value="True">
                           <Setter TargetName="Bar" Property="Fill" Value="{DynamicResource Brush.Critical}" />
+                          <Setter TargetName="Count" Property="Foreground" Value="{DynamicResource Brush.Critical}" />
+                        </DataTrigger>
+                      </DataTemplate.Triggers>
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <!-- A compact window has the count only (the panel says how far below the minimum a group is); the code-behind swaps the two columns. -->
+                <DataGridTemplateColumn x:Name="UnitsCompactColumn" Header="Units" Width="96" CanUserSort="False" Visibility="Collapsed">
+                  <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate DataType="{x:Type stock:StockTile}">
+                      <TextBlock x:Name="Count" Text="{Binding UnitsText}" Style="{DynamicResource Text.Body}" FontWeight="SemiBold" VerticalAlignment="Center"
+                                 AutomationProperties.Name="{Binding AutomationName}" />
+                      <DataTemplate.Triggers>
+                        <DataTrigger Binding="{Binding IsLow}" Value="True">
                           <Setter TargetName="Count" Property="Foreground" Value="{DynamicResource Brush.Critical}" />
                         </DataTrigger>
                       </DataTemplate.Triggers>

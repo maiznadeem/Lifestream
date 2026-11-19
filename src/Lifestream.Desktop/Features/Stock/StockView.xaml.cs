@@ -14,7 +14,8 @@ namespace Lifestream.Desktop.Features.Stock;
 /// <summary>
 /// The Stock screen. Ctrl+F puts focus on the table (the screen has no search box; eight rows need none); the blood group chip, shown only for a group
 /// another screen asked for, opens its menu on a click; Enter on a row moves into the group's panel and Esc closes it. The six age-band headers come from
-/// <see cref="StockAges.Bands"/>, the definition the server counts with. A compact window folds the Refresh label to its icon and narrows the panel;
+/// <see cref="StockAges.Bands"/>, the definition the server counts with. A compact window folds the Refresh label to its icon, shows the units without
+/// their meter and narrows the panel;
 /// the Status column folds away when the table gets narrow (the panel still says it).
 /// </summary>
 public partial class StockView : UserControl
@@ -129,6 +130,8 @@ public partial class StockView : UserControl
     {
         var compact = Responsive.GetBreakpoint(this) == Breakpoint.Compact;
         RefreshLabel.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+        UnitsColumn.Visibility = compact ? Visibility.Collapsed : Visibility.Visible; // the count with its meter
+        UnitsCompactColumn.Visibility = compact ? Visibility.Visible : Visibility.Collapsed; // the count alone
         if (compact)
         {
             Panel.SetResourceReference(SidePanel.PanelWidthProperty, "Width.PanelCompact");

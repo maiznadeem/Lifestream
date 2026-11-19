@@ -265,6 +265,15 @@ public sealed partial class StaffViewModel : SortedRecordListViewModel<StaffRow,
             return;
         }
 
+        if (IsOperationWaking || CurrentServerStatus?.State == ServerState.Waking)
+        {
+            // A row first shown after the server started waking (an Undo's reload, a page drawn late): its request would wait on the waking server where no
+            // Cancel reaches it. It asks once the server is awake.
+            _deferredPhotos.Add(row);
+            WatchForAwake();
+            return;
+        }
+
         if (!row.ClaimPhotoRequest())
         {
             return;
@@ -319,6 +328,12 @@ public sealed partial class StaffViewModel : SortedRecordListViewModel<StaffRow,
         _photoCts.Cancel();
         _photoCts.Dispose();
         _photoCts = new CancellationTokenSource();
+        WatchForAwake();
+    }
+
+    /// <summary>Fetches the deferred photos once the server leaves the waking state (no-op without a server status, or when already watching).</summary>
+    private void WatchForAwake()
+    {
         if (_resumeWatch is null && CurrentServerStatus is { } status)
         {
             _resumeWatch = status;

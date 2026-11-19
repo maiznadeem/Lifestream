@@ -22,6 +22,7 @@ public partial class StaffView : UserControl
     public StaffView()
     {
         InitializeComponent();
+        MoreButton.ContextMenu.SetBinding(FrameworkElement.DataContextProperty, new System.Windows.Data.Binding(nameof(DataContext)) { Source = this });
         DataContextChanged += (_, e) =>
         {
             if (_model is not null)
@@ -38,7 +39,6 @@ public partial class StaffView : UserControl
             ApplyPrimary();
 
             // The "..." menu lives outside the visual tree: give it the screen's model now, so Delete's state and its reason are right before it opens.
-            MoreButton.ContextMenu.DataContext = e.NewValue;
         };
         Loaded += (_, _) =>
         {

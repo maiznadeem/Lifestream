@@ -119,6 +119,9 @@ public sealed class WakingEveryOperationTests
         ["Stock.OpenRequestsCommand"] = "navigates to Requests with the group (a fake navigation here)",
         ["Receipts.PrintCommand"] = "prints the receipt already loaded in the panel (the printer, no API call)",
         ["Receipts.SavePdfCommand"] = "saves the receipt already loaded in the panel as a PDF (the printer, no API call)",
+        ["Stock.RecordDonationCommand"] = "the empty state's action: navigates to Appointments (a fake navigation here)",
+        ["Stock.RetryBagsCommand"] = "reloads the open group's bags; with no group selected (this walk selects none on Stock) there is nothing to load",
+        ["Staff.ClearSalaryCommand"] = "empties the two salary boxes; the list then reloads through the filter, after the search pause",
     };
 
     /// <summary>Commands that are disabled on a freshly loaded screen with the first record selected, each with the reason; they make no call of their own.</summary>
