@@ -8,7 +8,7 @@ environment variables read by `main.bicepparam`.
 
 | Resource (resource group `Lifestream`) | Notes |
 |---|---|
-| Container Apps environment `lifestream-env` | Plain Consumption environment: Consumption profile only, **no virtual network**, log destination `none`. |
+| Container Apps environment `lifestream-env` | Plain Consumption environment: Consumption profile only, **no virtual network**, no log destination (`appLogsConfiguration` omitted; Azure rejects the string `none`). |
 | Container app `lifestream-api` | External HTTPS only (port 8080, plain HTTP is redirected), min replicas 0, max 1, 0.25 vCPU / 0.5 GiB, startup probe `/healthz`, system-assigned identity, secret `jwt-signing-key`. |
 | Container Apps job `lifestream-migrate` | Manual trigger only. Identity `lifestream-migrator` (user-assigned, no password). Secret `owner-admin-password`. |
 | SQL server `lifestream-server` and database `BloodBank` | Declared so the settings are code: free offer (`useFreeLimit`, `AutoPause`), auto-pause 60 min, Entra administrator, Entra-only switch, auditing, locks, backup policy. No firewall rule is declared: `sync-sql-firewall.ps1` owns them (see below). |
