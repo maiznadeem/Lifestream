@@ -102,7 +102,7 @@ public sealed class ListViewTests
 
         Assert.True(facts.result.Loading);
         Assert.False(facts.result.GridVisible);
-        Assert.Equal("2*,100,90,*,130", facts.result.Columns);
+        Assert.Equal("2*,80,130,130,140", facts.result.Columns); // the skeleton has the shape of the table: name, group, eligibility, last donated, phone
         Assert.True(facts.result.SameCell);
         Assert.True(facts.GridVisibleAfter);
         Assert.Equal(0, facts.SkeletonAfter);

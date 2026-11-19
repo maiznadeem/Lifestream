@@ -1,0 +1,67 @@
+<UserControl x:Class="Lifestream.Desktop.Features.ListScreens.FilterChip"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:Lifestream.Desktop.Controls"
+             Focusable="False" IsTabStop="False">
+  <UserControl.Resources>
+    <Thickness x:Key="Chip.Gap.Before">6,0,0,0</Thickness>
+    <Thickness x:Key="Chip.Pad.Choice">10,0,10,0</Thickness>
+  </UserControl.Resources>
+  <!-- A filter chip of a list toolbar: a dashed "+ Blood group" while nothing is chosen, "Blood group: O−" on a filled chip once a value is chosen. A click (or Space,
+       Enter, Alt+Down) opens the choices under it; a click or Enter picks one and applies it, Esc closes without a change. The first choice means "no filter". -->
+  <Grid>
+    <Button x:Name="ChipButton" Style="{DynamicResource Button.Chip}" Click="OnChipClick" PreviewKeyDown="OnChipKeyDown" HorizontalAlignment="Left">
+      <StackPanel Orientation="Horizontal">
+        <controls:Icon x:Name="PlusIcon" Kind="Plus" Size="14" VerticalAlignment="Center" Margin="{DynamicResource Inset.R6}" />
+        <TextBlock x:Name="ChipText" VerticalAlignment="Center" TextWrapping="NoWrap" />
+        <controls:Icon x:Name="ChevronIcon" Kind="Chevd" Size="14" VerticalAlignment="Center" Margin="{StaticResource Chip.Gap.Before}" Visibility="Collapsed" />
+      </StackPanel>
+    </Button>
+    <Popup x:Name="ChoicesPopup" PlacementTarget="{Binding ElementName=ChipButton}" Placement="Bottom" VerticalOffset="4" StaysOpen="False" AllowsTransparency="True"
+           PopupAnimation="None" Closed="OnPopupClosed">
+      <Grid Margin="{DynamicResource Inset.Popup}">
+        <controls:ElevatedSurface Level="Flyout" CornerRadius="{DynamicResource Radius.Panel}" Padding="{DynamicResource Pad.4}" MinWidth="180">
+          <ListBox x:Name="ChoicesList" BorderThickness="0" Background="Transparent" MaxHeight="320" KeyboardNavigation.DirectionalNavigation="Cycle"
+                   PreviewKeyDown="OnListKeyDown" PreviewMouseLeftButtonUp="OnListMouseUp" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+            <ListBox.ItemContainerStyle>
+              <Style TargetType="ListBoxItem">
+                <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+                <Setter Property="Foreground" Value="{DynamicResource Brush.Ink}" />
+                <Setter Property="FontFamily" Value="{DynamicResource Font.Family}" />
+                <Setter Property="FontSize" Value="{DynamicResource FontSize.Body}" />
+                <Setter Property="Template">
+                  <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                      <Border x:Name="Row" Background="Transparent" CornerRadius="{DynamicResource Radius.Small}" Padding="{StaticResource Chip.Pad.Choice}" MinHeight="{DynamicResource Height.Compact}">
+                        <Grid>
+                          <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="20" />
+                            <ColumnDefinition Width="*" />
+                          </Grid.ColumnDefinitions>
+                          <controls:Icon x:Name="Tick" Kind="Check" Size="14" VerticalAlignment="Center" Visibility="Hidden" />
+                          <ContentPresenter Grid.Column="1" VerticalAlignment="Center" />
+                        </Grid>
+                      </Border>
+                      <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                          <Setter TargetName="Row" Property="Background" Value="{DynamicResource Brush.Hover}" />
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                          <Setter TargetName="Row" Property="Background" Value="{DynamicResource Brush.Hover}" />
+                        </Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                          <Setter TargetName="Row" Property="Background" Value="{DynamicResource Brush.Selected}" />
+                          <Setter TargetName="Tick" Property="Visibility" Value="Visible" />
+                        </Trigger>
+                      </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                  </Setter.Value>
+                </Setter>
+              </Style>
+            </ListBox.ItemContainerStyle>
+          </ListBox>
+        </controls:ElevatedSurface>
+      </Grid>
+    </Popup>
+  </Grid>
+</UserControl>

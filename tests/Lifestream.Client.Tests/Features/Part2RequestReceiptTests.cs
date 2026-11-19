@@ -83,7 +83,7 @@ public sealed class Part2RequestReceiptTests
     // FEAT-16
 
     [Fact]
-    public async Task FulfilRequest_IsAnActionOnTheRequest_OpensItsOwnDialog_IssuesReceipt()
+    public async Task FulfilRequest_IsAnActionOnTheRequest_OpensItsStepInTheSidePanel_IssuesReceipt()
     {
         var (rig, vm) = await LoadedRequestsAsync(Samples2.RequestRow(7, 3, "Omar Haddad"));
         rig.Fake.On("GetStockAsync", ApiResult<IReadOnlyList<StockItem>>.Ok([new StockItem(BloodType.ANeg, 8, 0, 10, true)]));
@@ -91,16 +91,18 @@ public sealed class Part2RequestReceiptTests
         Assert.False(vm.FulfilCommand.CanExecute(null)); // nothing selected
         await SelectFirstAsync(vm);
         Assert.True(vm.FulfilCommand.CanExecute(null));
-        rig.Forms.Script = async dialog =>
-        {
-            var fulfil = Assert.IsType<FulfilRequestDialogViewModel>(dialog);
-            await fulfil.PendingStock;
-            Assert.Equal("In stock: 8 units of A-", fulfil.StockText);
-            Assert.False(fulfil.StockIsShort);
-            await fulfil.PrimaryCommand.ExecuteAsync();
-        };
 
-        await vm.FulfilCommand.ExecuteAsync();
+        // The fulfil step opens in the side panel (direction A), not as a dialog: it is the view model's Fulfilment until it closes.
+        var run = vm.FulfilCommand.ExecuteAsync();
+        var fulfil = Assert.IsType<FulfilRequestDialogViewModel>(vm.Fulfilment);
+        Assert.True(vm.IsFulfilling);
+        Assert.Empty(rig.Forms.Shown); // no dialog
+        await fulfil.PendingStock;
+        Assert.Equal("In stock: 8 units of A-", fulfil.StockText);
+        Assert.False(fulfil.StockIsShort);
+        await fulfil.PrimaryCommand.ExecuteAsync();
+        await run;
+        Assert.Null(vm.Fulfilment); // the step closed after the request was fulfilled
 
         Assert.Equal(7, rig.Recorder.Calls.Single(c => c.Name == "FulfilRequestAsync").Args[0]);
         var toast = Assert.Single(rig.Toasts.Toasts);
@@ -118,20 +120,20 @@ public sealed class Part2RequestReceiptTests
         rig.Fake.On("GetStockAsync", ApiResult<IReadOnlyList<StockItem>>.Ok([new StockItem(BloodType.ANeg, 1, 0, 10, true)]));
         rig.Fake.On("FulfilRequestAsync", FakeApiClient.Fail<ReceiptDetail>(409, ProblemCodes.InsufficientStock, "Not enough stock"));
         await SelectFirstAsync(vm);
-        FulfilRequestDialogViewModel? shown = null;
-        rig.Forms.Script = async dialog =>
-        {
-            shown = (FulfilRequestDialogViewModel)dialog;
-            await shown.PendingStock;
-            Assert.True(shown.StockIsShort); // the warning is there before the click
-            await shown.PrimaryCommand.ExecuteAsync();
-        };
+        var run = vm.FulfilCommand.ExecuteAsync();
+        var shown = Assert.IsType<FulfilRequestDialogViewModel>(vm.Fulfilment);
+        await shown.PendingStock;
+        Assert.True(shown.StockIsShort); // the warning is there before the click
+        await shown.PrimaryCommand.ExecuteAsync();
 
-        await vm.FulfilCommand.ExecuteAsync();
-
-        Assert.False(shown!.Completed);
+        Assert.False(shown.Completed);
         Assert.Equal("There isn't enough A- blood in stock: this request needs 3 units. Nothing was issued.", shown.FormError);
         Assert.False(shown.IsBusy);
+        Assert.Same(shown, vm.Fulfilment); // the step stays open with the message
+        Assert.False(run.IsCompleted);
+        await shown.CancelCommand.ExecuteAsync(); // the user leaves it
+        await run;
+        Assert.Null(vm.Fulfilment);
         Assert.Empty(rig.Toasts.Toasts); // no success toast
         Assert.Equal(1, rig.Recorder.CountOf("GetRequestsAsync")); // the list was not touched
         Assert.Empty(rig.Viewer.Opened);

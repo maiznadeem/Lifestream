@@ -6,6 +6,7 @@ using Lifestream.Client.Features.Receipts;
 using Lifestream.Client.Navigation;
 using Lifestream.Contracts;
 using Lifestream.Contracts.Appointments;
+using Lifestream.Contracts.Donors;
 using Lifestream.Contracts.Lookups;
 using Lifestream.Domain;
 using ContractSortKeys = Lifestream.Contracts.SortKeys;
@@ -90,7 +91,96 @@ public sealed class AppointmentsViewModel : SortedRecordListViewModel<Appointmen
                 CancelAppointmentCommand.RaiseCanExecuteChanged();
                 ViewReceiptCommand.RaiseCanExecuteChanged();
             }
+
+            if (e.PropertyName is nameof(Detail))
+            {
+                OnPropertyChanged(nameof(DetailCode));
+                OnPropertyChanged(nameof(DetailWhen));
+                OnPropertyChanged(nameof(DetailBloodGroup));
+                OnPropertyChanged(nameof(DetailInitials));
+                OnPropertyChanged(nameof(IsPendingDetail));
+            }
+
+            if (e.PropertyName is nameof(DetailFacts))
+            {
+                OnPropertyChanged(nameof(PanelFacts));
+                ShowDonorEligibility();
+            }
         };
+    }
+
+    /// <summary>The donor's eligibility on the day of the selected (pending) appointment, shown in the side panel; hidden for any other appointment.</summary>
+    public EligibilityBannerViewModel DonorEligibility { get; } = new();
+
+    /// <summary>The time zone the screen shows times in (the clinic's local time).</summary>
+    public TimeZoneInfo DisplayZone => Zone;
+
+    /// <summary>Today in the clinic's local time: the list highlights its day group.</summary>
+    public DateOnly Today => RecordFormatting.LocalDate(Clock.GetUtcNow().UtcDateTime, Zone);
+
+    /// <summary>The local day of an appointment: the list groups its rows by it.</summary>
+    public DateOnly DayOf(AppointmentListItem item) => RecordFormatting.LocalDate((item ?? throw new ArgumentNullException(nameof(item))).SlotStartUtc, Zone);
+
+    /// <summary>"Today, Thu 19 Nov", "Tomorrow, Fri 20 Nov", "Yesterday, Wed 18 Nov", "Mon 23 Nov 2026" (another year): a day group's heading.</summary>
+    public string DayHeading(DateOnly day)
+    {
+        var today = Today;
+        var date = day.ToString(day.Year == today.Year ? "ddd dd MMM" : "ddd dd MMM yyyy", System.Globalization.CultureInfo.InvariantCulture);
+        return (day.DayNumber - today.DayNumber) switch
+        {
+            0 => "Today, " + date,
+            1 => "Tomorrow, " + date,
+            -1 => "Yesterday, " + date,
+            _ => date,
+        };
+    }
+
+    /// <summary>The side panel's overline, "Appointment #904".</summary>
+    public string? DetailCode => Detail is { } a ? "Appointment " + RecordFormatting.IdText(a.Id) : null;
+
+    /// <summary>The appointment's time in the side panel's header: "Thu 19 Nov 2026, 11:00".</summary>
+    public string? DetailWhen => Detail is { } a
+        ? $"{RecordFormatting.LocalDate(a.SlotStartUtc, Zone).ToString("ddd dd MMM yyyy", System.Globalization.CultureInfo.InvariantCulture)}, {RecordFormatting.LocalTime(a.SlotStartUtc, Zone).ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture)}"
+        : null;
+
+    public string? DetailBloodGroup => Detail?.DonorBloodType.ToTypographic();
+
+    public string? DetailInitials => Detail is { } a ? DonorsViewModel.PersonInitials(a.DonorName) : null;
+
+    /// <summary>True while the selected appointment is still to come or to be recorded (its actions apply).</summary>
+    public bool IsPendingDetail => IsPending;
+
+    /// <summary>The facts under "Details" in the side panel, without those its header already shows (donor, blood group, time).</summary>
+    public IReadOnlyList<DetailFact> PanelFacts => [.. DetailFacts.Where(f => f.Label is not ("Donor" or "Blood type" or "Appointment"))];
+
+    private (int AppointmentId, DonorDetail Donor)? _donorOfDetail;
+
+    // The donor of a pending appointment, for the eligibility card: fetched with the detail, shown once the detail is in place (on the UI thread).
+    protected override async Task<IReadOnlyList<DetailFact>> GetExtraFactsAsync(int id, CancellationToken ct)
+    {
+        _donorOfDetail = null;
+        if (SelectedItem is { Status: AppointmentStatus.Pending } row && row.Id == id)
+        {
+            var donor = await _api.GetDonorAsync(row.DonorId, ct).ConfigureAwait(false);
+            if (donor.IsOk)
+            {
+                _donorOfDetail = (id, donor.Value);
+            }
+        }
+
+        return [];
+    }
+
+    private void ShowDonorEligibility()
+    {
+        if (Detail is { Status: AppointmentStatus.Pending } appointment && _donorOfDetail is { } found && found.AppointmentId == appointment.Id)
+        {
+            DonorEligibility.Show(found.Donor, RecordFormatting.LocalDate(appointment.SlotStartUtc, Zone), Today);
+        }
+        else
+        {
+            DonorEligibility.Hide();
+        }
     }
 
     public override string PageTitle => "Appointments";

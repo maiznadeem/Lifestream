@@ -57,28 +57,30 @@ public sealed class Part2AppointmentRequestViewTests
                 Headers: grid.Columns.Select(c => c.Header?.ToString()).ToList(),
                 Sortable: grid.Columns.Where(c => c.CanUserSort).Select(c => c.SortMemberPath).ToList(),
                 VmKeys: vm.SortKeys,
-                DonorIds: texts.Count(t => Regex.IsMatch(t, @"^#1\d\d$")),
+                DonorIds: texts.Count(t => Regex.IsMatch(t, @"^D-01\d\d$")),
                 Names: texts.Contains(DemoData.Name(1)),
                 ChipCount: chips.Count,
                 ChipTexts: chips.Select(c => c.DisplayText).Distinct().Order().ToList(),
-                LocalTimes: texts.Any(t => Regex.IsMatch(t, @"^\d{2} [A-Z][a-z]{2} \d{4} \d{2}:\d{2}$")),
+                LocalTimes: texts.Any(t => Regex.IsMatch(t, @"^\d{2}:\d{2}$")),
+                DayHeadings: texts.Count(t => Regex.IsMatch(t, @"^((Today|Tomorrow|Yesterday), )?[A-Z][a-z]{2} \d{2} [A-Z][a-z]{2}( \d{4})?$")),
                 Actions: new[] { "Record donation", "Reschedule", "Cancel appointment" }.Select(n => host.All<Button>().Any(b => b.IsVisible && AutomationProperties.GetName(b) == n)).ToList(),
                 Skeletons: host.All<Skeleton>().Count(s => s.IsVisible),
                 Calls: (rig.Api.CountOf("GetAppointmentsAsync"), rig.Api.CountOf("GetAppointmentAsync")));
         });
 
         Assert.Equal("Showing 1-50 of 86", facts.Count);
-        Assert.Equal(["Donor", "Blood type", "Appointment", "Status"], facts.Headers); // no id column, no constant or always-empty column
+        Assert.Equal(["Time", "Donor", "Group", "Status", "Booked on"], facts.Headers); // no id column, no constant or always-empty column; the day is the group heading
         Assert.Equal(["slot"], facts.Sortable);
         Assert.All(facts.Sortable, key => Assert.Contains(key, facts.VmKeys)); // a column only sorts by a key the screen declares (and the API accepts)
-        Assert.True(facts.DonorIds > 3); // "#101": the donor's id, as secondary text under the name
+        Assert.True(facts.DonorIds > 3); // "D-0101": the donor's code, as secondary text under the name
         Assert.True(facts.Names);
         Assert.True(facts.ChipCount > 3);
         Assert.Contains("Pending", facts.ChipTexts);
         Assert.Contains("Cancelled", facts.ChipTexts);
         Assert.Contains("Completed", facts.ChipTexts);
         Assert.Contains("No show", facts.ChipTexts);
-        Assert.True(facts.LocalTimes);
+        Assert.True(facts.LocalTimes); // "14:00": the local time of day in the row
+        Assert.True(facts.DayHeadings > 0); // and the local day as the heading of its group
         Assert.All(facts.Actions, Assert.True);
         Assert.Equal(0, facts.Skeletons);
         Assert.Equal((1, 1), facts.Calls);
@@ -269,21 +271,21 @@ public sealed class Part2AppointmentRequestViewTests
                 Sortable: grid.Columns.Where(c => c.CanUserSort).Select(c => c.SortMemberPath).ToList(),
                 Keys: vm.SortKeys,
                 Patient: texts.Contains(DemoData.Name(4)),
-                Ids: texts.Count(t => Regex.IsMatch(t, @"^#2\d\d$")),
+                Ids: texts.Count(t => Regex.IsMatch(t, @"^P-02\d\d$")),
                 Chips: Part2Harness.Visible<StatusChip>(host).Select(c => c.DisplayText).Distinct().Order().ToList(),
-                SearchLabel: host.All<FormField>().Where(f => f.IsVisible).Select(f => f.Label).First(),
+                SearchLabel: InputAssist.GetPlaceholder(host.Find<TextBox>("SearchBox")),
                 Fulfil: host.All<Button>().Any(b => b.IsVisible && AutomationProperties.GetName(b) == "Fulfil request"));
         });
 
         Assert.Equal("Showing 1-40 of 40", facts.Count);
-        Assert.Equal(["Patient", "Blood type", "Units", "Needed by", "Status"], facts.Headers);
+        Assert.Equal(["Patient", "Group", "Units", "Needed by", "Urgency", "Status"], facts.Headers);
         Assert.Equal(["requiredBy"], facts.Sortable);
         Assert.All(facts.Sortable, key => Assert.Contains(key, facts.Keys));
         Assert.True(facts.Patient);
         Assert.True(facts.Ids > 3);
         Assert.Contains("Pending", facts.Chips);
         Assert.Contains("Fulfilled", facts.Chips);
-        Assert.Equal("Patient name", facts.SearchLabel);
+        Assert.Equal("Search by patient name or number", facts.SearchLabel); // the one search box says what it finds
         Assert.True(facts.Fulfil);
     }
 

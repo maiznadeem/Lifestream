@@ -3,17 +3,21 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="clr-namespace:Lifestream.Desktop.Controls"
              xmlns:feat="clr-namespace:Lifestream.Desktop.Features"
+             xmlns:lists="clr-namespace:Lifestream.Desktop.Features.ListScreens"
              Focusable="False" IsTabStop="False">
-  <!-- The detail pane of the selected record: its facts, and the Edit and Delete actions that act on it, then any related action the screen adds in RelatedActions ("Book appointment" on a donor, FEAT-04). The data context is the list view model. -->
+  <!-- The selected record in a side panel (direction A): the header (the screen's Header, or the record's name), one row of actions (the screen's primary RelatedActions,
+       Edit, and a "..." menu with Delete), then the screen's Body (an eligibility card), the record's facts as a label/value grid under "Details", and the screen's Extra.
+       ShowFrame draws the pane as its own panel; inside a SidePanel it is off. The data context is the list view model. -->
   <UserControl.Resources>
     <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
     <feat:NullToVisibleConverter x:Key="NullToVisible" />
+    <feat:NullToCollapsedConverter x:Key="NullToCollapsed" />
+    <Thickness x:Key="Pane.ActionsGap">0,16,0,20</Thickness>
   </UserControl.Resources>
-  <controls:Card Background="{DynamicResource Brush.SurfaceRaised}" CornerRadius="{DynamicResource Radius.Card}" Padding="{DynamicResource Pad.16}" AutomationProperties.Name="Details" BorderBrush="{DynamicResource Brush.BorderCard}" BorderThickness="1">
-    <DockPanel LastChildFill="True">
+  <Border x:Name="Frame" SnapsToDevicePixels="True" AutomationProperties.Name="Details">
     <Grid>
       <!-- Nothing selected -->
-      <TextBlock x:Name="NoSelection" Style="{DynamicResource Text.Body}" Foreground="{DynamicResource Brush.TextSecondary}" Text="{Binding NoSelectionText}" TextWrapping="Wrap"
+      <TextBlock x:Name="NoSelection" Style="{DynamicResource Text.Secondary}" Text="{Binding NoSelectionText}" TextWrapping="Wrap"
                  VerticalAlignment="Top" Visibility="{Binding SelectedItem, Converter={StaticResource NullToVisible}}" />
       <controls:Skeleton Kind="Detail" Visibility="{Binding ShowDetailSkeleton, Converter={StaticResource BoolToVisibility}}" />
       <controls:ErrorState Message="{Binding DetailError}" RetryCommand="{Binding RetryDetailCommand}" Visibility="{Binding HasDetailError, Converter={StaticResource BoolToVisibility}}" />
@@ -23,37 +27,48 @@
           <RowDefinition Height="Auto" />
           <RowDefinition Height="*" />
         </Grid.RowDefinitions>
-        <TextBlock Style="{DynamicResource Text.Heading}" Text="{Binding DetailTitle}" TextWrapping="Wrap" AutomationProperties.HeadingLevel="Level2" />
-        <WrapPanel Grid.Row="1" feat:Edge.Top="{DynamicResource Space.12}" feat:Edge.Bottom="{DynamicResource Space.8}">
-          <Button x:Name="EditButton" Style="{DynamicResource Button.Secondary}" Command="{Binding EditCommand}" feat:Edge.Right="{DynamicResource Space.8}" feat:Edge.Bottom="{DynamicResource Space.8}" AutomationProperties.Name="Edit">
+        <Grid>
+          <TextBlock x:Name="TitleText" Style="{DynamicResource Text.Section}" Text="{Binding DetailTitle}" TextWrapping="Wrap" AutomationProperties.HeadingLevel="Level2"
+                     Visibility="{Binding Header, RelativeSource={RelativeSource AncestorType=lists:RecordDetailPane}, Converter={StaticResource NullToVisible}}" />
+          <ContentControl Focusable="False" IsTabStop="False" Content="{Binding Header, RelativeSource={RelativeSource AncestorType=lists:RecordDetailPane}}"
+                          Visibility="{Binding Header, RelativeSource={RelativeSource AncestorType=lists:RecordDetailPane}, Converter={StaticResource NullToCollapsed}}" />
+        </Grid>
+        <Grid x:Name="ActionsRow" Grid.Row="1" Margin="{StaticResource Pane.ActionsGap}">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
+          </Grid.ColumnDefinitions>
+          <ContentControl x:Name="RelatedHost" Focusable="False" IsTabStop="False" HorizontalContentAlignment="Stretch" Margin="{DynamicResource Inset.R8}"
+                          Content="{Binding RelatedActions, RelativeSource={RelativeSource AncestorType=lists:RecordDetailPane}}" />
+          <Button x:Name="EditButton" Grid.Column="1" Style="{DynamicResource Button.Secondary}" Command="{Binding EditCommand}" controls:ButtonAssist.BusyText="" AutomationProperties.Name="Edit" ToolTip="Edit">
             <StackPanel Orientation="Horizontal">
-              <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE70F;" feat:Edge.Right="{DynamicResource Space.8}" VerticalAlignment="Center" />
-              <TextBlock Text="Edit" VerticalAlignment="Center" />
+              <controls:Icon Kind="Edit" Size="16" VerticalAlignment="Center" />
+              <TextBlock x:Name="EditText" Text="Edit" VerticalAlignment="Center" Margin="{DynamicResource Inset.L8}" />
             </StackPanel>
           </Button>
-          <Button x:Name="DeleteButton" Style="{DynamicResource Button.Danger}" Command="{Binding DeleteCommand}" feat:Edge.Right="{DynamicResource Space.8}" feat:Edge.Bottom="{DynamicResource Space.8}" AutomationProperties.Name="Delete"
-                  controls:ButtonAssist.IsBusy="{Binding DeleteCommand.IsRunning}" controls:ButtonAssist.BusyText="Deleting...">
-            <StackPanel Orientation="Horizontal">
-              <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE74D;" feat:Edge.Right="{DynamicResource Space.8}" VerticalAlignment="Center" />
-              <TextBlock Text="Delete" VerticalAlignment="Center" />
-            </StackPanel>
-          </Button>
-          <ContentControl Focusable="False" IsTabStop="False" feat:Edge.Bottom="{DynamicResource Space.8}" Content="{Binding RelatedActions, RelativeSource={RelativeSource AncestorType=UserControl}}" />
-        </WrapPanel>
-        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Focusable="False">
-          <ItemsControl ItemsSource="{Binding DetailFacts}" Focusable="False" AutomationProperties.Name="Record details">
-            <ItemsControl.ItemTemplate>
-              <DataTemplate>
-                <StackPanel feat:Edge.Bottom="{DynamicResource Space.12}">
-                  <TextBlock Style="{DynamicResource Text.Caption}" Text="{Binding Label}" Foreground="{DynamicResource Brush.TextMuted}" />
-                  <TextBlock Style="{DynamicResource Text.Body}" Text="{Binding Value}" TextWrapping="Wrap" />
-                </StackPanel>
-              </DataTemplate>
-            </ItemsControl.ItemTemplate>
-          </ItemsControl>
+          <lists:MenuButton x:Name="MoreButton" Grid.Column="2" Style="{DynamicResource Button.Icon}" Margin="{DynamicResource Inset.L8}" AutomationProperties.Name="More actions" ToolTip="More actions">
+            <controls:Icon Kind="More" Size="18" />
+            <lists:MenuButton.ContextMenu>
+              <ContextMenu>
+                <MenuItem x:Name="DeleteItem" Command="{Binding DeleteCommand}" Foreground="{DynamicResource Brush.Critical}"
+                          Header="{Binding DeleteText, RelativeSource={RelativeSource AncestorType=lists:RecordDetailPane}}">
+                  <MenuItem.Icon>
+                    <controls:Icon Kind="Trash" Size="16" />
+                  </MenuItem.Icon>
+                </MenuItem>
+              </ContextMenu>
+            </lists:MenuButton.ContextMenu>
+          </lists:MenuButton>
+        </Grid>
+        <ScrollViewer x:Name="BodyScroll" Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+          <StackPanel>
+            <ContentControl Focusable="False" IsTabStop="False" Content="{Binding Body, RelativeSource={RelativeSource AncestorType=lists:RecordDetailPane}}" />
+            <lists:FactGrid x:Name="Facts" />
+            <ContentControl Focusable="False" IsTabStop="False" Content="{Binding Extra, RelativeSource={RelativeSource AncestorType=lists:RecordDetailPane}}" />
+          </StackPanel>
         </ScrollViewer>
       </Grid>
     </Grid>
-    </DockPanel>
-  </controls:Card>
+  </Border>
 </UserControl>

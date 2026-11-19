@@ -22,7 +22,6 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
     private const string StatusKey = "status";
 
     private readonly ILifestreamApiClient _api;
-    private readonly IFormDialogService _forms;
     private readonly IReceiptViewer _receipts;
     private readonly INavigationService _navigation;
     private FilterOption<RequestStatus> _statusFilter;
@@ -39,7 +38,7 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
         : base(states, "requests", toasts, dialogs, ui)
     {
         _api = api;
-        _forms = forms;
+        _ = forms; // the fulfil step is shown in the side panel (Fulfilment), not as a dialog; the parameter stays for the screen's constructor contract
         _receipts = receipts;
         _navigation = navigation;
         StatusOptions = SharedLists.WithAll(SharedLists.RequestStatuses, "All statuses");
@@ -69,8 +68,71 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
                 EditRequestCommand.RaiseCanExecuteChanged();
                 ViewReceiptCommand.RaiseCanExecuteChanged();
             }
+
+            if (e.PropertyName is nameof(Detail))
+            {
+                OnPropertyChanged(nameof(DetailCode));
+                OnPropertyChanged(nameof(DetailSubtitle));
+                OnPropertyChanged(nameof(DetailBloodGroup));
+                OnPropertyChanged(nameof(DetailUrgency));
+                OnPropertyChanged(nameof(IsPendingDetail));
+            }
+
+            if (e.PropertyName is nameof(DetailFacts))
+            {
+                OnPropertyChanged(nameof(PanelFacts));
+            }
+
+            // Another request chosen, or the panel closed, while the fulfil step is open: that step is left (nothing was issued).
+            if (e.PropertyName is nameof(SelectedItem) && Fulfilment is { } open && (SelectedItem is null || SelectedItem.Id != open.RequestId))
+            {
+                open.CancelCommand.Execute(null);
+            }
         };
     }
+
+    /// <summary>
+    /// The fulfil step of the selected request, shown in the side panel in place of its details (FEAT-16): what will be issued, the stock of that blood, and "Fulfil
+    /// request" to confirm or Cancel. Null when not fulfilling.
+    /// </summary>
+    public FulfilRequestDialogViewModel? Fulfilment
+    {
+        get => _fulfilment;
+        private set
+        {
+            if (SetProperty(ref _fulfilment, value))
+            {
+                OnPropertyChanged(nameof(IsFulfilling));
+            }
+        }
+    }
+
+    private FulfilRequestDialogViewModel? _fulfilment;
+
+    public bool IsFulfilling => Fulfilment is not null;
+
+    /// <summary>Today in the clinic's local time: how urgent a request is depends on how many days are left until it is needed.</summary>
+    public DateOnly Today => DateOnly.FromDateTime(Clock.GetLocalNow().DateTime);
+
+    /// <summary>How urgent a pending request is today (<see cref="RequestUrgency"/>); fulfilled and cancelled requests are not urgent.</summary>
+    public RequestUrgency UrgencyOf(RequestStatus status, DateOnly requiredBy) => RequestUrgency.Of(status, requiredBy, Today);
+
+    /// <summary>The selected request's urgency, for the side panel's header.</summary>
+    public RequestUrgency? DetailUrgency => Detail is { } r ? UrgencyOf(r.Status, r.RequiredBy) : null;
+
+    /// <summary>The side panel's overline, "Request #148".</summary>
+    public string? DetailCode => Detail is { } r ? "Request " + RecordFormatting.IdText(r.Id) : null;
+
+    /// <summary>"3 units of AB+ for Petra Iversen": the side panel's header line.</summary>
+    public string? DetailSubtitle => Detail is { } r ? $"{RecordFormatting.Units(r.Units)}, needed by {Formatting.Date(r.RequiredBy)}" : null;
+
+    public string? DetailBloodGroup => Detail?.BloodType.ToTypographic();
+
+    /// <summary>True while the selected request is still waiting for blood (its actions apply).</summary>
+    public bool IsPendingDetail => IsPending;
+
+    /// <summary>The facts under "Details" in the side panel, without those its header already shows (patient, blood group, units, date, status).</summary>
+    public IReadOnlyList<DetailFact> PanelFacts => [.. DetailFacts.Where(f => f.Label is not ("Patient" or "Blood type" or "Units" or "Needed by" or "Status"))];
 
     public override string PageTitle => "Requests";
 
@@ -226,10 +288,17 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
         bool done;
         try
         {
-            done = await _forms.ShowAsync(dialog).ConfigureAwait(true);
+            // In the side panel: the step closes itself after a fulfilled request, or on Cancel; a refusal (not enough stock) keeps it open with the message.
+            dialog.Bind(CurrentServerStatus, Clock, Dialogs);
+            var closed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            dialog.CloseRequested += (_, _) => closed.TrySetResult();
+            Fulfilment = dialog;
+            await closed.Task.ConfigureAwait(true);
+            done = dialog.Completed;
         }
         finally
         {
+            Fulfilment = null;
             dialog.Dispose();
         }
 

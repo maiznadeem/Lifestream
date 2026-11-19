@@ -151,15 +151,54 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
 
     /// <summary>The selected row. Selecting loads that record's detail; selecting nothing clears the pane.</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsDetailOpen))]
     public partial TItem? SelectedItem { get; set; }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasDetail), nameof(ShowDetailSkeleton), nameof(HasDetailError), nameof(DetailTitle))]
+    [NotifyPropertyChangedFor(nameof(HasDetail), nameof(ShowDetailSkeleton), nameof(HasDetailError), nameof(DetailTitle), nameof(IsDetailOpen))]
     public partial TDetail? Detail { get; set; }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasDetail), nameof(ShowDetailSkeleton), nameof(HasDetailError), nameof(IsDetailWaking), nameof(ShowWakingNotice))]
+    [NotifyPropertyChangedFor(nameof(HasDetail), nameof(ShowDetailSkeleton), nameof(HasDetailError), nameof(IsDetailWaking), nameof(ShowWakingNotice), nameof(IsDetailOpen))]
     public partial LoadState DetailState { get; set; } = LoadState.Ready;
+
+    /// <summary>
+    /// True while the side panel has something to show: a selected record (loading, loaded or failed) or an open editor. Selecting nothing and closing the editor closes it
+    /// (direction A, list and side panel).
+    /// </summary>
+    public bool IsDetailOpen => SelectedItem is not null || Detail is not null || DetailState != LoadState.Ready || Editor is not null;
+
+    /// <summary>
+    /// The side panel's close button and Esc: an open editor is cancelled first (it asks before discarding changes); otherwise the selection is cleared and the panel
+    /// closes. It makes no API call of its own.
+    /// </summary>
+    public System.Windows.Input.ICommand CloseDetailCommand => _closeDetailCommand ??= new CommunityToolkit.Mvvm.Input.RelayCommand(CloseDetail);
+
+    private System.Windows.Input.ICommand? _closeDetailCommand;
+
+    private void CloseDetail()
+    {
+        if (Editor is { } editor)
+        {
+            if (editor.CancelCommand.CanExecute(null))
+            {
+                editor.CancelCommand.Execute(null);
+            }
+
+            return;
+        }
+
+        _openedId = null;
+        _selectedId = null;
+        if (SelectedItem is null)
+        {
+            ClearDetail();
+        }
+        else
+        {
+            SelectedItem = null;
+        }
+    }
 
     /// <summary>True while the detail request is waiting on a waking server (after 3 s): the pane shows "Waking up the server" with Cancel (SHELL-07).</summary>
     public bool IsDetailWaking => DetailState == LoadState.Waking;
@@ -173,7 +212,7 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
 
     /// <summary>The open editor (the drawer), or null.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsEditing))]
+    [NotifyPropertyChangedFor(nameof(IsEditing), nameof(IsDetailOpen))]
     public partial RecordEditorViewModel? Editor { get; set; }
 
     public bool IsEditing => Editor is not null;
