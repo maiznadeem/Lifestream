@@ -157,34 +157,38 @@ public sealed class ServerClockAndRangeTests(ApiFixture fx) : IClassFixture<ApiF
 
     private static string ToDate => "2031-02-14";
 
+    /// <summary>The day only the receipts list test uses (the dashboard test owns 2031-02-14 for its blood type); the API clock pinned to 2031-02-14 noon keeps it in the past.</summary>
+    private static readonly DateTime ReceiptDay = Utc(2031, 1, 20);
+
     [Fact]
     public async Task Receipts_RangeEndingOnADay_IncludesTheLastMillisecond_ExcludesMidnightAfter_ExcludesTheLastMillisecondBefore()
     {
         using var pinned = PinClocks();
         var admin = await fx.AddStaffAsync(Role.Admin);
-        var tag = Utc(2031, 2, 14, 12);
-        var dayBefore = await Seed.ReceiptAsync(fx, ReceiptKind.Donation, Utc(2031, 2, 13, 23, 59, 59, 999));
-        var startOfDay = await Seed.ReceiptAsync(fx, ReceiptKind.Donation, Day);
-        var lastMs = await Seed.ReceiptAsync(fx, ReceiptKind.Issue, Utc(2031, 2, 14, 23, 59, 59, 999));
-        var nextMidnight = await Seed.ReceiptAsync(fx, ReceiptKind.Donation, Utc(2031, 2, 15));
-        Assert.True(tag > Day);
+        // Its own day: receipts are listed across the whole fixture database, so a day another test in this class seeds on would add rows to the exact list below.
+        var day = ReceiptDay;
+        var dayText = "2031-01-20";
+        var dayBefore = await Seed.ReceiptAsync(fx, ReceiptKind.Donation, Utc(2031, 1, 19, 23, 59, 59, 999));
+        var startOfDay = await Seed.ReceiptAsync(fx, ReceiptKind.Donation, day);
+        var lastMs = await Seed.ReceiptAsync(fx, ReceiptKind.Issue, Utc(2031, 1, 20, 23, 59, 59, 999));
+        var nextMidnight = await Seed.ReceiptAsync(fx, ReceiptKind.Donation, Utc(2031, 1, 21));
 
-        var oneDay = await (await admin.Client.GetApi(ApiRoutes.Receipts, $"?fromUtc={ToDate}&toUtc={ToDate}&pageSize=200")).Read<PagedResult<ReceiptListItem>>();
+        var oneDay = await (await admin.Client.GetApi(ApiRoutes.Receipts, $"?fromUtc={dayText}&toUtc={dayText}&pageSize=200")).Read<PagedResult<ReceiptListItem>>();
         Assert.Equal(new[] { startOfDay.Id, lastMs.Id }.Order(), oneDay.Items.Select(i => i.Id).Order());
         Assert.Equal(2, oneDay.Total);
 
         // Only an end date: everything up to and including that whole day, nothing after it.
-        var upTo = await (await admin.Client.GetApi(ApiRoutes.Receipts, $"?toUtc={ToDate}&pageSize=200&fromUtc=2031-02-01")).Read<PagedResult<ReceiptListItem>>();
+        var upTo = await (await admin.Client.GetApi(ApiRoutes.Receipts, $"?toUtc={dayText}&pageSize=200&fromUtc=2031-01-01")).Read<PagedResult<ReceiptListItem>>();
         Assert.DoesNotContain(upTo.Items, i => i.Id == nextMidnight.Id);
         Assert.Contains(upTo.Items, i => i.Id == lastMs.Id);
         Assert.Contains(upTo.Items, i => i.Id == dayBefore.Id);
 
         // A date-time instead of a date on the To side means the same day.
-        var withTime = await (await admin.Client.GetApi(ApiRoutes.Receipts, $"?fromUtc={ToDate}&toUtc=2031-02-14T00:00:00Z&pageSize=200")).Read<PagedResult<ReceiptListItem>>();
+        var withTime = await (await admin.Client.GetApi(ApiRoutes.Receipts, $"?fromUtc={dayText}&toUtc=2031-01-20T00:00:00Z&pageSize=200")).Read<PagedResult<ReceiptListItem>>();
         Assert.Equal(new[] { startOfDay.Id, lastMs.Id }.Order(), withTime.Items.Select(i => i.Id).Order());
 
         // The same range through a name search (the search path builds its own query).
-        var searched = await (await admin.Client.GetApi(ApiRoutes.Receipts, $"?fromUtc={ToDate}&toUtc={ToDate}&pageSize=200&search=Receipt")).Read<PagedResult<ReceiptListItem>>();
+        var searched = await (await admin.Client.GetApi(ApiRoutes.Receipts, $"?fromUtc={dayText}&toUtc={dayText}&pageSize=200&search=Receipt")).Read<PagedResult<ReceiptListItem>>();
         Assert.Equal(new[] { startOfDay.Id, lastMs.Id }.Order(), searched.Items.Select(i => i.Id).Order());
     }
 

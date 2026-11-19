@@ -31,13 +31,33 @@ BeforeAll {
 
 Describe 'INFRA-01 source tree: precise scanning of code' {
     It 'the repository scan exactly as secret-scan.yml runs it exits 0 on the current tree' {
-        $r = Invoke-Scan @('-Path', 'src,tests,infra,packaging')
+        $r = Invoke-Scan @('-Path', 'src,tests,infra,packaging', '-SkipBuildOutput')
         $r.ExitCode | Should -Be 0 -Because $r.Output
         $r.Output | Should -Match '0 finding\(s\)'
     }
 
+    It 'with -SkipBuildOutput, ignores bin, obj and TestResults folders below the scanned folder but still scans everything else' {
+        $bad = 'class B { const string Cs = "Server=a;' + $script:Pw + '=' + $script:Val + '"; }'
+        $repo = New-Repo @{ 'src/App/bin/Debug/B.cs' = $bad; 'src/App/obj/B.cs' = $bad; 'src/TestResults/B.cs' = $bad; 'src/App/Real.cs' = 'class R { }' }
+        $skipped = Invoke-Scan @('-Path', (Join-Path $repo 'src'), '-RepoRoot', $repo, '-SkipBuildOutput')
+        $skipped.ExitCode | Should -Be 0 -Because $skipped.Output
+        $skipped.Output | Should -Match 'scanned 1 files'
+        (Invoke-Scan @('-Path', (Join-Path $repo 'src'), '-RepoRoot', $repo)).ExitCode | Should -Be 1
+        $kept = New-Repo @{ 'src/App/Db.cs' = $bad; 'src/App/obj/B.cs' = $bad }
+        $r = Invoke-Scan @('-Path', (Join-Path $kept 'src'), '-RepoRoot', $kept, '-SkipBuildOutput')
+        $r.ExitCode | Should -Be 1 -Because $r.Output
+        $r.Output | Should -Match 'Db\.cs'
+        $r.Output | Should -Not -Match 'obj'
+    }
+
+    It 'with -SkipBuildOutput, a scanned folder that is itself named bin (a publish folder) is still scanned' {
+        $bad = 'class B { const string Cs = "Server=a;' + $script:Pw + '=' + $script:Val + '"; }'
+        $repo = New-Repo @{ 'bin/B.cs' = $bad }
+        (Invoke-Scan @('-Path', (Join-Path $repo 'bin'), '-RepoRoot', $repo, '-SkipBuildOutput')).ExitCode | Should -Be 1
+    }
+
     It 'secret-scan.yml runs that same scan command' {
-        (Get-Content -Raw (Join-Path $script:Root '.github' 'workflows' 'secret-scan.yml')) | Should -Match 'scan-artifacts\.ps1 -Path src,tests,infra,packaging'
+        (Get-Content -Raw (Join-Path $script:Root '.github' 'workflows' 'secret-scan.yml')) | Should -Match 'scan-artifacts\.ps1 -Path src,tests,infra,packaging -SkipBuildOutput'
     }
 
     It 'exits 1 on a real connection string planted in a temp .cs file' {

@@ -282,19 +282,21 @@ public sealed class RateLimitTests(LowLimitApiFixture fx) : IClassFixture<LowLim
     [Fact]
     public async Task Login_PerIpLimit_429WithRetryAfter_OtherIpUnaffected()
     {
+        // A name no other test in this fixture uses: the unknown-name lockout counts per name across the whole host, so a shared name would carry earlier tests' failures.
+        var name = fx.NextName("nobody-");
         using var a = fx.NewClient(ip: "203.0.113.10");
         for (var i = 0; i < 3; i++)
         {
-            using var attempt = await a.PostApi(ApiRoutes.AuthLogin, new LoginRequest("nobody", "wrong-password-1"));
+            using var attempt = await a.PostApi(ApiRoutes.AuthLogin, new LoginRequest(name, "wrong-password-1"));
             Assert.Equal(HttpStatusCode.Unauthorized, attempt.StatusCode);
         }
 
-        using var limited = await a.PostApi(ApiRoutes.AuthLogin, new LoginRequest("nobody", "wrong-password-1"));
+        using var limited = await a.PostApi(ApiRoutes.AuthLogin, new LoginRequest(name, "wrong-password-1"));
         using var problem = await limited.Problem(429, ProblemCodes.RateLimited);
         Assert.True(limited.Headers.Contains("Retry-After"));
 
         using var other = fx.NewClient(ip: "203.0.113.11");
-        using var fine = await other.PostApi(ApiRoutes.AuthLogin, new LoginRequest("nobody", "wrong-password-1"));
+        using var fine = await other.PostApi(ApiRoutes.AuthLogin, new LoginRequest(name, "wrong-password-1"));
         Assert.Equal(HttpStatusCode.Unauthorized, fine.StatusCode);
     }
 
@@ -302,15 +304,16 @@ public sealed class RateLimitTests(LowLimitApiFixture fx) : IClassFixture<LowLim
     public async Task DemoLogin_HasItsOwnPerIpLimit_SeparateFromLogin()
     {
         await fx.AddDemoAsync(ip: "203.0.113.20");
+        var name = fx.NextName("nobody-");
         using var client = fx.NewClient(ip: "203.0.113.21");
 
         // Use up the normal login budget for this address...
         for (var i = 0; i < 3; i++)
         {
-            (await client.PostApi(ApiRoutes.AuthLogin, new LoginRequest("nobody", "wrong-password-1"))).Dispose();
+            (await client.PostApi(ApiRoutes.AuthLogin, new LoginRequest(name, "wrong-password-1"))).Dispose();
         }
 
-        Assert.Equal(HttpStatusCode.TooManyRequests, (await client.PostApi(ApiRoutes.AuthLogin, new LoginRequest("nobody", "wrong-password-1"))).StatusCode);
+        Assert.Equal(HttpStatusCode.TooManyRequests, (await client.PostApi(ApiRoutes.AuthLogin, new LoginRequest(name, "wrong-password-1"))).StatusCode);
 
         // ...the demo bucket is untouched, and it has its own (smaller) limit.
         Assert.Equal(HttpStatusCode.OK, (await client.PostApi(ApiRoutes.AuthDemo)).StatusCode);
