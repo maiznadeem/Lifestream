@@ -30,12 +30,11 @@ public static class ReceiptEndpoints
         var (start, end) = Lists.DayRange(q.FromUtc, q.ToUtc);
         IQueryable<Receipt> pageOfReceipts;
         IQueryable<int> total;
-        Func<Task<int>> countWhenEmpty;
         if (Lists.CleanSearch(q.Search) is { } term)
         {
             // A name search: the matches come from SearchQueries.ReceiptsMatching (index seeks that end in narrow indexes holding the
             // date, kind and blood type), are filtered, counted and paged there, and only the page's receipts are then read by id.
-            var hits = SearchQueries.ReceiptsMatching(db, term, int.TryParse(term, out var id) ? id : null);
+            var hits = SearchQueries.ReceiptsMatching(db, SearchQueries.ParseTerm(term));
             if (q.Kind is { } hitKind)
             {
                 hits = hits.Where(h => h.Kind == hitKind);
@@ -59,7 +58,6 @@ public static class ReceiptEndpoints
             var pageOfHits = HitSorts.Apply(hits, q.Sort).Skip((page - 1) * size).Take(size);
             pageOfReceipts = Sorts.Apply(db.Receipts.AsNoTracking().Join(pageOfHits, r => r.Id, h => h.Id, (r, _) => r), q.Sort);
             total = Lists.Total(hits);
-            countWhenEmpty = () => hits.CountAsync(ct);
         }
         else
         {
@@ -86,13 +84,14 @@ public static class ReceiptEndpoints
 
             pageOfReceipts = Sorts.Apply(filtered, q.Sort).Skip((page - 1) * size).Take(size);
             total = Lists.Total(filtered);
-            countWhenEmpty = () => filtered.CountAsync(ct);
         }
 
-        var rows = await (from r in pageOfReceipts
-                          from t in total
-                          select new ListRow<ReceiptListItem>(
-                              new ReceiptListItem(
+        // The total drives the statement and the page is joined to it, so a page past the end answers with the total and no rows, from ONE statement
+        // (the indexed path above), instead of a second statement that counts the whole result again.
+        var rows = await (from t in total
+                          from r in pageOfReceipts.DefaultIfEmpty()
+                          select new ListRow<ReceiptListItem?>(
+                              r == null ? null : new ReceiptListItem(
                                   r.Id,
                                   r.CreatedAtUtc,
                                   r.Kind,
@@ -105,7 +104,7 @@ public static class ReceiptEndpoints
                                   r.RequestId),
                               t))
             .ToListAsync(ct);
-        return await Lists.BuildAsync(rows, page, size, countWhenEmpty);
+        return Lists.BuildFromTotal(rows, page, size);
     }
 
     internal static async Task<ReceiptDetail> LoadDetailAsync(LifestreamDbContext db, int id, CancellationToken ct)

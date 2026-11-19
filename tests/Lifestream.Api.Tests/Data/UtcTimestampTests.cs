@@ -31,7 +31,7 @@ public sealed class UtcTimestampTests(SqlServerDatabaseFixture fixture) : IClass
     {
         await using var db = fixture.NewContext(null);
         var staff = TestRows.Staff(Tag());
-        staff.LockoutEndUtc = DateTime.Now.AddMinutes(15);
+        staff.Credential!.LockoutEndUtc = DateTime.Now.AddMinutes(15);
         db.Staff.Add(staff);
 
         var error = await Assert.ThrowsAnyAsync<Exception>(() => db.SaveChangesAsync(Ct));
@@ -73,7 +73,7 @@ public sealed class UtcTimestampTests(SqlServerDatabaseFixture fixture) : IClass
     {
         var utc = new DateTime(2026, 7, 1, 8, 30, 15, 123, DateTimeKind.Utc);
         var staff = TestRows.Staff(Tag());
-        staff.LockoutEndUtc = utc;
+        staff.Credential!.LockoutEndUtc = utc;
         await using (var db = fixture.NewContext(null))
         {
             db.Appointments.Add(TestRows.Appointment(TestRows.Donor(Tag()), utc));
@@ -83,7 +83,7 @@ public sealed class UtcTimestampTests(SqlServerDatabaseFixture fixture) : IClass
 
         await using var read = fixture.NewContext(null);
         var appointment = await read.Appointments.AsNoTracking().OrderByDescending(a => a.Id).FirstAsync(a => a.SlotStartUtc == utc, Ct);
-        var lockedOut = await read.Staff.AsNoTracking().SingleAsync(s => s.Id == staff.Id, Ct);
+        var lockedOut = await read.StaffCredentials.AsNoTracking().SingleAsync(c => c.StaffId == staff.Id, Ct);
 
         Assert.Equal(DateTimeKind.Utc, appointment.SlotStartUtc.Kind);
         Assert.Equal(utc, appointment.SlotStartUtc);

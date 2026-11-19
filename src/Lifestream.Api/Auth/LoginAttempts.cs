@@ -1,79 +1,67 @@
+using Lifestream.Api.Common;
 using Lifestream.Api.Infrastructure;
+using Lifestream.Data;
+using Lifestream.Data.Entities;
+using Microsoft.EntityFrameworkCore;
 
 namespace Lifestream.Api.Auth;
 
 /// <summary>
-/// Failure counting and lockout for usernames that have no staff row (or belong to the demo account), so a locked real account and
-/// an unknown name behave the same: both count, both lock after the same number of wrong guesses, both answer 429 with the
-/// same Retry-After. Held in memory; there is one replica, and the counter of a name that does not exist is not worth a table.
+/// Failure counting and lockout for login names that have no password account (or belong to the demo account), so a locked real account
+/// and an unknown name behave the same: both count, both lock after the same number of wrong guesses, both answer 429 with the same
+/// Retry-After, also after a restart. The counters are rows of <c>UnknownLogin</c>, whose name column has the same collation as
+/// <c>Staff.Username</c>: every spelling the database treats as one user name (soft hyphen, NUL, fullwidth letters, ss and the sharp s)
+/// is one row, exactly as it is one account. Expired rows are purged whenever the table is used; no timer runs.
 /// </summary>
-public sealed class UnknownLoginTracker(TimeProvider time)
+public sealed class UnknownLoginStore(LifestreamDbContext db, TimeProvider time)
 {
-    private const int MaxEntries = 50_000;
-    private static readonly TimeSpan Retention = TimeSpan.FromDays(30);
-
-    private readonly object _gate = new();
-    private readonly Dictionary<string, Entry> _entries = new(StringComparer.Ordinal);
-
-    public static string KeyOf(string username) => username.Trim().ToLowerInvariant();
+    private const string LockName = "login:unknown";
+    private const int PurgeBatch = 200;
 
     /// <summary>Counts one guess atomically. Returns how long the name is locked for, or null when the guess may be checked.</summary>
-    public TimeSpan? Reserve(string username, int maxAttempts, int lockoutMinutes)
+    public async Task<TimeSpan?> ReserveAsync(string username, int maxAttempts, int lockoutMinutes, CancellationToken ct)
     {
         var now = time.GetUtcNow().UtcDateTime;
-        lock (_gate)
+        await PurgeAsync(now, ct);
+        return await db.RunAsync(async token =>
         {
-            var key = KeyOf(username);
-            if (!_entries.TryGetValue(key, out var entry))
+            // One lock for the whole table: the key is decided by the database's collation, which a lock name cannot be.
+            await db.LockAsync(LockName, token);
+            var row = await db.UnknownLogins.FirstOrDefaultAsync(u => u.Name == username, token);
+            if (row is null)
             {
-                MakeRoom(now);
-                _entries[key] = entry = new Entry();
+                db.UnknownLogins.Add(row = new UnknownLogin { Name = username });
             }
 
-            entry.LastSeenUtc = now;
-            if (entry.LockoutEndUtc is { } until && until > now)
+            row.ExpiresAtUtc = now + UnknownLogin.Retention;
+            TimeSpan? wait = null;
+            if (row.LockoutEndUtc is { } until && until > now)
             {
-                return until - now;
+                wait = until - now;
+            }
+            else
+            {
+                row.FailedCount++;
+                if (row.FailedCount >= maxAttempts)
+                {
+                    row.LockoutEndUtc = now.AddMinutes(lockoutMinutes);
+                    row.FailedCount = 0;
+                }
             }
 
-            entry.Failures++;
-            if (entry.Failures >= maxAttempts)
-            {
-                entry.LockoutEndUtc = now.AddMinutes(lockoutMinutes);
-                entry.Failures = 0;
-            }
-
-            return null;
-        }
+            await db.SaveChangesAsync(token);
+            return wait;
+        }, ct);
     }
 
-    private void MakeRoom(DateTime now)
+    /// <summary>Removes the counters nobody has touched for the retention time (a locked name keeps its row until its lock has ended).</summary>
+    private async Task PurgeAsync(DateTime now, CancellationToken ct)
     {
-        if (_entries.Count < MaxEntries)
+        var expired = await db.UnknownLogins.Where(u => u.ExpiresAtUtc <= now).OrderBy(u => u.ExpiresAtUtc).Select(u => u.Id).Take(PurgeBatch).ToListAsync(ct);
+        if (expired.Count > 0)
         {
-            return;
+            await db.UnknownLogins.Where(u => expired.Contains(u.Id) && u.ExpiresAtUtc <= now).ExecuteDeleteAsync(ct);
         }
-
-        foreach (var stale in _entries.Where(e => e.Value.LastSeenUtc < now - Retention).Select(e => e.Key).ToList())
-        {
-            _entries.Remove(stale);
-        }
-
-        if (_entries.Count >= MaxEntries)
-        {
-            // Still full (a flood of names): forget the least recently seen tenth.
-            foreach (var oldest in _entries.OrderBy(e => e.Value.LastSeenUtc).Take(MaxEntries / 10).Select(e => e.Key).ToList())
-            {
-                _entries.Remove(oldest);
-            }
-        }
-    }
-
-    private sealed class Entry
-    {
-        public int Failures { get; set; }
-        public DateTime? LockoutEndUtc { get; set; }
-        public DateTime LastSeenUtc { get; set; }
     }
 }
 

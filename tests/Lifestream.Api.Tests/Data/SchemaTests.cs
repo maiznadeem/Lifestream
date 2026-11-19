@@ -12,7 +12,7 @@ public sealed partial class SchemaTests(SqlServerDatabaseFixture fixture) : ICla
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     private static readonly string[] ExpectedTables =
-        ["AuditLog", "Appointment", "BloodBag", "DemoState", "DeletedRecord", "Donor", "Patient", "Receipt", "RefreshToken", "Request", "Staff", "StaffPhoto"];
+        ["AuditLog", "Appointment", "BloodBag", "DemoRevocation", "DemoState", "DeletedRecord", "Donor", "Patient", "Receipt", "RefreshToken", "Request", "Staff", "StaffCredential", "StaffPhoto", "UnknownLogin"];
 
     // ---- DB-01 ----
 
@@ -90,7 +90,7 @@ public sealed partial class SchemaTests(SqlServerDatabaseFixture fixture) : ICla
     public async Task AllForeignKeyColumns_HaveIndexes()
     {
         var total = await fixture.ScalarAsync<int>("SELECT COUNT(*) FROM sys.foreign_key_columns", Ct);
-        Assert.Equal(9, total);
+        Assert.Equal(10, total); // + StaffCredential.StaffId -> Staff
 
         // A supporting index has the foreign key column as its first key column.
         var unsupported = await fixture.RowsAsync(
@@ -166,7 +166,7 @@ public sealed partial class SchemaTests(SqlServerDatabaseFixture fixture) : ICla
     [Fact]
     public async Task Ids_AreOneType_IdentityInt_AndForeignKeysAreInt()
     {
-        // Every table's key is an int: "Id" (identity), except StaffPhoto, whose key is the owning StaffId.
+        // Every table's key is an int: "Id" (identity), except StaffPhoto and StaffCredential, whose key is the owning StaffId, and DemoRevocation, whose key is the revoked session or token (text).
         var keys = await fixture.RowsAsync(
             """
             SELECT t.name, c.name, ty.name, c.is_identity
@@ -181,14 +181,21 @@ public sealed partial class SchemaTests(SqlServerDatabaseFixture fixture) : ICla
         Assert.Equal(ExpectedTables.Length, keys.Count);
         Assert.All(keys, r =>
         {
+            if ((string)r[0]! == "DemoRevocation")
+            {
+                Assert.Equal("varchar", (string)r[2]!);
+                Assert.False((bool)r[3]!);
+                return;
+            }
+
             Assert.Equal("int", (string)r[2]!);
-            if ((string)r[0]! != "StaffPhoto")
+            if ((string)r[0]! is not ("StaffPhoto" or "StaffCredential"))
             {
                 Assert.Equal("Id", (string)r[1]!);
             }
 
             // DemoState is the single row Id = 1, so it is not generated.
-            Assert.Equal((string)r[0]! != "DemoState" && (string)r[0]! != "StaffPhoto", (bool)r[3]!);
+            Assert.Equal((string)r[0]! is not ("DemoState" or "StaffPhoto" or "StaffCredential"), (bool)r[3]!);
         });
 
         var foreignKeyTypes = await fixture.RowsAsync(

@@ -223,6 +223,9 @@ public sealed class LifestreamApiClient(HttpClient http, ISessionService session
     public Task<ApiResult> DeleteStaffAsync(int id, CancellationToken ct = default) =>
         SendAsync(HttpMethod.Delete, ApiRoutes.Path(ApiRoutes.StaffById, id), null, ct);
 
+    public Task<ApiResult<StaffDetail>> RestoreStaffAsync(int id, CancellationToken ct = default) =>
+        SendAsync<StaffDetail>(HttpMethod.Post, ApiRoutes.Path(ApiRoutes.StaffRestore, id), null, ct: ct);
+
     public Task<ApiResult> ResetStaffPasswordAsync(int id, ResetPasswordRequest request, CancellationToken ct = default) =>
         SendAsync(HttpMethod.Post, ApiRoutes.Path(ApiRoutes.StaffResetPassword, id), request, ct);
 

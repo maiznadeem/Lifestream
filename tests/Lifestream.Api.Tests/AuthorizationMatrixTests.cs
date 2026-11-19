@@ -83,6 +83,7 @@ public sealed class AuthorizationMatrixTests(ApiFixture fx) : IClassFixture<ApiF
         new(ApiRoutes.StaffPhoto, HttpMethod.Get, AdminOrDemo),
         new(ApiRoutes.StaffPhoto, HttpMethod.Put, AdminOnly),
         new(ApiRoutes.StaffResetPassword, HttpMethod.Post, AdminOnly),
+        new(ApiRoutes.StaffRestore, HttpMethod.Post, AdminOnly),
 
         new(ApiRoutes.Me, HttpMethod.Get, Everyone),
         new(ApiRoutes.Me, HttpMethod.Patch, NotDemo),

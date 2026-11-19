@@ -491,6 +491,7 @@ public sealed partial class ApiWritePlanMatrixTests(WritePlanApiFixture fx) : IC
         await Run(ApiRoutes.StaffPhoto, "GET staff photo (stored)", () => c.GetApi(ApiRoutes.StaffPhoto, staff.Id), false);
         await Run(ApiRoutes.StaffById, "DELETE staff with receipts (refused)", () => c.DeleteApi(ApiRoutes.StaffById, someStaff), false, HttpStatusCode.Conflict);
         await Run(ApiRoutes.StaffById, "DELETE staff", () => c.DeleteApi(ApiRoutes.StaffById, staff.Id), true);
+        await Run(ApiRoutes.StaffRestore, "POST staff restore", () => c.PostApi(ApiRoutes.StaffRestore, null, staff.Id), true);
 
         var me = await fx.AddStaffAsync(Role.Staff, "planme07");
         var mine = await (await me.Client.GetAsync(ApiRoutes.Path(ApiRoutes.Me), Ct)).Read<ProfileResponse>();

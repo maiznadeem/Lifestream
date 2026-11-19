@@ -5,6 +5,7 @@ using Lifestream.Contracts;
 using Lifestream.Contracts.Lookups;
 using Lifestream.Contracts.Profile;
 using Lifestream.Data;
+using Lifestream.Data.Queries;
 using Lifestream.Data.Security;
 using Lifestream.Data.Seed;
 using Lifestream.Domain;
@@ -93,7 +94,7 @@ public static class ProfileEndpoints
         check.ThrowIfInvalid();
 
         var id = user.TokenStaffId;
-        var current = await db.Staff.AsNoTracking().Where(s => s.Id == id).Select(s => new { s.PasswordHash }).FirstOrDefaultAsync(ct)
+        var current = await db.StaffCredentials.AsNoTracking().Where(c => c.StaffId == id).Select(c => new { c.PasswordHash }).FirstOrDefaultAsync(ct)
             ?? throw ApiException.NotFound("The profile");
 
         // The guess is counted, and the lock checked, before the password is: a locked account is refused (429) without any check,
@@ -113,10 +114,13 @@ public static class ProfileEndpoints
         var hash = PasswordHashing.Hash(r.NewPassword);
         await db.RunAsync(async token =>
         {
-            var entity = await db.Staff.FirstOrDefaultAsync(s => s.Id == id, token) ?? throw ApiException.NotFound("The profile");
+            // Only the credential row changes: the profile record the person has open keeps its row version.
+            var entity = await db.StaffCredentials.FirstOrDefaultAsync(c => c.StaffId == id, token) ?? throw ApiException.NotFound("The profile");
             entity.PasswordHash = hash;
+            entity.SecurityStamp = Guid.NewGuid();
             entity.MustChangePassword = false;
-            entity.FailedLoginCount = 0;
+            entity.FailedCount = 0;
+            entity.LastFailureUtc = null;
             entity.LockoutEndUtc = null;
             await db.SaveChangesAsync(token);
             return true;
@@ -168,7 +172,7 @@ public static class LookupEndpoints
         if (Lists.CleanSearch(search) is { } term)
         {
             var like = Lists.PrefixPattern(term);
-            var id = int.TryParse(term, out var parsed) ? parsed : -1;
+            var id = SearchQueries.ParseTerm(term).Id ?? -1;
             query = query.Where(s => s.Id == id || EF.Functions.Like(s.DisplayName, like, "\\") || EF.Functions.Like(s.Username, like, "\\"));
         }
 
@@ -181,9 +185,9 @@ public static class LookupEndpoints
         var query = db.Appointments.AsNoTracking().Where(a => a.Status == AppointmentStatus.Pending);
         if (Lists.CleanSearch(search) is { } term)
         {
-            var like = Lists.PrefixPattern(term);
-            var id = int.TryParse(term, out var parsed) ? parsed : -1;
-            query = query.Where(a => a.Id == id || EF.Functions.Like(a.Donor!.Name, like, "\\") || EF.Functions.Like(a.Donor.Phone!, like, "\\"));
+            var parsed = SearchQueries.ParseTerm(term);
+            var donorIds = db.Donors.NameOrPhoneMatching(parsed).Select(d => d.Id);
+            query = parsed.Id is { } id ? query.Where(a => a.Id == id || donorIds.Contains(a.DonorId)) : query.Where(a => donorIds.Contains(a.DonorId));
         }
 
         var rows = await query.OrderBy(a => a.SlotStartUtc).ThenBy(a => a.Id).Take(Take).Select(a => new { a.Id, Donor = a.Donor!.Name, a.SlotStartUtc }).ToListAsync(ct);
@@ -195,9 +199,9 @@ public static class LookupEndpoints
         var query = db.Requests.AsNoTracking().Where(r => r.Status == RequestStatus.Pending);
         if (Lists.CleanSearch(search) is { } term)
         {
-            var like = Lists.PrefixPattern(term);
-            var id = int.TryParse(term, out var parsed) ? parsed : -1;
-            query = query.Where(r => r.Id == id || EF.Functions.Like(r.Patient!.Name, like, "\\") || EF.Functions.Like(r.Patient.Phone!, like, "\\"));
+            var parsed = SearchQueries.ParseTerm(term);
+            var patientIds = db.Patients.NameOrPhoneMatching(parsed).Select(p => p.Id);
+            query = parsed.Id is { } id ? query.Where(r => r.Id == id || patientIds.Contains(r.PatientId)) : query.Where(r => patientIds.Contains(r.PatientId));
         }
 
         var rows = await query.OrderBy(r => r.RequiredBy).ThenBy(r => r.Id).Take(Take).Select(r => new { r.Id, Patient = r.Patient!.Name, r.BloodType, r.Units }).ToListAsync(ct);

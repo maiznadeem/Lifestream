@@ -97,7 +97,7 @@ internal static class SyntheticDataBuilder
             {
                 DisplayName = name,
                 Username = isDemo ? "demo" : SyntheticVocabulary.UsernameFor(name),
-                PasswordHash = DiscardedPasswordHash,
+                Credential = new StaffCredential { PasswordHash = DiscardedPasswordHash },
                 Gender = PickGender(rng),
                 DateOfBirth = today.AddDays(-rng.Between(22 * 365, 60 * 365)),
                 Designation = isAdmin ? Designation.Admin : rng.Pick([Designation.Doctor, Designation.Worker, Designation.Assistant]),

@@ -4,6 +4,7 @@ using Lifestream.Api.Infrastructure;
 using Lifestream.Contracts;
 using Lifestream.Contracts.Patients;
 using Lifestream.Data;
+using Lifestream.Data.Queries;
 using Lifestream.Data.Entities;
 using Lifestream.Domain;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -36,10 +37,7 @@ public static class PatientEndpoints
 
         if (Lists.CleanSearch(search) is { } term)
         {
-            var like = Lists.PrefixPattern(term);
-            patients = int.TryParse(term, out var id)
-                ? patients.Where(p => p.Id == id || EF.Functions.Like(p.Name, like, "\\") || EF.Functions.Like(p.Phone!, like, "\\"))
-                : patients.Where(p => EF.Functions.Like(p.Name, like, "\\") || EF.Functions.Like(p.Phone!, like, "\\"));
+            patients = patients.Matching(SearchQueries.ParseTerm(term));
         }
 
         return patients;

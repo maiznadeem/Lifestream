@@ -16,7 +16,7 @@ partial class LifestreamDbContextModelSnapshot : ModelSnapshot
     // If you encounter a merge conflict in the line below, it means you need to
     // discard one of the migration branches and recreate its migrations on top of
     // the other branch. See https://aka.ms/efcore-docs-migrations-conflicts for more info.
-    public override string LastMigrationId => "20261119140000_WriteIssueFifoAndDemoIndexes";
+    public override string LastMigrationId => "20261119024537_TempLastFailure";
 
     protected override void BuildModel(ModelBuilder modelBuilder)
     {
@@ -254,6 +254,24 @@ partial class LifestreamDbContextModelSnapshot : ModelSnapshot
                 b.HasIndex("Entity", "EntityId");
 
                 b.ToTable("DeletedRecord");
+            });
+
+        modelBuilder.Entity("Lifestream.Data.Entities.DemoRevocation", b =>
+            {
+                b.Property<string>("Key")
+                    .HasMaxLength(40)
+                    .IsUnicode(false)
+                    .HasColumnType("varchar(40)")
+                    .UseCollation("Latin1_General_100_BIN2");
+
+                b.Property<DateTime>("ExpiresAtUtc")
+                    .HasColumnType("datetime2(3)");
+
+                b.HasKey("Key");
+
+                b.HasIndex("ExpiresAtUtc");
+
+                b.ToTable("DemoRevocation");
             });
 
         modelBuilder.Entity("Lifestream.Data.Entities.DemoState", b =>
@@ -680,9 +698,6 @@ partial class LifestreamDbContextModelSnapshot : ModelSnapshot
                     .HasColumnType("nvarchar(100)")
                     .UseCollation("Latin1_General_100_CI_AI");
 
-                b.Property<int>("FailedLoginCount")
-                    .HasColumnType("int");
-
                 b.Property<string>("Gender")
                     .IsRequired()
                     .HasMaxLength(16)
@@ -697,20 +712,6 @@ partial class LifestreamDbContextModelSnapshot : ModelSnapshot
 
                 b.Property<bool>("IsProtected")
                     .HasColumnType("bit");
-
-                b.Property<DateTime?>("LockoutEndUtc")
-                    .HasColumnType("datetime2(3)");
-
-                b.Property<bool>("MustChangePassword")
-                    .ValueGeneratedOnAdd()
-                    .HasColumnType("bit")
-                    .HasDefaultValue(false);
-
-                b.Property<string>("PasswordHash")
-                    .IsRequired()
-                    .HasMaxLength(256)
-                    .IsUnicode(false)
-                    .HasColumnType("varchar(256)");
 
                 b.Property<string>("Phone")
                     .HasMaxLength(20)
@@ -753,6 +754,12 @@ partial class LifestreamDbContextModelSnapshot : ModelSnapshot
 
                 SqlServerIndexBuilderExtensions.IncludeProperties(index, new[] { "DisplayName" });
 
+                b.HasIndex("IsProtected");
+
+                b.HasIndex("Role");
+
+                b.HasIndex("Salary");
+
                 b.HasIndex("Username")
                     .IsUnique();
 
@@ -762,13 +769,55 @@ partial class LifestreamDbContextModelSnapshot : ModelSnapshot
 
                         t.HasCheckConstraint("CK_Staff_Gender", "[Gender] IN ('Male', 'Female', 'Other')");
 
-                        t.HasCheckConstraint("CK_Staff_PasswordHash", "LEN([PasswordHash]) BETWEEN 84 AND 256 AND LEN([PasswordHash]) % 4 = 0 AND [PasswordHash] NOT LIKE '%[^A-Za-z0-9+/=]%' COLLATE Latin1_General_100_BIN2 AND [PasswordHash] NOT LIKE '%=%[^=]%' COLLATE Latin1_General_100_BIN2 AND [PasswordHash] NOT LIKE '%===%' COLLATE Latin1_General_100_BIN2 AND [PasswordHash] LIKE 'AQAAAAIA____AAAAE%' COLLATE Latin1_General_100_BIN2");
-
                         t.HasCheckConstraint("CK_Staff_Role", "[Role] IN ('Admin', 'Staff')");
 
                         t.HasCheckConstraint("CK_Staff_Salary", "[Salary] IS NULL OR [Salary] >= 0");
 
                         t.HasCheckConstraint("CK_Staff_Shift", "[Shift] IN ('Morning', 'Evening', 'FullTime')");
+                    });
+            });
+
+        modelBuilder.Entity("Lifestream.Data.Entities.StaffCredential", b =>
+            {
+                b.Property<int>("StaffId")
+                    .HasColumnType("int");
+
+                b.Property<int>("FailedCount")
+                    .HasColumnType("int");
+
+                b.Property<DateTime?>("LastFailureUtc")
+                    .HasColumnType("datetime2(3)");
+
+                b.Property<DateTime?>("LockoutEndUtc")
+                    .HasColumnType("datetime2(3)");
+
+                b.Property<bool>("MustChangePassword")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("bit")
+                    .HasDefaultValue(false);
+
+                b.Property<string>("PasswordHash")
+                    .IsRequired()
+                    .HasMaxLength(256)
+                    .IsUnicode(false)
+                    .HasColumnType("varchar(256)");
+
+                b.Property<byte[]>("RowVersion")
+                    .IsConcurrencyToken()
+                    .IsRequired()
+                    .ValueGeneratedOnAddOrUpdate()
+                    .HasColumnType("rowversion");
+
+                b.Property<Guid>("SecurityStamp")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("uniqueidentifier")
+                    .HasDefaultValueSql("NEWID()");
+
+                b.HasKey("StaffId");
+
+                b.ToTable("StaffCredential", t =>
+                    {
+                        t.HasCheckConstraint("CK_StaffCredential_PasswordHash", "LEN([PasswordHash]) BETWEEN 84 AND 256 AND LEN([PasswordHash]) % 4 = 0 AND [PasswordHash] NOT LIKE '%[^A-Za-z0-9+/=]%' COLLATE Latin1_General_100_BIN2 AND [PasswordHash] NOT LIKE '%=%[^=]%' COLLATE Latin1_General_100_BIN2 AND [PasswordHash] NOT LIKE '%===%' COLLATE Latin1_General_100_BIN2 AND [PasswordHash] LIKE 'AQAAAAIA____AAAAE%' COLLATE Latin1_General_100_BIN2");
                     });
             });
 
@@ -807,6 +856,39 @@ partial class LifestreamDbContextModelSnapshot : ModelSnapshot
 
                         t.HasCheckConstraint("CK_StaffPhoto_Size", "DATALENGTH([Content]) BETWEEN 1 AND 30720");
                     });
+            });
+
+        modelBuilder.Entity("Lifestream.Data.Entities.UnknownLogin", b =>
+            {
+                var id = b.Property<int>("Id")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("int");
+
+                SqlServerPropertyBuilderExtensions.UseIdentityColumn(id);
+
+                b.Property<DateTime>("ExpiresAtUtc")
+                    .HasColumnType("datetime2(3)");
+
+                b.Property<int>("FailedCount")
+                    .HasColumnType("int");
+
+                b.Property<DateTime?>("LockoutEndUtc")
+                    .HasColumnType("datetime2(3)");
+
+                b.Property<string>("Name")
+                    .IsRequired()
+                    .HasMaxLength(200)
+                    .HasColumnType("nvarchar(200)")
+                    .UseCollation("Latin1_General_100_CI_AS");
+
+                b.HasKey("Id");
+
+                b.HasIndex("ExpiresAtUtc");
+
+                b.HasIndex("Name")
+                    .IsUnique();
+
+                b.ToTable("UnknownLogin");
             });
 
         modelBuilder.Entity("Lifestream.Data.Entities.Appointment", b =>
@@ -885,6 +967,17 @@ partial class LifestreamDbContextModelSnapshot : ModelSnapshot
                 b.Navigation("Patient");
             });
 
+        modelBuilder.Entity("Lifestream.Data.Entities.StaffCredential", b =>
+            {
+                b.HasOne("Lifestream.Data.Entities.Staff", "Staff")
+                    .WithOne("Credential")
+                    .HasForeignKey("Lifestream.Data.Entities.StaffCredential", "StaffId")
+                    .OnDelete(DeleteBehavior.Cascade)
+                    .IsRequired();
+
+                b.Navigation("Staff");
+            });
+
         modelBuilder.Entity("Lifestream.Data.Entities.StaffPhoto", b =>
             {
                 b.HasOne("Lifestream.Data.Entities.Staff", "Staff")
@@ -894,6 +987,11 @@ partial class LifestreamDbContextModelSnapshot : ModelSnapshot
                     .IsRequired();
 
                 b.Navigation("Staff");
+            });
+
+        modelBuilder.Entity("Lifestream.Data.Entities.Staff", b =>
+            {
+                b.Navigation("Credential");
             });
 #pragma warning restore 612, 618
     }

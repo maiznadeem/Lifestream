@@ -101,9 +101,28 @@ public sealed class ApiPlanMatrixTests(ScaleApiFixture fx) : IClassFixture<Scale
             500),
     };
 
+    /// <summary>
+    /// The terms the verifier found scanning (a phone prefix every seeded phone starts with, and what int.TryParse reads as an id), single letters, a whole phone and a
+    /// digit; each is sent at page 1, a mid page and a page past the end, at the default page size and at 200 (a past-end page is its own request path).
+    /// </summary>
+    private static readonly string[] SearchTerms = ["+", "+1", "+1-555", "+1-555-0101", "a", "e", "o", "z", "1"];
+
+    private static readonly string[] SearchVariants = ["p1", "mid", "past", "s200p1", "s200mid", "s200past"];
+
     public static TheoryData<string> Cases()
     {
         var data = new TheoryData<string>();
+        foreach (var list in new[] { "donors", "patients", "appointments", "requests", "receipts" })
+        {
+            foreach (var term in SearchTerms)
+            {
+                foreach (var variant in SearchVariants)
+                {
+                    data.Add($"search-matrix|{list}|{term}|{variant}");
+                }
+            }
+        }
+
         foreach (var (list, shape) in Lists)
         {
             foreach (var filter in shape.Filters)
@@ -219,6 +238,17 @@ public sealed class ApiPlanMatrixTests(ScaleApiFixture fx) : IClassFixture<Scale
         Record(url, plans, parameterText);
 
         var kind = @case.Split('|')[0];
+        if (kind == "search-matrix")
+        {
+            // Receipts: every variant, a page past the end included, is one database call (the total drives the statement; there is no fallback count).
+            // The other lists keep their fallback count for a page past the end, which must also seek (checked below), but are one call in range.
+            var parts = @case.Split('|');
+            if (parts[1] == "receipts" || parts[3] is "p1" or "s200p1")
+            {
+                Assert.True(plans.Count == 1, $"{url}: {plans.Count} database calls, expected 1:\n{string.Join("\n---\n", plans.Select(p => p.Sql))}");
+            }
+        }
+
         if (kind is "donors" or "patients" or "appointments" or "requests" or "receipts" or "page-size-200" or "staff")
         {
             // API-22: a filter click is one database call (page and total together); the deep pages here are inside the data.
@@ -273,6 +303,17 @@ public sealed class ApiPlanMatrixTests(ScaleApiFixture fx) : IClassFixture<Scale
 
         switch (parts[0])
         {
+            case "search-matrix":
+                var term = "search=" + Uri.EscapeDataString(parts[2]);
+                return ApiRoutes.Path(Lists[parts[1]].Route) + "?" + term + parts[3] switch
+                {
+                    "p1" => "",
+                    "mid" => "&page=10",
+                    "past" => "&page=100000",
+                    "s200p1" => "&pageSize=200&page=1",
+                    "s200mid" => "&pageSize=200&page=60",
+                    _ => "&pageSize=200&page=100000",
+                };
             case "page-size-200":
                 return ApiRoutes.Path(Lists[parts[1]].Route) + "?pageSize=200&page=2";
             case "lookup":

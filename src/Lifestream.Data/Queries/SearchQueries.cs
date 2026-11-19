@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Linq.Expressions;
 using Lifestream.Data.Entities;
 using Microsoft.EntityFrameworkCore;
 
@@ -13,6 +15,66 @@ namespace Lifestream.Data.Queries;
 public static class SearchQueries
 {
     private const string Escape = "\\";
+
+    /// <summary>
+    /// What a list search term can match, decided once for every list (DB-05): a name or contact PREFIX is always tried against names; a phone is
+    /// matched only when the term has at least <see cref="MinPhoneDigits"/> digits (so "+", "+1" and "+1-555", which every seeded phone starts with,
+    /// search names only and never read the whole table); a record id is matched only when the WHOLE term is a number made of digits
+    /// ("+1" and "1-5" are not ids; <c>int.TryParse</c> would read "+1" as 1).
+    /// </summary>
+    public sealed record Term(string Text, string Pattern, string? PhonePattern, int? Id);
+
+    /// <summary>The fewest digits a term needs before it is also matched against phone numbers.</summary>
+    public const int MinPhoneDigits = 7;
+
+    /// <summary>Applies the shared rule to a trimmed, non-empty search term.</summary>
+    public static Term ParseTerm(string term)
+    {
+        var text = term.Trim();
+        var pattern = PrefixPattern(text);
+        var phone = text.Count(char.IsAsciiDigit) >= MinPhoneDigits ? pattern : null;
+        var id = text.All(char.IsAsciiDigit) && int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out var parsed) && parsed > 0 ? parsed : (int?)null;
+        return new Term(text, pattern, phone, id);
+    }
+
+    /// <summary>Donors whose name starts with the term, or (for a long enough term) whose phone does, or whose id it is.</summary>
+    public static IQueryable<Donor> Matching(this IQueryable<Donor> source, Term term)
+    {
+        var pattern = term.Pattern;
+        Expression<Func<Donor, bool>> name = d => EF.Functions.Like(d.Name, pattern, Escape);
+        return source.Where(AnyOf(name, term.PhonePattern is { } phonePattern ? d => EF.Functions.Like(d.Phone!, phonePattern, Escape) : null, term.Id is { } id ? d => d.Id == id : null));
+    }
+
+    /// <summary>Donors by name or phone only (never by id), for lists that search through their donors.</summary>
+    public static IQueryable<Donor> NameOrPhoneMatching(this IQueryable<Donor> source, Term term) => source.Matching(term with { Id = null });
+
+    /// <summary>Patients whose name starts with the term, or (for a long enough term) whose phone does, or whose id it is.</summary>
+    public static IQueryable<Patient> Matching(this IQueryable<Patient> source, Term term)
+    {
+        var pattern = term.Pattern;
+        Expression<Func<Patient, bool>> name = p => EF.Functions.Like(p.Name, pattern, Escape);
+        return source.Where(AnyOf(name, term.PhonePattern is { } phonePattern ? p => EF.Functions.Like(p.Phone!, phonePattern, Escape) : null, term.Id is { } id ? p => p.Id == id : null));
+    }
+
+    /// <summary>Patients by name or phone only (never by id), for lists that search through their patients.</summary>
+    public static IQueryable<Patient> NameOrPhoneMatching(this IQueryable<Patient> source, Term term) => source.Matching(term with { Id = null });
+
+    // OR of the predicates that are present (the first always is), each over its own parameter, joined over the first one's.
+    private static Expression<Func<T, bool>> AnyOf<T>(Expression<Func<T, bool>> first, params Expression<Func<T, bool>>?[] others)
+    {
+        var body = first.Body;
+        foreach (var other in others.OfType<Expression<Func<T, bool>>>())
+        {
+            body = Expression.OrElse(body, new ParameterReplacer(other.Parameters[0], first.Parameters[0]).Visit(other.Body));
+        }
+
+        return Expression.Lambda<Func<T, bool>>(body, first.Parameters);
+    }
+
+    private sealed class ParameterReplacer(ParameterExpression from, ParameterExpression to) : ExpressionVisitor
+    {
+        protected override Expression VisitParameter(ParameterExpression node) => node == from ? to : base.VisitParameter(node);
+    }
 
     /// <summary>The LIKE pattern for "starts with <paramref name="term"/>", with the wildcard characters in the term escaped.</summary>
     public static string PrefixPattern(string term) =>
@@ -51,21 +113,22 @@ public static class SearchQueries
     /// <summary>
     /// The receipts a list search finds, as (id, date, kind, blood type) rows: the receipt with that id (when the term is a number), the
     /// receipts of the staff members whose name starts with the term, and of the donors (through their appointments) and patients
-    /// (through their requests) whose name or contact starts with the term. Each source is a chain of joins that starts at a name or
+    /// (through their requests) whose name starts with the term, or whose phone does when the term is long enough to be a phone (<see cref="Term"/>). Each source is a chain of joins that starts at a name or
     /// phone index seek and ends at an index on the receipt's foreign key that carries these four columns, so the hits are found,
     /// filtered by kind, blood type and date, counted and ordered without reading the receipt table; only the page's own rows are then
     /// fetched by id. The sources are joined by <c>UNION</c> because a single <c>OR</c> across them cannot use any index.
     /// </summary>
-    public static IQueryable<ReceiptHit> ReceiptsMatching(LifestreamDbContext db, string term, int? id)
+    public static IQueryable<ReceiptHit> ReceiptsMatching(LifestreamDbContext db, Term term)
     {
-        var pattern = PrefixPattern(term);
+        var pattern = term.Pattern;
+        var id = term.Id;
         var byDonor =
-            from d in db.Donors.Where(d => EF.Functions.Like(d.Name, pattern, Escape) || EF.Functions.Like(d.Phone!, pattern, Escape))
+            from d in db.Donors.NameOrPhoneMatching(term)
             join a in db.Appointments on d.Id equals a.DonorId
             join r in db.Receipts.Where(r => r.AppointmentId != null) on a.Id equals r.AppointmentId
             select new ReceiptHit { Id = r.Id, CreatedAtUtc = r.CreatedAtUtc, Kind = r.Kind, BloodType = r.BloodType };
         var byPatient =
-            from p in db.Patients.Where(p => EF.Functions.Like(p.Name, pattern, Escape) || EF.Functions.Like(p.Phone!, pattern, Escape))
+            from p in db.Patients.NameOrPhoneMatching(term)
             join q in db.Requests on p.Id equals q.PatientId
             join r in db.Receipts.Where(r => r.RequestId != null) on q.Id equals r.RequestId
             select new ReceiptHit { Id = r.Id, CreatedAtUtc = r.CreatedAtUtc, Kind = r.Kind, BloodType = r.BloodType };

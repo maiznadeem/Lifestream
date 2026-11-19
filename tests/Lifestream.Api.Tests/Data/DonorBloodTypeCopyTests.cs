@@ -92,5 +92,9 @@ public sealed class DonorBloodTypeCopyTests(SqlServerDatabaseFixture fixture) : 
 
         Assert.Equal("ONeg", await empty.ScalarAsync<string>("SELECT DonorBloodType FROM Appointment", Ct));
         Assert.Equal(1, await empty.ScalarAsync<int>("SELECT COUNT(*) FROM Staff", Ct));
+
+        // The StaffCredential migration moved the old Staff columns into the new table: the hash is the one that was stored, and the columns are gone.
+        Assert.Equal(TestRows.ValidHash, await empty.ScalarAsync<string>("SELECT c.PasswordHash FROM StaffCredential c JOIN Staff s ON s.Id = c.StaffId WHERE s.Username = N'old'", Ct));
+        Assert.Equal(0, await empty.ScalarAsync<int>("SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID('Staff') AND name IN ('PasswordHash', 'FailedLoginCount', 'LockoutEndUtc', 'MustChangePassword')", Ct));
     }
 }

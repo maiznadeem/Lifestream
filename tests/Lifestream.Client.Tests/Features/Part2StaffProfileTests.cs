@@ -237,7 +237,7 @@ public sealed class Part2StaffProfileTests
     }
 
     [Fact]
-    public async Task StaffDelete_EveryOtherDelete_AsksFirst_NamingThePerson_NoUndoOffered()
+    public async Task StaffDelete_EveryOtherDelete_AsksFirst_NamingThePerson_OffersUndo()
     {
         var (rig, vm) = await LoadedStaffAsync();
         rig.Fake.OnVoid("DeleteStaffAsync", ApiResult.Success);
@@ -252,10 +252,47 @@ public sealed class Part2StaffProfileTests
 
         Assert.Equal(2, rig.Dialogs.Confirmations.Count);
         Assert.Contains("Selected", rig.Dialogs.Confirmations[1].Body, StringComparison.Ordinal);
-        Assert.Contains("can't be undone", rig.Dialogs.Confirmations[1].Body, StringComparison.Ordinal);
+        Assert.Contains("You can undo this for a few seconds afterwards", rig.Dialogs.Confirmations[1].Body, StringComparison.Ordinal);
         Assert.Equal(1, rig.Recorder.CountOf("DeleteStaffAsync"));
         var toast = Assert.Single(rig.Toasts.Toasts);
-        Assert.False(toast.HasAction); // a deleted staff member can't be restored from the list, so no Undo
+        Assert.Equal("Undo", toast.ActionLabel); // FEAT-06: every delete offers a 10-second Undo, staff included
+    }
+
+    [Fact]
+    public async Task StaffDelete_Undo_RestoresTheSameStaffMember_ByIdThroughTheApi_NotRecreatedAndNeverWithAPassword_FakeApi()
+    {
+        var (rig, vm) = await LoadedStaffAsync();
+        rig.Fake.OnVoid("DeleteStaffAsync", ApiResult.Success);
+        await SelectAsync(vm, 1);
+        rig.Dialogs.Answer = true;
+        await vm.DeleteCommand.ExecuteAsync();
+        var toast = Assert.Single(rig.Toasts.Toasts);
+        rig.Clock.Advance(TimeSpan.FromSeconds(9.9));
+        Assert.False(toast.IsDismissed); // Undo stays ten seconds
+
+        var restored = Samples2.Staff(rig.Recorder.LastArg<int>("DeleteStaffAsync"), "Selected");
+        rig.Fake.On("RestoreStaffAsync", ApiResult<StaffDetail>.Ok(restored));
+        await toast.ActionCommand.ExecuteAsync();
+
+        Assert.Equal(restored.Id, rig.Recorder.LastArg<int>("RestoreStaffAsync")); // the same id goes back
+        Assert.Equal(0, rig.Recorder.CountOf("CreateStaffAsync"));
+        Assert.Contains(rig.Toasts.Toasts, t => t.Message == "Staff member 'Selected' restored.");
+    }
+
+    [Fact]
+    public async Task StaffDelete_UndoFailure_SaysSo_FakeApi()
+    {
+        var (rig, vm) = await LoadedStaffAsync();
+        rig.Fake.OnVoid("DeleteStaffAsync", ApiResult.Success);
+        await SelectAsync(vm, 1);
+        rig.Dialogs.Answer = true;
+        await vm.DeleteCommand.ExecuteAsync();
+        var toast = Assert.Single(rig.Toasts.Toasts);
+        rig.Fake.On("RestoreStaffAsync", ApiResult<StaffDetail>.Fail(FeatureRig.Problem(404, ProblemCodes.NotFound)));
+
+        await toast.ActionCommand.ExecuteAsync();
+
+        Assert.Contains(rig.Toasts.Toasts, t => t.Kind == ToastKind.Error && t.Message.Contains("Couldn't restore staff member", StringComparison.Ordinal));
     }
 
     [Fact]

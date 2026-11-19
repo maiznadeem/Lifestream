@@ -40,7 +40,7 @@ public sealed class StaffWriteFailer : SaveChangesInterceptor
 
     public override ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
     {
-        if (Mode != FailMode.None && eventData.Context!.ChangeTracker.Entries<Lifestream.Data.Entities.Staff>().Any(e => e.State == EntityState.Modified))
+        if (Mode != FailMode.None && eventData.Context!.ChangeTracker.Entries<Lifestream.Data.Entities.StaffCredential>().Any(e => e.State == EntityState.Modified))
         {
             throw Mode == FailMode.ConcurrencyClash ? new DbUpdateConcurrencyException("simulated clash") : new InvalidOperationException("simulated write failure");
         }
@@ -88,7 +88,7 @@ public sealed class LoginLockoutConcurrencyTests(ApiFixture fx) : IClassFixture<
 
         // The real database holds the lock; counting restarted when it began.
         Assert.Contains("Microsoft SQL Server", fx.Db.ServerVersion);
-        var row = (await fx.Db.RowsAsync($"SELECT FailedLoginCount, LockoutEndUtc FROM Staff WHERE Id = {user.Id}", Ct)).Single();
+        var row = (await fx.Db.RowsAsync($"SELECT FailedCount, LockoutEndUtc FROM StaffCredential WHERE StaffId = {user.Id}", Ct)).Single();
         Assert.Equal(0, Convert.ToInt32(row[0], System.Globalization.CultureInfo.InvariantCulture));
         Assert.NotNull(row[1]);
 
@@ -124,7 +124,7 @@ public sealed class LoginLockoutConcurrencyTests(ApiFixture fx) : IClassFixture<
         var results = await BurstAsync(fixture, user.Username, [.. Enumerable.Range(0, 30).Select(i => "lost-write-" + i)], i => $"192.0.2.{i + 1}");
 
         Assert.All(results, r => Assert.Equal(401, r.Status));
-        Assert.Equal(30, await fixture.Db.ScalarAsync<int>($"SELECT FailedLoginCount FROM Staff WHERE Id = {user.Id}", Ct));
+        Assert.Equal(30, await fixture.Db.ScalarAsync<int>($"SELECT FailedCount FROM StaffCredential WHERE StaffId = {user.Id}", Ct));
     }
 
     [Fact]
@@ -164,7 +164,7 @@ public sealed class LoginWriteFailureTests(FailingStaffWriteFixture fx) : IClass
         }
 
         // Nothing was half-written: the account still counts from where it was.
-        Assert.Equal(0, await fx.Db.ScalarAsync<int>($"SELECT FailedLoginCount FROM Staff WHERE Id = {user.Id}", Ct));
+        Assert.Equal(0, await fx.Db.ScalarAsync<int>($"SELECT FailedCount FROM StaffCredential WHERE StaffId = {user.Id}", Ct));
     }
 }
 

@@ -90,6 +90,8 @@ public sealed partial class Check
 public static class BodyReader
 {
     private static readonly ConcurrentDictionary<Type, string[]> RequiredByType = new();
+    private static readonly ConcurrentDictionary<Type, string[]> NotClearableByType = new();
+    private static readonly ConcurrentDictionary<Type, (string Name, Type Enum)[]> EnumFieldsByType = new();
 
     public static async Task<T> ReadBodyAsync<T>(this HttpRequest request, CancellationToken ct)
         where T : class
@@ -126,6 +128,26 @@ public static class BodyReader
                 }
             }
 
+            // A PATCH field that cannot be cleared (a dropdown, a date) must not be sent as null: that would otherwise become the type's default value.
+            foreach (var name in NotClearableByType.GetOrAdd(typeof(T), NotClearableNames))
+            {
+                if (document.RootElement.EnumerateObject().Any(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase) && p.Value.ValueKind == JsonValueKind.Null))
+                {
+                    check.Fail(name, "cannot be null");
+                }
+            }
+
+            // Every enum field is exactly one defined name (the strict converter would also refuse the rest, but only this names the field).
+            foreach (var (name, enumType) in EnumFieldsByType.GetOrAdd(typeof(T), EnumFields))
+            {
+                var property = document.RootElement.EnumerateObject().Cast<JsonProperty?>().FirstOrDefault(p => string.Equals(p!.Value.Name, name, StringComparison.OrdinalIgnoreCase));
+                if (property is { Value: { ValueKind: not JsonValueKind.Null } value }
+                    && (value.ValueKind != JsonValueKind.String || !System.Enum.GetNames(enumType).Contains(value.GetString(), StringComparer.OrdinalIgnoreCase)))
+                {
+                    check.Fail(name, "is not a valid value");
+                }
+            }
+
             check.ThrowIfInvalid();
             return JsonSerializer.Deserialize<T>(bytes, options) ?? throw ApiException.Validation("body", "is required");
         }
@@ -147,6 +169,42 @@ public static class BodyReader
         [
             .. constructor.GetParameters()
                 .Where(p => !p.HasDefaultValue && !IsNullable(context, p))
+                .Select(p => JsonNamingPolicy.CamelCase.ConvertName(p.Name!)),
+        ];
+    }
+
+    // Constructor parameters that are enums (also inside Optional<> or Nullable<>), by their JSON name.
+    private static (string Name, Type Enum)[] EnumFields(Type type)
+    {
+        var constructor = type.GetConstructors().OrderByDescending(c => c.GetParameters().Length).First();
+        var fields = new List<(string, Type)>();
+        foreach (var parameter in constructor.GetParameters())
+        {
+            var inner = parameter.ParameterType;
+            if (inner.IsGenericType && inner.GetGenericTypeDefinition() == typeof(Lifestream.Contracts.Optional<>))
+            {
+                inner = inner.GetGenericArguments()[0];
+            }
+
+            inner = Nullable.GetUnderlyingType(inner) ?? inner;
+            if (inner.IsEnum)
+            {
+                fields.Add((JsonNamingPolicy.CamelCase.ConvertName(parameter.Name!), inner));
+            }
+        }
+
+        return [.. fields];
+    }
+
+    // Optional<X> constructor parameters where X is a value type that is not nullable (Optional<Gender>, Optional<DateOnly>).
+    private static string[] NotClearableNames(Type type)
+    {
+        var constructor = type.GetConstructors().OrderByDescending(c => c.GetParameters().Length).First();
+        return
+        [
+            .. constructor.GetParameters()
+                .Where(p => p.ParameterType.IsGenericType && p.ParameterType.GetGenericTypeDefinition() == typeof(Lifestream.Contracts.Optional<>)
+                    && p.ParameterType.GetGenericArguments()[0] is { IsValueType: true } inner && Nullable.GetUnderlyingType(inner) is null)
                 .Select(p => JsonNamingPolicy.CamelCase.ConvertName(p.Name!)),
         ];
     }
