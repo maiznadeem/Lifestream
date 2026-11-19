@@ -241,11 +241,13 @@ public sealed partial class StaffViewModel : SortedRecordListViewModel<StaffRow,
             return;
         }
 
-        if (State is LoadState.Loading or LoadState.Waking || _resumeWatch is not null)
+        if (State is LoadState.Loading or LoadState.Waking || CurrentServerStatus?.State == ServerState.Waking)
         {
-            // Rows shown while the list is (re)loading, or while the server is waking, wait for it: a photo request then would sit behind the load's waking banner, out of reach of
-            // its Cancel. They are fetched once the list is ready (OnStateChangedForPhotos).
+            // No thumbnail request STARTS while the list is (re)loading or the server is waking: a row that scrolls into view then (or appears when the
+            // layout changes, as it does when a toast leaves) would add a request after the user pressed Cancel, one that no Cancel on screen stops.
+            // The row waits and is fetched once the list is ready and the server answers again (OnStateChangedForPhotos, OnServerAwake).
             _deferredPhotos.Add(row);
+            WatchForServerAwake();
             return;
         }
 
@@ -278,7 +280,7 @@ public sealed partial class StaffViewModel : SortedRecordListViewModel<StaffRow,
         }
         catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException)
         {
-            // A load started (the rows are being replaced), the server started waking, or the screen was left. The row may ask again.
+            // A load started (the rows are being replaced), the user cancelled the waiting requests, or the screen was left. The row may ask again.
             row.ReleasePhotoRequest();
         }
         finally
@@ -288,22 +290,12 @@ public sealed partial class StaffViewModel : SortedRecordListViewModel<StaffRow,
     }
 
     /// <summary>
-    /// A call of this screen waits on a waking server. Thumbnails are not worth waiting for: the photo requests in flight are cancelled at once (so no
-    /// request is left that the screen's Cancel can't reach), and the rows ask again when the server is awake.
+    /// Deferred rows are fetched when the server stops waking. (A request already in flight when the server starts waking is an operation of this screen
+    /// like any other: the screen shows its waking notice, and its Cancel stops the request.)
     /// </summary>
-    protected override void OnOperationWakingChanged(bool isWaking)
+    private void WatchForServerAwake()
     {
-        base.OnOperationWakingChanged(isWaking);
-        if (!isWaking || _disposed || _photosInFlight.Count == 0)
-        {
-            return;
-        }
-
-        _deferredPhotos.UnionWith(_photosInFlight);
-        _photoCts.Cancel();
-        _photoCts.Dispose();
-        _photoCts = new CancellationTokenSource();
-        if (_resumeWatch is null && CurrentServerStatus is { } status)
+        if (_resumeWatch is null && CurrentServerStatus is { State: ServerState.Waking } status)
         {
             _resumeWatch = status;
             status.Changed += OnServerAwake;

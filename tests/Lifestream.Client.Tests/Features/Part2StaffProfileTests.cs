@@ -58,6 +58,32 @@ public sealed class Part2StaffProfileTests
     }
 
     [Fact]
+    public async Task StaffList_WhileTheServerIsWaking_NoThumbnailRequestStarts_AndTheRowIsFetchedWhenTheServerIsAwake()
+    {
+        // A row that comes into view while a call of the app waits on a waking server (it scrolls in, or the layout changes when a toast leaves after
+        // the user pressed Cancel) must not start a request of its own: no Cancel on screen would stop it. It is fetched once the server answers again.
+        var (rig, vm) = await LoadedStaffAsync();
+        var status = new ServerStatus();
+        vm.Attach(status, rig.Clock);
+        status.Enter(); // a call somewhere in the app is waiting: the server is waking
+
+        await vm.LoadPhotoCommand.ExecuteAsync(vm.Items[1]);
+        Assert.Equal(0, rig.Recorder.CountOf("GetStaffPhotoAsync"));
+        Assert.Null(vm.Items[1].Photo);
+        await vm.LoadPhotoAsync(vm.Items[1]); // shown again while still waking: still no request
+        Assert.Equal(0, rig.Recorder.CountOf("GetStaffPhotoAsync"));
+
+        status.Leave(); // the server answered
+        for (var i = 0; i < 500 && vm.Items[1].Photo is null; i++)
+        {
+            await Task.Delay(10); // the fetch runs on the pool; this waits for its result, at most 5 s
+        }
+
+        Assert.Equal([1, 2, 3], vm.Items[1].Photo);
+        Assert.Equal(1, rig.Recorder.CountOf("GetStaffPhotoAsync")); // once, however often the row was shown meanwhile
+    }
+
+    [Fact]
     public async Task StaffList_PhotoRowChangesNotify_SoTheCellUpdatesWhenTheBytesArrive()
     {
         var (_, vm) = await LoadedStaffAsync();
