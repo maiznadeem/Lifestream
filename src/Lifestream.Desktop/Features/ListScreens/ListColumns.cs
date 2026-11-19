@@ -49,6 +49,32 @@ public static class ListColumns
         }
     }
 
+    /// <summary>
+    /// WPF's DataGrid takes width from fixed columns, down to their minimum, while the table is too narrow for them (a passing layout, the side panel opening), and
+    /// gives it back only to star columns. Once the table is laid out, each fixed column gets the width it was declared with back.
+    /// </summary>
+    public static void RestoreWidths(DataGrid grid)
+    {
+        ArgumentNullException.ThrowIfNull(grid);
+        foreach (var column in grid.Columns)
+        {
+            if (column.ReadLocalValue(DeclaredWidthProperty) is not double declared)
+            {
+                declared = column.Width.IsAbsolute ? column.Width.Value : double.NaN;
+                column.SetValue(DeclaredWidthProperty, declared);
+            }
+
+            if (!double.IsNaN(declared) && column.Visibility == Visibility.Visible && Math.Abs(column.ActualWidth - declared) > 0.5)
+            {
+                column.Width = new DataGridLength(declared);
+            }
+        }
+    }
+
+    /// <summary>The width a fixed column was declared with (NaN for star and auto columns), read once.</summary>
+    private static readonly DependencyProperty DeclaredWidthProperty =
+        DependencyProperty.RegisterAttached("DeclaredWidth", typeof(double), typeof(ListColumns), new PropertyMetadata(double.NaN));
+
     private static void OnIsResponsiveChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         if (d is not DataGrid grid)
@@ -61,6 +87,7 @@ public static class ListColumns
         {
             grid.SizeChanged += OnSizeChanged;
             Apply(grid, grid.ActualWidth);
+            RestoreWidths(grid);
         }
     }
 
@@ -68,7 +95,10 @@ public static class ListColumns
     {
         if (e.WidthChanged)
         {
-            Apply((DataGrid)sender, e.NewSize.Width);
+            var grid = (DataGrid)sender;
+            Apply(grid, e.NewSize.Width);
+            // After the grid has shared out the new width among its columns (it does so in its own layout pass, after this event).
+            grid.Dispatcher.BeginInvoke(() => RestoreWidths(grid), System.Windows.Threading.DispatcherPriority.Loaded);
         }
     }
 }

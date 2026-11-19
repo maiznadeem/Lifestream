@@ -5,83 +5,240 @@
              xmlns:feat="clr-namespace:Lifestream.Desktop.Features"
              xmlns:lists="clr-namespace:Lifestream.Desktop.Features.ListScreens"
              xmlns:services="clr-namespace:Lifestream.Desktop.Services"
+             controls:ShellPage.OwnsHeader="True"
              Focusable="False">
-  <!-- Donors: search and filters on top, the list with its page count, and on the right the detail of the selected donor or the editor. -->
+  <!-- Donors (direction A): the page header with the count and "Add donor", the search and filter chips, the table in its panel with the footer, and the selected donor
+       (or the donor form) in the side panel at the right: who they are, "Book appointment", the eligibility card and the details. -->
   <UserControl.Resources>
     <feat:DateTextConverter x:Key="DateText" />
-    <feat:BloodTypeTextConverter x:Key="BloodTypeText" />
     <feat:NullToCollapsedConverter x:Key="NullToCollapsed" />
     <feat:NullToVisibleConverter x:Key="NullToVisible" />
+    <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+    <lists:TypographicBloodTypeConverter x:Key="BloodGroup" />
+    <lists:InitialsConverter x:Key="Initials" />
+    <lists:RecordCodeConverter x:Key="Code" />
+    <lists:DonorStandingConverter x:Key="Standing" />
+    <lists:DonorStandingKindConverter x:Key="StandingKind" />
+    <lists:DonorStandingDotConverter x:Key="StandingDot" />
+    <lists:PanelWidthConverter x:Key="PanelWidth" />
+    <lists:IsCompactConverter x:Key="IsCompact" />
+    <Thickness x:Key="Donors.ToolbarGap">0,20,0,16</Thickness>
+    <Thickness x:Key="Donors.CardPad">16,14,16,14</Thickness>
+    <Thickness x:Key="Donors.CardGap">0,0,0,24</Thickness>
+    <Thickness x:Key="Donors.NameGap">10,0,0,0</Thickness>
+    <Thickness x:Key="Donors.HeaderGap">14,0,12,0</Thickness>
+    <Thickness x:Key="Donors.IconGap">0,1,12,0</Thickness>
   </UserControl.Resources>
   <Grid>
-    <Grid.RowDefinitions>
-      <RowDefinition Height="Auto" />
-      <RowDefinition Height="Auto" />
-      <RowDefinition Height="*" />
-    </Grid.RowDefinitions>
-    <lists:ListToolbar />
-    <lists:ScreenWakingNotice Grid.Row="1" />
-    <Grid Grid.Row="2">
-      <Grid.ColumnDefinitions>
-        <ColumnDefinition Width="*" MinWidth="360" />
-        <ColumnDefinition Width="16" />
-        <ColumnDefinition Width="400" />
-      </Grid.ColumnDefinitions>
-      <controls:LoadSurface x:Name="ListSurface" State="{Binding State}" SkeletonKind="List" SkeletonColumns="2*,100,90,*,130"
-                            ErrorMessage="{Binding ErrorMessage}" ErrorDetail="{Binding ErrorDetail}" RetryCommand="{Binding RetryCommand}"
-                            EmptyGlyph="&#xE716;" EmptyTitle="{Binding EmptyTitle}" EmptyMessage="{Binding EmptyMessage}" EmptyActionText="{Binding EmptyActionText}"
-                            EmptyActionCommand="{Binding EmptyActionCommand}">
-        <Grid>
-          <Grid.RowDefinitions>
-            <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
-          </Grid.RowDefinitions>
-          <controls:LifestreamDataGrid x:Name="Grid" ItemsSource="{Binding Items}" SelectedItem="{Binding SelectedItem, Mode=TwoWay}" SortCommand="{Binding SortCommand}"
-                                       SortColumn="{Binding SortColumn, Mode=OneWay}" SortDescending="{Binding SortDescending, Mode=OneWay}"
-                                       AutomationProperties.Name="Donors">
-            <DataGrid.Columns>
-              <DataGridTextColumn Header="Name" Binding="{Binding Name}" SortMemberPath="name" Width="2*" />
-              <DataGridTemplateColumn Header="Blood type" Width="100" CanUserSort="False">
-                <DataGridTemplateColumn.CellTemplate>
-                  <DataTemplate>
-                    <TextBlock Text="{Binding BloodType, Converter={StaticResource BloodTypeText}}" Style="{DynamicResource DataGrid.TextCell}" />
-                  </DataTemplate>
-                </DataGridTemplateColumn.CellTemplate>
-              </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Gender" Width="90">
-                <DataGridTemplateColumn.CellTemplate>
-                  <DataTemplate>
-                    <TextBlock Text="{Binding Gender}" Style="{DynamicResource DataGrid.TextCell}" />
-                  </DataTemplate>
-                </DataGridTemplateColumn.CellTemplate>
-              </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Phone" Width="*" MinWidth="130">
-                <DataGridTemplateColumn.CellTemplate>
-                  <DataTemplate>
-                    <TextBlock Text="{Binding Phone}" Style="{DynamicResource DataGrid.TextCell}" />
-                  </DataTemplate>
-                </DataGridTemplateColumn.CellTemplate>
-              </DataGridTemplateColumn>
-              <DataGridTextColumn Header="Last donated" Binding="{Binding LastDonated, Converter={StaticResource DateText}, ConverterParameter=Never}" SortMemberPath="lastDonated" Width="130" />
-            </DataGrid.Columns>
-          </controls:LifestreamDataGrid>
-          <lists:ListFooter Grid.Row="1" />
-        </Grid>
-      </controls:LoadSurface>
-      <Grid Grid.Column="2">
-        <lists:RecordDetailPane Visibility="{Binding Editor, Converter={StaticResource NullToVisible}}">
+    <Grid.ColumnDefinitions>
+      <ColumnDefinition Width="*" MinWidth="360" />
+      <ColumnDefinition Width="Auto" />
+      <ColumnDefinition Width="Auto" />
+    </Grid.ColumnDefinitions>
+
+    <!-- The list -->
+    <Grid x:Name="ListColumn">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto" />
+        <RowDefinition Height="Auto" />
+        <RowDefinition Height="Auto" />
+        <RowDefinition Height="*" />
+      </Grid.RowDefinitions>
+      <controls:PageHeader x:Name="Header" Title="{Binding PageTitle}" Count="{Binding Total}">
+        <controls:PageHeader.Actions>
+          <Button x:Name="AddButton" Style="{DynamicResource Button.Primary}" Command="{Binding AddCommand}" controls:ButtonAssist.BusyText="" AutomationProperties.Name="{Binding NewActionLabel}" ToolTip="Add donor (Ctrl+N)">
+            <StackPanel Orientation="Horizontal">
+              <controls:Icon Kind="Userplus" Size="16" VerticalAlignment="Center" />
+              <TextBlock x:Name="AddLabel" Text="{Binding NewActionLabel}" VerticalAlignment="Center" Margin="{DynamicResource Inset.L8}">
+                <TextBlock.Style>
+                  <Style TargetType="TextBlock">
+                    <Style.Triggers>
+                      <DataTrigger Binding="{Binding (controls:Responsive.Breakpoint), RelativeSource={RelativeSource Self}}" Value="{x:Static controls:Breakpoint.Compact}">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                      </DataTrigger>
+                    </Style.Triggers>
+                  </Style>
+                </TextBlock.Style>
+              </TextBlock>
+            </StackPanel>
+          </Button>
+        </controls:PageHeader.Actions>
+      </controls:PageHeader>
+      <lists:ListToolbar x:Name="Toolbar" Grid.Row="1" Margin="{StaticResource Donors.ToolbarGap}" SearchPlaceholder="Search name, phone or ID" />
+      <lists:ScreenWakingNotice Grid.Row="2" />
+      <Border x:Name="TablePanel" Grid.Row="3" Background="{DynamicResource Brush.Layer}" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="1"
+              CornerRadius="{DynamicResource Radius.Panel}" SnapsToDevicePixels="True">
+        <controls:LoadSurface x:Name="ListSurface" State="{Binding State}" SkeletonKind="List" SkeletonColumns="2*,80,130,130,140"
+                              ErrorMessage="{Binding ErrorMessage}" ErrorDetail="{Binding ErrorDetail}" RetryCommand="{Binding RetryCommand}"
+                              EmptyGlyph="&#xE716;" EmptyTitle="{Binding EmptyTitle}" EmptyMessage="{Binding EmptyMessage}" EmptyActionText="{Binding EmptyActionText}"
+                              EmptyActionCommand="{Binding EmptyActionCommand}">
+          <Grid>
+            <Grid.RowDefinitions>
+              <RowDefinition Height="*" />
+              <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <controls:LifestreamDataGrid x:Name="Grid" ItemsSource="{Binding Items}" SelectedItem="{Binding SelectedItem, Mode=TwoWay}" SortCommand="{Binding SortCommand}"
+                                         SortColumn="{Binding SortColumn, Mode=OneWay}" SortDescending="{Binding SortDescending, Mode=OneWay}"
+                                         lists:ListColumns.IsResponsive="True" lists:ListKeys.Panel="{Binding ElementName=Panel}"
+                                         AutomationProperties.Name="Donors">
+              <DataGrid.Columns>
+                <DataGridTemplateColumn Header="Name" SortMemberPath="name" Width="2*" MinWidth="200">
+                  <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate>
+                      <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <controls:Avatar Initials="{Binding Name, Converter={StaticResource Initials}}" Size="28" VerticalAlignment="Center" />
+                        <StackPanel Margin="{StaticResource Donors.NameGap}" VerticalAlignment="Center">
+                          <TextBlock Style="{DynamicResource Text.Body}" FontWeight="Medium" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                          <TextBlock Style="{DynamicResource Text.Caption}" Text="{Binding Id, Converter={StaticResource Code}, ConverterParameter=D}" />
+                        </StackPanel>
+                      </StackPanel>
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="Group" Width="80" CanUserSort="False">
+                  <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate>
+                      <controls:BloodGroupTag Text="{Binding BloodType, Converter={StaticResource BloodGroup}}" HorizontalAlignment="Left" VerticalAlignment="Center" />
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="Eligibility" Width="130" CanUserSort="False">
+                  <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate>
+                      <controls:Badge HorizontalAlignment="Left" VerticalAlignment="Center" Text="{Binding Text}" Kind="{Binding Kind, Converter={StaticResource StandingKind}}"
+                                      ShowDot="{Binding Kind, Converter={StaticResource StandingDot}}">
+                        <controls:Badge.DataContext>
+                          <MultiBinding Converter="{StaticResource Standing}">
+                            <Binding />
+                            <Binding Path="DataContext.Today" RelativeSource="{RelativeSource AncestorType=DataGrid}" />
+                          </MultiBinding>
+                        </controls:Badge.DataContext>
+                      </controls:Badge>
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="Last donated" SortMemberPath="lastDonated" Width="130" lists:ListColumns.HideBelow="560">
+                  <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate>
+                      <TextBlock x:Name="LastText" Style="{DynamicResource DataGrid.TextCell}" Text="{Binding LastDonated, Converter={StaticResource DateText}, ConverterParameter=Never}" />
+                      <DataTemplate.Triggers>
+                        <DataTrigger Binding="{Binding LastDonated}" Value="{x:Null}">
+                          <Setter TargetName="LastText" Property="Foreground" Value="{DynamicResource Brush.Ink3}" />
+                        </DataTrigger>
+                      </DataTemplate.Triggers>
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="Donates" Width="110" CanUserSort="False" lists:ListColumns.HideBelow="900">
+                  <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate>
+                      <TextBlock Style="{DynamicResource DataGrid.TextCell}" Text="{Binding Frequency}" />
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="Phone" Width="140" CanUserSort="False" lists:ListColumns.HideBelow="680">
+                  <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate>
+                      <TextBlock Style="{DynamicResource DataGrid.TextCell}" Text="{Binding Phone}" />
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+              </DataGrid.Columns>
+            </controls:LifestreamDataGrid>
+            <lists:ListFooter Grid.Row="1" />
+          </Grid>
+        </controls:LoadSurface>
+      </Border>
+    </Grid>
+
+    <!-- The gap before the side panel, only while it is open -->
+    <Border Grid.Column="1" Width="{DynamicResource Space.24}" Visibility="{Binding IsDetailOpen, Converter={StaticResource BoolToVisibility}}" />
+
+    <!-- The selected donor, or the donor form -->
+    <controls:SidePanel x:Name="Panel" Grid.Column="2" IsOpen="{Binding IsDetailOpen, Mode=OneWay}" CloseCommand="{Binding CloseDetailCommand}" Overline="{Binding DetailCode}"
+                        PanelWidth="{Binding (controls:Responsive.Breakpoint), RelativeSource={RelativeSource Self}, Converter={StaticResource PanelWidth}}" lists:PanelBleed.IsEnabled="True" lists:DetailPaneFrame.IsInPanel="True">
+      <Grid>
+        <lists:RecordDetailPane x:Name="DetailPane" FactsSource="{Binding PanelFacts}" DeleteText="Delete donor"
+                                IsCompact="{Binding (controls:Responsive.Breakpoint), RelativeSource={RelativeSource Self}, Converter={StaticResource IsCompact}}" Visibility="{Binding Editor, Converter={StaticResource NullToVisible}}">
+          <lists:RecordDetailPane.Header>
+            <Grid>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+              </Grid.ColumnDefinitions>
+              <controls:Avatar Initials="{Binding DetailInitials}" IsBlood="True" Size="52" VerticalAlignment="Center" />
+              <StackPanel Grid.Column="1" Margin="{StaticResource Donors.HeaderGap}" VerticalAlignment="Center">
+                <TextBlock Style="{DynamicResource Text.Section}" Text="{Binding DetailTitle}" TextWrapping="Wrap" AutomationProperties.HeadingLevel="Level2" />
+                <TextBlock Style="{DynamicResource Text.Secondary}" Text="{Binding DetailSubtitle}" TextWrapping="Wrap" />
+              </StackPanel>
+              <controls:BloodGroupTag Grid.Column="2" Text="{Binding DetailBloodGroup}" IsLarge="True" VerticalAlignment="Top" />
+            </Grid>
+          </lists:RecordDetailPane.Header>
           <lists:RecordDetailPane.RelatedActions>
-            <Button Style="{DynamicResource Button.Secondary}" Command="{Binding BookAppointmentCommand}" AutomationProperties.Name="Book appointment">
+            <Button Style="{DynamicResource Button.Primary}" Command="{Binding BookAppointmentCommand}" HorizontalAlignment="Stretch" AutomationProperties.Name="Book appointment">
               <StackPanel Orientation="Horizontal">
-                <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE787;" feat:Edge.Right="{DynamicResource Space.8}" VerticalAlignment="Center" />
-                <TextBlock Text="Book appointment" VerticalAlignment="Center" />
+                <controls:Icon Kind="Calplus" Size="16" VerticalAlignment="Center" />
+                <TextBlock Text="Book appointment" VerticalAlignment="Center" Margin="{DynamicResource Inset.L8}" />
               </StackPanel>
             </Button>
           </lists:RecordDetailPane.RelatedActions>
+          <lists:RecordDetailPane.Body>
+            <!-- The eligibility card: eligible (green), waiting or on hold (amber), not checked (neutral) -->
+            <Border DataContext="{Binding EligibilityCard}" Visibility="{Binding Converter={StaticResource NullToCollapsed}}" BorderThickness="1"
+                    CornerRadius="{DynamicResource Radius.Panel}" Padding="{StaticResource Donors.CardPad}" Margin="{StaticResource Donors.CardGap}" SnapsToDevicePixels="True"
+                    AutomationProperties.Name="{Binding Headline}">
+              <Border.Style>
+                <Style TargetType="Border">
+                  <Setter Property="Background" Value="{DynamicResource Brush.Layer2}" />
+                  <Setter Property="BorderBrush" Value="{DynamicResource Brush.Stroke}" />
+                  <Setter Property="TextElement.Foreground" Value="{DynamicResource Brush.Ink2}" />
+                  <Style.Triggers>
+                    <DataTrigger Binding="{Binding Kind}" Value="Eligible">
+                      <Setter Property="Background" Value="{DynamicResource Brush.SuccessSoft}" />
+                      <Setter Property="BorderBrush" Value="{DynamicResource Brush.SuccessStroke}" />
+                      <Setter Property="TextElement.Foreground" Value="{DynamicResource Brush.Success}" />
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding Kind}" Value="Waiting">
+                      <Setter Property="Background" Value="{DynamicResource Brush.WarningSoft}" />
+                      <Setter Property="BorderBrush" Value="{DynamicResource Brush.Stroke}" />
+                      <Setter Property="TextElement.Foreground" Value="{DynamicResource Brush.Warning}" />
+                    </DataTrigger>
+                  </Style.Triggers>
+                </Style>
+              </Border.Style>
+              <Grid>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="Auto" />
+                  <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <controls:Icon Size="20" VerticalAlignment="Top" Margin="{StaticResource Donors.IconGap}">
+                  <controls:Icon.Style>
+                    <Style TargetType="controls:Icon">
+                      <Setter Property="Kind" Value="Info" />
+                      <Style.Triggers>
+                        <DataTrigger Binding="{Binding Kind}" Value="Eligible">
+                          <Setter Property="Kind" Value="Checkc" />
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding Kind}" Value="Waiting">
+                          <Setter Property="Kind" Value="Clock" />
+                        </DataTrigger>
+                      </Style.Triggers>
+                    </Style>
+                  </controls:Icon.Style>
+                </controls:Icon>
+                <StackPanel Grid.Column="1">
+                  <TextBlock Style="{DynamicResource Text.BodyStrong}" Foreground="{Binding (TextElement.Foreground), RelativeSource={RelativeSource AncestorType=Border}}"
+                             Text="{Binding Headline}" TextWrapping="Wrap" />
+                  <TextBlock Style="{DynamicResource Text.Secondary}" Text="{Binding Message}" TextWrapping="Wrap" Margin="{DynamicResource Inset.T4}" />
+                </StackPanel>
+              </Grid>
+            </Border>
+          </lists:RecordDetailPane.Body>
         </lists:RecordDetailPane>
-        <ContentControl Content="{Binding Editor}" ContentTemplateSelector="{x:Static services:ViewLocator.Instance}" IsTabStop="False" Focusable="False"
+        <ContentControl x:Name="EditorHost" Content="{Binding Editor}" ContentTemplateSelector="{x:Static services:ViewLocator.Instance}" IsTabStop="False" Focusable="False"
                         HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" Visibility="{Binding Editor, Converter={StaticResource NullToCollapsed}}" />
       </Grid>
-    </Grid>
+    </controls:SidePanel>
   </Grid>
 </UserControl>

@@ -30,6 +30,25 @@ public sealed class PatientsViewModel : SortedRecordListViewModel<PatientListIte
             {
                 NewRequestCommand.RaiseCanExecuteChanged();
             }
+
+            if (e.PropertyName is nameof(Detail))
+            {
+                OnPropertyChanged(nameof(DetailCode));
+                OnPropertyChanged(nameof(DetailSubtitle));
+                OnPropertyChanged(nameof(DetailBloodGroup));
+                OnPropertyChanged(nameof(DetailInitials));
+            }
+
+            if (e.PropertyName is nameof(Detail) or nameof(SelectedItem))
+            {
+                OnPropertyChanged(nameof(OpenRequests));
+                OnPropertyChanged(nameof(OpenRequestsText));
+            }
+
+            if (e.PropertyName is nameof(DetailFacts))
+            {
+                OnPropertyChanged(nameof(PanelFacts));
+            }
         };
     }
 
@@ -37,6 +56,35 @@ public sealed class PatientsViewModel : SortedRecordListViewModel<PatientListIte
     public AsyncRelayCommand NewRequestCommand { get; }
 
     public override string PageTitle => "Patients";
+
+    /// <summary>The patient's code as the screens show it, "P-0051".</summary>
+    public static string Code(int id) => $"P-{id:0000}";
+
+    /// <summary>The side panel's overline, "Patient P-0051".</summary>
+    public string? DetailCode => Detail is { } p ? "Patient " + Code(p.Id) : null;
+
+    /// <summary>The line under the patient's name in the side panel: "Female, age 42".</summary>
+    public string? DetailSubtitle => Detail is { } p ? $"{p.Gender}, age {Eligibility.AgeOn(p.DateOfBirth, DateOnly.FromDateTime(Clock.GetLocalNow().DateTime))}" : null;
+
+    /// <summary>The patient's blood group with a true minus sign, for the large tag in the side panel.</summary>
+    public string? DetailBloodGroup => Detail?.BloodType.ToTypographic();
+
+    public string? DetailInitials => Detail is { } p ? Donors.DonorsViewModel.PersonInitials(p.Name) : null;
+
+    /// <summary>The selected patient's requests still waiting for blood (from the list row), or null when not known.</summary>
+    public int? OpenRequests => Detail is { } p && SelectedItem is { } row && row.Id == p.Id ? row.PendingRequests : null;
+
+    /// <summary>"2 requests waiting for blood", "No requests waiting", for the card in the side panel.</summary>
+    public string? OpenRequestsText => OpenRequests switch
+    {
+        null => null,
+        0 => "No requests waiting",
+        1 => "1 request waiting for blood",
+        var n => $"{n} requests waiting for blood",
+    };
+
+    /// <summary>The facts under "Details" in the side panel, without the blood group (it is in the header).</summary>
+    public IReadOnlyList<DetailFact> PanelFacts => [.. DetailFacts.Where(f => f.Label != "Blood type")];
 
     protected override string PluralName => "patients";
 

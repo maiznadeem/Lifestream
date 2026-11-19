@@ -28,6 +28,9 @@ public sealed partial class FulfilRequestDialogViewModel : DialogViewModel
         PendingStock = LoadStockAsync();
     }
 
+    /// <summary>The request being fulfilled.</summary>
+    public int RequestId => _request.Id;
+
     public string PatientName => _request.PatientName;
 
     public string BloodTypeText => _request.BloodType.ToDisplay();
