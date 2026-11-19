@@ -1,31 +1,41 @@
 <UserControl x:Class="Lifestream.Desktop.Features.ListScreens.ListFooter"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:feat="clr-namespace:Lifestream.Desktop.Features"
              xmlns:controls="clr-namespace:Lifestream.Desktop.Controls"
              Focusable="False" IsTabStop="False">
-  <!-- "Showing 1-50 of 1,230" and the page buttons (FEAT-01). The data context is the list view model. -->
-  <Grid feat:Edge.Top="{DynamicResource Space.8}">
-    <Grid.ColumnDefinitions>
-      <ColumnDefinition Width="*" />
-      <ColumnDefinition Width="Auto" />
-    </Grid.ColumnDefinitions>
-    <TextBlock x:Name="RangeText" Style="{DynamicResource Text.Body}" Foreground="{DynamicResource Brush.TextSecondary}" Text="{Binding RangeText}" VerticalAlignment="Center"
-               AutomationProperties.LiveSetting="Polite" AutomationProperties.Name="Rows shown" />
-    <StackPanel Grid.Column="1" Orientation="Horizontal">
-      <TextBlock Style="{DynamicResource Text.Caption}" Text="{Binding PageCountText}" VerticalAlignment="Center" feat:Edge.Right="{DynamicResource Space.12}" />
-      <Button Style="{DynamicResource Button.Secondary}" Command="{Binding PreviousPageCommand}" MinHeight="32" feat:Edge.Right="{DynamicResource Space.8}" AutomationProperties.Name="Previous page">
-        <StackPanel Orientation="Horizontal">
-          <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE76B;" feat:Edge.Right="{DynamicResource Space.8}" VerticalAlignment="Center" />
-          <TextBlock Text="Previous" VerticalAlignment="Center" />
-        </StackPanel>
-      </Button>
-      <Button Style="{DynamicResource Button.Secondary}" Command="{Binding NextPageCommand}" MinHeight="32" AutomationProperties.Name="Next page">
-        <StackPanel Orientation="Horizontal">
-          <TextBlock Text="Next" VerticalAlignment="Center" />
-          <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE76C;" feat:Edge.Left="{DynamicResource Space.8}" VerticalAlignment="Center" />
-        </StackPanel>
-      </Button>
-    </StackPanel>
-  </Grid>
+  <!-- The foot of a list's panel (direction A): "Showing 1-50 of 1,230" on the left, "< Page 1 of 3 >" on the right, under a 1 px line. The data context is the list view model. -->
+  <UserControl.Resources>
+    <Thickness x:Key="Footer.Pad">16,8,10,8</Thickness>
+    <Thickness x:Key="Footer.PageGap">6,0,6,0</Thickness>
+  </UserControl.Resources>
+  <Border BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="0,1,0,0" Padding="{StaticResource Footer.Pad}" SnapsToDevicePixels="True" MinHeight="{DynamicResource Height.Row}">
+    <Grid>
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*" />
+        <ColumnDefinition Width="Auto" />
+      </Grid.ColumnDefinitions>
+      <TextBlock x:Name="RangeText" Style="{DynamicResource Text.Secondary}" Text="{Binding RangeText}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                 AutomationProperties.LiveSetting="Polite" AutomationProperties.Name="Rows shown" />
+      <!-- The pager only when there is more than one page. -->
+      <StackPanel x:Name="Pager" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+        <StackPanel.Style>
+          <Style TargetType="StackPanel">
+            <Style.Triggers>
+              <DataTrigger Binding="{Binding PageCountText}" Value="">
+                <Setter Property="Visibility" Value="Collapsed" />
+              </DataTrigger>
+            </Style.Triggers>
+          </Style>
+        </StackPanel.Style>
+        <Button Style="{DynamicResource Button.Icon.Small}" Command="{Binding PreviousPageCommand}" AutomationProperties.Name="Previous page" ToolTip="Previous page">
+          <controls:Icon Kind="Chevl" Size="16" />
+        </Button>
+        <TextBlock x:Name="PageText" Style="{DynamicResource Text.Secondary}" Foreground="{DynamicResource Brush.Ink}" Text="{Binding PageCountText}" VerticalAlignment="Center"
+                   Margin="{StaticResource Footer.PageGap}" />
+        <Button Style="{DynamicResource Button.Icon.Small}" Command="{Binding NextPageCommand}" AutomationProperties.Name="Next page" ToolTip="Next page">
+          <controls:Icon Kind="Chevr" Size="16" />
+        </Button>
+      </StackPanel>
+    </Grid>
+  </Border>
 </UserControl>
