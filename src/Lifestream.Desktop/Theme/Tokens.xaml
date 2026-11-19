@@ -116,6 +116,8 @@
   <CornerRadius x:Key="Radius.AvatarLarge">48</CornerRadius>
   <Thickness x:Key="Inset.B12">0,0,0,12</Thickness>
   <Thickness x:Key="Inset.B4">0,0,0,4</Thickness>
+  <Thickness x:Key="Inset.L24">24,0,0,0</Thickness>
+  <Thickness x:Key="Inset.V4">0,4,0,4</Thickness>
   <Thickness x:Key="Inset.H12">12,0,12,0</Thickness>
   <Thickness x:Key="Inset.H12V16">12,16,12,16</Thickness>
   <Thickness x:Key="Inset.H12V4">12,4,12,4</Thickness>

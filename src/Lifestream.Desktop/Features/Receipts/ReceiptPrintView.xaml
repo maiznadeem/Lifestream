@@ -3,5 +3,5 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              Focusable="False" IsTabStop="False">
   <!-- The printable receipt: the same FlowDocument that is sent to the printer, shown as a white page. -->
-  <FlowDocumentScrollViewer x:Name="Viewer" IsToolBarVisible="False" VerticalScrollBarVisibility="Auto" Focusable="True" AutomationProperties.Name="Receipt" />
+  <FlowDocumentScrollViewer x:Name="Viewer" ContextMenu="{DynamicResource ContextMenu.Document}" IsToolBarVisible="False" VerticalScrollBarVisibility="Auto" Focusable="True" AutomationProperties.Name="Receipt" />
 </UserControl>

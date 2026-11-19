@@ -247,7 +247,11 @@ public sealed partial class LoginViewModel : ViewModelBase
     public const string InvalidResponseCode = "invalid_sign_in_response";
 
     private static bool IsUsable(TokenResponse? tokens) =>
-        tokens is { AccessToken.Length: > 0, RefreshToken.Length: > 0, User: { DisplayName: { Length: > 0 } } user } && Enum.IsDefined(user.Role);
+        tokens is { User: { } user }
+        && !string.IsNullOrWhiteSpace(tokens.AccessToken)
+        && !string.IsNullOrWhiteSpace(tokens.RefreshToken)
+        && !string.IsNullOrWhiteSpace(user.DisplayName)
+        && Enum.IsDefined(user.Role);
 
     private void Fail(ApiProblem problem)
     {
