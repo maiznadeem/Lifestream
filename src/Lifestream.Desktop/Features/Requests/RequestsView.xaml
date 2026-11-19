@@ -144,16 +144,30 @@
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
                       <Grid VerticalAlignment="Center">
-                        <controls:Badge HorizontalAlignment="Left" Text="{Binding Text}" Kind="{Binding Kind, Converter={StaticResource UrgencyKind}}"
-                                        Icon="{Binding Kind, Converter={StaticResource UrgencyIcon}}"
-                                        Visibility="{Binding Kind, Converter={StaticResource EqualsToVisible}, ConverterParameter=Critical|Soon|Normal}">
-                          <controls:Badge.DataContext>
-                            <MultiBinding Converter="{StaticResource Urgency}">
+                        <!-- Tag carries the urgency kind; the colour and icon follow it -->
+                        <controls:Badge x:Name="UrgencyBadge" HorizontalAlignment="Left" Kind="{Binding Tag, RelativeSource={RelativeSource Self}, Converter={StaticResource UrgencyKind}}"
+                                        Icon="{Binding Tag, RelativeSource={RelativeSource Self}, Converter={StaticResource UrgencyIcon}}">
+                          <controls:Badge.Text>
+                            <MultiBinding Converter="{StaticResource Urgency}" ConverterParameter="Text">
                               <Binding Path="Status" />
                               <Binding Path="RequiredBy" />
                               <Binding Path="DataContext" RelativeSource="{RelativeSource AncestorType=DataGrid}" />
                             </MultiBinding>
-                          </controls:Badge.DataContext>
+                          </controls:Badge.Text>
+                          <controls:Badge.Visibility>
+                            <MultiBinding Converter="{StaticResource Urgency}" ConverterParameter="Visibility">
+                              <Binding Path="Status" />
+                              <Binding Path="RequiredBy" />
+                              <Binding Path="DataContext" RelativeSource="{RelativeSource AncestorType=DataGrid}" />
+                            </MultiBinding>
+                          </controls:Badge.Visibility>
+                          <controls:Badge.Tag>
+                            <MultiBinding Converter="{StaticResource Urgency}" ConverterParameter="Kind">
+                              <Binding Path="Status" />
+                              <Binding Path="RequiredBy" />
+                              <Binding Path="DataContext" RelativeSource="{RelativeSource AncestorType=DataGrid}" />
+                            </MultiBinding>
+                          </controls:Badge.Tag>
                         </controls:Badge>
                         <!-- A fulfilled or cancelled request is not urgent: its status, quietly -->
                         <TextBlock Style="{DynamicResource DataGrid.TextCell}" Foreground="{DynamicResource Brush.Ink3}" Text="{Binding Status, Converter={StaticResource StatusText}}"

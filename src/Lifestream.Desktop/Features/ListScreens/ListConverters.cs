@@ -32,37 +32,35 @@ public sealed class RecordCodeConverter : IValueConverter
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => throw new NotSupportedException();
 }
 
-/// <summary>A donor row and today (a multi-binding) as the donor's standing (<see cref="DonorStanding"/>): eligible, first-time, waiting until a date, on hold.</summary>
+/// <summary>
+/// A donor row and today (a multi-binding) as a part of the donor's standing (<see cref="DonorStanding"/>: eligible, first-time, waiting until a date, on hold), chosen by
+/// the parameter: "Text" (the badge's word), "Kind" (its colour) or "Dot" (true when eligible).
+/// </summary>
 public sealed class DonorStandingConverter : IMultiValueConverter
 {
-    public object? Convert(object[] values, Type targetType, object parameter, CultureInfo culture) =>
-        values is [Lifestream.Contracts.Donors.DonorListItem donor, DateOnly today, ..]
-            ? DonorStanding.Of(donor.DateOfBirth, donor.LastDonated, donor.MedicalHold, today)
-            : null;
+    public object? Convert(object[] values, Type targetType, object parameter, CultureInfo culture)
+    {
+        if (values is not [Lifestream.Contracts.Donors.DonorListItem donor, DateOnly today, ..])
+        {
+            return parameter as string == "Dot" ? false : parameter as string == "Kind" ? BadgeKind.Neutral : string.Empty;
+        }
+
+        var standing = DonorStanding.Of(donor.DateOfBirth, donor.LastDonated, donor.MedicalHold, today);
+        return (parameter as string) switch
+        {
+            "Kind" => standing.Kind switch
+            {
+                DonorStandingKind.Eligible => BadgeKind.Success,
+                DonorStandingKind.FirstTime => BadgeKind.Info,
+                DonorStandingKind.OnHold => BadgeKind.Warning,
+                _ => BadgeKind.Neutral,
+            },
+            "Dot" => standing.Kind == DonorStandingKind.Eligible,
+            _ => standing.Text,
+        };
+    }
 
     public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture) => throw new NotSupportedException();
-}
-
-/// <summary>A donor's standing as the badge's colour: eligible green, first-time blue, on hold amber, waiting and the rest neutral.</summary>
-public sealed class DonorStandingKindConverter : IValueConverter
-{
-    public object Convert(object value, Type targetType, object parameter, CultureInfo culture) => value switch
-    {
-        DonorStandingKind.Eligible => BadgeKind.Success,
-        DonorStandingKind.FirstTime => BadgeKind.Info,
-        DonorStandingKind.OnHold => BadgeKind.Warning,
-        _ => BadgeKind.Neutral,
-    };
-
-    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => throw new NotSupportedException();
-}
-
-/// <summary>True (the badge's dot) only for an eligible donor: the one state a clinician scans the column for.</summary>
-public sealed class DonorStandingDotConverter : IValueConverter
-{
-    public object Convert(object value, Type targetType, object parameter, CultureInfo culture) => value is DonorStandingKind.Eligible;
-
-    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => throw new NotSupportedException();
 }
 
 /// <summary>Visible when the bound value is one of the parameter's names ("Critical|Soon", enum values by name), collapsed otherwise (and for null).</summary>

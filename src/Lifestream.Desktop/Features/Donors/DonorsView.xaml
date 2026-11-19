@@ -18,8 +18,6 @@
     <lists:InitialsConverter x:Key="Initials" />
     <lists:RecordCodeConverter x:Key="Code" />
     <lists:DonorStandingConverter x:Key="Standing" />
-    <lists:DonorStandingKindConverter x:Key="StandingKind" />
-    <lists:DonorStandingDotConverter x:Key="StandingDot" />
     <lists:PanelWidthConverter x:Key="PanelWidth" />
     <lists:IsCompactConverter x:Key="IsCompact" />
     <Thickness x:Key="Donors.ToolbarGap">0,20,0,16</Thickness>
@@ -105,14 +103,25 @@
                 <DataGridTemplateColumn Header="Eligibility" Width="130" CanUserSort="False">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
-                      <controls:Badge HorizontalAlignment="Left" VerticalAlignment="Center" Text="{Binding Text}" Kind="{Binding Kind, Converter={StaticResource StandingKind}}"
-                                      ShowDot="{Binding Kind, Converter={StaticResource StandingDot}}">
-                        <controls:Badge.DataContext>
-                          <MultiBinding Converter="{StaticResource Standing}">
+                      <controls:Badge HorizontalAlignment="Left" VerticalAlignment="Center">
+                        <controls:Badge.Text>
+                          <MultiBinding Converter="{StaticResource Standing}" ConverterParameter="Text">
                             <Binding />
                             <Binding Path="DataContext.Today" RelativeSource="{RelativeSource AncestorType=DataGrid}" />
                           </MultiBinding>
-                        </controls:Badge.DataContext>
+                        </controls:Badge.Text>
+                        <controls:Badge.Kind>
+                          <MultiBinding Converter="{StaticResource Standing}" ConverterParameter="Kind">
+                            <Binding />
+                            <Binding Path="DataContext.Today" RelativeSource="{RelativeSource AncestorType=DataGrid}" />
+                          </MultiBinding>
+                        </controls:Badge.Kind>
+                        <controls:Badge.ShowDot>
+                          <MultiBinding Converter="{StaticResource Standing}" ConverterParameter="Dot">
+                            <Binding />
+                            <Binding Path="DataContext.Today" RelativeSource="{RelativeSource AncestorType=DataGrid}" />
+                          </MultiBinding>
+                        </controls:Badge.ShowDot>
                       </controls:Badge>
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>

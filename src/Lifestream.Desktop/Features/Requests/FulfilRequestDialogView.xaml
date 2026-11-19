@@ -19,6 +19,8 @@
           Padding="{StaticResource Fulfil.Pad}" SnapsToDevicePixels="True" AutomationProperties.Name="Fulfil request">
     <StackPanel>
       <TextBlock Style="{DynamicResource Text.Heading}" Text="Fulfil this request" Margin="{StaticResource Fulfil.Gap}" AutomationProperties.HeadingLevel="Level3" />
+      <!-- A server that is waking up (the stock check or the fulfil call waits on it): say so, with Cancel -->
+      <controls:WakingNotice IsActive="{Binding IsOperationWaking}" CancelCommand="{Binding CancelOperationCommand}" Margin="{StaticResource Fulfil.Gap}" />
       <TextBlock Style="{DynamicResource Text.Body}" TextWrapping="Wrap" Margin="{StaticResource Fulfil.Gap}">
         <Run Text="Issue" /> <Run Text="{Binding UnitsText, Mode=OneWay}" FontWeight="SemiBold" /> <Run Text="of" /> <Run Text="{Binding BloodTypeText, Mode=OneWay}" FontWeight="SemiBold" />
         <Run Text="to" /> <Run Text="{Binding PatientName, Mode=OneWay}" /><Run Text=", needed by" /> <Run Text="{Binding RequiredByText, Mode=OneWay}" /><Run Text="." />
