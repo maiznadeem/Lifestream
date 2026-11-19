@@ -18,13 +18,19 @@ public static class StaffText
 /// shown, which is why <see cref="Photo"/> raises change notification: the cell shows the shared default avatar until the bytes arrive (FEAT-20).
 /// A row without a photo never makes a request.
 /// </summary>
-public sealed partial class StaffRow(StaffListItem item) : ObservableObject
+public sealed partial class StaffRow : ObservableObject
 {
     private int _requested;
 
-    public StaffListItem Item { get; } = item;
+    public StaffRow(StaffListItem item)
+    {
+        Item = item;
+        Id = item?.Id ?? 0; // a row built without an item (by reflection-based tests) has no id
+    }
 
-    public int Id => Item.Id;
+    public StaffListItem Item { get; }
+
+    public int Id { get; }
 
     public string DisplayName => Item.DisplayName;
 

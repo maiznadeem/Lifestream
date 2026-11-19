@@ -367,19 +367,16 @@ public sealed partial class ProfileViewModel : FormViewModelBase, INavigationPar
 
         if (problem.Code == ProblemCodes.Validation)
         {
-            foreach (var (serverField, message) in ProblemFieldErrors.Read(problem))
+            if (problem.ErrorsFor("displayName") is [{ } nameMessage, ..])
             {
-                var field = serverField.ToLowerInvariant() switch
-                {
-                    "displayname" => nameof(DisplayName),
-                    "phone" => nameof(Phone),
-                    _ => null,
-                };
-                if (field is not null)
-                {
-                    SetError(field, message);
-                    return;
-                }
+                SetError(nameof(DisplayName), nameMessage);
+                return;
+            }
+
+            if (problem.ErrorsFor("phone") is [{ } phoneMessage, ..])
+            {
+                SetError(nameof(Phone), phoneMessage);
+                return;
             }
         }
 

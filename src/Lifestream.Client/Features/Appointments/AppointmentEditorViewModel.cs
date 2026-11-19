@@ -1,5 +1,4 @@
 using System.Collections.ObjectModel;
-using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Lifestream.Client.Api;
 using Lifestream.Client.Common;
@@ -524,7 +523,7 @@ public sealed partial class AppointmentEditorViewModel : RecordEditorViewModel
     }
 
     private static ApiProblem FieldProblem(ApiProblem problem, string field, string message) =>
-        problem with { Code = ProblemCodes.Validation, Detail = JsonSerializer.Serialize(new Dictionary<string, string[]> { [field] = [message] }) };
+        problem with { Code = ProblemCodes.Validation, Errors = new Dictionary<string, string[]> { [field] = [message] } };
 
     protected override Func<CancellationToken, Task<ApiProblem?>> PrepareReload()
     {

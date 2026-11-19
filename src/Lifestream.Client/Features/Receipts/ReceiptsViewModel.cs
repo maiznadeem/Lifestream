@@ -13,9 +13,20 @@ using Lifestream.Domain;
 namespace Lifestream.Client.Features.Receipts;
 
 /// <summary>One row of the receipts list: names first with the ids as secondary text, never a bare id (FEAT-14, FEAT-17).</summary>
-public sealed record ReceiptRow(ReceiptListItem Item, TimeZoneInfo Zone)
+public sealed class ReceiptRow
 {
-    public int Id => Item.Id;
+    public ReceiptRow(ReceiptListItem item, TimeZoneInfo zone)
+    {
+        Item = item;
+        Zone = zone;
+        Id = item.Id;
+    }
+
+    public ReceiptListItem Item { get; }
+
+    public TimeZoneInfo Zone { get; }
+
+    public int Id { get; }
 
     public string WhenText => RecordFormatting.When(Item.CreatedAtUtc, Zone);
 

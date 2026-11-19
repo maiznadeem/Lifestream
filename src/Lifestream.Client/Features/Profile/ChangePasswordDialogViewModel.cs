@@ -119,26 +119,20 @@ public sealed partial class ChangePasswordDialogViewModel : DialogViewModel
     protected override void ShowProblem(ApiProblem problem)
     {
         // The API says which field is wrong ("currentPassword is not correct"): put the message under that field.
-        foreach (var (serverField, message) in ListScreens.ProblemFieldErrors.Read(problem))
+        if (problem.ErrorsFor("currentPassword") is [_, ..])
         {
-            var field = serverField.ToLowerInvariant() switch
-            {
-                "currentpassword" => nameof(CurrentPassword),
-                "newpassword" => nameof(NewPassword),
-                _ => null,
-            };
-            if (field is not null)
-            {
-                var text = field == nameof(CurrentPassword) ? "Your current password isn't correct." : $"The new password {message}.";
-                SetFieldError(field, text);
-                return;
-            }
+            SetError(nameof(CurrentPassword), "Your current password isn't correct.");
+            return;
+        }
+
+        if (problem.ErrorsFor("newPassword") is [{ } newPasswordMessage, ..])
+        {
+            SetError(nameof(NewPassword), $"The new password {newPasswordMessage}.");
+            return;
         }
 
         FormError = ListScreens.ProblemText.For(problem, RecordType);
     }
-
-    private void SetFieldError(string field, string message) => SetError(field, message);
 
     protected override void OnSucceeded() => ClearPasswords();
 

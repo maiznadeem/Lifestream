@@ -389,6 +389,22 @@ public sealed class Part2AppointmentTests
     }
 
     [Fact]
+    public async Task Booking_ServerFieldErrors_ShowUnderTheirFields_ThroughErrorsFor()
+    {
+        var rig = RigWithSlots();
+        rig.Fake.On("BookAppointmentAsync", ApiResult<AppointmentDetail>.Fail(new ApiProblem(400, ProblemCodes.Validation, "Validation failed", "c", null, new Dictionary<string, string[]> { ["slotStartUtc"] = ["must be in the future"] })));
+        var form = await BookingWithDonorAsync(rig);
+        form.Date = Day;
+        await form.PendingSlots;
+        form.SelectedSlot = form.Slots.Single(s => s.Display == "10:30");
+
+        await form.SaveCommand.ExecuteAsync();
+
+        Assert.Equal("must be in the future", form.GetErrorFor(AppointmentEditorViewModel.Time));
+        Assert.False(form.HasFormError);
+    }
+
+    [Fact]
     public async Task Booking_Cancel_WithEntries_AsksDiscardChanges()
     {
         var rig = RigWithSlots();

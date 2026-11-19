@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Text.Json;
 using System.Text.RegularExpressions;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Lifestream.Client.Api;
@@ -353,7 +352,7 @@ public sealed partial class StaffEditorViewModel : RecordEditorViewModel
             if (!result.IsOk && result.Problem!.Code == ProblemCodes.Conflict)
             {
                 // The only unique value on the form is the username: say so under that field.
-                return result.Problem with { Code = ProblemCodes.Validation, Detail = JsonSerializer.Serialize(new Dictionary<string, string[]> { ["username"] = ["That username is already taken. Choose another."] }) };
+                return result.Problem with { Code = ProblemCodes.Validation, Errors = new Dictionary<string, string[]> { ["username"] = ["That username is already taken. Choose another."] } };
             }
 
             return Finish(result);

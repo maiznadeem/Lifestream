@@ -49,6 +49,20 @@ public static class ProblemFieldErrors
     {
         ArgumentNullException.ThrowIfNull(problem);
         var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (problem.Errors is { Count: > 0 } parsed)
+        {
+            // The API client already parsed the problem's "errors" object: use it as it is.
+            foreach (var (field, messages) in parsed)
+            {
+                if (messages.FirstOrDefault(m => !string.IsNullOrEmpty(m)) is { } message)
+                {
+                    result[field] = message;
+                }
+            }
+
+            return result;
+        }
+
         if (string.IsNullOrWhiteSpace(problem.Detail))
         {
             return result;

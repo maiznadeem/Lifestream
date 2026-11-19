@@ -503,6 +503,42 @@ public sealed class Part2StaffProfileTests
         public Task ShowErrorAsync(string title, string message, string? details) => Task.CompletedTask;
     }
 
+    [Fact]
+    public async Task StaffEditor_ServerFieldErrors_ShowUnderTheirFields_ThroughErrorsFor()
+    {
+        var rig = new Part2Rig();
+        var errors = new Dictionary<string, string[]> { ["phone"] = ["must be a phone number"], ["displayName"] = ["is too long"] };
+        rig.Fake.On("CreateStaffAsync", ApiResult<StaffDetail>.Fail(new ApiProblem(400, ProblemCodes.Validation, "Validation failed", "c", null, errors)));
+        var form = StaffEditorViewModel.ForNew(rig.Api, rig.Toasts, rig.Dialogs, rig.Clock);
+        form.DisplayName = "Nurse Joy";
+        form.Username = "nurse.joy";
+        form.Gender = Gender.Female;
+        form.DateOfBirth = new DateOnly(1990, 1, 1);
+        form.Designation = Designation.Assistant;
+        form.Shift = Shift.FullTime;
+        form.Password = "a-long-enough-password";
+        form.ConfirmPassword = "a-long-enough-password";
+
+        await form.SaveCommand.ExecuteAsync();
+
+        Assert.Equal("must be a phone number", form.GetError(nameof(StaffEditorViewModel.Phone)));
+        Assert.Equal("is too long", form.GetError(nameof(StaffEditorViewModel.DisplayName)));
+        Assert.False(form.HasFormError);
+    }
+
+    [Fact]
+    public async Task Profile_ServerFieldErrors_ShowUnderTheirFields_ThroughErrorsFor()
+    {
+        var (rig, vm) = await LoadedProfileAsync();
+        rig.Fake.On("UpdateProfileAsync", ApiResult<ProfileResponse>.Fail(new ApiProblem(400, ProblemCodes.Validation, "Validation failed", "c", null, new Dictionary<string, string[]> { ["phone"] = ["is not a valid phone number"] })));
+        vm.Phone = "+1-555-0199";
+
+        await vm.SaveCommand.ExecuteAsync();
+
+        Assert.Equal("is not a valid phone number", vm["Phone"]);
+        Assert.False(vm.HasFormError);
+    }
+
     // FEAT-25
 
     [Fact]
@@ -558,7 +594,7 @@ public sealed class Part2StaffProfileTests
 
         dialog.NewPassword = "brand-new-password";
         dialog.ConfirmPassword = "brand-new-password";
-        rig.Fake.OnVoid("ChangePasswordAsync", ApiResult.Fail(new ApiProblem(400, ProblemCodes.Validation, "Validation failed", "c", "{\"errors\":{\"currentPassword\":[\"is not correct\"]}}")));
+        rig.Fake.OnVoid("ChangePasswordAsync", ApiResult.Fail(new ApiProblem(400, ProblemCodes.Validation, "Validation failed", "c", null, new Dictionary<string, string[]> { ["currentPassword"] = ["is not correct"] })));
         await dialog.PrimaryCommand.ExecuteAsync();
 
         Assert.Equal("Your current password isn't correct.", dialog.GetError(nameof(ChangePasswordDialogViewModel.CurrentPassword)));
