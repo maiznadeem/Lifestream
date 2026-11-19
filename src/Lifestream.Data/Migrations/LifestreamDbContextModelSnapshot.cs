@@ -16,7 +16,7 @@ partial class LifestreamDbContextModelSnapshot : ModelSnapshot
     // If you encounter a merge conflict in the line below, it means you need to
     // discard one of the migration branches and recreate its migrations on top of
     // the other branch. See https://aka.ms/efcore-docs-migrations-conflicts for more info.
-    public override string LastMigrationId => "20261119120000_StaffMustChangePassword";
+    public override string LastMigrationId => "20261119004026_DeletedRecordTombstones";
 
     protected override void BuildModel(ModelBuilder modelBuilder)
     {
@@ -214,6 +214,41 @@ partial class LifestreamDbContextModelSnapshot : ModelSnapshot
 
                         t.HasCheckConstraint("CK_BloodBag_Status", "[Status] IN ('Available', 'Issued', 'Discarded')");
                     });
+            });
+
+        modelBuilder.Entity("Lifestream.Data.Entities.DeletedRecord", b =>
+            {
+                var id = b.Property<int>("Id")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("int");
+
+                SqlServerPropertyBuilderExtensions.UseIdentityColumn(id);
+
+                b.Property<DateTime>("DeletedAtUtc")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("datetime2(3)")
+                    .HasDefaultValueSql("SYSUTCDATETIME()");
+
+                b.Property<string>("Entity")
+                    .IsRequired()
+                    .HasMaxLength(30)
+                    .IsUnicode(false)
+                    .HasColumnType("varchar(30)");
+
+                b.Property<int>("EntityId")
+                    .HasColumnType("int");
+
+                b.Property<string>("Json")
+                    .IsRequired()
+                    .HasColumnType("nvarchar(max)");
+
+                b.HasKey("Id");
+
+                b.HasIndex("DeletedAtUtc");
+
+                b.HasIndex("Entity", "EntityId");
+
+                b.ToTable("DeletedRecord");
             });
 
         modelBuilder.Entity("Lifestream.Data.Entities.DemoState", b =>

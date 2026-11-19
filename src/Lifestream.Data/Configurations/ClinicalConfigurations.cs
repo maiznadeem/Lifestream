@@ -128,6 +128,18 @@ internal sealed class AuditLogConfiguration : IEntityTypeConfiguration<AuditLog>
     }
 }
 
+internal sealed class DeletedRecordConfiguration : IEntityTypeConfiguration<DeletedRecord>
+{
+    public void Configure(EntityTypeBuilder<DeletedRecord> b)
+    {
+        b.Table("DeletedRecord");
+        b.Property(x => x.Entity).HasMaxLength(30).IsUnicode(false);
+        b.Property(x => x.DeletedAtUtc).HasDefaultValueSql(UtcNow);
+        b.HasIndex(x => new { x.Entity, x.EntityId });
+        b.HasIndex(x => x.DeletedAtUtc);
+    }
+}
+
 internal sealed class DemoStateConfiguration : IEntityTypeConfiguration<DemoState>
 {
     public void Configure(EntityTypeBuilder<DemoState> b)

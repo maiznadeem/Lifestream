@@ -27,9 +27,15 @@ public static class ApiRoutes
     public const string DonorById = "donors/{id}";
     public const string DonorEligibility = "donors/{id}/eligibility";
 
+    /// <summary>POST: puts a donor deleted a moment ago back, with the same id and data (the Undo of a delete).</summary>
+    public const string DonorRestore = "donors/{id}/restore";
+
     // Patients
     public const string Patients = "patients";
     public const string PatientById = "patients/{id}";
+
+    /// <summary>POST: puts a patient deleted a moment ago back, with the same id and data (the Undo of a delete).</summary>
+    public const string PatientRestore = "patients/{id}/restore";
 
     // Appointments (GET appointments/slots?date=yyyy-MM-dd returns SlotInfo[])
     public const string Appointments = "appointments";

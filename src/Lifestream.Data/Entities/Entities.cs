@@ -185,6 +185,25 @@ public sealed class AuditLog : IEntity
     public DateTime OccurredAtUtc { get; set; }
 }
 
+/// <summary>
+/// What a deleted donor or patient looked like, so Undo can put the same record back with the same id (FEAT-06). A row is written in
+/// the transaction of the delete and removed by a restore; rows older than the restore window are dropped by the next delete.
+/// </summary>
+public sealed class DeletedRecord : IEntity
+{
+    public int Id { get; set; }
+
+    /// <summary>The table the record came from: "Donor" or "Patient".</summary>
+    public string Entity { get; set; } = "";
+
+    public int EntityId { get; set; }
+
+    /// <summary>The row as JSON (columns only, no navigations).</summary>
+    public string Json { get; set; } = "";
+
+    public DateTime DeletedAtUtc { get; set; }
+}
+
 /// <summary>Single row (Id = 1) holding the demo reset bookkeeping.</summary>
 public sealed class DemoState : IEntity
 {
