@@ -117,7 +117,7 @@ jobs:
 
       - name: Upload render captures
         if: always() && steps.scan-logs.outcome == 'success'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: desktop-captures
           path: ${{ runner.temp }}\captures

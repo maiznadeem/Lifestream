@@ -129,7 +129,7 @@ jobs:
 
       - name: Upload scan report (no values, only file, rule and offset)
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: image-scan-report
           path: |
