@@ -245,7 +245,7 @@
                 <TextBlock Style="{StaticResource Text.Body}" Text="Waking up the server, this can take up to a minute" VerticalAlignment="Center" Margin="{DynamicResource Inset.R16}"
                            TextWrapping="NoWrap" />
                 <Button Style="{StaticResource Button.Secondary}" Content="Retry" Command="{TemplateBinding RetryCommand}" MinHeight="32" Margin="{DynamicResource Inset.R8}" />
-                <Button Style="{StaticResource Button.Ghost}" Content="Cancel" Command="{TemplateBinding CancelCommand}" />
+                <Button x:Name="PART_CancelWaking" Style="{StaticResource Button.Ghost}" Content="Cancel" />
               </StackPanel>
             </Border>
             <local:EmptyState x:Name="PART_Empty" Visibility="Collapsed" Glyph="{TemplateBinding EmptyGlyph}" Title="{TemplateBinding EmptyTitle}"

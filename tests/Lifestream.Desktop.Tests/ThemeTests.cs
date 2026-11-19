@@ -46,6 +46,96 @@ public sealed partial class ThemeTests
         }
     }
 
+    // C# that builds elements itself must read spacing and radii from the tokens too (SHELL-25). Only paths that print or
+    // feed a charting library, where the theme does not apply, are listed here, each with its reason.
+    private static readonly Dictionary<string, string> CodeLiteralExemptions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        [Path.Combine("Features", "Receipts", "ReceiptDocumentBuilder.cs")] = "the printed receipt is a fixed-layout paged document in print units, not themed UI",
+        [Path.Combine("Features", "Dashboard", "DashboardView.xaml.cs")] = "Padding on a LiveCharts column series is the gap between bars, not layout spacing",
+    };
+
+    [GeneratedRegex(@"//[^\r\n]*|/\*.*?\*/", RegexOptions.CultureInvariant | RegexOptions.Singleline, matchTimeoutMilliseconds: 5000)]
+    private static partial Regex CodeComment();
+
+    [GeneratedRegex(@"[$@]*""(?:[^""\\r\n]|\.)*""", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 5000)]
+    private static partial Regex CodeString();
+
+    [GeneratedRegex(@"new\s+(?:Thickness|CornerRadius)\s*\(", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 5000)]
+    private static partial Regex SpacingConstructor();
+
+    [GeneratedRegex(@"\b(?:Margin|Padding|PagePadding|CornerRadius)\s*=\s*(?<value>[^;,}\r\n]+)", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 5000)]
+    private static partial Regex SpacingAssignment();
+
+    [GeneratedRegex(@"(?<![\w.])(?:\d+\.?\d*|\.\d+)", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 5000)]
+    private static partial Regex NumberLiteral();
+
+    private static bool HasNonZeroNumber(string expression) =>
+        NumberLiteral().Matches(expression).Any(m => double.Parse(m.Value, CultureInfo.InvariantCulture) != 0);
+
+    private static List<string> CodeSpacingLiterals(string file, string text)
+    {
+        var code = CodeString().Replace(CodeComment().Replace(text, " "), "\"\"");
+        var found = new List<string>();
+        foreach (var start in SpacingConstructor().Matches(code).Cast<Match>())
+        {
+            var bodyStart = start.Index + start.Length;
+            var depth = 1;
+            var end = bodyStart;
+            while (end < code.Length && depth > 0)
+            {
+                depth += code[end] == '(' ? 1 : code[end] == ')' ? -1 : 0;
+                end++;
+            }
+
+            var body = code[bodyStart..Math.Max(bodyStart, end - 1)];
+            if (HasNonZeroNumber(body))
+            {
+                found.Add($"{file}: {start.Value}{body})");
+            }
+        }
+
+        found.AddRange(SpacingAssignment().Matches(code).Where(m => !m.Groups["value"].Value.Contains("new ", StringComparison.Ordinal) && HasNonZeroNumber(m.Groups["value"].Value)).Select(m => $"{file}: {m.Value.Trim()}"));
+        return found;
+    }
+
+    [Fact]
+    public void Theme_NoSpacingOrRadiusLiteralsInCSharp_OnlyTokens()
+    {
+        var offenders = new List<string>();
+        var scanned = new List<string>();
+        var separator = Path.DirectorySeparatorChar;
+        foreach (var file in Directory.EnumerateFiles(DesktopDir, "*.cs", SearchOption.AllDirectories)
+                     .Where(f => !f.Contains($"{separator}obj{separator}", StringComparison.Ordinal) && !f.Contains($"{separator}bin{separator}", StringComparison.Ordinal)))
+        {
+            var name = Path.GetRelativePath(DesktopDir, file);
+            scanned.Add(name);
+            if (CodeLiteralExemptions.ContainsKey(name))
+            {
+                continue;
+            }
+
+            offenders.AddRange(CodeSpacingLiterals(name, File.ReadAllText(file)));
+        }
+
+        Assert.Contains(Path.Combine("Controls", "Skeleton.cs"), scanned);
+        Assert.Contains(Path.Combine("Controls", "ToastView.xaml.cs"), scanned);
+        Assert.Contains(Path.Combine("Controls", "RecordPicker.xaml.cs"), scanned);
+        Assert.True(offenders.Count == 0, $"{offenders.Count} literal(s) in C#: " + string.Join("; ", offenders));
+    }
+
+    [Fact]
+    public void Theme_CSharpSpacingScanner_FindsPlantedLiterals_AndAllowsZeroAndTokens()
+    {
+        Assert.Single(CodeSpacingLiterals("x", "var a = new Thickness(0, 0, 24, 24);"));
+        Assert.Single(CodeSpacingLiterals("x", "var a = new CornerRadius(36);"));
+        Assert.Single(CodeSpacingLiterals("x", "b.Margin = new Thickness(i == 0 ? 0 : 8, 0, 0, 0);"));
+        Assert.Single(CodeSpacingLiterals("x", "b.Padding = 2;"));
+        Assert.Single(CodeSpacingLiterals("x", "var a = new Thickness(0, 0, 0, Token(\"Space.16\", 16));"));
+        Assert.Empty(CodeSpacingLiterals("x", "var a = new Thickness(0); var b = new CornerRadius(0, 0, 0, 0); var c = new Thickness(0.0);"));
+        Assert.Empty(CodeSpacingLiterals("x", "b.Margin = ThemeTokens.Inset(\"Inset.H12\"); b.CornerRadius = ThemeTokens.Radius(\"Radius.Card\");"));
+        Assert.Empty(CodeSpacingLiterals("x", "// new Thickness(8) in a comment\nvar s = \"new Thickness(8)\";"));
+    }
+
     [GeneratedRegex(@"\b(Margin|Padding|CornerRadius|Spacing)=""(?!\{)([^""]*)""", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 5000)]
     private static partial Regex SpacingAttribute();
 

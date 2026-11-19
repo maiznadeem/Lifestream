@@ -80,7 +80,7 @@ public sealed class ToastHost : ItemsControl
         Focusable = false;
         HorizontalAlignment = HorizontalAlignment.Right;
         VerticalAlignment = VerticalAlignment.Bottom;
-        Margin = new Thickness(0, 0, 24, 24);
+        Margin = Theme.ThemeTokens.Inset("Inset.R24B24");
         AutomationProperties.SetName(this, "Notifications");
         AutomationProperties.SetLiveSetting(this, AutomationLiveSetting.Polite);
         ((INotifyCollectionChanged)Items).CollectionChanged += (_, e) =>

@@ -319,8 +319,9 @@ public sealed class LifestreamApiClient(HttpClient http, ISessionService session
             var value = await response.Content.ReadFromJsonAsync<T>(Json, ct).ConfigureAwait(false);
             return value is null ? ApiResult<T>.Fail(BadResponse()) : ApiResult<T>.Ok(value);
         }
-        catch (JsonException)
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException or ArgumentException or NotSupportedException)
         {
+            // JsonException: not the shape we expect. The others: headers that cannot be decoded (an unknown charset, SHELL-02).
             return ApiResult<T>.Fail(BadResponse());
         }
     }
@@ -502,7 +503,7 @@ public sealed class LifestreamApiClient(HttpClient http, ISessionService session
             {
                 return false;
             }
-            catch (JsonException)
+            catch (Exception ex) when (ex is JsonException or InvalidOperationException or ArgumentException or NotSupportedException)
             {
                 // An unreadable refresh answer is a failed refresh, not a crash.
             }
@@ -538,9 +539,9 @@ public sealed class LifestreamApiClient(HttpClient http, ISessionService session
             correlation ??= JsonText.Property(root, "correlationId");
             errors = JsonText.Errors(root);
         }
-        catch (JsonException)
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException or ArgumentException or NotSupportedException)
         {
-            // Not a problem document (a proxy error page, for example): fall back to the status code.
+            // Not a problem document (a proxy error page, an unknown charset in the headers, ...): fall back to the status code.
             detail = text is { Length: > 0 } ? text[..Math.Min(text.Length, 300)] : null;
         }
 
