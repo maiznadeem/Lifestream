@@ -32,7 +32,7 @@ public sealed partial class StaffViewModel : SortedRecordListViewModel<StaffRow,
         _api = api;
         _forms = forms;
         _session = session;
-        ResetPasswordCommand = Command(_ => ResetPasswordAsync(), () => Detail is not null && !IsEditing && CanManageStaff);
+        ResetPasswordCommand = Command(_ => ResetPasswordAsync(), () => Detail is not null && !IsEditing && CanManageStaff, opensModal: true);
         LoadPhotoCommand = Command((parameter, _) => parameter is StaffRow row ? LoadPhotoAsync(row) : Task.CompletedTask);
         PropertyChanged += (_, e) =>
         {

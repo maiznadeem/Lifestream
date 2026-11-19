@@ -49,8 +49,8 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
             _statusFilter = StatusOptions.First(o => o.Value == status);
         }
 
-        FulfilCommand = Command(_ => FulfilSelectedAsync(), () => IsPending && !IsEditing);
-        CancelRequestCommand = Command(_ => CancelSelectedAsync(), () => IsPending && !IsEditing);
+        FulfilCommand = Command(_ => FulfilSelectedAsync(), () => IsPending && !IsEditing, opensModal: true);
+        CancelRequestCommand = Command(_ => CancelSelectedAsync(), () => IsPending && !IsEditing, opensModal: true);
         EditRequestCommand = Command(_ => EditCommand.ExecuteAsync(), () => IsPending && EditCommand.CanExecute(null));
         OpenPatientCommand = Command(async (parameter, _) =>
         {
@@ -59,7 +59,7 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
                 await _navigation.NavigateTo<PatientsViewModel>(new ListPrefilter(RecordId: item.PatientId)).ConfigureAwait(true);
             }
         });
-        ViewReceiptCommand = Command(_ => Detail?.ReceiptId is { } id ? _receipts.ShowAsync(id, isDuplicate: true) : Task.CompletedTask, () => Detail?.ReceiptId is not null);
+        ViewReceiptCommand = Command(_ => Detail?.ReceiptId is { } id ? _receipts.ShowAsync(id, isDuplicate: true) : Task.CompletedTask, () => Detail?.ReceiptId is not null, opensModal: true);
         PropertyChanged += (_, e) =>
         {
             if (e.PropertyName is nameof(Detail) or nameof(Editor))

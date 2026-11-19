@@ -60,8 +60,11 @@ public sealed partial class LoginViewModel : ViewModelBase
         RetryCommand = Command(RetryAsync, () => Problem is LoginProblem.ServerUnreachable or LoginProblem.ServerWaking);
         CancelCommand = Command(_ =>
         {
+            // One cancel for every sign-in path (Sign in, Demo and Retry each run on their own command): whichever one is running is stopped,
+            // down to the HTTP request (SHELL-07). The update download of the same screen is not a sign-in and is left alone.
             SignInCommand.Cancel();
             DemoCommand.Cancel();
+            RetryCommand.Cancel();
             return Task.CompletedTask;
         });
     }

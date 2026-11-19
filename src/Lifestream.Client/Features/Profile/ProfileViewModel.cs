@@ -68,8 +68,8 @@ public sealed partial class ProfileViewModel : FormViewModelBase, INavigationPar
             ChangesChanged();
             return Task.CompletedTask;
         }, () => HasUnsavedChanges && !IsBusy);
-        PickPhotoCommand = Command(PickPhotoAsync, () => !IsBusy);
-        ChangePasswordCommand = Command(_ => _passwords.PromptAsync(), () => !IsBusy);
+        PickPhotoCommand = Command(PickPhotoAsync, () => !IsBusy, opensModal: true);
+        ChangePasswordCommand = Command(_ => _passwords.PromptAsync(), () => !IsBusy, opensModal: true);
         RetryCommand = Command(ct => LoadAsync(ct));
         ReloadCommand = Command(ct => LoadAsync(ct));
         ErrorsChanged += (_, _) => OnPropertyChanged("Item[]");

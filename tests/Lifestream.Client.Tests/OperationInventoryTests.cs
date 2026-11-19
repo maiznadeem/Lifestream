@@ -56,7 +56,7 @@ public sealed class OperationInventoryTests : IDisposable
                     continue;
                 }
 
-                var owner = (instance as ViewModelBase)?.Operations ?? (instance as Lookups.RecordPickerViewModel)?.Operations;
+                var owner = (instance as ViewModelBase)?.Operations ?? (instance as Lookups.RecordPickerViewModel)?.Operations ?? (instance as ToastItem)?.Operations;
                 if (command.Runner is null || !ReferenceEquals(command.Runner, owner))
                 {
                     problems.Add($"{type.Name}.{property.Name}: not bound to the view model's operation runner");
