@@ -14,8 +14,8 @@ COPY src/Lifestream.Contracts src/Lifestream.Contracts
 COPY src/Lifestream.Data src/Lifestream.Data
 COPY src/Lifestream.Api src/Lifestream.Api
 
-RUN dotnet restore src/Lifestream.Api/Lifestream.Api.csproj
-RUN dotnet publish src/Lifestream.Api/Lifestream.Api.csproj -c Release -o /app --no-restore -p:UseAppHost=false
+RUN dotnet restore src/Lifestream.Api/Lifestream.Api.csproj -r linux-x64
+RUN dotnet publish src/Lifestream.Api/Lifestream.Api.csproj -c Release -r linux-x64 --self-contained false -o /app --no-restore -p:UseAppHost=false
 
 FROM mcr.microsoft.com/dotnet/aspnet:11.0 AS final
 # Links the GHCR package to the repository, which lets the workflow's GITHUB_TOKEN manage (prune) its versions.

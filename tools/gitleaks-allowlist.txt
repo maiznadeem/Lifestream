@@ -98,3 +98,9 @@ zh-Hans.ftl|lifestream-db-userid|1b3239f92bb0831af8bbf008d1294c37baaed51af6deb04
 # coreutils localisation file (locales/id|stat/<lang>.ftl): the labels "-uid = ..." and "password = <description>" of the help text.
 zh-Hant.ftl|lifestream-db-userid|1b3239f92bb0831af8bbf008d1294c37baaed51af6deb0407c43d1157da0eb4a
 zh-Hant.ftl|lifestream-db-userid|be76fa2765e26874b716480653878e4399ee3558b3ab86a45601ca300e228817
+
+# Microsoft.Identity.Client.dll (MSAL, NuGet, pulled in by Microsoft.Data.SqlClient.Extensions.Azure): the user string of an error
+# message, "If you do not need access token for any specific user, pass userId=UserIdentifier.AnyUser instead of userId=null."
+# Reviewed 2026-11-19 from the scanner's string dump: an API usage hint, not a credential.
+Microsoft.Identity.Client.dll|lifestream-db-userid|b5b319f3b215ef97ae56b34236294828d4688a2bcf70fda2362c31385bdfeb11
+Microsoft.Identity.Client.dll|lifestream-db-userid|27d7fb591fe3d2674362948725c2190d168f2feb67d47d963c0706dd6701513a

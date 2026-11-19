@@ -66,6 +66,9 @@ Describe 'INFRA-04 SQL firewall: no allow-all, only the API environment' {
         Test-Path (Join-Path $script:InfraDir 'sync-sql-firewall.ps1') | Should -BeTrue
         Test-Path (Join-Path $root '.github' 'workflows' 'sync-sql-firewall.yml') | Should -BeTrue
         (Get-Content (Join-Path $root '.github' 'workflows' 'deploy-api.yml') -Raw) | Should -Not -Match 'run: ./infra/sync-sql-firewall\.ps1'
+        $deploy = Get-Content (Join-Path $root '.github' 'workflows' 'deploy-api.yml') -Raw
+        $deploy | Should -Match 'az sql server ad-only-auth get'
+        $deploy.IndexOf('Require Entra-only authentication') | Should -BeLessThan $deploy.IndexOf('Run the migration job')
     }
 }
 
