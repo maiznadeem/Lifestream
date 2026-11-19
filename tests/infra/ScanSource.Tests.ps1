@@ -158,56 +158,58 @@ Describe 'INFRA-01 source tree: precise scanning of code' {
     Context 'the reviewed allow-list (tools/secret-scan-allowlist.txt: path | rule | sha256 of the matched line)' {
         BeforeAll {
             $script:Line = '    public const string Pass' + 'word = "not-a-real-' + 'value-for-tests";'
-            $script:Repo = New-Repo @{ 'tests/Fixture.cs' = ("class F {`r`n" + $script:Line + "`r`n}`r`n") }
+            $script:Repo = New-Repo @{ 'tests/App.Tests/TestSecrets.cs' = ("class F {`r`n" + $script:Line + "`r`n}`r`n") }
             function script:Write-Allow([string]$text) { $f = Join-Path $TestDrive ('allow-' + [guid]::NewGuid().ToString('N') + '.txt'); Set-Content -LiteralPath $f $text; $f }
         }
 
         It 'flags a test-only literal that is not listed, printing the line number and the line hash to put in the list' {
-            $r = Invoke-Scan @('-Path', $script:Repo, '-RepoRoot', $script:Repo, '-Allowlist', (Write-Allow '# empty'))
+            $r = Invoke-Scan @('-Path', $script:Repo, '-RepoRoot', $script:Repo, '-Allowlist', (Write-Allow '# empty'), '-ShowMatchHashes')
             $r.ExitCode | Should -Be 1 -Because $r.Output
             $r.Output | Should -Match 'line=2'
             $r.Output | Should -Match (Get-LineHash $script:Line)
         }
 
         It 'accepts it once the path, rule and hash of the line are listed' {
-            $allow = Write-Allow ("tests/Fixture.cs|PasswordValue|" + (Get-LineHash $script:Line))
+            $allow = Write-Allow ("tests/App.Tests/TestSecrets.cs|PasswordValue|" + (Get-LineHash $script:Line))
             $r = Invoke-Scan @('-Path', $script:Repo, '-RepoRoot', $script:Repo, '-Allowlist', $allow)
             $r.ExitCode | Should -Be 0 -Because $r.Output
             $r.Output | Should -Match '1 allow-listed'
         }
 
         It 'flags the line again when it is edited (the hash no longer matches)' {
-            $allow = Write-Allow ("tests/Fixture.cs|PasswordValue|" + (Get-LineHash $script:Line))
-            $edited = New-Repo @{ 'tests/Fixture.cs' = ("class F {`r`n" + $script:Line.Replace('not-a-real', 'a-real') + "`r`n}`r`n") }
+            $allow = Write-Allow ("tests/App.Tests/TestSecrets.cs|PasswordValue|" + (Get-LineHash $script:Line))
+            $edited = New-Repo @{ 'tests/App.Tests/TestSecrets.cs' = ("class F {`r`n" + $script:Line.Replace('not-a-real', 'a-real') + "`r`n}`r`n") }
             $r = Invoke-Scan @('-Path', $edited, '-RepoRoot', $edited, '-Allowlist', $allow)
             $r.ExitCode | Should -Be 1 -Because $r.Output
         }
 
         It 'does not apply an entry to another file or another rule' {
-            $other = New-Repo @{ 'tests/Other.cs' = ("class F {`r`n" + $script:Line + "`r`n}`r`n") }
-            $allow = Write-Allow ("tests/Fixture.cs|PasswordValue|" + (Get-LineHash $script:Line))
+            $other = New-Repo @{ 'tests/App.Tests/Other.cs' = ("class F {`r`n" + $script:Line + "`r`n}`r`n") }
+            $allow = Write-Allow ("tests/App.Tests/TestSecrets.cs|PasswordValue|" + (Get-LineHash $script:Line))
             (Invoke-Scan @('-Path', $other, '-RepoRoot', $other, '-Allowlist', $allow)).ExitCode | Should -Be 1
-            $allow2 = Write-Allow ("tests/Fixture.cs|UserIdValue|" + (Get-LineHash $script:Line))
+            $allow2 = Write-Allow ("tests/App.Tests/TestSecrets.cs|UserIdValue|" + (Get-LineHash $script:Line))
             (Invoke-Scan @('-Path', $script:Repo, '-RepoRoot', $script:Repo, '-Allowlist', $allow2)).ExitCode | Should -Be 1
         }
 
-        It 'refuses an entry outside tests/ (product code is never test-only): exit 2' {
-            $allow = Write-Allow ("src/Fixture.cs|PasswordValue|" + (Get-LineHash $script:Line))
+        It 'refuses an entry for any file but a test project''s TestSecrets.cs (product code is never test-only): exit 2 (<Path>)' -ForEach @(
+            @{ Path = 'src/Fixture.cs' }, @{ Path = 'tests/App.Tests/Other.cs' }, @{ Path = 'tests/App.Tests/Sub/TestSecrets.cs' }
+            @{ Path = 'tests/../src/TestSecrets.cs' }, @{ Path = 'tests/TestSecrets.cs' }, @{ Path = 'src/App/TestSecrets.cs' }
+        ) {
+            $allow = Write-Allow ("$Path|PasswordValue|" + (Get-LineHash $script:Line))
             $r = Invoke-Scan @('-Path', $script:Repo, '-RepoRoot', $script:Repo, '-Allowlist', $allow)
             $r.ExitCode | Should -Be 2 -Because $r.Output
         }
 
         It 'refuses a malformed entry: exit 2' {
-            $r = Invoke-Scan @('-Path', $script:Repo, '-RepoRoot', $script:Repo, '-Allowlist', (Write-Allow 'tests/Fixture.cs|PasswordValue|nothex'))
+            $r = Invoke-Scan @('-Path', $script:Repo, '-RepoRoot', $script:Repo, '-Allowlist', (Write-Allow 'tests/App.Tests/TestSecrets.cs|PasswordValue|nothex'))
             $r.ExitCode | Should -Be 2 -Because $r.Output
         }
 
-        It 'the checked-in list has only tests/ entries and every one still matches a line of the current tree (no stale entries)' {
-            $entries = Get-Content (Join-Path $script:Root 'tools' 'secret-scan-allowlist.txt') | Where-Object { $_ -and -not $_.StartsWith('#') }
-            $entries.Count | Should -BeGreaterThan 0
+        It 'the checked-in list has only TestSecrets.cs entries and every one still matches a line of the current tree (no stale entries)' {
+            $entries = @(Get-Content (Join-Path $script:Root 'tools' 'secret-scan-allowlist.txt') | Where-Object { $_ -and -not $_.StartsWith('#') })
             foreach ($e in $entries) {
                 $path, $rule, $hash = $e -split '\|'
-                $path | Should -BeLike 'tests/*'
+                $path | Should -Match '^tests/[^/]+/TestSecrets\.cs$'
                 $lines = Get-Content (Join-Path $script:Root $path)
                 @($lines | Where-Object { (Get-LineHash $_) -eq $hash }).Count | Should -BeGreaterThan 0 -Because "$e matches no line"
             }

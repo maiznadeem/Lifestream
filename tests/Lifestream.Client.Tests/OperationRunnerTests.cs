@@ -146,9 +146,9 @@ public sealed class OperationRunnerTests
         dialog.Bind(stack.Status, stack.Clock, new FakeDialogs());
         var closed = 0;
         dialog.CloseRequested += (_, _) => closed++;
-        dialog.CurrentPassword = "old-password-123";
-        dialog.NewPassword = "new-password-456";
-        dialog.ConfirmPassword = "new-password-456";
+        dialog.CurrentPassword = TestSecrets.Old123;
+        dialog.NewPassword = TestSecrets.New456;
+        dialog.ConfirmPassword = TestSecrets.New456;
 
         var submit = dialog.PrimaryCommand.ExecuteAsync();
         await Pump(stack.Clock, TimeSpan.FromSeconds(3.5));
@@ -173,9 +173,9 @@ public sealed class OperationRunnerTests
         using var stack = new RealClient(NoContent);
         using var dialog = new ChangePasswordDialogViewModel(stack.Api);
         dialog.Bind(stack.Status, stack.Clock, new FakeDialogs());
-        dialog.CurrentPassword = "old-password-123";
-        dialog.NewPassword = "new-password-456";
-        dialog.ConfirmPassword = "new-password-456";
+        dialog.CurrentPassword = TestSecrets.Old123;
+        dialog.NewPassword = TestSecrets.New456;
+        dialog.ConfirmPassword = TestSecrets.New456;
         var submit = dialog.PrimaryCommand.ExecuteAsync();
         await Pump(stack.Clock, TimeSpan.FromSeconds(3.5));
         await dialog.CancelCommand.ExecuteAsync();
@@ -297,7 +297,7 @@ public sealed class OperationRunnerTests
     {
         using var stack = new RealClient(_ => Json("{}"));
         using var rig = new Rig();
-        var login = new Auth.LoginViewModel(stack.Api, rig.Session, rig.Get<Navigation.IAppFlow>(), stack.Status) { Username = "u", Password = "p" };
+        var login = new Auth.LoginViewModel(stack.Api, rig.Session, rig.Get<Navigation.IAppFlow>(), stack.Status) { Username = "u", Password = TestSecrets.P };
 
         var attempt = login.SignInCommand.ExecuteAsync();
         await Pump(stack.Clock, TimeSpan.FromSeconds(3.5));
@@ -371,7 +371,7 @@ public sealed class OperationRunnerTests
         var handler = new ScriptedHandler((_, _) => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body, Encoding.UTF8, "application/json") });
         using var http = new HttpClient(new WakeAwareHandler(new WakePolicy { Budget = TimeSpan.Zero, Clock = new ManualTimeProvider() }, new ServerStatus(), handler)) { BaseAddress = new Uri("https://api.test/") };
         using var inner = new LifestreamApiClient(http, rig.Session);
-        var login = new Auth.LoginViewModel(ScopedApiClient.Wrap(inner, strict: true), rig.Session, rig.Get<Navigation.IAppFlow>()) { Username = "u", Password = "p" };
+        var login = new Auth.LoginViewModel(ScopedApiClient.Wrap(inner, strict: true), rig.Session, rig.Get<Navigation.IAppFlow>()) { Username = "u", Password = TestSecrets.P };
         var reported = new List<Exception>();
         var previous = AsyncRelayCommand.DefaultErrorHandler;
         AsyncRelayCommand.DefaultErrorHandler = reported.Add;

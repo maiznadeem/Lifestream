@@ -306,7 +306,7 @@ public sealed record TestUser(int Id, string Username, Role Role, HttpClient Cli
 /// </summary>
 public class ApiFixture : IAsyncLifetime
 {
-    public const string Password = "not-a-real-password-for-tests";
+    public const string Password = TestSecrets.Demo;
 
     private int _counter;
     private readonly List<HttpClient> _clients = [];

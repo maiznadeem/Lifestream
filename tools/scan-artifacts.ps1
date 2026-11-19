@@ -31,10 +31,14 @@
   (Password = string.Empty;) written with spaces around "=" is code, but only where the keyword is in code: inside any string
   literal (regular, verbatim, interpolated, raw, multi-line) or any comment it is a finding; and a literal credential under tests/
   is accepted only when tools/secret-scan-allowlist.txt lists it ("path|rule|sha256 of the matched line", paths under tests/ only,
-  anything else exits 2).
+  anything else exits 2). Test passwords belong in each test project's TestSecrets.cs (tests/infra/TestSecrets.Tests.ps1).
   Third-party files: a benign string that the binary rules match (help text, API names) is accepted only when
-  tools/secret-scan-binary-allowlist.txt lists it: "file name|rule|sha256 of the matched text", as printed by a finding. File
-  names starting with Lifestream or appsettings are refused (exit 2): the product's own files are never "third-party".
+  tools/secret-scan-binary-allowlist.txt lists it: "file name|rule|sha256 of the matched text". File names starting with
+  Lifestream or appsettings are refused (exit 2): the product's own files are never "third-party".
+
+  A finding names the file, rule, encoding, byte offset (and line, in source), never the value and, by default, never a hash of
+  it: in a public CI log a SHA-256 of a short or guessable value can be brute-forced offline. To get the matchSha256 / lineSha256
+  an allow-list entry needs, run locally with -ShowMatchHashes; it is refused (exit 2) when CI or GITHUB_ACTIONS is set.
 
   Exit codes: 0 clean; 1 at least one finding, or (with -GitTracked) a tracked file under a bin, obj or TestResults folder;
   2 nothing was scanned (path missing, no files, a read error, a bad allow-list), because a scan that looked at nothing proves nothing.
@@ -46,6 +50,8 @@
 .PARAMETER RepoRoot          What source allow-list paths and -GitTracked are relative to (default: the folder above tools/).
 .PARAMETER MaxArchiveDepth   How deep to open archives inside archives (default 6).
 .PARAMETER MaxFindingsPerFile  How many findings to list per file (default 20; every further one still fails the scan).
+.PARAMETER ShowMatchHashes   Local review only: also print and report the SHA-256 of each matched text (and, in source, of its
+                             line) for an allow-list entry. Refused when $env:CI or $env:GITHUB_ACTIONS is set.
 .PARAMETER GitTracked        Source-tree mode: scan the files git lists under each -Path (tracked, plus untracked files that are
                              not ignored), so ignored build output is never walked while EVERY tracked file is scanned, including
                              any under bin, obj or TestResults; such a tracked file also fails the scan (exit 1).
@@ -59,12 +65,17 @@ param(
     [string]$RepoRoot,
     [int]$MaxArchiveDepth = 6,
     [int]$MaxFindingsPerFile = 20,
-    [switch]$GitTracked
+    [switch]$GitTracked,
+    [switch]$ShowMatchHashes
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $started = [Diagnostics.Stopwatch]::StartNew()
+if ($ShowMatchHashes -and ($env:CI -or $env:GITHUB_ACTIONS)) {
+    Write-Host 'ERROR: -ShowMatchHashes is for a local review only and is refused in CI (CI or GITHUB_ACTIONS is set): a hash of a matched value must never reach a CI log or report.'
+    exit 2
+}
 
 $sourceExtensions = '.cs', '.csx', '.razor', '.cshtml', '.xaml', '.axaml'
 $buildOutputSegments = 'bin', 'obj', 'TestResults'
@@ -95,6 +106,7 @@ if (-not ('LifestreamScan.Engine' -as [type])) {
 $engine = [LifestreamScan.Engine]::new()
 $engine.MaxArchiveDepth = $MaxArchiveDepth
 $engine.MaxFindingsPerFile = $MaxFindingsPerFile
+$engine.ShowHashes = [bool]$ShowMatchHashes
 
 # ---- allow-lists
 # Source: path|rule|sha256 of the matched line. Only tests/ may be listed: a credential in product code is never "test-only".
@@ -107,7 +119,7 @@ if (Test-Path -LiteralPath $Allowlist) {
         $parts = $line -split '\|'
         if ($parts.Count -ne 3 -or $parts[2] -notmatch '^[0-9a-f]{64}$') { Write-Host "ERROR: ${Allowlist}:$n is not path|rule|sha256"; exit 2 }
         $entryPath = $parts[0].Trim().Replace('\', '/')
-        if (-not $entryPath.StartsWith('tests/') -or $entryPath.Contains('..')) { Write-Host "ERROR: ${Allowlist}:$n lists $entryPath; only paths under tests/ may be allow-listed"; exit 2 }
+        if ($entryPath -notmatch '^tests/[^/.][^/]*/TestSecrets\.cs$') { Write-Host "ERROR: ${Allowlist}:$n lists $entryPath; only a test project's TestSecrets.cs (tests/<Project>/TestSecrets.cs) may be allow-listed"; exit 2 }
         [void]$engine.SourceAllow.Add(('{0}|{1}|{2}' -f $entryPath, $parts[1].Trim(), $parts[2]))
     }
 }
@@ -175,8 +187,10 @@ foreach ($file in $files) { $engine.ScanFile($file, (Get-SourceRel $file)) }
 $started.Stop()
 
 $findings = @($engine.Findings | ForEach-Object {
-    $f = [ordered]@{ file = $_.File; rule = $_.Rule; encoding = $_.Encoding; offset = $_.Offset; matchSha256 = $_.MatchSha256 }
-    if ($_.LineSha256) { $f.line = $_.Line; $f.lineSha256 = $_.LineSha256 }
+    $f = [ordered]@{ file = $_.File; rule = $_.Rule; encoding = $_.Encoding; offset = $_.Offset }
+    if ($_.Line -gt 0) { $f.line = $_.Line }
+    if ($_.MatchSha256) { $f.matchSha256 = $_.MatchSha256 }
+    if ($_.LineSha256) { $f.lineSha256 = $_.LineSha256 }
     [pscustomobject]$f
 })
 if ($ReportPath) {
@@ -188,8 +202,11 @@ if ($ReportPath) {
 }
 
 foreach ($f in $findings) {
-    $tail = if ($f.PSObject.Properties['lineSha256']) { ' line={0} lineSha256={1}' -f $f.line, $f.lineSha256 } else { '' }
-    Write-Host ("FINDING rule={0} encoding={1} offset={2} matchSha256={3} file={4}{5}" -f $f.rule, $f.encoding, $f.offset, $f.matchSha256, $f.file, $tail)
+    $tail = ''
+    if ($f.PSObject.Properties['line']) { $tail += ' line={0}' -f $f.line }
+    if ($f.PSObject.Properties['matchSha256']) { $tail += ' matchSha256={0}' -f $f.matchSha256 }
+    if ($f.PSObject.Properties['lineSha256']) { $tail += ' lineSha256={0}' -f $f.lineSha256 }
+    Write-Host ("FINDING rule={0} encoding={1} offset={2} file={3}{4}" -f $f.rule, $f.encoding, $f.offset, $f.file, $tail)
 }
 if ($engine.FindingsOverCap -gt 0) { Write-Host "($($engine.FindingsOverCap) more finding(s) not listed: over $MaxFindingsPerFile per file)" }
 foreach ($t in $trackedBuildOutput) { Write-Host "ERROR: tracked build output: $t (bin, obj and TestResults folders must not be in git; run git rm --cached on it)" }

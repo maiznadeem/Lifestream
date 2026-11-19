@@ -123,7 +123,7 @@ public sealed class ServerClockAndRangeTests(ApiFixture fx) : IClassFixture<ApiF
         // Five wrong passwords from a client whose clock is five hours behind: the lockout end is five minutes... from the server's now.
         for (var i = 0; i < 5; i++)
         {
-            using var attempt = Skewed(HttpMethod.Post, ApiRoutes.Path(ApiRoutes.AuthLogin), $$"""{"username":"{{victim.Username}}","password":"wrong-{{i}}"}""");
+            using var attempt = Skewed(HttpMethod.Post, ApiRoutes.Path(ApiRoutes.AuthLogin), $$"""{"username":"{{victim.Username}}","password":"{{TestSecrets.WrongPrefix}}-{{i}}"}""");
             attempt.Headers.Date = DateTimeOffset.UtcNow.AddHours(-5);
             using var response = await fx.NewClient().SendAsync(attempt, Ct);
             Assert.True(response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.TooManyRequests);

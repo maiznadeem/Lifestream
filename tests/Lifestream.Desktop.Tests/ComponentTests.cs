@@ -381,10 +381,10 @@ public sealed class ComponentTests
             var plain = host.All<TextBox>().First(t => t.Name == "PART_Plain");
 
             var list = new List<(string, string?)> { ("start", field.DisplayedText) };
-            model.Password = "from-view-model";
+            model.Password = TestSecrets.FromViewModel;
             host.Settle(50);
             list.Add(("vm-to-box", box.Password));
-            box.Password = "typed-by-user";
+            box.Password = TestSecrets.TypedByUser;
             host.Settle(50);
             list.Add(("box-to-vm", model.Password));
             model.Password = string.Empty; // a cleared view model clears the box
@@ -393,7 +393,7 @@ public sealed class ComponentTests
             list.Add(("cleared-plain", plain.Text));
 
             field.IsRevealed = true;
-            model.Password = "shown";
+            model.Password = TestSecrets.Shown;
             host.Settle(50);
             list.Add(("revealed", field.DisplayedText));
             plain.Text = "edited-while-shown";
@@ -404,7 +404,7 @@ public sealed class ComponentTests
         });
 
         Assert.Equal(
-            [("start", ""), ("vm-to-box", "from-view-model"), ("box-to-vm", "typed-by-user"), ("cleared-box", ""), ("cleared-plain", ""), ("revealed", "shown"), ("plain-to-vm", "edited-while-shown"), ("plain-to-box", "edited-while-shown")],
+            [("start", ""), ("vm-to-box", TestSecrets.FromViewModel), ("box-to-vm", TestSecrets.TypedByUser), ("cleared-box", ""), ("cleared-plain", ""), ("revealed", "shown"), ("plain-to-vm", "edited-while-shown"), ("plain-to-box", "edited-while-shown")],
             results.Select(r => (r.Item1, r.Item2 ?? "<null>")));
     }
 

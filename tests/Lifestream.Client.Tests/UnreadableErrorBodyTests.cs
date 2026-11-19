@@ -94,7 +94,7 @@ public sealed class UnreadableErrorBodyTests
         using (api)
         using (rig)
         {
-            var vm = new LoginViewModel(api, rig.Session, rig.Get<IAppFlow>()) { Username = "u", Password = "p" };
+            var vm = new LoginViewModel(api, rig.Session, rig.Get<IAppFlow>()) { Username = "u", Password = TestSecrets.P };
             var captured = new List<Exception>();
             var previous = AsyncRelayCommand.DefaultErrorHandler;
             AsyncRelayCommand.DefaultErrorHandler = captured.Add;

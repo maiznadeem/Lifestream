@@ -465,7 +465,7 @@ Describe 'INFRA-01 binary mode: keywords found anywhere, decided on the right si
             Write-Binary $script:StockDir 'debconf.conf' $script:StockText 'UTF-8'
             function script:Write-BinAllow([string]$text) { $f = Join-Path $TestDrive ('binallow-' + [guid]::NewGuid().ToString('N') + '.txt'); Set-Content -LiteralPath $f $text; $f }
             # The checked-in list already accepts this exact text in debconf.conf, so these tests pass their own lists.
-            $r0 = Invoke-Scan $script:StockDir @('-BinaryAllowlist', (Write-BinAllow '# empty'))
+            $r0 = Invoke-Scan $script:StockDir @('-BinaryAllowlist', (Write-BinAllow '# empty'), '-ShowMatchHashes')
             $script:StockSha = [regex]::Match($r0.Output, 'matchSha256=([0-9a-f]{64})').Groups[1].Value
         }
 
@@ -508,5 +508,72 @@ Describe 'INFRA-01 binary mode: keywords found anywhere, decided on the right si
         $r.ExitCode | Should -Be 1
         (Get-FindingCount $r.Output) | Should -Be 5
         $r.Output | Should -Match '25 more finding\(s\) not listed'
+    }
+}
+
+# Security review: a SHA-256 of a matched value in a public CI log can be brute-forced offline when the value is short or
+# guessable. By default nothing derived from the value (or from the source line that holds it) is printed or reported.
+Describe 'INFRA-01 findings never carry a hash of the matched value unless asked for locally' {
+    BeforeAll {
+        $script:HashKey = 'Pass' + 'word='; $script:HashVal = 'ab' + '12'
+        $script:HashDir = Join-Path $TestDrive 'hash-privacy'
+        New-Item -ItemType Directory -Force -Path (Join-Path $script:HashDir 'src') | Out-Null
+        Set-Content -Encoding ascii (Join-Path $script:HashDir 'app.config') ('<add connectionString="Server=a;' + $script:HashKey + $script:HashVal + '" />')
+        [IO.File]::WriteAllBytes((Join-Path $script:HashDir 'App.dll'), [byte[]]::new(16) + [Text.Encoding]::Unicode.GetBytes('Server=a;' + $script:HashKey + $script:HashVal + 'xyz9;') + [byte[]]::new(16))
+        Set-Content -Encoding ascii (Join-Path $script:HashDir 'src/Db.cs') ('class Db { const string Cs = "Server=a;' + $script:HashKey + $script:HashVal + '"; }')
+        $script:Sha = {
+            param([string]$s) [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($s))).ToLowerInvariant()
+        }
+        # A child scan with the CI variables removed (or set), so the result does not depend on where the suite runs.
+        function script:Invoke-ScanEnv([string[]]$ScanArgs, [hashtable]$Env = @{}) {
+            $psi = [Diagnostics.ProcessStartInfo]::new($script:Pwsh)
+            foreach ($a in @($script:PwshArgs) + @($script:Scanner) + $ScanArgs) { $psi.ArgumentList.Add($a) }
+            [void]$psi.Environment.Remove('CI'); [void]$psi.Environment.Remove('GITHUB_ACTIONS')
+            foreach ($k in $Env.Keys) { $psi.Environment[$k] = $Env[$k] }
+            $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
+            $p = [Diagnostics.Process]::Start($psi); $o = $p.StandardOutput.ReadToEndAsync(); $e = $p.StandardError.ReadToEndAsync(); $p.WaitForExit()
+            [pscustomobject]@{ ExitCode = $p.ExitCode; Output = $o.Result + $e.Result }
+        }
+    }
+
+    It 'prints and reports no 64-hex hash at all by default (text, binary and source findings), only file, rule, encoding, offset and line' {
+        $report = Join-Path $TestDrive 'hash-default.json'
+        $r = Invoke-ScanEnv @('-Path', $script:HashDir, '-RepoRoot', $script:HashDir, '-ReportPath', $report)
+        $r.ExitCode | Should -Be 1 -Because $r.Output
+        @($r.Output -split "`n" | Where-Object { $_ -match '^FINDING ' }).Count | Should -BeGreaterOrEqual 3 -Because $r.Output
+        $r.Output | Should -Not -Match '[0-9a-f]{64}'
+        $r.Output | Should -Not -Match 'Sha256'
+        $json = Get-Content -Raw $report
+        $json | Should -Not -Match '[0-9a-f]{64}'
+        $json | Should -Not -Match 'Sha256'
+        $r.Output | Should -Match 'Db\.cs line=1'
+        $r.Output | Should -Not -Match $script:HashVal
+    }
+
+    It 'prints matchSha256 and lineSha256 with -ShowMatchHashes, for a local allow-list review' {
+        $r = Invoke-ScanEnv @('-Path', $script:HashDir, '-RepoRoot', $script:HashDir, '-ShowMatchHashes')
+        $r.ExitCode | Should -Be 1 -Because $r.Output
+        $r.Output | Should -Match ('matchSha256=' + (& $script:Sha ($script:HashKey + $script:HashVal)))
+        $r.Output | Should -Match 'lineSha256=[0-9a-f]{64}'
+    }
+
+    It 'refuses -ShowMatchHashes when <Var> is set (exit 2, nothing scanned, no hash printed)' -ForEach @(@{ Var = 'CI' }, @{ Var = 'GITHUB_ACTIONS' }) {
+        $r = Invoke-ScanEnv @('-Path', $script:HashDir, '-RepoRoot', $script:HashDir, '-ShowMatchHashes') @{ $Var = 'true' }
+        $r.ExitCode | Should -Be 2 -Because $r.Output
+        $r.Output | Should -Match 'refused in CI'
+        $r.Output | Should -Not -Match '[0-9a-f]{64}'
+        $r.Output | Should -Not -Match '^FINDING'
+    }
+
+    It 'in CI without the switch it still scans and fails on the credential, with no hash' {
+        $r = Invoke-ScanEnv @('-Path', $script:HashDir, '-RepoRoot', $script:HashDir) @{ CI = 'true'; GITHUB_ACTIONS = 'true' }
+        $r.ExitCode | Should -Be 1 -Because $r.Output
+        $r.Output | Should -Not -Match '[0-9a-f]{64}'
+    }
+
+    It 'no workflow passes -ShowMatchHashes' {
+        foreach ($wf in Get-ChildItem (Join-Path $PSScriptRoot '..' '..' '.github' 'workflows') -Filter '*.yml') {
+            (Get-Content -Raw $wf.FullName) | Should -Not -Match 'ShowMatchHashes' -Because $wf.Name
+        }
     }
 }

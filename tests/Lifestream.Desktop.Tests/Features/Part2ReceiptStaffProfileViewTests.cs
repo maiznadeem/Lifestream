@@ -298,7 +298,7 @@ public sealed class Part2ReceiptStaffProfileViewTests
             var salary = host.All<TextBox>().First(t => t.IsVisible && AutomationProperties.GetName(t) == "Salary");
             var textBoxesBoundToPassword = host.All<TextBox>().Count(t => System.Windows.Data.BindingOperations.GetBinding(t, TextBox.TextProperty)?.Path.Path is "Password" or "ConfirmPassword");
             var messages = host.All<TextBlock>().Where(t => t.IsVisible).Select(t => t.Text).ToList();
-            form.Password = "a-long-enough-password";
+            form.Password = TestSecrets.LongEnough;
             host.Settle(100);
             return (
                 PasswordFields: passwords.Count,
@@ -317,7 +317,7 @@ public sealed class Part2ReceiptStaffProfileViewTests
         Assert.Equal(0, facts.TextBoxesBoundToPassword); // a password is only ever collected through the masked field
         Assert.Contains("Enter the date of birth.", facts.Messages);
         Assert.Contains("Enter a password.", facts.Messages);
-        Assert.Equal("a-long-enough-password", facts.DisplayedWhileMasked); // the control mirrors its bound value (and its box masks it)
+        Assert.Equal(TestSecrets.LongEnough, facts.DisplayedWhileMasked); // the control mirrors its bound value (and its box masks it)
     }
 
     [Fact]

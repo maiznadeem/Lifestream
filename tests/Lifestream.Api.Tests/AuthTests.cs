@@ -215,14 +215,14 @@ public sealed class AuthTests(ApiFixture fx) : IClassFixture<ApiFixture>
     {
         using var client = fx.NewClient();
         var big = new string('a', 3000);
-        using var login = await client.PostAsync(ApiRoutes.Path(ApiRoutes.AuthLogin), new StringContent($"{{\"username\":\"{big}\",\"password\":\"x\"}}", Encoding.UTF8, "application/json"), Ct);
+        using var login = await client.PostAsync(ApiRoutes.Path(ApiRoutes.AuthLogin), new StringContent($"{{\"username\":\"{big}\",\"password\":\"{TestSecrets.WrongX}\"}}", Encoding.UTF8, "application/json"), Ct);
         using var p1 = await login.Problem(413, "payload_too_large");
 
         // 1.5 KB is fine for login (2 KB limit) but too big for the demo endpoint (1 KB limit).
         var mid = new string('b', 1500);
         using var demo = await client.PostAsync(ApiRoutes.Path(ApiRoutes.AuthDemo), new StringContent(mid, Encoding.UTF8, "application/json"), Ct);
         using var p2 = await demo.Problem(413, "payload_too_large");
-        using var loginMid = await client.PostAsync(ApiRoutes.Path(ApiRoutes.AuthLogin), new StringContent($"{{\"username\":\"{mid[..30]}\",\"password\":\"x\"}}", Encoding.UTF8, "application/json"), Ct);
+        using var loginMid = await client.PostAsync(ApiRoutes.Path(ApiRoutes.AuthLogin), new StringContent($"{{\"username\":\"{mid[..30]}\",\"password\":\"{TestSecrets.WrongX}\"}}", Encoding.UTF8, "application/json"), Ct);
         Assert.Equal(HttpStatusCode.Unauthorized, loginMid.StatusCode);
     }
 

@@ -67,7 +67,7 @@ public sealed class LoginViewModelTests
         rig.Api.On("LoginAsync", FakeApiClient.Unreachable<TokenResponse>());
         var vm = Create(rig);
         vm.Username = "nadeem";
-        vm.Password = "pw";
+        vm.Password = TestSecrets.Pw;
 
         await vm.SignInCommand.ExecuteAsync();
 
@@ -88,7 +88,7 @@ public sealed class LoginViewModelTests
         rig.Api.Handlers["LoginAsync"] = _ => throw new HttpRequestException("boom");
         var vm = Create(rig);
         vm.Username = "u";
-        vm.Password = "p";
+        vm.Password = TestSecrets.P;
 
         await vm.SignInCommand.ExecuteAsync();
 
@@ -105,7 +105,7 @@ public sealed class LoginViewModelTests
         var captured = new List<Exception>();
         var vm = Create(rig);
         vm.Username = "u";
-        vm.Password = "p";
+        vm.Password = TestSecrets.P;
         var previous = Lifestream.Client.Common.AsyncRelayCommand.DefaultErrorHandler;
         Lifestream.Client.Common.AsyncRelayCommand.DefaultErrorHandler = captured.Add;
         try
@@ -137,7 +137,7 @@ public sealed class LoginViewModelTests
             rig.Api.On("LoginAsync", answer);
             var vm = Create(rig);
             vm.Username = "u";
-            vm.Password = "p";
+            vm.Password = TestSecrets.P;
             await vm.SignInCommand.ExecuteAsync();
             results[name] = (vm.Message, vm.CanRetry);
         }
@@ -159,7 +159,7 @@ public sealed class LoginViewModelTests
             : ApiResult<TokenResponse>.Ok(FakeApiClient.Tokens())));
         var vm = Create(rig);
         vm.Username = "u";
-        vm.Password = "p";
+        vm.Password = TestSecrets.P;
 
         await vm.SignInCommand.ExecuteAsync();
         Assert.True(vm.RetryCommand.CanExecute(null));
@@ -180,7 +180,7 @@ public sealed class LoginViewModelTests
         flow.Start();
         var vm = rig.Windows.Login!;
         vm.Username = "ada";
-        vm.Password = "pw";
+        vm.Password = TestSecrets.Pw;
 
         await vm.SignInCommand.ExecuteAsync();
 
@@ -213,7 +213,7 @@ public sealed class LoginViewModelTests
         rig.Api.On<TokenResponse>("LoginAsync", _ => gate.Task);
         var vm = Create(rig);
         vm.Username = "u";
-        vm.Password = "p";
+        vm.Password = TestSecrets.P;
 
         var clock = Stopwatch.StartNew();
         var running = vm.SignInCommand.ExecuteAsync(); // returns at the first await, i.e. when the request is in flight
@@ -241,7 +241,7 @@ public sealed class LoginViewModelTests
         rig.Api.On<TokenResponse>("LoginAsync", _ => gate.Task);
         var vm = Create(rig);
         vm.Username = "u";
-        vm.Password = "p";
+        vm.Password = TestSecrets.P;
 
         var first = vm.SignInCommand.ExecuteAsync();
         await vm.SignInCommand.ExecuteAsync();

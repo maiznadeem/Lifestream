@@ -28,7 +28,7 @@ public sealed class LoginWakingRenderedTests
             using var host = Hosted.Create(new LoginView { DataContext = vm }, 520, 688);
             host.Settle(150);
             vm.Username = "u";
-            vm.Password = "p";
+            vm.Password = TestSecrets.P;
             host.Settle(100);
             var banner = host.Find<Border>("WakingBanner");
             var cancel = host.Find<Button>("CancelButton");

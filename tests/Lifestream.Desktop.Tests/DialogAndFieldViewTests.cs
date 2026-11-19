@@ -22,7 +22,7 @@ public sealed class DialogAndFieldViewTests
             var dialogs = new FakeDialogs { Answer = false };
             using var vm = new ChangePasswordDialogViewModel(rig.Get<ILifestreamApiClient>());
             vm.Bind(null, TimeProvider.System, dialogs);
-            vm.NewPassword = "typed-but-not-saved";
+            vm.NewPassword = TestSecrets.TypedNotSaved;
             var window = new FormDialogWindow { DataContext = vm };
             vm.CloseRequested += (_, _) => window.Close(); // what the presenter does
             var closed = false;
@@ -151,9 +151,9 @@ public sealed class DialogAndFieldViewTests
             var status = new ServerStatus();
             using var vm = new ChangePasswordDialogViewModel(ScopedApiClient.Wrap(api, strict: true));
             vm.Bind(status, clock, new FakeDialogs());
-            vm.CurrentPassword = "old-password-123";
-            vm.NewPassword = "new-password-456";
-            vm.ConfirmPassword = "new-password-456";
+            vm.CurrentPassword = TestSecrets.Old123;
+            vm.NewPassword = TestSecrets.New456;
+            vm.ConfirmPassword = TestSecrets.New456;
             using var host = Hosted.Create(new ChangePasswordDialogView { DataContext = vm }, 560, 520);
             host.Settle(100);
             var notice = host.All<WakingNotice>().Single();
