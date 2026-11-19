@@ -35,6 +35,7 @@ public sealed class UnknownLoginStore(LifestreamDbContext db, TimeProvider time)
     /// </summary>
     public async Task<AttemptReservation> ReserveAsync(int? staffId, string username, int maxAttempts, int lockoutMinutes, CancellationToken ct)
     {
+        var duplicateRetried = false;
         for (var attempt = 1; ; attempt++)
         {
             try
@@ -46,6 +47,12 @@ public sealed class UnknownLoginStore(LifestreamDbContext db, TimeProvider time)
             {
                 // Another writer (a password reset) changed the credential between the read and the write: count again from the fresh row.
             }
+            catch (SqlException e) when (e.Number is 2601 or 2627 && !duplicateRetried)
+            {
+                // The key-range lock should make this impossible; if an equal spelling still got its row in first, count again from that row once
+                // (a 500 here would tell an unknown name from a real account).
+                duplicateRetried = true;
+            }
         }
     }
 
@@ -54,13 +61,21 @@ public sealed class UnknownLoginStore(LifestreamDbContext db, TimeProvider time)
         var now = time.GetUtcNow().UtcDateTime;
         var id = staffId ?? 0; // no staff row has id 0: the credential read finds nothing for an unknown name
 
-        // A lock per real account and one per unknown name, of the same shape (see LockResourceAsync).
-        await db.LockAsync(await LockResourceAsync(staffId, username, token), token);
+        // A real account is serialised by an application lock on its id. An unknown name is serialised by the key-range lock the unknown-name
+        // read below takes (see the read); it still asks for an application lock, on a resource no one else asks for, so both cases make the same calls.
+        await db.LockAsync(LoginLocks.Resource(staffId), token);
 
         var credential = await db.StaffCredentials.AsNoTracking().Where(c => c.StaffId == id)
             .Select(c => new { c.FailedCount, c.LockoutEndUtc, c.LastFailureUtc, c.RowVersion }).FirstOrDefaultAsync(token);
-        var unknown = await db.UnknownLogins.AsNoTracking().Where(u => u.Name == username)
-            .Select(u => new { u.FailedCount, u.LockoutEndUtc, u.ExpiresAtUtc }).FirstOrDefaultAsync(token);
+
+        // The same statement for both cases. For an unknown name (@serialise = 1) UPDLOCK + HOLDLOCK (serializable) lock the key range of the Name
+        // index until the commit, so every spelling the column collation treats as one name waits for the one before it, whether or not the row exists
+        // yet, and a second insert of the same name cannot happen. For a real account (@serialise = 0) the startup filter skips the seek, so no
+        // key is locked and real accounts never wait for each other here.
+        var unknown = await db.UnknownLogins
+            .FromSqlRaw("SELECT Id, Name, FailedCount, LockoutEndUtc, ExpiresAtUtc FROM UnknownLogin WITH (UPDLOCK, HOLDLOCK) WHERE Name = @name AND @serialise = 1",
+                Param("@name", SqlDbType.NVarChar, username, UnknownLogin.MaxNameLength), Param("@serialise", SqlDbType.Int, staffId is null ? 1 : 0))
+            .AsNoTracking().Select(u => new { u.FailedCount, u.LockoutEndUtc, u.ExpiresAtUtc }).FirstOrDefaultAsync(token);
         if (staffId is not null && credential is null)
         {
             throw AuthService.InvalidCredentials(); // the account was deleted between the lookup and now
@@ -88,21 +103,6 @@ public sealed class UnknownLoginStore(LifestreamDbContext db, TimeProvider time)
         var next = lockedNow ? new Counters(0, now.AddMinutes(lockoutMinutes), now) : new Counters(failed, current.LockoutEndUtc, now);
         await WriteAsync(staffId, username, credential?.RowVersion, next, now, write: true, token);
         return (new AttemptReservation(lockedNow), null);
-    }
-
-    /// <summary>
-    /// The application lock that serialises the counting for one login name. A real account's is <c>login:{staffId}</c>. An unknown name's
-    /// is <c>login:{n}</c> with n made from the database's own checksum of the name under the collation of the <c>UnknownLogin.Name</c> column
-    /// (a lock name is compared byte for byte, so the database has to do the normalising: every spelling it treats as one name gives one
-    /// checksum, one lock). Both are asked the same question, so the commands sent do not tell them apart, and under load a locked unknown name
-    /// waits on no lock but its own, like a real account (the verifier measured 14 ms against 1.6 ms with one lock shared by every unknown name).
-    /// </summary>
-    public async Task<string> LockResourceAsync(int? staffId, string username, CancellationToken ct)
-    {
-        var checksum = (await db.Database.SqlQueryRaw<int>(
-            "SELECT CHECKSUM(COALESCE((SELECT TOP (1) Name FROM UnknownLogin WHERE 1 = 0), @name)) AS Value",
-            Param("@name", SqlDbType.NVarChar, username, UnknownLogin.MaxNameLength)).ToListAsync(ct)).Single();
-        return LoginLocks.Resource(staffId, checksum);
     }
 
     /// <summary>
@@ -150,8 +150,13 @@ public static class LoginLocks
     // Real account ids are below 2^31 and an unknown name's number is at least 2^32: the two never share a lock, and both are "login:" and digits.
     private const long UnknownBase = 1L << 32;
 
-    public static string Resource(int? staffId, int nameChecksum) =>
-        staffId is { } id ? $"login:{id}" : $"login:{UnknownBase + nameChecksum + (1L << 31)}";
+    /// <summary>
+    /// A real account's lock is <c>login:{staffId}</c>. An unknown name's is a number nobody else asks for: it is not made from the name, because a
+    /// lock name is compared byte for byte and so cannot know which spellings the database treats as one name; the key-range lock of the
+    /// unknown-name read does that (see <c>ReserveOnceAsync</c>).
+    /// </summary>
+    public static string Resource(int? staffId) =>
+        staffId is { } id ? $"login:{id}" : $"login:{UnknownBase + Random.Shared.NextInt64(1L << 40)}";
 }
 
 public static class LoginProblems
