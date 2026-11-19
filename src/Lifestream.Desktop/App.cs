@@ -39,6 +39,7 @@ public sealed class App : Application
     {
         base.OnStartup(e);
         Resources.MergedDictionaries.Add(ThemeLoader.Resources);
+        _ = Features.Dashboard.ChartWarmUp.Start(Dispatcher); // the first dashboard's one-time cost is paid while the sign-in window is idle, before the dashboard is shown (FEAT-27)
 
         _host = Host.CreateDefaultBuilder(e.Args).ConfigureServices((context, services) => Configure(context.Configuration, services)).Build();
         var provider = _host.Services;

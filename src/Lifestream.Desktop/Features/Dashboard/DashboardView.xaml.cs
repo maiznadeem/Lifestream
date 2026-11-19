@@ -21,6 +21,9 @@ public partial class DashboardView : UserControl
 {
     private DashboardViewModel? _model;
 
+    /// <summary>How many times the charts have been drawn in this process (0 means the next draw is the first, cold one; for tests).</summary>
+    internal static int ChartDrawCount { get; private set; }
+
     public DashboardView()
     {
         InitializeComponent();
@@ -100,6 +103,11 @@ public partial class DashboardView : UserControl
 
     private void Draw(DashboardViewModel model)
     {
+        if (!ChartWarmUp.IsRunning)
+        {
+            ChartDrawCount++;
+        }
+
         var labels = model.MonthLabels;
 
         DonationsChart.AnimationsSpeed = TimeSpan.Zero;

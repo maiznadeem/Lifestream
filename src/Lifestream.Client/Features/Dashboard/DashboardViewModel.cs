@@ -153,6 +153,26 @@ public sealed partial class DashboardViewModel : ViewModelBase
 
     protected override bool HasNoData => false;
 
+    /// <summary>
+    /// A dashboard filled from a small made-up response without any API call. The app draws one off the UI thread at startup (the desktop's chart warm-up) so the first real
+    /// dashboard, which is drawn right after sign-in, finds the code it runs already compiled (FEAT-27).
+    /// </summary>
+    public static DashboardViewModel CreateWarmUpSample()
+    {
+        var model = new DashboardViewModel(null!, null!);
+        var months = new[] { new DateOnly(2026, 1, 1), new DateOnly(2026, 2, 1), new DateOnly(2026, 3, 1) };
+        var stock = new Contracts.Stock.StockItem(BloodType.ANeg, 4, 1, 10, true);
+        model._fetched = new DashboardResponse(
+            new DashboardKpis(1, 1, 1, 1, 1, 1),
+            months,
+            [.. SharedLists.BloodTypes.Select(c => new BloodTypeSeries(c.Value, [3, 5, 4], [2, 4, 1]))],
+            [.. SharedLists.Genders.Select(c => new GenderCount(c.Value, 1))],
+            [stock]);
+        model.Apply();
+        model.State = LoadState.Ready;
+        return model;
+    }
+
     /// <summary>The month label used for both the axis and the table: "Mar 2026".</summary>
     public static string MonthLabel(DateOnly month) => month.ToString("MMM yyyy", CultureInfo.InvariantCulture);
 
