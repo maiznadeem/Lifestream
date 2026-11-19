@@ -1,4 +1,4 @@
-# INFRA-01 (container image): proves tools/scan-image.sh scans the image FILESYSTEM (every layer) and the image configuration.
+# INFRA-01 (container image): proves tools/scan-image.sh scans EVERY LAYER of the image (docker save) and the image configuration.
 # No Docker daemon: each test crafts a docker-archive tarball (layer tars, config.json, manifest.json) and tools/scan-image.sh runs
 # unchanged against tests/infra/fake-docker.sh, which serves that archive the way `docker save` / `docker export` would.
 # Credentials are assembled from fragments so this file is itself clean when the repository is scanned.
@@ -114,5 +114,45 @@ Describe 'INFRA-01 container image: tools/scan-image.sh scans the image filesyst
         # The helper writes text as UTF-8; bytes >= 0x80 do not occur in this ASCII credential, only NULs, which UTF-8 keeps.
         $r.ExitCode | Should -Be 1 -Because $r.Output
         $r.Output | Should -Match 'UTF-16LE'
+    }
+}
+
+# v-03c: the old scan read `docker export` (the merged filesystem), so a credential that one layer adds and a later layer deletes
+# was in the pushed layer blob but never scanned. The scan now reads `docker save`, which keeps every layer as its own tar.
+Describe 'INFRA-01 container image: every layer is scanned separately' {
+    It 'fails when a credential file is added in one layer and deleted (whiteout) in a later one, naming the layer it is in' {
+        $a = Join-Path $TestDrive 'whiteout.tar'
+        New-ImageArchive $a @(
+            @{ 'app/ok.txt' = 'fine'; 'opt/secret.config' = ('<add connectionString="' + $script:ConnString + '" />') },
+            @{ 'opt/.wh.secret.config' = '' }
+        ) (New-Config)
+        $r = Invoke-ScanImage $a
+        $r.ExitCode | Should -Be 1 -Because $r.Output
+        $r.Output | Should -Match 'layer0\.tar!/opt/secret\.config'
+        $r.Output | Should -Not -Match $script:Secret
+    }
+
+    It 'the fixture really hides the file from the merged filesystem (what docker export, the old scan input, contains)' {
+        $a = Join-Path $TestDrive 'whiteout-fixture.tar'
+        New-ImageArchive $a @(@{ 'opt/secret.config' = 'x'; 'app/ok.txt' = 'fine' }, @{ 'opt/.wh.secret.config' = '' }) (New-Config)
+        $state = Join-Path $TestDrive ('state-' + [guid]::NewGuid().ToString('N'))
+        $psi = [Diagnostics.ProcessStartInfo]::new($script:Bash)
+        $psi.ArgumentList.Add('-c'); $psi.ArgumentList.Add('d="$1"; "$d" create img >/dev/null && "$d" export id | tar -tf -'); $psi.ArgumentList.Add('fake')
+        $shim = Join-Path $TestDrive ('shim-' + [guid]::NewGuid().ToString('N')); New-Item -ItemType Directory $shim | Out-Null
+        [IO.File]::WriteAllText((Join-Path $shim 'docker'), ((Get-Content -Raw $script:FakeDocker) -replace "`r`n", "`n"), [Text.UTF8Encoding]::new($false))
+        $psi.ArgumentList.Add((Join-Path $shim 'docker').Replace('\', '/'))
+        $psi.Environment['PATH'] = $script:BashDir + [IO.Path]::PathSeparator + $env:PATH
+        $psi.Environment['FAKE_DOCKER_ARCHIVE'] = $a; $psi.Environment['FAKE_DOCKER_STATE'] = $state
+        $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
+        $p = [Diagnostics.Process]::Start($psi); $o = $p.StandardOutput.ReadToEndAsync(); $e = $p.StandardError.ReadToEndAsync(); $p.WaitForExit()
+        $p.ExitCode | Should -Be 0 -Because $e.Result
+        $o.Result | Should -Match 'app/ok\.txt'
+        $o.Result | Should -Not -Match 'secret\.config'
+    }
+
+    It 'scan-image.sh reads docker save, not docker export' {
+        $text = Get-Content -Raw $script:ScanImage
+        $text | Should -Match 'docker save -o'
+        $text | Should -Not -Match '(?m)^[^#]*docker (export|create)'
     }
 }

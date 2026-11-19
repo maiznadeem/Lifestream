@@ -57,19 +57,29 @@ jobs:
           dotnet build tests/Lifestream.Domain.Tests tests/Lifestream.Client.Tests tests/Lifestream.Api.Tests
           -c Release
 
+      # Test output is kept (bash with pipefail: a failing test run still fails the step) and scanned for credentials.
       - name: Test
+        shell: bash
         run: |
-          dotnet test tests/Lifestream.Domain.Tests -c Release --no-build
-          dotnet test tests/Lifestream.Client.Tests -c Release --no-build
-          dotnet test tests/Lifestream.Api.Tests -c Release --no-build
+          mkdir -p "$RUNNER_TEMP/test-logs"
+          dotnet test tests/Lifestream.Domain.Tests -c Release --no-build 2>&1 | tee "$RUNNER_TEMP/test-logs/domain.log"
+          dotnet test tests/Lifestream.Client.Tests -c Release --no-build 2>&1 | tee "$RUNNER_TEMP/test-logs/client.log"
+          dotnet test tests/Lifestream.Api.Tests -c Release --no-build 2>&1 | tee "$RUNNER_TEMP/test-logs/api.log"
+
+      - name: Scan the test logs for credentials
+        if: always()
+        shell: pwsh
+        run: ./tools/scan-artifacts.ps1 -Path "$env:RUNNER_TEMP/test-logs" -ReportPath "$env:RUNNER_TEMP/scan-test-logs.json"
 
   desktop:
     name: desktop (build whole solution, Desktop tests)
     runs-on: windows-latest
     timeout-minutes: 30
-    env:
-      LIFESTREAM_CAPTURE_DIR: ${{ runner.temp }}\captures
     steps:
+      # The runner context is not available in a job-level env, so the capture folder is set for the later steps here.
+      - name: Set the render capture folder
+        run: '"LIFESTREAM_CAPTURE_DIR=$env:RUNNER_TEMP\captures" >> $env:GITHUB_ENV'
+
       - uses: actions/checkout@v4
 
       - uses: actions/setup-dotnet@v4
@@ -81,11 +91,21 @@ jobs:
 
       - name: Gate, Desktop and Client tests (off-screen renders, no window is shown)
         run: |
-          dotnet test tests/Lifestream.Client.Tests -c Release --no-build
-          dotnet test tests/Lifestream.Desktop.Tests -c Release --no-build
+          New-Item -ItemType Directory -Force "$env:RUNNER_TEMP/test-logs", "$env:LIFESTREAM_CAPTURE_DIR" | Out-Null
+          dotnet test tests/Lifestream.Client.Tests -c Release --no-build 2>&1 | Tee-Object "$env:RUNNER_TEMP/test-logs/client.log"
+          $client = $LASTEXITCODE
+          dotnet test tests/Lifestream.Desktop.Tests -c Release --no-build 2>&1 | Tee-Object "$env:RUNNER_TEMP/test-logs/desktop.log"
+          $desktop = $LASTEXITCODE
+          if ($client -ne 0 -or $desktop -ne 0) { exit 1 }
+
+      # The captures are uploaded only after they and the test logs were scanned clean.
+      - name: Scan the test logs and render captures for credentials
+        id: scan-logs
+        if: always()
+        run: ./tools/scan-artifacts.ps1 -Path "$env:RUNNER_TEMP/test-logs","$env:LIFESTREAM_CAPTURE_DIR" -ReportPath "$env:RUNNER_TEMP/scan-test-logs.json"
 
       - name: Upload render captures
-        if: always()
+        if: always() && steps.scan-logs.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: desktop-captures
