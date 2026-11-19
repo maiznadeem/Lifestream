@@ -244,8 +244,11 @@ try {
                         if ($t.Kind -eq 'dump') {
                             # The dump file holds "<marker> <label>" lines; the finding belongs to the nearest one above its line.
                             $markerPrefix = $engine.DumpMarker + ' '
+                            # gitleaks counts lines by LF only. ReadLines would also break at a lone CR (a progress line, a CR inside a dumped
+                            # string), move the line number and attribute the finding to a neighbouring member (a stock file that is allow-listed
+                            # under its own name then fails the scan): split on LF exactly like gitleaks.
                             $cur = $null; $ln = 0
-                            foreach ($l in [IO.File]::ReadLines([string]$it.File)) { $ln++; if ($ln -gt $it.StartLine) { break }; if ($l.StartsWith($markerPrefix)) { $cur = $l.Substring($markerPrefix.Length) } }
+                            foreach ($l in [IO.File]::ReadAllText([string]$it.File).Split([char]10)) { $ln++; if ($ln -gt $it.StartLine) { break }; if ($l.StartsWith($markerPrefix)) { $cur = $l.Substring($markerPrefix.Length) } }
                             $label = if ($cur) { $cur } else { "(string dump $([IO.Path]::GetFileName($label)))" }
                         }
                         $leaf = ($label -split '[\\/!]' | Where-Object { $_ } | Select-Object -Last 1)

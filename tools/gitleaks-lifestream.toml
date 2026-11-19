@@ -4,7 +4,9 @@
 #
 # Placeholders: a value is ignored ONLY when the whole value equals an entry of the exact list in `placeholders` below (the same list
 # as tools/scan-engine.cs PlaceholderValues, optionally in quotes). Nothing that "looks like" a placeholder is skipped: PWD={x} is
-# ODBC quoting of a real password.
+# ODBC quoting of a real password. A shell variable REFERENCE as the whole value of a USER ID ($NAME in capitals, ${NAME}, %NAME%, $(NAME)) is
+# not an identity (docker history carries "useradd --uid=$APP_UID"): only the lifestream-db-userid rule skips it, like tools/scan-engine.cs
+# VariableReference. A password or secret is never skipped for being a reference (Password=%Secret1% is a password).
 # Third-party hits that were read and judged benign are not listed here: they are in tools/gitleaks-allowlist.txt, by file name,
 # rule and the SHA-256 of the matched text.
 
@@ -12,6 +14,13 @@ title = "Lifestream credential rules"
 
 [extend]
 useDefault = true
+
+# An image reference of this repository with a commit SHA tag (docker build output: "naming to ghcr.io/<owner>/lifestream-api:<40 hex>") is
+# not a key; the default generic-api-key rule reads "api:<hex>" as one. Only this exact repository name followed by a hex tag is skipped.
+[[allowlists]]
+description = "the lifestream-api image reference with a commit SHA tag"
+regexTarget = "match"
+regexes = ['''lifestream-api:[0-9a-f]{7,64}''']
 
 # A value: "quoted", 'quoted', {ODBC brace-quoted with }} escapes}, or a run up to whitespace ; , < > or a quote.
 # (The run may start with ~ > = : , ; or a backtick: those are part of a password.)
@@ -57,7 +66,7 @@ keywords = ["user id", "userid", "uid"]
 description = "placeholders, and a GUID (a user id that identifies someone is not a secret)"
 regexTarget = "secret"
 regexes = [
-  '''^["']?(?:\{[0-9]\}|\$\(Password\)|\$\{PASSWORD\}|%PASSWORD%|<password>|\*\*\*)?["']?$''',
+  '''^["']?(?:\{[0-9]\}|\$\(Password\)|\$\{PASSWORD\}|%PASSWORD%|<password>|\*\*\*|\$[A-Z_][A-Z0-9_]*|\$\{[A-Za-z_][A-Za-z0-9_]*\}|%[A-Za-z_][A-Za-z0-9_]*%|\$\([A-Za-z_][A-Za-z0-9_]*\))?["']?$''',
   '''^\{?[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\}?$''',
 ]
 

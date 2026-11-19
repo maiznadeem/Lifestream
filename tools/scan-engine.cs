@@ -323,7 +323,7 @@ namespace LifestreamScan
         static bool IsCredentialValue(string rule, string value, bool binary, bool context)
         {
             if (value.Length == 0 || PlaceholderSet.Contains(value)) return false;
-            if (rule == "UserIdValue" && (Guid.IsMatch(value) || UserIdReference.IsMatch(value))) return false;
+            if (rule == "UserIdValue" && (Guid.IsMatch(value) || UserIdReference.IsMatch(value) || VariableReference.IsMatch(value))) return false;
             if (!binary) return true;
             return context || CodePoints(value) >= 6;
         }
@@ -522,6 +522,11 @@ namespace LifestreamScan
         bool[] _interp;
         // Inside an interpolated C# string a value made only of holes ({name}, {{Type.Member}}, joined by - _ . :) comes from a variable.
         static readonly Regex HoleValue = new Regex(@"^(?=.*\{)(?:\{\{?[A-Za-z_][\w.]*\}\}?|[-_.:])+$", Cs);
+        // A shell variable REFERENCE as the WHOLE value of a USER ID ($NAME, ${NAME}, %NAME%, $(NAME)) names where an identity comes from; it is not
+        // an identity (docker history carries "useradd --uid=$APP_UID"), in every mode. It applies to UserIdValue ONLY: a password, secret, token or
+        // connection string is never skipped for being a reference (Password=%Secret1% is a password; only the exact PlaceholderValues are not).
+        // The bare $NAME form is a reference only in the environment-variable spelling ([A-Z_][A-Z0-9_]*): "User ID=$sa" is a value (verifier plant).
+        static readonly Regex VariableReference = new Regex(@"^(?:\$[A-Z_][A-Z0-9_]*|\$\{[A-Za-z_][A-Za-z0-9_]*\}|%[A-Za-z_][A-Za-z0-9_]*%|\$\([A-Za-z_][A-Za-z0-9_]*\))$", Cs);
         // A user id given as a reference or a description (${migrator.clientId}, <client id>) names an identity; it is not a secret.
         static readonly Regex UserIdReference = new Regex(@"^(?:\$\{[A-Za-z_][\w.]*\}|<[A-Za-z][\w \-]{0,40}>)$", Cs);
 

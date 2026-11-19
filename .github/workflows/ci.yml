@@ -54,11 +54,16 @@ jobs:
 
       # Build and test output is written to a file, scanned (both scanners), and printed to the job log only after a clean scan
       # (tools/run-logged.ps1); on a finding only a redacted summary is printed. The exit code is the command's own, or 1 on a finding.
+      # `dotnet build` takes ONE project (MSB1008 otherwise), so each test project is its own logged command.
       - name: Build (warnings are errors)
         shell: pwsh
-        run: >
-          ./tools/run-logged.ps1 -Log "$env:RUNNER_TEMP/test-logs/build.log" -Command
-          'dotnet build tests/Lifestream.Domain.Tests tests/Lifestream.Client.Tests tests/Lifestream.Api.Tests -c Release'
+        run: |
+          $failed = 0
+          foreach ($project in 'Domain', 'Client', 'Api') {
+            ./tools/run-logged.ps1 -Log "$env:RUNNER_TEMP/test-logs/build-$project.log" -Command "dotnet build tests/Lifestream.$project.Tests -c Release"
+            if ($LASTEXITCODE -ne 0) { $failed++ }
+          }
+          if ($failed -gt 0) { exit 1 }
 
       - name: Test
         shell: pwsh
@@ -168,41 +173,41 @@ jobs:
           exit 1
 
       - name: Build the test projects (warnings are errors)
-        shell: bash
+        shell: pwsh
         run: |
-          for project in ${{ matrix.projects }}; do
-            dotnet build "tests/Lifestream.$project.Tests" -c Release
-          done
+          $failed = 0
+          foreach ($project in '${{ matrix.projects }}' -split ' ') {
+            ./tools/run-logged.ps1 -Log "$env:RUNNER_TEMP/test-logs/order-build-$project.log" -Command "dotnet build tests/Lifestream.$project.Tests -c Release"
+            if ($LASTEXITCODE -ne 0) { $failed++ }
+          }
+          if ($failed -gt 0) { exit 1 }
 
       # Every project and seed runs even when an earlier one failed, so one pull request shows all the order failures at once.
+      # The test program of each project runs inside tools/run-logged.ps1 too (file first, scan, then print), in its own folder.
       - name: Test, two fixed seeds per project
-        shell: bash
+        shell: pwsh
         env:
           LIFESTREAM_CAPTURE_DIR: ${{ runner.temp }}/captures
         run: |
-          mkdir -p "$RUNNER_TEMP/test-logs" "$LIFESTREAM_CAPTURE_DIR"
-          DOTNET_HOST_PATH="$(command -v dotnet)"
-          export DOTNET_HOST_PATH
-          fail=0
-          root="$PWD"
-          for project in ${{ matrix.projects }}; do
-            outputs=("$root/tests/Lifestream.$project.Tests/bin/Release/"net11.0*)
-            dir="${outputs[0]}"
-            exe="$dir/Lifestream.$project.Tests"
-            if [ -f "$exe.exe" ]; then exe="$exe.exe"; fi
-            for seed in $SEEDS; do
-              echo "::group::$project, seed $seed"
-              set +e
-              (cd "$dir" && "$exe" ":$seed" -noLogo -notrait "Category=Perf" 2>&1) | tee "$RUNNER_TEMP/test-logs/order-$project-$seed.log"
-              status=${PIPESTATUS[0]}
-              set -e
-              echo "::endgroup::"
-              if [ "$status" -ne 0 ]; then
-                echo "::error::$project failed under seed $seed (exit $status). Reproduce: Lifestream.$project.Tests :$seed"
-                fail=1
-              fi
-            done
-          done
+          New-Item -ItemType Directory -Force "$env:RUNNER_TEMP/test-logs", "$env:LIFESTREAM_CAPTURE_DIR" | Out-Null
+          $env:DOTNET_HOST_PATH = (Get-Command dotnet).Source
+          $fail = 0
+          foreach ($project in '${{ matrix.projects }}' -split ' ') {
+            $testDir = (Get-ChildItem "tests/Lifestream.$project.Tests/bin/Release" -Directory -Filter 'net11.0*' | Select-Object -First 1).FullName
+            $testExe = Join-Path $testDir "Lifestream.$project.Tests"
+            if (Test-Path "$testExe.exe") { $testExe = "$testExe.exe" }
+            foreach ($seed in $env:SEEDS -split ' ') {
+              Write-Host "::group::$project, seed $seed"
+              # The command is single-quoted: $testDir, $testExe and $seed are read by the wrapper's scriptblock from this script's variables.
+              ./tools/run-logged.ps1 -Log "$env:RUNNER_TEMP/test-logs/order-$project-$seed.log" -Command 'Push-Location "$testDir"; & "$testExe" ":$seed" -noLogo -notrait "Category=Perf"; Pop-Location'
+              $status = $LASTEXITCODE
+              Write-Host '::endgroup::'
+              if ($status -ne 0) {
+                Write-Host "::error::$project failed under seed $seed (exit $status). Reproduce: Lifestream.$project.Tests :$seed"
+                $fail = 1
+              }
+            }
+          }
           exit $fail
 
       - name: Scan the test logs for credentials

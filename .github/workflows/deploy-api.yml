@@ -67,16 +67,27 @@ jobs:
           echo "SQL Server did not become ready" >&2
           exit 1
 
+      # Build and test output goes to a file, is scanned (both scanners) and is printed to the job log only after a clean scan
+      # (tools/run-logged.ps1). `dotnet build` takes ONE project (MSB1008 otherwise), so each test project is its own command.
       - name: Build (warnings are errors)
-        run: >
-          dotnet build tests/Lifestream.Domain.Tests tests/Lifestream.Client.Tests tests/Lifestream.Api.Tests
-          -c Release
+        shell: pwsh
+        run: |
+          $failed = 0
+          foreach ($project in 'Domain', 'Client', 'Api') {
+            ./tools/run-logged.ps1 -Log "$env:RUNNER_TEMP/gate-logs/build-$project.log" -Command "dotnet build tests/Lifestream.$project.Tests -c Release"
+            if ($LASTEXITCODE -ne 0) { $failed++ }
+          }
+          if ($failed -gt 0) { exit 1 }
 
       - name: Test
+        shell: pwsh
         run: |
-          dotnet test tests/Lifestream.Domain.Tests -c Release --no-build
-          dotnet test tests/Lifestream.Client.Tests -c Release --no-build
-          dotnet test tests/Lifestream.Api.Tests -c Release --no-build
+          $failed = 0
+          foreach ($project in 'Domain', 'Client', 'Api') {
+            ./tools/run-logged.ps1 -Log "$env:RUNNER_TEMP/gate-logs/test-$project.log" -Command "dotnet test tests/Lifestream.$project.Tests -c Release --no-build"
+            if ($LASTEXITCODE -ne 0) { $failed++ }
+          }
+          if ($failed -gt 0) { exit 1 }
 
   image:
     name: image (build, scan, push)
@@ -102,8 +113,9 @@ jobs:
       - name: Build image (not pushed yet)
         shell: bash
         run: >
-          docker buildx build --progress=plain --provenance=false --sbom=false --platform linux/amd64 --load
-          -f src/Lifestream.Api/Dockerfile -t "$IMAGE:$GITHUB_SHA" . 2>&1 | tee "$RUNNER_TEMP/docker-build.log"
+          pwsh -NoProfile -File tools/run-logged.ps1 -Log "$RUNNER_TEMP/docker-build.log" -Command
+          "docker buildx build --progress=plain --provenance=false --sbom=false --platform linux/amd64 --load
+          -f src/Lifestream.Api/Dockerfile -t $IMAGE:$GITHUB_SHA ."
 
       # A credential in the image would be public the moment the package is pushed, so the scan comes first: every layer, the
       # image configuration, and the build log.

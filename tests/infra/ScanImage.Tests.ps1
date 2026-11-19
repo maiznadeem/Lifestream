@@ -117,6 +117,55 @@ Describe 'INFRA-01 container image: tools/scan-image.sh scans the image filesyst
     }
 }
 
+# v-03f verifier: every CLEAN image failed the scan. The stock mcr.microsoft.com/dotnet/aspnet:11.0 image configuration carries the build
+# history "useradd ... --uid=$APP_UID"; `docker save` ships that config inside image.tar, where it is scanned in binary mode, and
+# `$APP_UID` is a shell variable reference, not a user id. tests/infra/fixtures/aspnet-11.0-config.json IS the real configuration blob
+# of that image (sha256:d2ab04a0..., downloaded from the registry as data; a Microsoft base image, no credential in it).
+Describe 'INFRA-01 container image: the REAL stock aspnet:11.0 configuration is clean, and a credential planted in that same archive is still caught' {
+    BeforeAll {
+        $script:StockConfig = Get-Content -Raw (Join-Path $PSScriptRoot 'fixtures' 'aspnet-11.0-config.json')
+        # the app layer of a clean API publish: settings without credentials
+        $script:AppLayer = @{ 'app/appsettings.json' = '{ "Logging": { "LogLevel": { "Default": "Information" } }, "Sql": { "Server": "tcp:db.example.net", "Authentication": "Active Directory Default" } }' }
+    }
+
+    It 'the fixture is the real stock configuration: it carries the history line with $APP_UID that made the old scan fail' {
+        $script:StockConfig | Should -Match ('ui' + 'd=\$APP_UID')
+        ($script:StockConfig | ConvertFrom-Json).history.Count | Should -BeGreaterThan 5
+    }
+
+    It 'exits 0 on the stock configuration plus a clean app layer (image.tar!/config.json holds the uid variable reference $APP_UID)' {
+        $a = Join-Path $TestDrive 'stock-clean.tar'
+        New-ImageArchive $a @($script:AppLayer) $script:StockConfig
+        $r = Invoke-ScanImage $a (Join-Path $TestDrive 'stock-clean-report.json')
+        $r.ExitCode | Should -Be 0 -Because $r.Output
+        $r.Output | Should -Not -Match 'UserIdValue'
+    }
+
+    It 'exits 1 on the same archive with a credential planted in <Where>, naming where and not the value' -ForEach @(
+        @{ Where = 'the image configuration (a baked environment variable)'; File = '_image-inspect\.json|config\.json'; Plant = 'config' }
+        @{ Where = 'a build ARG in the image history'; File = 'config\.json'; Plant = 'history' }
+        @{ Where = 'the image history as a variable reference (a password given as ${DB_PASS} is never skipped for being a reference)'; File = 'config\.json'; Plant = 'historyref' }
+        @{ Where = 'a file in the app layer'; File = 'appsettings\.Production\.json'; Plant = 'layer' }
+    ) {
+        $conn = 'Server=tcp:db.example.net,1433;Initial Catalog=BloodBank;User ' + 'ID=lsadmin;Pass' + 'word=' + $script:Secret
+        $config = $script:StockConfig
+        $layer = $script:AppLayer
+        if ($Plant -eq 'config') { $config = [regex]::Replace($config, '"Env"\s*:\s*\[', ('"Env":["ConnectionStrings__Sql=' + $conn + '",'), 1) }
+        if ($Plant -eq 'history') { $config = [regex]::Replace($config, '"history"\s*:\s*\[', ('"history":[{"created_by":"RUN |1 MSSQL_SA_PASS' + 'WORD=' + $script:Secret + ' /bin/sh -c echo build"},'), 1) }
+        if ($Plant -eq 'historyref') { $at = $config.IndexOf('[', $config.IndexOf('"history"')) + 1; $config = $config.Insert($at, '{"created_by":"RUN /bin/sh -c export DB=Server=db;Pass' + 'word=${DB_PASS} && ./migrate"},') }
+        if ($Plant -eq 'layer') { $layer = @{ 'app/appsettings.Production.json' = ('{ "ConnectionStrings": { "Default": "' + $conn + '" } }') } }
+        $config | Should -Not -BeNullOrEmpty
+        if ($Plant -ne 'layer') { $config | Should -Not -Be $script:StockConfig -Because 'the plant must really be in the archive' }
+        $a = Join-Path $TestDrive "stock-plant-$Plant.tar"
+        New-ImageArchive $a @($layer) $config
+        $r = Invoke-ScanImage $a
+        $r.ExitCode | Should -Be 1 -Because $r.Output
+        $r.Output | Should -Match 'FINDING'
+        $r.Output | Should -Match $File
+        $r.Output | Should -Not -Match $script:Secret
+    }
+}
+
 # v-03c: the old scan read `docker export` (the merged filesystem), so a credential that one layer adds and a later layer deletes
 # was in the pushed layer blob but never scanned. The scan now reads `docker save`, which keeps every layer as its own tar.
 Describe 'INFRA-01 container image: every layer is scanned separately' {
