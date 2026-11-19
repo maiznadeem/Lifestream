@@ -436,6 +436,10 @@ public sealed partial class ApiWritePlanMatrixTests(WritePlanApiFixture fx) : IC
             return r;
         }, true);
         await Run(ApiRoutes.AppointmentDonation, "POST appointment donation (record)", () => c.PostApi(ApiRoutes.AppointmentDonation, new RecordDonationRequest(2, null), booked.Id), true);
+
+        // The donor donated today, so a second donation today is judged ineligible and needs an override reason (stored on the appointment).
+        var second = await (await c.PostApi(ApiRoutes.Appointments, new BookAppointmentRequest(donor.Id, await FreeSlotAsync(170), null))).Read<AppointmentDetail>();
+        await Run(ApiRoutes.AppointmentDonation, "POST appointment donation (override reason)", () => c.PostApi(ApiRoutes.AppointmentDonation, new RecordDonationRequest(1, null) { OverrideReason = "Plan matrix: urgent shortage" }, second.Id), true);
         var toCancel = await (await c.PostApi(ApiRoutes.Appointments, new BookAppointmentRequest(donor.Id, await FreeSlotAsync(150), "plan"))).Read<AppointmentDetail>();
         await Run(ApiRoutes.AppointmentCancel, "POST appointment cancel", () => c.PostApi(ApiRoutes.AppointmentCancel, null, toCancel.Id), true);
         await Run(ApiRoutes.AppointmentById, "DELETE appointment", () => c.DeleteApi(ApiRoutes.AppointmentById, toCancel.Id), true);
@@ -466,8 +470,10 @@ public sealed partial class ApiWritePlanMatrixTests(WritePlanApiFixture fx) : IC
         await Run(ApiRoutes.DonorById, "DELETE donor with a receipt (refused)", () => c.DeleteApi(ApiRoutes.DonorById, donor.Id), false, HttpStatusCode.Conflict);
         var lonelyDonor = await (await c.PostApi(ApiRoutes.Donors, new CreateDonorRequest(fx.NextName("Plan Donor "), DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-30)), Gender.Male, BloodType.APos, null, null, DonorFrequency.Regular))).Read<DonorDetail>();
         await Run(ApiRoutes.DonorById, "DELETE donor (no children)", () => c.DeleteApi(ApiRoutes.DonorById, lonelyDonor.Id), true);
+        await Run(ApiRoutes.DonorRestore, "POST donor restore", () => c.PostApi(ApiRoutes.DonorRestore, null, lonelyDonor.Id), true);
         var lonelyPatient = await (await c.PostApi(ApiRoutes.Patients, new CreatePatientRequest(fx.NextName("Plan Patient "), DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-40)), Gender.Female, BloodType.OPos, null, null))).Read<PatientDetail>();
         await Run(ApiRoutes.PatientById, "DELETE patient (no children)", () => c.DeleteApi(ApiRoutes.PatientById, lonelyPatient.Id), true);
+        await Run(ApiRoutes.PatientRestore, "POST patient restore", () => c.PostApi(ApiRoutes.PatientRestore, null, lonelyPatient.Id), true);
 
         // Staff, photos and the profile.
         StaffDetail staff = null!;
