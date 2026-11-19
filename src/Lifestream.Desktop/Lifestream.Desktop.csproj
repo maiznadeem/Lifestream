@@ -6,6 +6,7 @@
     <RootNamespace>Lifestream.Desktop</RootNamespace>
     <AssemblyName>Lifestream</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\Lifestream.ico</ApplicationIcon>
     <!-- Own entry point (Program.Main) so Velopack can run its install hooks before WPF starts. -->
     <StartupObject>Lifestream.Desktop.Program</StartupObject>
     <!-- LibraryImport (source-generated P/Invoke) emits unsafe marshalling code. -->
@@ -21,5 +22,7 @@
     <Content Include="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
     <!-- Inter, SIL Open Font License (Fonts/OFL.txt, version and hash in Fonts/README.md): the one font of the app, embedded in the executable. -->
     <Resource Include="Fonts\InterVariable.ttf" />
+    <!-- The window icon is read from pack://application:,,,/Lifestream;component/Assets/Lifestream.ico; ApplicationIcon embeds the same file in the exe. -->
+    <Resource Include="Assets\Lifestream.ico" />
   </ItemGroup>
 </Project>

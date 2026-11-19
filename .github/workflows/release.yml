@@ -1,6 +1,6 @@
 name: Release
 
-# On a version tag (v2.0.0): gate, publish the desktop app self-contained for win-x64 with ReadyToRun, scan it, pack the
+# On a version tag (v2.0.1): gate, publish the desktop app self-contained for win-x64 with ReadyToRun, scan it, pack the
 # Velopack installer and update packages, scan those, upload to a GitHub Release with SHA-256 checksums, and build the
 # Microsoft Store MSIX as an extra workflow artifact. Unsigned unless a signing certificate secret is configured.
 on:
@@ -112,7 +112,9 @@ jobs:
         run: |
           $vpkArgs = @('pack', '--packId', 'Lifestream', '--packVersion', '${{ steps.version.outputs.version }}',
                     '--packDir', "$env:RUNNER_TEMP/publish", '--mainExe', 'Lifestream.exe', '--runtime', 'win-x64',
-                    '--outputDir', "$env:RUNNER_TEMP/Releases")
+                    '--outputDir', "$env:RUNNER_TEMP/Releases",
+                    '--icon', 'src/Lifestream.Desktop/Assets/Lifestream.ico')
+          # --icon sets the icon of Setup.exe; the Start menu and desktop shortcuts use the icon embedded in Lifestream.exe, which ApplicationIcon provides.
           if ('${{ steps.signing.outputs.enabled }}' -eq 'true') {
             $vpkArgs += @('--signParams', "/f `"${{ steps.signing.outputs.pfx }}`" /p `"$env:WINDOWS_SIGNING_PFX_PASSWORD`" /fd sha256 /tr http://timestamp.digicert.com /td sha256")
           }
