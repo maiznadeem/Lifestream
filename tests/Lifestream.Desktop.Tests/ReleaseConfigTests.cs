@@ -40,10 +40,10 @@ public sealed partial class ReleaseConfigTests
     }
 
     [Fact]
-    public void Version_IsTwoDotZeroDotOne_EverywhereItIsSet()
+    public void Version_IsTheReleaseVersion_EverywhereItIsSet()
     {
         Assert.Contains($"<Version>{Version}</Version>", Text("Directory.Build.props"), StringComparison.Ordinal);
-        Assert.Equal(new System.Version(2, 0, 1), typeof(App).Assembly.GetName().Version is { } v ? new System.Version(v.Major, v.Minor, v.Build) : null);
+        Assert.Equal(System.Version.Parse(Version), typeof(App).Assembly.GetName().Version is { } v ? new System.Version(v.Major, v.Minor, v.Build) : null);
         Assert.Contains($"<assemblyIdentity version=\"{Version}.0\"", Text("src/Lifestream.Desktop/app.manifest"), StringComparison.Ordinal);
 
         // The installer: vpk pack gets the version of the tag (v2.0.2), and the tag pattern is the only way in.
