@@ -188,6 +188,13 @@ public sealed class Hosted : IDisposable
         };
         check.Start();
         Dispatcher.PushFrame(frame);
+
+        // Past the timeout the work is still pumped (never blocked on: its continuations need this thread), up to a minute, then the test fails instead of hanging.
+        if (task is { IsCompleted: false } && !PumpUntil(() => task.IsCompleted, 60_000))
+        {
+            throw new TimeoutException($"The awaited work did not finish within {timeoutMilliseconds} ms and a minute more.");
+        }
+
         task!.GetAwaiter().GetResult();
     }
 
