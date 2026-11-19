@@ -24,6 +24,17 @@ public static class Lists
         return (page, size);
     }
 
+    /// <summary>
+    /// The number of rows of <paramref name="filtered"/> as a one-row query, to be cross-joined to the page. Written as a scalar
+    /// subquery in the page's SELECT list, SQL Server may work the count out again for every row of the page; as a one-row table it is
+    /// worked out once, and the page and its total still come back in one command.
+    /// </summary>
+    public static IQueryable<int> Total<T>(IQueryable<T> filtered) => filtered.GroupBy(_ => 1).Select(g => g.Count());
+
+    /// <summary>Marks a search query so it is compiled for its actual term (see <see cref="Infrastructure.SearchPlanInterceptor"/>).</summary>
+    public static IQueryable<T> ForSearch<T>(this IQueryable<T> query, string? search) =>
+        CleanSearch(search) is null ? query : query.TagWith(Infrastructure.SearchPlanInterceptor.Tag);
+
     /// <summary>Builds the response. The total comes from the first row; only an empty result needs a fallback (0, or a count for a page past the end).</summary>
     public static async Task<PagedResult<T>> BuildAsync<T>(IReadOnlyList<ListRow<T>> rows, int page, int size, Func<Task<int>> countWhenEmpty)
     {

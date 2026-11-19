@@ -96,6 +96,7 @@ public static class ApiSetup
             var database = sp.GetRequiredService<DatabaseSettings>();
             options.UseSqlServer(connection, sql => sql.ExecutionStrategy(d => new WakeAwareExecutionStrategy(d, database)));
             options.AddInterceptors(sp.GetServices<IInterceptor>());
+            options.AddInterceptors(new SearchPlanInterceptor());
         });
         services.AddSingleton<IDatabaseProbe, SqlDatabaseProbe>();
 

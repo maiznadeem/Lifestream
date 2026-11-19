@@ -16,7 +16,7 @@ partial class LifestreamDbContextModelSnapshot : ModelSnapshot
     // If you encounter a merge conflict in the line below, it means you need to
     // discard one of the migration branches and recreate its migrations on top of
     // the other branch. See https://aka.ms/efcore-docs-migrations-conflicts for more info.
-    public override string LastMigrationId => "20261118220716_HardenHashCheckAndListIndexes";
+    public override string LastMigrationId => "20261118234152_ListIndexesAndMedicalHold";
 
     protected override void BuildModel(ModelBuilder modelBuilder)
     {
@@ -70,25 +70,43 @@ partial class LifestreamDbContextModelSnapshot : ModelSnapshot
 
                 b.HasKey("Id");
 
+                b.HasIndex("DonorId");
+
                 var index = b.HasIndex("PlacedAtUtc");
 
-                SqlServerIndexBuilderExtensions.IncludeProperties(index, new[] { "SlotStartUtc", "Status" });
+                SqlServerIndexBuilderExtensions.IncludeProperties(index, new[] { "SlotStartUtc", "Status", "DonorId" });
 
                 var index0 = b.HasIndex("SlotStartUtc");
 
-                SqlServerIndexBuilderExtensions.IncludeProperties(index0, new[] { "PlacedAtUtc", "Status" });
+                SqlServerIndexBuilderExtensions.IncludeProperties(index0, new[] { "PlacedAtUtc", "Status", "DonorId" });
 
-                b.HasIndex("DonorBloodType", "PlacedAtUtc");
+                var index1 = b.HasIndex("DonorBloodType", "PlacedAtUtc");
 
-                b.HasIndex("DonorBloodType", "SlotStartUtc");
+                SqlServerIndexBuilderExtensions.IncludeProperties(index1, new[] { "SlotStartUtc", "Status", "DonorId" });
 
-                var index1 = b.HasIndex("DonorId", "SlotStartUtc");
+                var index2 = b.HasIndex("DonorBloodType", "SlotStartUtc");
 
-                SqlServerIndexBuilderExtensions.IncludeProperties(index1, new[] { "PlacedAtUtc", "Status" });
+                SqlServerIndexBuilderExtensions.IncludeProperties(index2, new[] { "PlacedAtUtc", "Status", "DonorId" });
 
-                b.HasIndex("Status", "PlacedAtUtc");
+                var index3 = b.HasIndex("DonorId", "SlotStartUtc");
 
-                b.HasIndex("Status", "SlotStartUtc");
+                SqlServerIndexBuilderExtensions.IncludeProperties(index3, new[] { "PlacedAtUtc", "Status" });
+
+                var index4 = b.HasIndex("Status", "PlacedAtUtc");
+
+                SqlServerIndexBuilderExtensions.IncludeProperties(index4, new[] { "SlotStartUtc", "DonorId" });
+
+                var index5 = b.HasIndex("Status", "SlotStartUtc");
+
+                SqlServerIndexBuilderExtensions.IncludeProperties(index5, new[] { "PlacedAtUtc", "DonorId" });
+
+                var index6 = b.HasIndex("Status", "DonorBloodType", "PlacedAtUtc");
+
+                SqlServerIndexBuilderExtensions.IncludeProperties(index6, new[] { "SlotStartUtc", "DonorId" });
+
+                var index7 = b.HasIndex("Status", "DonorBloodType", "SlotStartUtc");
+
+                SqlServerIndexBuilderExtensions.IncludeProperties(index7, new[] { "PlacedAtUtc", "DonorId" });
 
                 b.ToTable("Appointment", t =>
                     {
@@ -253,6 +271,9 @@ partial class LifestreamDbContextModelSnapshot : ModelSnapshot
                 b.Property<DateOnly?>("LastDonated")
                     .HasColumnType("date");
 
+                b.Property<bool>("MedicalHold")
+                    .HasColumnType("bit");
+
                 b.Property<string>("Name")
                     .IsRequired()
                     .HasMaxLength(100)
@@ -274,11 +295,23 @@ partial class LifestreamDbContextModelSnapshot : ModelSnapshot
 
                 b.HasIndex("Gender");
 
-                b.HasIndex("LastDonated");
+                var index = b.HasIndex("LastDonated");
 
-                b.HasIndex("Name");
+                SqlServerIndexBuilderExtensions.IncludeProperties(index, new[] { "Name", "DateOfBirth", "Gender", "BloodType", "Phone", "Frequency", "MedicalHold" });
 
-                b.HasIndex("BloodType", "Name");
+                var index0 = b.HasIndex("Name");
+
+                SqlServerIndexBuilderExtensions.IncludeProperties(index0, new[] { "DateOfBirth", "Gender", "BloodType", "Phone", "Frequency", "LastDonated", "MedicalHold" });
+
+                b.HasIndex("Phone");
+
+                var index1 = b.HasIndex("BloodType", "LastDonated");
+
+                SqlServerIndexBuilderExtensions.IncludeProperties(index1, new[] { "Name", "DateOfBirth", "Gender", "Phone", "Frequency", "MedicalHold" });
+
+                var index2 = b.HasIndex("BloodType", "Name");
+
+                SqlServerIndexBuilderExtensions.IncludeProperties(index2, new[] { "DateOfBirth", "Gender", "Phone", "Frequency", "LastDonated", "MedicalHold" });
 
                 b.ToTable("Donor", t =>
                     {
@@ -338,9 +371,15 @@ partial class LifestreamDbContextModelSnapshot : ModelSnapshot
 
                 b.HasIndex("Gender");
 
-                b.HasIndex("Name");
+                var index = b.HasIndex("Name");
 
-                b.HasIndex("BloodType", "Name");
+                SqlServerIndexBuilderExtensions.IncludeProperties(index, new[] { "DateOfBirth", "Gender", "BloodType", "Phone" });
+
+                b.HasIndex("Phone");
+
+                var index0 = b.HasIndex("BloodType", "Name");
+
+                SqlServerIndexBuilderExtensions.IncludeProperties(index0, new[] { "DateOfBirth", "Gender", "Phone" });
 
                 b.ToTable("Patient", t =>
                     {
@@ -393,21 +432,38 @@ partial class LifestreamDbContextModelSnapshot : ModelSnapshot
 
                 b.HasKey("Id");
 
-                b.HasIndex("AppointmentId")
+                var index = b.HasIndex("AppointmentId")
                     .IsUnique()
                     .HasFilter("[AppointmentId] IS NOT NULL");
 
-                b.HasIndex("CreatedAtUtc");
+                SqlServerIndexBuilderExtensions.IncludeProperties(index, new[] { "CreatedAtUtc", "Kind", "BloodType" });
 
-                b.HasIndex("RequestId");
+                var index0 = b.HasIndex("CreatedAtUtc");
+
+                SqlServerIndexBuilderExtensions.IncludeProperties(index0, new[] { "Kind", "BloodType", "Units", "StaffId", "AppointmentId", "RequestId" });
+
+                var index1 = b.HasIndex("RequestId")
+                    .HasFilter("[RequestId] IS NOT NULL");
+
+                SqlServerIndexBuilderExtensions.IncludeProperties(index1, new[] { "CreatedAtUtc", "Kind", "BloodType" });
 
                 b.HasIndex("StaffId");
 
-                b.HasIndex("BloodType", "CreatedAtUtc");
+                var index2 = b.HasIndex("BloodType", "CreatedAtUtc");
 
-                var index = b.HasIndex("Kind", "CreatedAtUtc");
+                SqlServerIndexBuilderExtensions.IncludeProperties(index2, new[] { "Kind", "Units", "StaffId", "AppointmentId", "RequestId" });
 
-                SqlServerIndexBuilderExtensions.IncludeProperties(index, new[] { "BloodType", "Units" });
+                var index3 = b.HasIndex("Kind", "CreatedAtUtc");
+
+                SqlServerIndexBuilderExtensions.IncludeProperties(index3, new[] { "BloodType", "Units", "StaffId", "AppointmentId", "RequestId" });
+
+                var index4 = b.HasIndex("StaffId", "CreatedAtUtc");
+
+                SqlServerIndexBuilderExtensions.IncludeProperties(index4, new[] { "Kind", "BloodType" });
+
+                var index5 = b.HasIndex("Kind", "BloodType", "CreatedAtUtc");
+
+                SqlServerIndexBuilderExtensions.IncludeProperties(index5, new[] { "Units", "StaffId", "AppointmentId", "RequestId" });
 
                 b.ToTable("Receipt", t =>
                     {
@@ -508,23 +564,43 @@ partial class LifestreamDbContextModelSnapshot : ModelSnapshot
 
                 b.HasKey("Id");
 
-                b.HasIndex("PlacedAtUtc");
+                b.HasIndex("PatientId");
 
-                b.HasIndex("RequiredBy");
+                var index = b.HasIndex("PlacedAtUtc");
 
-                b.HasIndex("BloodType", "PlacedAtUtc");
+                SqlServerIndexBuilderExtensions.IncludeProperties(index, new[] { "PatientId", "BloodType", "Units", "RequiredBy", "Status" });
 
-                b.HasIndex("BloodType", "RequiredBy");
+                var index0 = b.HasIndex("RequiredBy");
 
-                var index = b.HasIndex("PatientId", "PlacedAtUtc");
+                SqlServerIndexBuilderExtensions.IncludeProperties(index0, new[] { "PatientId", "BloodType", "Units", "PlacedAtUtc", "Status" });
 
-                SqlServerIndexBuilderExtensions.IncludeProperties(index, new[] { "RequiredBy" });
+                var index1 = b.HasIndex("BloodType", "PlacedAtUtc");
 
-                b.HasIndex("Status", "PlacedAtUtc");
+                SqlServerIndexBuilderExtensions.IncludeProperties(index1, new[] { "PatientId", "Units", "RequiredBy", "Status" });
 
-                b.HasIndex("Status", "RequiredBy");
+                var index2 = b.HasIndex("BloodType", "RequiredBy");
 
-                b.HasIndex("BloodType", "Status", "PlacedAtUtc");
+                SqlServerIndexBuilderExtensions.IncludeProperties(index2, new[] { "PatientId", "Units", "PlacedAtUtc", "Status" });
+
+                var index3 = b.HasIndex("PatientId", "PlacedAtUtc");
+
+                SqlServerIndexBuilderExtensions.IncludeProperties(index3, new[] { "RequiredBy", "Status", "BloodType", "Units" });
+
+                var index4 = b.HasIndex("Status", "PlacedAtUtc");
+
+                SqlServerIndexBuilderExtensions.IncludeProperties(index4, new[] { "PatientId", "BloodType", "Units", "RequiredBy" });
+
+                var index5 = b.HasIndex("Status", "RequiredBy");
+
+                SqlServerIndexBuilderExtensions.IncludeProperties(index5, new[] { "PatientId", "BloodType", "Units", "PlacedAtUtc" });
+
+                var index6 = b.HasIndex("BloodType", "Status", "PlacedAtUtc");
+
+                SqlServerIndexBuilderExtensions.IncludeProperties(index6, new[] { "PatientId", "Units", "RequiredBy" });
+
+                var index7 = b.HasIndex("BloodType", "Status", "RequiredBy");
+
+                SqlServerIndexBuilderExtensions.IncludeProperties(index7, new[] { "PatientId", "Units", "PlacedAtUtc" });
 
                 b.ToTable("Request", t =>
                     {

@@ -10,7 +10,11 @@ public sealed record DonorListItem(
     BloodType BloodType,
     string? Phone,
     DonorFrequency Frequency,
-    DateOnly? LastDonated);
+    DateOnly? LastDonated)
+{
+    /// <summary>True when a clinician has put the donor on hold; such a donor is not eligible (API-11).</summary>
+    public bool MedicalHold { get; init; }
+}
 
 public sealed record DonorDetail(
     int Id,
@@ -22,7 +26,11 @@ public sealed record DonorDetail(
     string? Address,
     DonorFrequency Frequency,
     DateOnly? LastDonated,
-    string RowVersion);
+    string RowVersion)
+{
+    /// <summary>True when a clinician has put the donor on hold; such a donor is not eligible (API-11).</summary>
+    public bool MedicalHold { get; init; }
+}
 
 public sealed record CreateDonorRequest(
     string Name,
@@ -31,7 +39,11 @@ public sealed record CreateDonorRequest(
     BloodType BloodType,
     string? Phone,
     string? Address,
-    DonorFrequency Frequency);
+    DonorFrequency Frequency)
+{
+    /// <summary>Optional: put the new donor on hold from the start. Defaults to false.</summary>
+    public bool MedicalHold { get; init; }
+}
 
 /// <summary>PATCH body: only supplied fields change; an explicit null clears an optional field.</summary>
 public sealed record UpdateDonorRequest(
@@ -42,7 +54,11 @@ public sealed record UpdateDonorRequest(
     Optional<BloodType> BloodType = default,
     Optional<string?> Phone = default,
     Optional<string?> Address = default,
-    Optional<DonorFrequency> Frequency = default);
+    Optional<DonorFrequency> Frequency = default)
+{
+    /// <summary>Absent leaves the hold as it is; true or false sets or lifts it.</summary>
+    public Optional<bool> MedicalHold { get; init; }
+}
 
 public sealed record DonorQuery(
     string? Search = null,

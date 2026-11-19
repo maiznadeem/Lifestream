@@ -63,15 +63,20 @@ public static class RequestEndpoints
 
         if (Lists.CleanSearch(q.Search) is { } term)
         {
+            // Patient ids by name or contact (two prefix seeks), then the requests of those patients; a numeric term also matches the id.
             var like = Lists.PrefixPattern(term);
-            var id = int.TryParse(term, out var parsed) ? parsed : -1;
-            filtered = filtered.Where(r => r.Id == id || EF.Functions.Like(r.Patient!.Name, like, "\\") || EF.Functions.Like(r.Patient.Phone!, like, "\\"));
+            var patientIds = db.Patients.Where(p => EF.Functions.Like(p.Name, like, "\\") || EF.Functions.Like(p.Phone!, like, "\\")).Select(p => p.Id);
+            filtered = int.TryParse(term, out var id)
+                ? filtered.Where(r => r.Id == id || patientIds.Contains(r.PatientId))
+                : filtered.Where(r => patientIds.Contains(r.PatientId));
         }
 
-        var rows = await Sorts.Apply(filtered, q.Sort).Skip((page - 1) * size).Take(size)
-            .Select(r => new ListRow<RequestListItem>(
-                new RequestListItem(r.Id, r.PatientId, r.Patient!.Name, r.BloodType, r.Units, r.PlacedAtUtc, r.RequiredBy, r.Status),
-                filtered.Count()))
+        var total = Lists.Total(filtered);
+        var rows = await (from r in Sorts.Apply(filtered, q.Sort).Skip((page - 1) * size).Take(size).ForSearch(q.Search)
+                          from t in total
+                          select new ListRow<RequestListItem>(
+                              new RequestListItem(r.Id, r.PatientId, r.Patient!.Name, r.BloodType, r.Units, r.PlacedAtUtc, r.RequiredBy, r.Status),
+                              t))
             .ToListAsync(ct);
         return await Lists.BuildAsync(rows, page, size, () => filtered.CountAsync(ct));
     }

@@ -23,6 +23,9 @@ public sealed class Donor : IEntity
     /// <summary>Set by the API when a donation is recorded (replaces the old trigger).</summary>
     public DateOnly? LastDonated { get; set; }
 
+    /// <summary>A clinician has put this donor on hold (illness, medication, deferral). A donor with a hold is not eligible (API-11).</summary>
+    public bool MedicalHold { get; set; }
+
     public byte[] RowVersion { get; set; } = [];
 }
 

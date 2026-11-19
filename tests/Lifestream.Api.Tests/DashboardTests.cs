@@ -169,6 +169,9 @@ public sealed class DashboardLocalDayTests(ApiFixture fx) : IClassFixture<ApiFix
     [Fact]
     public async Task Dashboard_GenderCounts_EqualIndependentCount_IncludingOther()
     {
+        // Exact counts need an empty donor table: the other tests of this class seed receipts, which come with a (male) donor each, and the
+        // order the tests of a class run in changes with every build. Staff is cleared too, so the admin is created after.
+        await fx.Db.ClearAllAsync(Ct);
         var admin = await fx.AddStaffAsync(Role.Admin);
         await using (var db = fx.Db.NewContext())
         {

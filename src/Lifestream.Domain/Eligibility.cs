@@ -2,16 +2,22 @@ namespace Lifestream.Domain;
 
 public sealed record EligibilityResult(bool IsEligible, IReadOnlyList<string> Reasons, DateOnly? NextEligibleDate);
 
-/// <summary>Donor eligibility: age 18-60 inclusive and at least 90 days since the last donation.</summary>
+/// <summary>Donor eligibility: age 18-60 inclusive, at least 90 days since the last donation, and no medical hold.</summary>
 public static class Eligibility
 {
     public const int MinAgeYears = 18;
     public const int MaxAgeYears = 60;
     public const int MinDaysBetweenDonations = 90;
+    public const string MedicalHoldReason = "The donor has a medical hold.";
 
-    public static EligibilityResult Evaluate(DateOnly dateOfBirth, DateOnly? lastDonation, DateOnly today)
+    public static EligibilityResult Evaluate(DateOnly dateOfBirth, DateOnly? lastDonation, DateOnly today, bool medicalHold = false)
     {
         var reasons = new List<string>();
+        if (medicalHold)
+        {
+            reasons.Add(MedicalHoldReason);
+        }
+
         var age = AgeOn(dateOfBirth, today);
 
         if (age < MinAgeYears)
