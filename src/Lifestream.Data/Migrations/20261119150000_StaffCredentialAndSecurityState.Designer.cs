@@ -783,6 +783,9 @@ partial class StaffCredentialAndSecurityState
                 b.Property<int>("FailedCount")
                     .HasColumnType("int");
 
+                b.Property<DateTime?>("LastFailureUtc")
+                    .HasColumnType("datetime2(3)");
+
                 b.Property<DateTime?>("LockoutEndUtc")
                     .HasColumnType("datetime2(3)");
 

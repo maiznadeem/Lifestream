@@ -265,6 +265,50 @@ public sealed class UnknownLoginPersistenceTests(ApiFixture fx) : IClassFixture<
         }
     }
 
+    [Fact]
+    public async Task ARealAccountAndAnUnknownName_WithThreeFailuresThenThirtyOneIdleDays_BehaveIdentically_NeitherIsLockedAfterTwoMore()
+    {
+        var user = await fx.AddStaffAsync(Role.Staff);
+        var ghost = "ghostidle" + Guid.NewGuid().ToString("N")[..8];
+        using var client = fx.NewClient();
+        for (var i = 0; i < 3; i++)
+        {
+            Assert.Equal(401, (await LoginAsync(client, user.Username, "w" + i)).Status);
+            Assert.Equal(401, (await LoginAsync(client, ghost, "w" + i)).Status);
+        }
+
+        var idle = TimeSpan.FromDays(31);
+        fx.Clock.Advance(idle);
+        try
+        {
+            var known = new List<(int, string?, string?)>();
+            var unknown = new List<(int, string?, string?)>();
+            for (var i = 3; i < 5; i++)
+            {
+                known.Add(await LoginAsync(client, user.Username, "w" + i));
+                unknown.Add(await LoginAsync(client, ghost, "w" + i));
+            }
+
+            Assert.Equal(known, unknown);
+            Assert.All(known, r => Assert.Equal(401, r.Item1)); // the old three were forgotten: two guesses are not five
+            Assert.Equal(2, await fx.Db.ScalarAsync<int>($"SELECT FailedCount FROM StaffCredential WHERE StaffId = {user.Id}", Ct));
+
+            // Three more reach five in this run, for both, and both then lock the same way.
+            for (var i = 5; i < 8; i++)
+            {
+                Assert.Equal(401, (await LoginAsync(client, user.Username, "w" + i)).Status);
+                Assert.Equal(401, (await LoginAsync(client, ghost, "w" + i)).Status);
+            }
+
+            Assert.Equal((await LoginAsync(client, user.Username, "w9")).Item1, (await LoginAsync(client, ghost, "w9")).Item1);
+            Assert.Equal(429, (await LoginAsync(client, ghost, "w10")).Item1);
+        }
+        finally
+        {
+            fx.Clock.Advance(-idle);
+        }
+    }
+
     private static TimeSpan UnknownLoginRetention => Lifestream.Data.Entities.UnknownLogin.Retention;
 }
 

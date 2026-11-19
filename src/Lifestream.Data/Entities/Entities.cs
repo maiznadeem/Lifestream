@@ -86,6 +86,9 @@ public sealed class StaffCredential
     public int FailedCount { get; set; }
     public DateTime? LockoutEndUtc { get; set; }
 
+    /// <summary>When the last wrong guess was counted; a partial count idle for <see cref="UnknownLogin.Retention"/> counts as zero, exactly as for an unknown name.</summary>
+    public DateTime? LastFailureUtc { get; set; }
+
     /// <summary>Set when an administrator resets the password: the person must choose their own before anything else is allowed.</summary>
     public bool MustChangePassword { get; set; }
 

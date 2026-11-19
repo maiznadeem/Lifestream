@@ -1349,6 +1349,7 @@ BEGIN
         [PasswordHash] varchar(256) NOT NULL,
         [FailedCount] int NOT NULL,
         [LockoutEndUtc] datetime2(3) NULL,
+        [LastFailureUtc] datetime2(3) NULL,
         [MustChangePassword] bit NOT NULL DEFAULT CAST(0 AS bit),
         [SecurityStamp] uniqueidentifier NOT NULL DEFAULT (NEWID()),
         [RowVersion] rowversion NOT NULL,
@@ -1378,7 +1379,7 @@ IF NOT EXISTS (
     WHERE [MigrationId] = N'20261119150000_StaffCredentialAndSecurityState'
 )
 BEGIN
-    EXEC(N'INSERT INTO [StaffCredential] ([StaffId], [PasswordHash], [FailedCount], [LockoutEndUtc], [MustChangePassword]) SELECT [Id], [PasswordHash], [FailedLoginCount], [LockoutEndUtc], [MustChangePassword] FROM [Staff]');
+    EXEC(N'INSERT INTO [StaffCredential] ([StaffId], [PasswordHash], [FailedCount], [LockoutEndUtc], [LastFailureUtc], [MustChangePassword]) SELECT [Id], [PasswordHash], [FailedLoginCount], [LockoutEndUtc], CASE WHEN [FailedLoginCount] > 0 THEN SYSUTCDATETIME() END, [MustChangePassword] FROM [Staff]');
 END;
 
 IF NOT EXISTS (

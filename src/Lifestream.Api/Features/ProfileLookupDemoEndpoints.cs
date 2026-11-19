@@ -120,6 +120,7 @@ public static class ProfileEndpoints
             entity.SecurityStamp = Guid.NewGuid();
             entity.MustChangePassword = false;
             entity.FailedCount = 0;
+            entity.LastFailureUtc = null;
             entity.LockoutEndUtc = null;
             await db.SaveChangesAsync(token);
             return true;

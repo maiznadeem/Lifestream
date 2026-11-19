@@ -480,6 +480,7 @@ public static class StaffEndpoints
             credential.SecurityStamp = Guid.NewGuid();
             credential.MustChangePassword = true;
             credential.FailedCount = 0;
+            credential.LastFailureUtc = null;
             credential.LockoutEndUtc = null;
             await db.SaveChangesAsync(token);
             return true;

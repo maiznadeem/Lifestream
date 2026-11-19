@@ -16,7 +16,7 @@ partial class LifestreamDbContextModelSnapshot : ModelSnapshot
     // If you encounter a merge conflict in the line below, it means you need to
     // discard one of the migration branches and recreate its migrations on top of
     // the other branch. See https://aka.ms/efcore-docs-migrations-conflicts for more info.
-    public override string LastMigrationId => "20261119022242_TempStaffIndexes";
+    public override string LastMigrationId => "20261119024537_TempLastFailure";
 
     protected override void BuildModel(ModelBuilder modelBuilder)
     {
@@ -784,6 +784,9 @@ partial class LifestreamDbContextModelSnapshot : ModelSnapshot
 
                 b.Property<int>("FailedCount")
                     .HasColumnType("int");
+
+                b.Property<DateTime?>("LastFailureUtc")
+                    .HasColumnType("datetime2(3)");
 
                 b.Property<DateTime?>("LockoutEndUtc")
                     .HasColumnType("datetime2(3)");

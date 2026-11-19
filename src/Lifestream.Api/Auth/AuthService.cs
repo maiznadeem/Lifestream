@@ -96,7 +96,13 @@ public sealed class AuthService(
                         throw LoginProblems.Locked(until - now);
                     }
 
+                    if (staff.FailedCount > 0 && staff.LastFailureUtc is { } last && last + UnknownLogin.Retention <= now)
+                    {
+                        staff.FailedCount = 0; // idle for the retention time: the partial count is forgotten, as an unknown name's row is purged
+                    }
+
                     staff.FailedCount++;
+                    staff.LastFailureUtc = now;
                     var lockedNow = staff.FailedCount >= Auth.MaxFailedAttempts;
                     if (lockedNow)
                     {
@@ -121,13 +127,13 @@ public sealed class AuthService(
     /// </summary>
     private async Task<StaffCredential?> AttachCountersAsync(int staffId, CancellationToken token)
     {
-        var row = await db.StaffCredentials.AsNoTracking().Where(c => c.StaffId == staffId).Select(c => new { c.FailedCount, c.LockoutEndUtc, c.RowVersion }).FirstOrDefaultAsync(token);
+        var row = await db.StaffCredentials.AsNoTracking().Where(c => c.StaffId == staffId).Select(c => new { c.FailedCount, c.LockoutEndUtc, c.LastFailureUtc, c.RowVersion }).FirstOrDefaultAsync(token);
         if (row is null)
         {
             return null;
         }
 
-        var credential = new StaffCredential { StaffId = staffId, FailedCount = row.FailedCount, LockoutEndUtc = row.LockoutEndUtc, RowVersion = row.RowVersion };
+        var credential = new StaffCredential { StaffId = staffId, FailedCount = row.FailedCount, LockoutEndUtc = row.LockoutEndUtc, LastFailureUtc = row.LastFailureUtc, RowVersion = row.RowVersion };
         db.StaffCredentials.Attach(credential);
         return credential;
     }
@@ -146,6 +152,7 @@ public sealed class AuthService(
                     if (staff is not null && (staff.FailedCount != 0 || staff.LockoutEndUtc is not null))
                     {
                         staff.FailedCount = 0;
+                        staff.LastFailureUtc = null;
                         staff.LockoutEndUtc = null;
                         await db.SaveChangesAsync(token);
                     }

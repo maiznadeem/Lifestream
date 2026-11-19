@@ -31,6 +31,7 @@ public partial class StaffCredentialAndSecurityState : Migration
                 PasswordHash = table.Column<string>(type: "varchar(256)", unicode: false, maxLength: 256, nullable: false),
                 FailedCount = table.Column<int>(type: "int", nullable: false),
                 LockoutEndUtc = table.Column<DateTime>(type: "datetime2(3)", nullable: true),
+                LastFailureUtc = table.Column<DateTime>(type: "datetime2(3)", nullable: true),
                 MustChangePassword = table.Column<bool>(type: "bit", nullable: false, defaultValue: false),
                 SecurityStamp = table.Column<Guid>(type: "uniqueidentifier", nullable: false, defaultValueSql: "NEWID()"),
                 RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
@@ -66,8 +67,8 @@ public partial class StaffCredentialAndSecurityState : Migration
         // Move every existing credential across before the columns go: nothing is lost and nobody has to sign in again.
         // (EXEC: the idempotent script must still compile on a database where the old columns are already gone.)
         migrationBuilder.Sql(
-            "EXEC(N'INSERT INTO [StaffCredential] ([StaffId], [PasswordHash], [FailedCount], [LockoutEndUtc], [MustChangePassword]) " +
-            "SELECT [Id], [PasswordHash], [FailedLoginCount], [LockoutEndUtc], [MustChangePassword] FROM [Staff]');");
+            "EXEC(N'INSERT INTO [StaffCredential] ([StaffId], [PasswordHash], [FailedCount], [LockoutEndUtc], [LastFailureUtc], [MustChangePassword]) " +
+            "SELECT [Id], [PasswordHash], [FailedLoginCount], [LockoutEndUtc], CASE WHEN [FailedLoginCount] > 0 THEN SYSUTCDATETIME() END, [MustChangePassword] FROM [Staff]');");
 
         migrationBuilder.DropCheckConstraint(
             name: "CK_Staff_PasswordHash",
