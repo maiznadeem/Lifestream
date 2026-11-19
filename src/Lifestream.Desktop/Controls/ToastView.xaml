@@ -5,7 +5,7 @@
   <UserControl.Resources>
     <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
   </UserControl.Resources>
-  <Border MaxWidth="440" MinWidth="280" Margin="{DynamicResource Inset.T8}" Background="{DynamicResource Brush.SurfaceRaised}" BorderBrush="{DynamicResource Brush.BorderSubtle}"
+  <controls:CrispBorder MaxWidth="440" MinWidth="280" Margin="{DynamicResource Inset.T8}" Background="{DynamicResource Brush.SurfaceRaised}" BorderBrush="{DynamicResource Brush.BorderSubtle}"
           BorderThickness="1" CornerRadius="{DynamicResource Radius.Card}">
     <Grid>
       <Grid.ColumnDefinitions>
@@ -31,5 +31,5 @@
         </Button>
       </Grid>
     </Grid>
-  </Border>
+  </controls:CrispBorder>
 </UserControl>

@@ -38,10 +38,10 @@
             <TextBlock Style="{DynamicResource Text.Body}" Text="{Binding RequiredByText}" />
           </StackPanel>
         </Grid>
-        <Border feat:Edge.PadX="{DynamicResource Space.12}" feat:Edge.PadY="{DynamicResource Space.8}" Background="{DynamicResource Brush.SurfacePressed}" BorderThickness="1" CornerRadius="{DynamicResource Radius.Control}"
+        <controls:CrispBorder feat:Edge.PadX="{DynamicResource Space.12}" feat:Edge.PadY="{DynamicResource Space.8}" Background="{DynamicResource Brush.SurfacePressed}" BorderThickness="1" CornerRadius="{DynamicResource Radius.Control}"
                 AutomationProperties.LiveSetting="Polite" AutomationProperties.Name="Stock">
-          <Border.Style>
-            <Style TargetType="Border">
+          <controls:CrispBorder.Style>
+            <Style TargetType="controls:CrispBorder">
               <Setter Property="BorderBrush" Value="{DynamicResource Brush.BorderSubtle}" />
               <Style.Triggers>
                 <DataTrigger Binding="{Binding StockIsShort}" Value="True">
@@ -49,13 +49,13 @@
                 </DataTrigger>
               </Style.Triggers>
             </Style>
-          </Border.Style>
+          </controls:CrispBorder.Style>
           <StackPanel Orientation="Horizontal">
             <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE7BA;" Foreground="{DynamicResource Brush.StatusWarning}" VerticalAlignment="Center" feat:Edge.Right="{DynamicResource Space.8}"
                                Visibility="{Binding StockIsShort, Converter={StaticResource BoolToVisibility}}" />
             <TextBlock Style="{DynamicResource Text.Body}" Text="{Binding StockText}" TextWrapping="Wrap" VerticalAlignment="Center" />
           </StackPanel>
-        </Border>
+        </controls:CrispBorder>
       </StackPanel>
     </dialogs:DialogFrame.Fields>
   </dialogs:DialogFrame>

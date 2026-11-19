@@ -75,10 +75,10 @@
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="CalendarDayButton">
-          <Border x:Name="Bd" Background="Transparent" BorderBrush="Transparent" BorderThickness="1" CornerRadius="{StaticResource Radius.Control}" SnapsToDevicePixels="True">
+          <controls:CrispBorder x:Name="Bd" Background="Transparent" BorderBrush="Transparent" BorderThickness="1" CornerRadius="{StaticResource Radius.Control}" SnapsToDevicePixels="True">
             <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
                               TextElement.FontFamily="{TemplateBinding FontFamily}" TextElement.FontSize="{TemplateBinding FontSize}" TextElement.Foreground="{TemplateBinding Foreground}" />
-          </Border>
+          </controls:CrispBorder>
           <ControlTemplate.Triggers>
             <Trigger Property="IsToday" Value="True">
               <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Brush.BorderInput}" />
@@ -121,10 +121,10 @@
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="CalendarButton">
-          <Border x:Name="Bd" Background="Transparent" BorderBrush="Transparent" BorderThickness="1" CornerRadius="{StaticResource Radius.Control}" SnapsToDevicePixels="True">
+          <controls:CrispBorder x:Name="Bd" Background="Transparent" BorderBrush="Transparent" BorderThickness="1" CornerRadius="{StaticResource Radius.Control}" SnapsToDevicePixels="True">
             <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
                               TextElement.FontFamily="{TemplateBinding FontFamily}" TextElement.FontSize="{TemplateBinding FontSize}" TextElement.Foreground="{TemplateBinding Foreground}" />
-          </Border>
+          </controls:CrispBorder>
           <ControlTemplate.Triggers>
             <Trigger Property="IsInactive" Value="True">
               <Setter Property="Foreground" Value="{DynamicResource Brush.TextMuted}" />

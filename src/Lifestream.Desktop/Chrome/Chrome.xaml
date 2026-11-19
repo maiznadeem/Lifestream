@@ -70,7 +70,7 @@
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="chrome:ChromeWindow">
-          <Border x:Name="PART_Root" Background="{TemplateBinding Background}" BorderBrush="{DynamicResource Brush.BorderSubtle}" BorderThickness="1">
+          <controls:CrispBorder x:Name="PART_Root" Background="{TemplateBinding Background}" BorderBrush="{DynamicResource Brush.BorderSubtle}" BorderThickness="1">
             <Grid>
               <Grid.RowDefinitions>
                 <RowDefinition Height="{StaticResource Grid.Height.Caption}" />
@@ -108,7 +108,7 @@
                 <ContentPresenter />
               </AdornerDecorator>
             </Grid>
-          </Border>
+          </controls:CrispBorder>
           <ControlTemplate.Triggers>
             <Trigger Property="WindowState" Value="Maximized">
               <Setter TargetName="MaximizeGlyph" Property="Text" Value="&#xE923;" />

@@ -79,7 +79,7 @@
             <TextBox x:Name="PhoneBox" Text="{Binding Phone, UpdateSourceTrigger=PropertyChanged}" MaxLength="21" AutomationProperties.Name="Phone" />
           </controls:FormField>
 
-          <Border feat:Edge.PadX="{DynamicResource Space.12}" feat:Edge.PadY="{DynamicResource Space.8}" feat:Edge.Bottom="{DynamicResource Space.12}" Background="{DynamicResource Brush.SurfacePressed}"
+          <controls:CrispBorder feat:Edge.PadX="{DynamicResource Space.12}" feat:Edge.PadY="{DynamicResource Space.8}" feat:Edge.Bottom="{DynamicResource Space.12}" Background="{DynamicResource Brush.SurfacePressed}"
                   BorderBrush="{DynamicResource Brush.StatusWarning}" BorderThickness="1" CornerRadius="{DynamicResource Radius.Control}" Visibility="{Binding HasConflict, Converter={StaticResource BoolToVisibility}}"
                   AutomationProperties.LiveSetting="Assertive">
             <StackPanel>
@@ -87,15 +87,15 @@
               <Button Style="{DynamicResource Button.Secondary}" Content="Reload" Command="{Binding ReloadCommand}" HorizontalAlignment="Left" feat:Edge.Top="{DynamicResource Space.8}"
                       AutomationProperties.Name="Reload the latest version" />
             </StackPanel>
-          </Border>
-          <Border feat:Edge.PadX="{DynamicResource Space.12}" feat:Edge.PadY="{DynamicResource Space.8}" feat:Edge.Bottom="{DynamicResource Space.12}" Background="{DynamicResource Brush.SurfacePressed}"
+          </controls:CrispBorder>
+          <controls:CrispBorder feat:Edge.PadX="{DynamicResource Space.12}" feat:Edge.PadY="{DynamicResource Space.8}" feat:Edge.Bottom="{DynamicResource Space.12}" Background="{DynamicResource Brush.SurfacePressed}"
                   BorderBrush="{DynamicResource Brush.StatusDanger}" BorderThickness="1" CornerRadius="{DynamicResource Radius.Control}" Visibility="{Binding HasFormError, Converter={StaticResource BoolToVisibility}}"
                   AutomationProperties.LiveSetting="Assertive">
             <StackPanel Orientation="Horizontal">
               <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE783;" Foreground="{DynamicResource Brush.StatusDanger}" VerticalAlignment="Top" feat:Edge.Top="{DynamicResource Space.4}" feat:Edge.Right="{DynamicResource Space.12}" />
               <TextBlock Style="{DynamicResource Text.Body}" Text="{Binding FormError}" TextWrapping="Wrap" MaxWidth="480" />
             </StackPanel>
-          </Border>
+          </controls:CrispBorder>
 
           <StackPanel Orientation="Horizontal" feat:Edge.Top="{DynamicResource Space.8}">
             <Button Style="{DynamicResource Button.Primary}" Content="{Binding SaveText}" Command="{Binding SaveCommand}" feat:Edge.Right="{DynamicResource Space.8}" AutomationProperties.Name="Save changes"

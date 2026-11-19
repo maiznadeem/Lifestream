@@ -33,7 +33,7 @@
           <!-- Rest: raised fill and a quiet border. Hover: a lighter fill. Focus: a darker fill, the accent border and a 2 px accent line along
                the bottom, faded in and out over Motion.Fast. The layers are separate borders so the change can animate (opacity, not colour). -->
           <Grid SnapsToDevicePixels="True">
-            <Border x:Name="Box" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+            <controls:CrispBorder x:Name="Box" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
                     BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="{StaticResource Radius.Control}" />
             <Border x:Name="HoverFill" Background="{DynamicResource Brush.SurfaceInputHover}" CornerRadius="{StaticResource Radius.Control}" Margin="{DynamicResource Pad.1}" Opacity="0" IsHitTestVisible="False" />
             <Border x:Name="FocusFill" Background="{DynamicResource Brush.SurfaceInputFocus}" CornerRadius="{StaticResource Radius.Control}" Margin="{DynamicResource Pad.1}" Opacity="0" IsHitTestVisible="False" />
@@ -118,7 +118,7 @@
           <!-- Rest: raised fill and a quiet border. Hover: a lighter fill. Focus: a darker fill, the accent border and a 2 px accent line along
                the bottom, faded in and out over Motion.Fast. The layers are separate borders so the change can animate (opacity, not colour). -->
           <Grid SnapsToDevicePixels="True">
-            <Border x:Name="Box" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+            <controls:CrispBorder x:Name="Box" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
                     BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="{StaticResource Radius.Control}" />
             <Border x:Name="HoverFill" Background="{DynamicResource Brush.SurfaceInputHover}" CornerRadius="{StaticResource Radius.Control}" Margin="{DynamicResource Pad.1}" Opacity="0" IsHitTestVisible="False" />
             <Border x:Name="FocusFill" Background="{DynamicResource Brush.SurfaceInputFocus}" CornerRadius="{StaticResource Radius.Control}" Margin="{DynamicResource Pad.1}" Opacity="0" IsHitTestVisible="False" />
@@ -213,7 +213,7 @@
               <ToggleButton.Template>
                 <ControlTemplate TargetType="ToggleButton">
                   <Grid>
-                    <Border x:Name="Box" Background="{Binding Background, RelativeSource={RelativeSource AncestorType=ComboBox}}"
+                    <controls:CrispBorder x:Name="Box" Background="{Binding Background, RelativeSource={RelativeSource AncestorType=ComboBox}}"
                             BorderBrush="{Binding BorderBrush, RelativeSource={RelativeSource AncestorType=ComboBox}}"
                             BorderThickness="1" CornerRadius="{StaticResource Radius.Control}" />
                     <Border x:Name="Underline" Height="2" VerticalAlignment="Bottom" CornerRadius="{StaticResource Radius.Underline}" Margin="{DynamicResource Inset.H1}"
@@ -278,11 +278,11 @@
               <ColumnDefinition Width="Auto" />
               <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
-            <Border x:Name="Box" Width="20" Height="20" BorderThickness="1" BorderBrush="{DynamicResource Brush.BorderInput}"
+            <controls:CrispBorder x:Name="Box" Width="20" Height="20" BorderThickness="1" BorderBrush="{DynamicResource Brush.BorderInput}"
                     Background="{DynamicResource Brush.SurfaceRaised}" CornerRadius="{StaticResource Radius.Control}" VerticalAlignment="Center">
               <controls:IconText x:Name="Mark" Style="{StaticResource Text.Icon}" Text="&#xE73E;" FontSize="{StaticResource FontSize.Body}"
                          Foreground="{DynamicResource Brush.TextOnPrimary}" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed" />
-            </Border>
+            </controls:CrispBorder>
             <ContentPresenter Grid.Column="1" Margin="{DynamicResource Inset.L8}" VerticalAlignment="Center" RecognizesAccessKey="True" />
           </Grid>
           <ControlTemplate.Triggers>
@@ -315,10 +315,10 @@
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="ToolTip">
-          <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
+          <controls:CrispBorder Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
                   CornerRadius="{StaticResource Radius.Control}" Padding="{TemplateBinding Padding}">
             <ContentPresenter TextElement.Foreground="{TemplateBinding Foreground}" />
-          </Border>
+          </controls:CrispBorder>
         </ControlTemplate>
       </Setter.Value>
     </Setter>
@@ -336,7 +336,7 @@
     <Setter Property="Control.Template">
       <Setter.Value>
         <ControlTemplate>
-          <Rectangle Margin="{DynamicResource Inset.Neg3}" RadiusX="9" RadiusY="9" StrokeThickness="{StaticResource Size.FocusRing}"
+          <Rectangle Margin="{DynamicResource Inset.Neg3}" RadiusX="11" RadiusY="11" StrokeThickness="{StaticResource Size.FocusRing}"
                      Stroke="{DynamicResource Brush.FocusRing}" SnapsToDevicePixels="True" IsHitTestVisible="False" />
         </ControlTemplate>
       </Setter.Value>

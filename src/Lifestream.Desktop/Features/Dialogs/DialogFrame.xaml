@@ -19,14 +19,14 @@
       <TextBlock Style="{DynamicResource Text.Heading}" Text="{Binding Title}" TextWrapping="Wrap" AutomationProperties.HeadingLevel="Level1" />
       <StackPanel Grid.Row="1">
       <controls:WakingNotice x:Name="Waking" IsActive="{Binding IsOperationWaking}" CancelCommand="{Binding CancelOperationCommand}" feat:Edge.Top="{DynamicResource Space.12}" />
-      <Border feat:Edge.PadX="{DynamicResource Space.12}" feat:Edge.PadY="{DynamicResource Space.8}" feat:Edge.Top="{DynamicResource Space.12}" Background="{DynamicResource Brush.SurfacePressed}"
+      <controls:CrispBorder feat:Edge.PadX="{DynamicResource Space.12}" feat:Edge.PadY="{DynamicResource Space.8}" feat:Edge.Top="{DynamicResource Space.12}" Background="{DynamicResource Brush.SurfacePressed}"
               BorderBrush="{DynamicResource Brush.StatusDanger}" BorderThickness="1" CornerRadius="{DynamicResource Radius.Control}" Visibility="{Binding HasFormError, Converter={StaticResource BoolToVisibility}}"
               AutomationProperties.LiveSetting="Assertive">
         <StackPanel Orientation="Horizontal">
           <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE783;" Foreground="{DynamicResource Brush.StatusDanger}" VerticalAlignment="Top" feat:Edge.Top="{DynamicResource Space.4}" feat:Edge.Right="{DynamicResource Space.12}" />
           <TextBlock Style="{DynamicResource Text.Body}" Text="{Binding FormError}" TextWrapping="Wrap" MaxWidth="440" />
         </StackPanel>
-      </Border>
+      </controls:CrispBorder>
       </StackPanel>
       <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Focusable="False" feat:Edge.Top="{DynamicResource Space.16}">
         <ContentControl Focusable="False" IsTabStop="False" Content="{Binding Fields, RelativeSource={RelativeSource AncestorType=UserControl}}" />

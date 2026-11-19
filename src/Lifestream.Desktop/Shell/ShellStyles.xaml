@@ -57,7 +57,7 @@
                          Foreground="{DynamicResource Brush.TextSecondary}" />
               <ContentPresenter Grid.Column="2" VerticalAlignment="Center" RecognizesAccessKey="False" />
             </Grid>
-            <Border x:Name="FocusRing" BorderThickness="{StaticResource Thickness.FocusRing}" BorderBrush="{DynamicResource Brush.FocusRing}" CornerRadius="{DynamicResource Radius.6}" Visibility="Collapsed"
+            <controls:CrispBorder x:Name="FocusRing" BorderThickness="{StaticResource Thickness.FocusRing}" BorderBrush="{DynamicResource Brush.FocusRing}" CornerRadius="{DynamicResource Radius.6}" Visibility="Collapsed"
                     IsHitTestVisible="False" />
           </Grid>
           <ControlTemplate.Triggers>

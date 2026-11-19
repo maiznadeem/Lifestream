@@ -92,7 +92,7 @@
         </ItemsControl>
 
         <!-- Stock alert: every blood type below its threshold, with icon and words. -->
-        <Border feat:Edge.Right="{DynamicResource Space.16}" feat:Edge.Bottom="{DynamicResource Space.16}" Padding="{DynamicResource Pad.16}" Background="{DynamicResource Brush.SurfaceRaised}" BorderBrush="{DynamicResource Brush.StatusDanger}" BorderThickness="1"
+        <controls:CrispBorder feat:Edge.Right="{DynamicResource Space.16}" feat:Edge.Bottom="{DynamicResource Space.16}" Padding="{DynamicResource Pad.16}" Background="{DynamicResource Brush.SurfaceRaised}" BorderBrush="{DynamicResource Brush.StatusDanger}" BorderThickness="1"
                 CornerRadius="{DynamicResource Radius.Card}" Visibility="{Binding HasLowStock, Converter={StaticResource BoolToVisibility}}" AutomationProperties.Name="Low stock alert">
           <StackPanel>
             <StackPanel Orientation="Horizontal" feat:Edge.Bottom="{DynamicResource Space.8}">
@@ -118,7 +118,7 @@
               </ItemsControl.ItemTemplate>
             </ItemsControl>
           </StackPanel>
-        </Border>
+        </controls:CrispBorder>
 
         <!-- Period and blood types of the donations chart. -->
         <Grid feat:Edge.Right="{DynamicResource Space.16}" feat:Edge.Bottom="{DynamicResource Space.8}">

@@ -90,7 +90,7 @@
       </Grid>
 
       <!-- Update prompt -->
-      <Border Grid.Row="1" Margin="{DynamicResource Inset.L24R24B8}" Padding="{DynamicResource Inset.H16V8}" Background="{DynamicResource Brush.SurfaceRaised}" BorderBrush="{DynamicResource Brush.StatusInfo}" BorderThickness="1"
+      <controls:CrispBorder Grid.Row="1" Margin="{DynamicResource Inset.L24R24B8}" Padding="{DynamicResource Inset.H16V8}" Background="{DynamicResource Brush.SurfaceRaised}" BorderBrush="{DynamicResource Brush.StatusInfo}" BorderThickness="1"
               CornerRadius="{DynamicResource Radius.Card}" Visibility="{Binding UpdatePrompt, Converter={StaticResource HasText}}" AutomationProperties.LiveSetting="Polite">
         <Grid>
           <Grid.ColumnDefinitions>
@@ -104,7 +104,7 @@
           <Button Grid.Column="1" Style="{DynamicResource Button.Primary}" Content="Restart and update" Command="{Binding ApplyUpdateCommand}"
                   controls:ButtonAssist.IsBusy="{Binding ApplyUpdateCommand.IsRunning}" controls:ButtonAssist.BusyText="Updating..." />
         </Grid>
-      </Border>
+      </controls:CrispBorder>
 
       <!-- The waking notice of a toast's action (Undo): the toast outlives the screen that showed it, so this notice belongs to the shell and shows on every screen (SHELL-07). -->
       <controls:WakingNotice x:Name="ToastActionWakingNotice" Grid.Row="2" Margin="{DynamicResource Inset.L24R24B8}" HorizontalAlignment="Left" MaxWidth="560"

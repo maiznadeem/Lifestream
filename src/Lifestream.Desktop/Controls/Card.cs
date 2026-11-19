@@ -1,5 +1,4 @@
 using System.Windows;
-using System.Windows.Controls;
 using System.Windows.Media;
 
 namespace Lifestream.Desktop.Controls;
@@ -9,7 +8,7 @@ namespace Lifestream.Desktop.Controls;
 /// rectangles instead of a DropShadowEffect: an effect would render the whole card, text included, through an off-screen bitmap and cost the
 /// text its ClearType. The shadow colour is the Color.Shadow token.
 /// </summary>
-public class Card : Border
+public class Card : CrispBorder
 {
     private const int Layers = 8;
 

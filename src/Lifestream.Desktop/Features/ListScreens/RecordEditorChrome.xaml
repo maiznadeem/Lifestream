@@ -21,7 +21,7 @@
         <!-- A save or a reload is waiting on a waking server: say so, and let the user cancel the request (SHELL-07). -->
         <controls:WakingNotice x:Name="Waking" IsActive="{Binding IsOperationWaking}" CancelCommand="{Binding CancelOperationCommand}" feat:Edge.Bottom="{DynamicResource Space.8}" />
         <!-- Someone else changed the record (409): reload, never overwrite. -->
-        <Border feat:Edge.PadX="{DynamicResource Space.12}" feat:Edge.PadY="{DynamicResource Space.8}" feat:Edge.Bottom="{DynamicResource Space.8}" Background="{DynamicResource Brush.SurfacePressed}" BorderBrush="{DynamicResource Brush.StatusWarning}" BorderThickness="1"
+        <controls:CrispBorder feat:Edge.PadX="{DynamicResource Space.12}" feat:Edge.PadY="{DynamicResource Space.8}" feat:Edge.Bottom="{DynamicResource Space.8}" Background="{DynamicResource Brush.SurfacePressed}" BorderBrush="{DynamicResource Brush.StatusWarning}" BorderThickness="1"
                 CornerRadius="{DynamicResource Radius.Control}" Visibility="{Binding HasConflict, Converter={StaticResource BoolToVisibility}}" AutomationProperties.LiveSetting="Assertive">
           <StackPanel>
             <StackPanel Orientation="Horizontal">
@@ -31,14 +31,14 @@
             <Button Style="{DynamicResource Button.Secondary}" Content="Reload" Command="{Binding ReloadCommand}" HorizontalAlignment="Left" MinHeight="32" feat:Edge.Top="{DynamicResource Space.8}"
                     AutomationProperties.Name="Reload the latest version" />
           </StackPanel>
-        </Border>
-        <Border feat:Edge.PadX="{DynamicResource Space.12}" feat:Edge.PadY="{DynamicResource Space.8}" feat:Edge.Bottom="{DynamicResource Space.8}" Background="{DynamicResource Brush.SurfacePressed}" BorderBrush="{DynamicResource Brush.StatusDanger}" BorderThickness="1"
+        </controls:CrispBorder>
+        <controls:CrispBorder feat:Edge.PadX="{DynamicResource Space.12}" feat:Edge.PadY="{DynamicResource Space.8}" feat:Edge.Bottom="{DynamicResource Space.8}" Background="{DynamicResource Brush.SurfacePressed}" BorderBrush="{DynamicResource Brush.StatusDanger}" BorderThickness="1"
                 CornerRadius="{DynamicResource Radius.Control}" Visibility="{Binding HasFormError, Converter={StaticResource BoolToVisibility}}" AutomationProperties.LiveSetting="Assertive">
           <StackPanel Orientation="Horizontal">
             <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE783;" Foreground="{DynamicResource Brush.StatusDanger}" VerticalAlignment="Top" feat:Edge.Top="{DynamicResource Space.4}" feat:Edge.Right="{DynamicResource Space.12}" />
             <TextBlock Style="{DynamicResource Text.Body}" Text="{Binding FormError}" TextWrapping="Wrap" MaxWidth="360" />
           </StackPanel>
-        </Border>
+        </controls:CrispBorder>
         <TextBlock Style="{DynamicResource Text.Caption}" Foreground="{DynamicResource Brush.StatusDanger}" Text="{Binding ErrorSummary}" AutomationProperties.LiveSetting="Assertive" />
       </StackPanel>
       <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Focusable="False">

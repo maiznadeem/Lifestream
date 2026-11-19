@@ -1,6 +1,6 @@
 <chrome:ChromeWindow x:Class="Lifestream.Desktop.Controls.DialogWindow"
                      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:controls="clr-namespace:Lifestream.Desktop.Controls"
                      xmlns:chrome="clr-namespace:Lifestream.Desktop.Chrome"
                      Title="Lifestream" Width="480" SizeToContent="Height" IsDialog="True" ResizeMode="NoResize"
                      WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
@@ -20,10 +20,10 @@
       <ToggleButton x:Name="DetailsToggle" Content="Details" HorizontalAlignment="Left" AutomationProperties.Name="Details">
         <ToggleButton.Template>
           <ControlTemplate TargetType="ToggleButton">
-            <Border x:Name="Bd" MinHeight="32" Padding="{DynamicResource Inset.H12}" CornerRadius="{DynamicResource Radius.Control}" Background="Transparent" BorderBrush="{DynamicResource Brush.BorderInput}"
+            <controls:CrispBorder x:Name="Bd" MinHeight="32" Padding="{DynamicResource Inset.H12}" CornerRadius="{DynamicResource Radius.Control}" Background="Transparent" BorderBrush="{DynamicResource Brush.BorderInput}"
                     BorderThickness="1">
               <TextBlock Text="{TemplateBinding Content}" Style="{DynamicResource Text.Label}" Foreground="{DynamicResource Brush.TextPrimary}" VerticalAlignment="Center" />
-            </Border>
+            </controls:CrispBorder>
             <ControlTemplate.Triggers>
               <Trigger Property="IsChecked" Value="True">
                 <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.SurfacePressed}" />

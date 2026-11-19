@@ -39,7 +39,7 @@
       </Style.Triggers>
     </Style>
   </UserControl.Resources>
-  <Border x:Name="Frame" Style="{StaticResource BannerFrame}" Visibility="{Binding IsVisible, Converter={StaticResource BoolToVisibility}}" Background="{DynamicResource Brush.SurfacePressed}"
+  <controls:CrispBorder x:Name="Frame" Style="{StaticResource BannerFrame}" Visibility="{Binding IsVisible, Converter={StaticResource BoolToVisibility}}" Background="{DynamicResource Brush.SurfacePressed}"
           BorderThickness="1" CornerRadius="{DynamicResource Radius.Control}" feat:Edge.PadX="{DynamicResource Space.12}" feat:Edge.PadY="{DynamicResource Space.8}" feat:Edge.Bottom="{DynamicResource Space.16}"
           AutomationProperties.Name="Eligibility" AutomationProperties.LiveSetting="Polite">
     <StackPanel>
@@ -55,5 +55,5 @@
         </ItemsControl.ItemTemplate>
       </ItemsControl>
     </StackPanel>
-  </Border>
+  </controls:CrispBorder>
 </UserControl>

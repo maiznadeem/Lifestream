@@ -96,13 +96,13 @@ public sealed class VisualPolishTests
                 focusedBorder, (Color)host.Element.FindResource("Color.FocusRing"), (CornerRadius)host.Element.FindResource("Radius.Card"));
         });
 
-        Assert.Equal(new CornerRadius(6), facts.control);
+        Assert.Equal(new CornerRadius(8), facts.control);
         Assert.Equal(facts.control, facts.Item2);              // button corners
         Assert.True(facts.Item3, "the button has a hover fill");
         Assert.Equal(0, facts.hoverBefore);
         Assert.Equal(1, facts.hoverAfter, 2);                  // the hover state fades the fill in
         Assert.True(facts.Item6, "the keyboard focus ring shows");
-        Assert.Equal(new CornerRadius(10), facts.Item7);       // the ring follows the corner 4 DIP out
+        Assert.Equal(new CornerRadius(12), facts.Item7);       // the ring follows the corner 4 DIP out
         Assert.Equal(facts.control, facts.Item8);              // text box corners
         Assert.True(facts.Item9, "the text box has a hover fill");
         Assert.True(facts.placeholderShown, "an empty field shows its placeholder");
@@ -148,8 +148,8 @@ public sealed class VisualPolishTests
         Assert.All(texts, t =>
         {
             Assert.True(t.Resolved, $"'{t.Text}' did not resolve to a font");
-            Assert.StartsWith("Inter Variable", t.Family, StringComparison.Ordinal);
-            Assert.EndsWith("Fonts/intervariable.ttf", t.Uri, StringComparison.OrdinalIgnoreCase);
+            Assert.StartsWith("Inter", t.Family, StringComparison.Ordinal);
+            Assert.Matches(@"(?i)/Lifestream;component/Fonts/inter(display)?-(regular|medium|semibold|bold)\.ttf$", t.Uri);
             Assert.Equal(t.Requested, t.Weight);                // a real named instance of the weight...
             Assert.Equal(StyleSimulations.None, t.Simulated);  // ...not a synthesised bold
             Assert.Equal(0, t.Missing);                          // and every character is in Inter: no per-glyph fallback

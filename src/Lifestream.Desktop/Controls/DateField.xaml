@@ -11,11 +11,11 @@
       <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE787;" />
     </Button>
     <Popup x:Name="CalendarPopup" PlacementTarget="{Binding ElementName=Box}" Placement="Bottom" StaysOpen="False" AllowsTransparency="True">
-      <Border Margin="{DynamicResource Inset.T4B8}" Background="{DynamicResource Brush.SurfaceRaised}" BorderBrush="{DynamicResource Brush.BorderInput}" BorderThickness="1"
+      <controls:CrispBorder Margin="{DynamicResource Inset.T4B8}" Background="{DynamicResource Brush.SurfaceRaised}" BorderBrush="{DynamicResource Brush.BorderInput}" BorderThickness="1"
               CornerRadius="{DynamicResource Radius.Card}" Padding="{DynamicResource Pad.4}">
         <Calendar x:Name="Picker" SelectedDatesChanged="OnCalendarChanged" Background="{DynamicResource Brush.SurfaceRaised}" Foreground="{DynamicResource Brush.TextPrimary}"
                   BorderThickness="0" AutomationProperties.Name="Calendar" />
-      </Border>
+      </controls:CrispBorder>
     </Popup>
   </Grid>
 </UserControl>

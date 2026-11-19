@@ -27,7 +27,7 @@
                  Margin="{DynamicResource Inset.R12}" IsHitTestVisible="False" />
       <Popup x:Name="ResultsPopup" IsOpen="{Binding IsOpen, Mode=TwoWay}" PlacementTarget="{Binding ElementName=SearchBox}" Placement="Bottom" StaysOpen="False"
              AllowsTransparency="True" Focusable="False">
-        <Border MinWidth="{Binding ActualWidth, ElementName=SearchBox}" MaxHeight="280" Margin="{DynamicResource Inset.T4B8}" Background="{DynamicResource Brush.SurfaceRaised}"
+        <controls:CrispBorder MinWidth="{Binding ActualWidth, ElementName=SearchBox}" MaxHeight="280" Margin="{DynamicResource Inset.T4B8}" Background="{DynamicResource Brush.SurfaceRaised}"
                 BorderBrush="{DynamicResource Brush.BorderInput}" BorderThickness="1" CornerRadius="{DynamicResource Radius.Control}">
           <Grid MinHeight="52">
             <ListBox x:Name="ResultsList" ItemsSource="{Binding Options}" BorderThickness="0" Background="Transparent" Focusable="True"
@@ -78,12 +78,12 @@
             <TextBlock x:Name="SearchError" Style="{DynamicResource Text.Body}" Foreground="{DynamicResource Brush.StatusDanger}" Text="{Binding SearchError}" Margin="{DynamicResource Inset.H12V16}"
                        Visibility="{Binding SearchError, Converter={StaticResource HasText}}" />
           </Grid>
-        </Border>
+        </controls:CrispBorder>
       </Popup>
     </Grid>
 
     <!-- Filter with nothing chosen: the placeholder ("Any donor") and a Choose action. Collapsed unless the view model says otherwise, so a picker without one shows nothing misleading. -->
-    <Border x:Name="Empty" Visibility="{Binding ShowEmpty, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed}" MinHeight="{DynamicResource Height.Control}"
+    <controls:CrispBorder x:Name="Empty" Visibility="{Binding ShowEmpty, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed}" MinHeight="{DynamicResource Height.Control}"
             Background="{DynamicResource Brush.SurfaceRaised}" BorderBrush="{DynamicResource Brush.BorderInput}" BorderThickness="1"
             CornerRadius="{DynamicResource Radius.Control}" Padding="{DynamicResource Inset.L12R4}">
       <Grid>
@@ -95,10 +95,10 @@
                    TextWrapping="NoWrap" />
         <Button Grid.Column="1" Style="{DynamicResource Button.Ghost}" Content="Choose" Command="{Binding ChooseCommand}" AutomationProperties.Name="Choose record" />
       </Grid>
-    </Border>
+    </controls:CrispBorder>
 
     <!-- Chosen: a summary chip with Change, and (on a filter) a clear. Collapsed unless something is chosen. -->
-    <Border x:Name="Chip" Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed}" MinHeight="{DynamicResource Height.Control}"
+    <controls:CrispBorder x:Name="Chip" Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed}" MinHeight="{DynamicResource Height.Control}"
             Background="{DynamicResource Brush.SurfaceRaised}" BorderBrush="{DynamicResource Brush.BorderInput}" BorderThickness="1"
             CornerRadius="{DynamicResource Radius.Control}" Padding="{DynamicResource Inset.L12R4}">
       <Grid>
@@ -115,6 +115,6 @@
           <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE711;" />
         </Button>
       </Grid>
-    </Border>
+    </controls:CrispBorder>
   </Grid>
 </UserControl>

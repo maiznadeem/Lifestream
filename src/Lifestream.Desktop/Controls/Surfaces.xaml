@@ -57,11 +57,11 @@
                             AutomationProperties.Name="Details">
                 <ToggleButton.Template>
                   <ControlTemplate TargetType="ToggleButton">
-                    <Border x:Name="Bd" MinHeight="{StaticResource Height.Control}" Padding="{DynamicResource Inset.H16}" CornerRadius="{StaticResource Radius.Control}"
+                    <controls:CrispBorder x:Name="Bd" MinHeight="{StaticResource Height.Control}" Padding="{DynamicResource Inset.H16}" CornerRadius="{StaticResource Radius.Control}"
                             Background="Transparent" BorderBrush="{DynamicResource Brush.BorderInput}" BorderThickness="1">
                       <TextBlock Text="{TemplateBinding Content}" Style="{StaticResource Text.Label}" Foreground="{DynamicResource Brush.TextPrimary}"
                                  VerticalAlignment="Center" />
-                    </Border>
+                    </controls:CrispBorder>
                     <ControlTemplate.Triggers>
                       <Trigger Property="IsMouseOver" Value="True">
                         <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.SurfaceHover}" />
@@ -111,7 +111,7 @@
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="local:StatusChip">
-          <Border MinHeight="24" Padding="{DynamicResource Inset.H8}" CornerRadius="{StaticResource Radius.Pill}" Background="{DynamicResource Brush.SurfaceRaised}"
+          <controls:CrispBorder MinHeight="24" Padding="{DynamicResource Inset.H8}" CornerRadius="{StaticResource Radius.Pill}" Background="{DynamicResource Brush.SurfaceRaised}"
                   BorderBrush="{TemplateBinding AccentBrush}" BorderThickness="1">
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
               <controls:IconText Style="{StaticResource Text.Icon}" Text="{TemplateBinding Glyph}" FontSize="12" Foreground="{TemplateBinding AccentBrush}"
@@ -119,7 +119,7 @@
               <TextBlock Style="{StaticResource Text.Caption}" Foreground="{DynamicResource Brush.TextPrimary}" Text="{TemplateBinding DisplayText}"
                          TextWrapping="NoWrap" VerticalAlignment="Center" />
             </StackPanel>
-          </Border>
+          </controls:CrispBorder>
         </ControlTemplate>
       </Setter.Value>
     </Setter>
@@ -187,11 +187,11 @@
                               AutomationProperties.Name="View as table" ToolTip="View as table">
                   <ToggleButton.Template>
                     <ControlTemplate TargetType="ToggleButton">
-                      <Border x:Name="Bd" MinHeight="32" MinWidth="40" Padding="{DynamicResource Inset.H12}" CornerRadius="{StaticResource Radius.Control}" Background="Transparent"
+                      <controls:CrispBorder x:Name="Bd" MinHeight="32" MinWidth="40" Padding="{DynamicResource Inset.H12}" CornerRadius="{StaticResource Radius.Control}" Background="Transparent"
                               BorderBrush="{DynamicResource Brush.BorderInput}" BorderThickness="1">
                         <local:IconText x:Name="Glyph" Style="{StaticResource Text.Icon}" Text="&#xE9D9;" VerticalAlignment="Center" HorizontalAlignment="Center"
                                         Foreground="{DynamicResource Brush.TextPrimary}" />
-                      </Border>
+                      </controls:CrispBorder>
                       <ControlTemplate.Triggers>
                         <Trigger Property="IsChecked" Value="True">
                           <Setter TargetName="Glyph" Property="Text" Value="&#xE9D2;" />
@@ -237,7 +237,7 @@
           <Grid>
             <ContentPresenter x:Name="PART_Content" />
             <local:Skeleton x:Name="PART_Skeleton" Visibility="Hidden" Kind="{TemplateBinding SkeletonKind}" ColumnWidths="{TemplateBinding SkeletonColumns}" />
-            <Border x:Name="PART_WakingBanner" Visibility="Collapsed" VerticalAlignment="Top" HorizontalAlignment="Center" Margin="{DynamicResource Inset.T16}" Padding="{DynamicResource Inset.H16V12}"
+            <controls:CrispBorder x:Name="PART_WakingBanner" Visibility="Collapsed" VerticalAlignment="Top" HorizontalAlignment="Center" Margin="{DynamicResource Inset.T16}" Padding="{DynamicResource Inset.H16V12}"
                     Background="{DynamicResource Brush.SurfacePressed}" BorderBrush="{DynamicResource Brush.StatusInfo}" BorderThickness="1"
                     CornerRadius="{StaticResource Radius.Card}">
               <StackPanel Orientation="Horizontal">
@@ -247,7 +247,7 @@
                 <Button Style="{StaticResource Button.Secondary}" Content="Retry" Command="{TemplateBinding RetryCommand}" MinHeight="32" Margin="{DynamicResource Inset.R8}" />
                 <Button x:Name="PART_CancelWaking" Style="{StaticResource Button.Ghost}" Content="Cancel" />
               </StackPanel>
-            </Border>
+            </controls:CrispBorder>
             <local:EmptyState x:Name="PART_Empty" Visibility="Collapsed" Glyph="{TemplateBinding EmptyGlyph}" Title="{TemplateBinding EmptyTitle}"
                               Message="{TemplateBinding EmptyMessage}" ActionText="{TemplateBinding EmptyActionText}" ActionCommand="{TemplateBinding EmptyActionCommand}" />
             <local:ErrorState x:Name="PART_Error" Visibility="Collapsed" Message="{TemplateBinding ErrorMessage}" Detail="{TemplateBinding ErrorDetail}"

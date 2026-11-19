@@ -236,11 +236,11 @@
   <Thickness x:Key="Thickness.FocusRing">2</Thickness>
 
   <!-- Radii -->
-  <CornerRadius x:Key="Radius.Control">6</CornerRadius>
+  <CornerRadius x:Key="Radius.Control">8</CornerRadius>
   <CornerRadius x:Key="Radius.Card">12</CornerRadius>
   <!-- The keyboard focus ring sits 4 DIP outside a control, so its radius is the control's plus 4 -->
-  <CornerRadius x:Key="Radius.FocusRing">10</CornerRadius>
+  <CornerRadius x:Key="Radius.FocusRing">12</CornerRadius>
   <!-- The bottom accent line of a focused input follows the field's rounded bottom corners -->
-  <CornerRadius x:Key="Radius.Underline">0,0,6,6</CornerRadius>
+  <CornerRadius x:Key="Radius.Underline">0,0,8,8</CornerRadius>
   <CornerRadius x:Key="Radius.Pill">12</CornerRadius>
 </ResourceDictionary>

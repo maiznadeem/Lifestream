@@ -56,10 +56,10 @@
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="ContextMenu">
-          <Border Background="{DynamicResource Brush.SurfaceRaised}" BorderBrush="{DynamicResource Brush.BorderInput}" BorderThickness="1" Padding="{DynamicResource Pad.4}"
+          <controls:CrispBorder Background="{DynamicResource Brush.SurfaceRaised}" BorderBrush="{DynamicResource Brush.BorderInput}" BorderThickness="1" Padding="{DynamicResource Pad.4}"
                   CornerRadius="{StaticResource Radius.Card}" MinWidth="200">
             <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle" />
-          </Border>
+          </controls:CrispBorder>
         </ControlTemplate>
       </Setter.Value>
     </Setter>

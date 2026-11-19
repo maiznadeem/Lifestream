@@ -112,7 +112,7 @@
                 <DataGridCellsPresenter Grid.Column="1" ItemsPanel="{TemplateBinding ItemsPanel}" SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" />
               </SelectiveScrollingGrid>
               <!-- Keyboard focus is shown as an inset 2 px ring on the row. -->
-              <Border x:Name="FocusRing" BorderThickness="2" BorderBrush="{DynamicResource Brush.FocusRing}" Visibility="Collapsed" IsHitTestVisible="False" />
+              <controls:CrispBorder x:Name="FocusRing" BorderThickness="2" BorderBrush="{DynamicResource Brush.FocusRing}" Visibility="Collapsed" IsHitTestVisible="False" />
             </Grid>
           </Border>
           <ControlTemplate.Triggers>

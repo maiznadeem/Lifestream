@@ -35,6 +35,7 @@ public sealed class Hosted : IDisposable
             element.Resources.MergedDictionaries.Add(ThemeLoader.Resources);
         }
 
+        element.UseLayoutRounding = true; // as every window of the app (Chrome.xaml): edges land on whole device pixels
         var parameters = new HwndSourceParameters("LifestreamHosted", (int)Math.Ceiling(width), (int)Math.Ceiling(height))
         {
             ParentWindow = new IntPtr(-3),
