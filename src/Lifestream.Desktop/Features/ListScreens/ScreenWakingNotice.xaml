@@ -1,0 +1,9 @@
+<UserControl x:Class="Lifestream.Desktop.Features.ListScreens.ScreenWakingNotice"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:Lifestream.Desktop.Controls"
+             xmlns:feat="clr-namespace:Lifestream.Desktop.Features"
+             Focusable="False" IsTabStop="False">
+  <!-- The ONE "Waking up the server" notice of a list screen's own operations (the detail load, Delete, Undo, and so on), with Cancel. It sits under the toolbar, outside the detail pane and the editor drawer, so it shows in every screen state (SHELL-07). The data context is the list view model; an editor keeps its own notice. -->
+  <controls:WakingNotice x:Name="Waking" IsActive="{Binding ShowWakingNotice}" CancelCommand="{Binding CancelWakingCommand}" feat:Edge.Bottom="{DynamicResource Space.12}" />
+</UserControl>

@@ -40,6 +40,16 @@ public sealed class WakingEveryOperationTests
     private const int Width = 1366;
     private const int Height = 736;
 
+    /// <summary>The state the screen is in when the command runs: SHELL-07 must hold in every one of them, not only with a record selected.</summary>
+    public enum ScreenState
+    {
+        NoSelection,
+        RecordSelected,
+        NewEditor,
+        EditEditor,
+        DialogOpen,
+    }
+
     private sealed record Screen(string Name, Type ViewModel, Func<ViewModelBase, UserControl> View, bool SelectFirst = true, Action<ViewModelBase>? Prepare = null, int SelectIndex = 0)
     {
         /// <summary>The parameter to run a command with, when it is not the selected row.</summary>
@@ -221,8 +231,10 @@ public sealed class WakingEveryOperationTests
     }
 
     /// <summary>One operation under test: its own rig, view model, rendered screen and silent server.</summary>
-    private sealed class Operation(Screen screen, string commandName) : IDisposable
+    private sealed class Operation(Screen screen, string commandName, ScreenState state = ScreenState.RecordSelected) : IDisposable
     {
+        public ScreenState State { get; } = state;
+
         public Rig? Rig { get; set; }
 
         public ViewModelBase? Vm { get; set; }
@@ -242,6 +254,9 @@ public sealed class WakingEveryOperationTests
 
         public string? Problem { get; set; }
 
+        /// <summary>True when the command could not run in this state (no such state on the screen, the command is disabled, or it made no call): it is not counted as exercised.</summary>
+        public bool NotApplicable { get; set; }
+
         /// <summary>When the server went into the waking state for this operation (the wake-aware handler does it once a call has waited 3 s).</summary>
         public long WakingSince { get; set; }
 
@@ -253,10 +268,61 @@ public sealed class WakingEveryOperationTests
         }
     }
 
-    /// <summary>Loads the screen, selects a record, makes the server stop answering and runs the command (it starts its API call and waits).</summary>
-    private static Operation Start(Screen screen, string commandName)
+    /// <summary>Puts a loaded screen into <paramref name="op"/>'s state. False when the screen has no such state (nothing to select, or no editor opens).</summary>
+    private static bool ArrangeState(Operation op, ViewModelBase vm, Hosted host)
     {
-        var op = new Operation(screen, commandName);
+        var screen = op.Screen;
+        var state = op.State;
+        var type = vm.GetType();
+        if (state == ScreenState.NoSelection && !screen.SelectFirst)
+        {
+            return false; // a screen without a selection is always in this state: RecordSelected covers it
+        }
+
+        if (state is ScreenState.RecordSelected or ScreenState.EditEditor or ScreenState.DialogOpen && screen.SelectFirst)
+        {
+            SelectRow(vm, screen.SelectIndex);
+            host.Settle(100);
+        }
+
+        switch (state)
+        {
+            case ScreenState.NewEditor:
+            case ScreenState.EditEditor:
+                if (type.GetProperty(state == ScreenState.NewEditor ? "AddCommand" : "EditCommand")?.GetValue(vm) is not AsyncRelayCommand open || !open.CanExecute(null))
+                {
+                    return false;
+                }
+
+                Hosted.Await(() =>
+                {
+                    open.Execute(null);
+                    return Task.CompletedTask;
+                });
+                Hosted.PumpUntil(() => type.GetProperty("Editor")?.GetValue(vm) is not null, 5000);
+                host.Settle(150);
+                return type.GetProperty("Editor")?.GetValue(vm) is not null;
+            case ScreenState.DialogOpen:
+                _ = op.Dialogs.ShowAsync(new ChangePasswordDialogViewModel(op.Rig!.Api));
+                host.Settle(100);
+                return true;
+            default:
+                return true;
+        }
+    }
+
+    private static void SelectRow(ViewModelBase vm, int index) =>
+        Hosted.Await(() =>
+        {
+            var items = (System.Collections.IList)vm.GetType().GetProperty("Items")!.GetValue(vm)!;
+            vm.GetType().GetProperty("SelectedItem")!.SetValue(vm, items[index]);
+            return (Task)vm.GetType().GetProperty("PendingDetail", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(vm)!;
+        });
+
+    /// <summary>Creates the rig, the view model and the rendered screen, loads it and puts it in the operation's state. False when the screen has no such state.</summary>
+    private static bool Open(Operation op)
+    {
+        var screen = op.Screen;
         var rig = op.Rig = Part2Harness.NewRig();
         rig.Get<DialogService>().Presenter = new Yes();
         rig.Get<FormDialogService>().Presenter = op.Dialogs;
@@ -265,18 +331,52 @@ public sealed class WakingEveryOperationTests
         var host = op.Host = Hosted.Create(screen.View(vm), Width, Height);
         Hosted.Await(() => vm.LoadAsync());
         host.Settle(100);
-        if (screen.SelectFirst)
+        if (!ArrangeState(op, vm, host))
         {
-            Hosted.Await(() =>
-            {
-                var items = (System.Collections.IList)vm.GetType().GetProperty("Items")!.GetValue(vm)!;
-                vm.GetType().GetProperty("SelectedItem")!.SetValue(vm, items[screen.SelectIndex]);
-                return (Task)vm.GetType().GetProperty("PendingDetail", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(vm)!;
-            });
-            host.Settle(100);
+            return false;
         }
 
         screen.Prepare?.Invoke(vm);
+        return true;
+    }
+
+    /// <summary>The commands a user could press with the screen in this state (the others are disabled there), found on one throwaway instance so the walk does not build a screen for each disabled command.</summary>
+    private static HashSet<string> Runnable(Screen screen, ScreenState state)
+    {
+        using var probe = new Operation(screen, "probe", state);
+        var found = new HashSet<string>();
+        if (!Open(probe))
+        {
+            return found;
+        }
+
+        foreach (var property in CommandsOf(screen.ViewModel))
+        {
+            if (property.GetValue(probe.Vm) is AsyncRelayCommand command && (screen.Parameters.TryGetValue(property.Name, out var pick) ? command.CanExecute(pick(probe.Vm!)) : new[] { Selected(probe.Vm!), null }.Any(command.CanExecute)))
+            {
+                found.Add(property.Name);
+            }
+        }
+
+        return found;
+    }
+
+    /// <summary>Loads the screen, puts it in the state, makes the server stop answering and runs the command (it starts its API call and waits).</summary>
+    private static Operation Start(Screen screen, string commandName, ScreenState state = ScreenState.RecordSelected)
+    {
+        var op = new Operation(screen, commandName, state);
+        var strict = state == ScreenState.RecordSelected; // the reviewed lists describe the selected-record state; elsewhere a disabled or silent command is simply not applicable
+        var arranged = Open(op);
+        var rig = op.Rig!;
+        var vm = op.Vm!;
+        var host = op.Host!;
+        if (!arranged)
+        {
+            op.Finished = true; // this screen has no such state (no selection, no editor)
+            op.NotApplicable = true;
+            return op;
+        }
+
         op.Server.Install(rig.Api);
         if (vm.GetType().GetProperty(commandName)!.GetValue(vm) is not AsyncRelayCommand command)
         {
@@ -288,7 +388,8 @@ public sealed class WakingEveryOperationTests
         if (!command.CanExecute(parameter))
         {
             op.Finished = true;
-            op.Problem = NotRunnable.ContainsKey(commandName) ? null : $"{screen.Name}.{commandName} cannot run on a loaded screen with a selected record: it needs a reviewed entry";
+            op.NotApplicable = !strict;
+            op.Problem = !strict || NotRunnable.ContainsKey(commandName) ? null : $"{screen.Name}.{commandName} cannot run on a loaded screen with a selected record: it needs a reviewed entry";
             return op;
         }
 
@@ -301,9 +402,10 @@ public sealed class WakingEveryOperationTests
         if (op.Server.Count == 0)
         {
             op.Finished = true;
-            op.Problem = IsNoCall(screen.Name, commandName) ? null : $"{screen.Name}.{commandName} made no API call and is not in the reviewed no-call list";
+            op.Problem = !strict || IsNoCall(screen.Name, commandName) ? null : $"{screen.Name}.{commandName} made no API call and is not in the reviewed no-call list";
+            op.NotApplicable = !strict;
         }
-        else if (IsNoCall(screen.Name, commandName))
+        else if (strict && IsNoCall(screen.Name, commandName))
         {
             op.Finished = true;
             op.Problem = $"{screen.Name}.{commandName} is listed as making no API call but it called {op.Server.Waiting[0].Method}";
@@ -358,33 +460,39 @@ public sealed class WakingEveryOperationTests
     }
 
     /// <summary>
-    /// Undo is not a command property: it is the action of the toast a delete shows. The delete is allowed to succeed, then the server stops answering and the
-    /// toast's Undo runs; the screen must show the waking notice with a Cancel that stops the restore request.
+    /// Undo is not a command property: it is the action of the toast a delete shows. The delete is allowed to succeed, then the screen is put in the state
+    /// (nothing selected, a new or an edit editor open, a dialog open), the server stops answering and the toast's Undo runs; the screen must show the
+    /// waking notice with a Cancel that stops the restore request. The editor and dialog cases are the verifier's probe (v-12c, Probe_UndoWhileEditorOpen).
     /// </summary>
     [Theory]
-    [InlineData("Donors")]
-    [InlineData("Patients")]
-    [InlineData("Staff")]
-    public void UndoOfADelete_OnAServerThatNeverAnswers_ShowsWakingAndACancelThatStopsTheRequest_FakeApi(string screenName)
+    [InlineData("Donors", ScreenState.NoSelection)]
+    [InlineData("Donors", ScreenState.NewEditor)]
+    [InlineData("Donors", ScreenState.EditEditor)]
+    [InlineData("Donors", ScreenState.DialogOpen)]
+    [InlineData("Patients", ScreenState.NoSelection)]
+    [InlineData("Patients", ScreenState.NewEditor)]
+    [InlineData("Patients", ScreenState.EditEditor)]
+    [InlineData("Patients", ScreenState.DialogOpen)]
+    [InlineData("Staff", ScreenState.NoSelection)]
+    [InlineData("Staff", ScreenState.NewEditor)]
+    [InlineData("Staff", ScreenState.EditEditor)]
+    [InlineData("Staff", ScreenState.DialogOpen)]
+    public void UndoOfADelete_OnAServerThatNeverAnswers_ShowsWakingAndACancelThatStopsTheRequest_FakeApi(string screenName, ScreenState state)
     {
         var screen = Screens.Single(s => s.Name == screenName);
         var capturesDirectory = Environment.GetEnvironmentVariable("LIFESTREAM_CAPTURE_DIR") is { Length: > 0 } dir ? dir : Path.Combine(AppContext.BaseDirectory, "captures");
         var problem = StaHost.Run(() =>
         {
-            using var op = new Operation(screen, "Undo");
+            using var op = new Operation(screen, "Undo", state);
             var rig = op.Rig = Part2Harness.NewRig();
             rig.Get<DialogService>().Presenter = new Yes();
+            rig.Get<FormDialogService>().Presenter = op.Dialogs;
             var vm = op.Vm = (ViewModelBase)Create(rig, screen.ViewModel);
             vm.Attach(rig.Get<ServerStatus>(), TimeProvider.System);
             var host = op.Host = Hosted.Create(screen.View(vm), Width, Height);
             Hosted.Await(() => vm.LoadAsync());
             host.Settle(100);
-            Hosted.Await(() =>
-            {
-                var items = (System.Collections.IList)vm.GetType().GetProperty("Items")!.GetValue(vm)!;
-                vm.GetType().GetProperty("SelectedItem")!.SetValue(vm, items[screen.SelectIndex]);
-                return (Task)vm.GetType().GetProperty("PendingDetail", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(vm)!;
-            });
+            SelectRow(vm, screen.SelectIndex);
             host.Settle(100);
             var toasts = rig.Get<ToastService>();
             var delete = (AsyncRelayCommand)vm.GetType().GetProperty("DeleteCommand")!.GetValue(vm)!;
@@ -393,7 +501,33 @@ public sealed class WakingEveryOperationTests
                 delete.Execute(null);
                 return Task.CompletedTask;
             });
-            Assert.True(Hosted.PumpUntil(() => toasts.Toasts.Any(t => t.HasAction), 5000), $"the delete did not finish with an Undo toast: toasts=[{string.Join(" | ", toasts.Toasts.Select(t => t.Message))}] calls=[{string.Join(",", rig.Api.Calls)}] canDelete={((AsyncRelayCommand)vm.GetType().GetProperty("DeleteCommand")!.GetValue(vm)!).CanExecute(null)}");
+            Assert.True(Hosted.PumpUntil(() => toasts.Toasts.Any(t => t.HasAction), 5000), $"the delete did not finish with an Undo toast: toasts=[{string.Join(" | ", toasts.Toasts.Select(t => t.Message))}] calls=[{string.Join(",", rig.Api.Calls)}]");
+
+            // The user moves on while the Undo toast is still up: an editor or a dialog opens (the detail pane that used to hold the notice is collapsed or covered).
+            if (state == ScreenState.DialogOpen)
+            {
+                _ = op.Dialogs.ShowAsync(new ChangePasswordDialogViewModel(rig.Api));
+                host.Settle(100);
+            }
+            else if (state is ScreenState.NewEditor or ScreenState.EditEditor)
+            {
+                if (state == ScreenState.EditEditor)
+                {
+                    SelectRow(vm, screen.SelectIndex == 0 ? 1 : 0);
+                    host.Settle(100);
+                }
+
+                var open = (AsyncRelayCommand)vm.GetType().GetProperty(state == ScreenState.NewEditor ? "AddCommand" : "EditCommand")!.GetValue(vm)!;
+                Assert.True(open.CanExecute(null), $"{state}: the command that opens the editor is disabled");
+                Hosted.Await(() =>
+                {
+                    open.Execute(null);
+                    return Task.CompletedTask;
+                });
+                Hosted.PumpUntil(() => vm.GetType().GetProperty("Editor")!.GetValue(vm) is not null, 5000);
+                host.Settle(150);
+                Assert.NotNull(vm.GetType().GetProperty("Editor")!.GetValue(vm));
+            }
 
             op.Server.Install(rig.Api);
             var undo = toasts.Toasts.First(t => t.HasAction).ActionCommand;
@@ -406,7 +540,7 @@ public sealed class WakingEveryOperationTests
             Assert.True(op.Server.Count > 0, "Undo made no API call");
             rig.Get<ServerStatus>().Enter();
             Hosted.RunDispatcherFor(3600);
-            return Inspect(op, Path.Combine(capturesDirectory, "waking", $"{screen.Name}_Undo.png"));
+            return Inspect(op, Path.Combine(capturesDirectory, "waking", $"{screen.Name}_Undo_{state}.png"));
         });
 
         Assert.True(problem is null, problem);
@@ -431,58 +565,75 @@ public sealed class WakingEveryOperationTests
     }
 
     [Fact]
-    public void EveryCommandOfEveryScreen_OnAServerThatNeverAnswers_ShowsWakingAndACancelThatStopsTheRequest_FakeApi()
+    public void EveryCommandOfEveryScreen_InEveryScreenState_OnAServerThatNeverAnswers_ShowsWakingAndACancelThatStopsTheRequest_FakeApi()
     {
         var capturesDirectory = Environment.GetEnvironmentVariable("LIFESTREAM_CAPTURE_DIR") is { Length: > 0 } dir ? dir : Path.Combine(AppContext.BaseDirectory, "captures");
         var (problems, exercised, withCalls) = StaHost.Run(() =>
         {
             var found = new List<string>();
-            var exercised = 0;
-            var withCalls = 0;
+            var exercised = Enum.GetValues<ScreenState>().ToDictionary(s => s, _ => 0);
+            var withCalls = Enum.GetValues<ScreenState>().ToDictionary(s => s, _ => 0);
             foreach (var screen in Screens)
             {
-                // All commands of a screen are started together, each on its own screen instance and silent server, so the real 3.6 s of waiting are shared.
-                var operations = new List<Operation>();
-                try
+                foreach (var state in Enum.GetValues<ScreenState>())
                 {
-                    foreach (var command in CommandsOf(screen.ViewModel).Where(p => !p.IsDefined(typeof(NoOperationRunnerAttribute), false) || IsNoCall(screen.Name, p.Name)))
+                    // All commands of a screen in one state are started together, each on its own screen instance and silent server, so the real 3.6 s of waiting are shared.
+                    var operations = new List<Operation>();
+                    try
                     {
-                        operations.Add(Start(screen, command.Name));
-                    }
-
-                    // Every operation has now been waking for at least 3.6 s: wait out what is left for the one that went last.
-                    var lastWaking = operations.Where(o => !o.Finished).Select(o => o.WakingSince).DefaultIfEmpty(System.Diagnostics.Stopwatch.GetTimestamp()).Max();
-                    var left = 3600 - (int)System.Diagnostics.Stopwatch.GetElapsedTime(lastWaking).TotalMilliseconds;
-                    if (left > 0)
-                    {
-                        Hosted.RunDispatcherFor(left);
-                    }
-
-                    foreach (var op in operations)
-                    {
-                        exercised++;
-                        if (!IsNoCall(screen.Name, op.CommandName))
+                        var runnable = state == ScreenState.RecordSelected ? null : Runnable(screen, state); // with a record selected every command is walked, so a disabled one needs a reviewed entry
+                        foreach (var command in CommandsOf(screen.ViewModel).Where(p => !p.IsDefined(typeof(NoOperationRunnerAttribute), false) || IsNoCall(screen.Name, p.Name)))
                         {
-                            withCalls++;
+                            if (runnable is null || runnable.Contains(command.Name))
+                            {
+                                operations.Add(Start(screen, command.Name, state));
+                            }
                         }
 
-                        var problem = op.Finished ? op.Problem : Inspect(op, Path.Combine(capturesDirectory, "waking", $"{screen.Name}_{op.CommandName}.png"));
-                        if (problem is not null)
+                        // Every operation has now been waking for at least 3.6 s: wait out what is left for the one that went last.
+                        var lastWaking = operations.Where(o => !o.Finished).Select(o => o.WakingSince).DefaultIfEmpty(System.Diagnostics.Stopwatch.GetTimestamp()).Max();
+                        var left = 3600 - (int)System.Diagnostics.Stopwatch.GetElapsedTime(lastWaking).TotalMilliseconds;
+                        if (left > 0 && operations.Any(o => !o.Finished))
                         {
-                            found.Add(problem);
+                            Hosted.RunDispatcherFor(left);
+                        }
+
+                        foreach (var op in operations)
+                        {
+                            if (op.NotApplicable)
+                            {
+                                continue; // no such state on this screen, or the command is disabled or makes no call in it
+                            }
+
+                            exercised[state]++;
+                            if (!IsNoCall(screen.Name, op.CommandName))
+                            {
+                                withCalls[state]++;
+                            }
+
+                            var problem = op.Finished ? op.Problem : Inspect(op, Path.Combine(capturesDirectory, "waking", $"{screen.Name}_{state}_{op.CommandName}.png"));
+                            if (problem is not null)
+                            {
+                                found.Add($"[{state}] {problem}");
+                            }
                         }
                     }
-                }
-                finally
-                {
-                    operations.ForEach(o => o.Dispose());
+                    finally
+                    {
+                        operations.ForEach(o => o.Dispose());
+                    }
                 }
             }
 
             return (found, exercised, withCalls);
         });
 
-        Assert.True(exercised > 40 && withCalls > 15, $"only {exercised} commands ({withCalls} calling the API) were exercised: the inventory is not walking the screens");
+        Assert.True(exercised[ScreenState.RecordSelected] > 40 && withCalls[ScreenState.RecordSelected] > 15, $"only {exercised[ScreenState.RecordSelected]} commands ({withCalls[ScreenState.RecordSelected]} calling the API) were exercised with a record selected: the inventory is not walking the screens");
+        foreach (var state in new[] { ScreenState.NoSelection, ScreenState.NewEditor, ScreenState.EditEditor, ScreenState.DialogOpen })
+        {
+            Assert.True(withCalls[state] >= 3, $"only {withCalls[state]} commands calling the API were exercised in the {state} state: the inventory is not walking that state");
+        }
+
         Assert.True(problems.Count == 0, string.Join(Environment.NewLine, problems));
     }
 }

@@ -218,6 +218,23 @@ public sealed partial class ShellViewModel : ViewModelBase
     {
         void Handle()
         {
+            if (Navigation.HasUnsavedChanges)
+            {
+                // Typed input on Profile or an open editor is never replaced without asking: keep it, and let the user reload when they are ready (SHELL-24).
+                Toasts.Show(
+                    ToastKind.Info,
+                    "Demo data was reset. You have unsaved changes on this screen, so it has not been refreshed.",
+                    "Reload",
+                    async () =>
+                    {
+                        if (await Navigation.ConfirmDiscardAsync().ConfigureAwait(true))
+                        {
+                            await Navigation.ReloadCurrentAsync().ConfigureAwait(true);
+                        }
+                    });
+                return;
+            }
+
             Toasts.Show(ToastKind.Info, "Demo data was reset. This screen has been refreshed.");
             _ = Navigation.ReloadCurrentAsync();
         }
