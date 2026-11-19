@@ -22,13 +22,20 @@ public interface IToastService
     /// </summary>
     OperationRunner Actions { get; }
 
-    /// <summary>Changes every time <see cref="EndSession"/> runs. An action that started before a sign-out compares it, so it never shows a toast to the next person (SHELL-07).</summary>
+    /// <summary>The sign-in session generation: <see cref="EndSession"/> advances it. Every toast is tagged with the one it was raised in (SHELL-07).</summary>
     int Epoch { get; }
+
+    /// <summary>
+    /// Marks the code that runs under the caller, and everything it awaits, as part of the sign-in session that is current now. A <see cref="Show"/> from
+    /// that code after <see cref="EndSession"/> has run is dropped, so a toast never reaches the next person. Without it, a Show belongs to the session
+    /// current when it is called. A view model's commands and a toast's action enter it themselves; callers do not check the session.
+    /// </summary>
+    IDisposable EnterSession();
 
     /// <summary>Sign-out: cancels every waiting toast action (Undo, View, Reload) and removes every toast, before the session is cleared.</summary>
     void EndSession();
 
-    /// <summary>Shows a toast. Name the affected record in <paramref name="message"/>; add an action such as View or Undo if one makes sense.</summary>
+    /// <summary>Shows a toast; one raised in a session that has ended is dropped (the result is already dismissed). Name the affected record in <paramref name="message"/>; add an action such as View or Undo if one makes sense.</summary>
     /// <param name="kind">Success, info, warning or error.</param>
     /// <param name="message">The text; names the affected record.</param>
     /// <param name="actionLabel">The action button's label, such as View or Undo.</param>
@@ -52,13 +59,15 @@ public sealed partial class ToastItem : ObservableObject, IDisposable
 {
     private readonly ToastService _owner;
     private readonly Func<Task>? _action;
+    private readonly int _session;
     private ITimer? _timer;
     private TimeSpan _remaining;
     private DateTimeOffset _startedAt;
 
-    internal ToastItem(ToastService owner, ToastKind kind, string message, string? actionLabel, Func<Task>? action, TimeSpan lifetime)
+    internal ToastItem(ToastService owner, int session, ToastKind kind, string message, string? actionLabel, Func<Task>? action, TimeSpan lifetime)
     {
         _owner = owner;
+        _session = session;
         Kind = kind;
         Message = message;
         ActionLabel = action is null ? null : actionLabel;
@@ -73,9 +82,12 @@ public sealed partial class ToastItem : ObservableObject, IDisposable
             async _ =>
             {
                 Dismiss();
-                if (_action is not null)
+                if (_action is not null && _owner.IsCurrent(_session))
                 {
-                    await _action().ConfigureAwait(true);
+                    using (_owner.EnterSession(_session)) // what the action shows belongs to the session the toast was raised in
+                    {
+                        await _action().ConfigureAwait(true);
+                    }
                 }
             },
             runner: owner.Actions);
@@ -196,6 +208,26 @@ public sealed class ToastService : IToastService
 
     private int _epoch;
 
+    private static readonly AsyncLocal<(ToastService Owner, int Session)?> Ambient = new();
+
+    public IDisposable EnterSession() => EnterSession(Epoch);
+
+    internal IDisposable EnterSession(int session)
+    {
+        var previous = Ambient.Value;
+        Ambient.Value = (this, session);
+        return new Restore(previous);
+    }
+
+    private sealed class Restore((ToastService Owner, int Session)? previous) : IDisposable
+    {
+        public void Dispose() => Ambient.Value = previous;
+    }
+
+    internal bool IsCurrent(int session) => session == Epoch;
+
+    private int CurrentSession => Ambient.Value is { } ambient && ReferenceEquals(ambient.Owner, this) ? ambient.Session : Epoch;
+
     public void EndSession()
     {
         Interlocked.Increment(ref _epoch);
@@ -214,7 +246,14 @@ public sealed class ToastService : IToastService
     public ToastItem Show(ToastKind kind, string message, string? actionLabel = null, Func<Task>? action = null, TimeSpan? lifetime = null)
     {
         var wanted = lifetime ?? (action is not null && string.Equals(actionLabel, "Undo", StringComparison.OrdinalIgnoreCase) ? UndoLifetime : Lifetime);
-        var toast = new ToastItem(this, kind, message, actionLabel, action, wanted < MinLifetime ? MinLifetime : wanted > MaxLifetime ? MaxLifetime : wanted);
+        var session = CurrentSession;
+        var toast = new ToastItem(this, session, kind, message, actionLabel, action, wanted < MinLifetime ? MinLifetime : wanted > MaxLifetime ? MaxLifetime : wanted);
+        if (!IsCurrent(session))
+        {
+            toast.Dismiss(); // raised in a session that has ended: never shown
+            return toast;
+        }
+
         Post(() => Toasts.Add(toast));
         return toast;
     }
