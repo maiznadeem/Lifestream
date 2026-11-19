@@ -76,13 +76,13 @@
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate>
                     <StackPanel VerticalAlignment="Center" feat:Edge.Left="{DynamicResource Space.12}" feat:Edge.Right="{DynamicResource Space.12}">
-                      <TextBlock TextTrimming="CharacterEllipsis">
+                      <TextBlock TextTrimming="CharacterEllipsis" TextWrapping="NoWrap">
                         <Hyperlink Style="{StaticResource RecordLink}" Command="{Binding DataContext.OpenPartyCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}" CommandParameter="{Binding}"
                                    AutomationProperties.Name="Open record">
                           <Run Text="{Binding PartyName, Mode=OneWay}" />
                         </Hyperlink>
                       </TextBlock>
-                      <TextBlock Style="{DynamicResource Text.Caption}" Foreground="{DynamicResource Brush.TextMuted}">
+                      <TextBlock Style="{DynamicResource Text.Caption}" Foreground="{DynamicResource Brush.TextMuted}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis">
                         <Run Text="{Binding SourceKindText, Mode=OneWay}" /> <Run Text="{Binding SourceIdText, Mode=OneWay}" />
                       </TextBlock>
                     </StackPanel>
@@ -107,8 +107,8 @@
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate>
                     <StackPanel VerticalAlignment="Center" feat:Edge.Left="{DynamicResource Space.12}" feat:Edge.Right="{DynamicResource Space.12}">
-                      <TextBlock Style="{DynamicResource Text.Body}" Text="{Binding StaffName}" TextTrimming="CharacterEllipsis" />
-                      <TextBlock Style="{DynamicResource Text.Caption}" Foreground="{DynamicResource Brush.TextMuted}" Text="{Binding StaffIdText}" />
+                      <TextBlock Style="{DynamicResource DataGrid.PrimaryLine}" Text="{Binding StaffName}" />
+                      <TextBlock Style="{DynamicResource DataGrid.SecondaryLine}" Foreground="{DynamicResource Brush.TextMuted}" Text="{Binding StaffIdText}" />
                     </StackPanel>
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>

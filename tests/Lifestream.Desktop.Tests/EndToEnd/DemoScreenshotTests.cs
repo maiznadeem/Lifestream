@@ -103,6 +103,10 @@ public sealed class DemoScreenshotTests
             PerfTests.Pump(ChartWarmUp.Start(System.Windows.Threading.Dispatcher.CurrentDispatcher), 10_000);
 
             using var rig = RealRig.CreateSignedOut(api);
+
+            // As in the app (App.cs): the record pickers get their view model from the real client, so a filter shows "Any donor" and not a half-built control. Matches are shown inline: no popup window.
+            RecordPicker.InlineResults = true;
+            RecordPicker.ViewModelFactory = kind => new Lifestream.Client.Lookups.RecordPickerViewModel(rig.Provider.GetRequiredService<Lifestream.Client.Api.ILifestreamApiClient>(), kind);
             var flow = rig.Provider.GetRequiredService<Lifestream.Client.Navigation.IAppFlow>();
             flow.Start();
             var login = rig.Windows.Login ?? throw new InvalidOperationException("the app flow did not open the sign-in screen");

@@ -59,6 +59,12 @@ internal static class SyntheticDataBuilder
     // Clinic day: 16 half-hour slots from 09:00 to 16:30 UTC.
     private const int SlotsPerDay = 16;
 
+    /// <summary>The demo history reaches this far back: the twelve months of the dashboard chart plus the part of the month before them.</summary>
+    internal const int HistoryDays = 365;
+
+    /// <summary>The oldest days of the history in which nothing is issued yet: the first donations have to build stock first.</summary>
+    private const int IssueFreeDays = 30;
+
     // The hash of a random password that was generated once and thrown away: no demo row has a password anyone knows.
     // The demo login hands out a token without a password (see the design, section 5.3).
     internal const string DiscardedPasswordHash =
@@ -72,7 +78,8 @@ internal static class SyntheticDataBuilder
         ArgumentOutOfRangeException.ThrowIfLessThan(factor, 1);
         var rng = new DeterministicRandom(((ulong)today.DayNumber << 16) ^ (ulong)factor);
         var set = new DemoDataSet();
-        var pastDays = 110 * ((factor + 5) / 6);
+        // At least a full year of history, so the dashboard's twelve monthly buckets all have data; bigger scale datasets keep their longer span.
+        var pastDays = Math.Max(HistoryDays, 110 * ((factor + 5) / 6));
         var futureDays = 30 * ((factor + 3) / 4);
 
         BuildStaff(set, rng, today, factor);
@@ -149,8 +156,8 @@ internal static class SyntheticDataBuilder
     {
         var completed = new List<Appointment>();
         var pastCount = (SeedSizes.CompletedAppointments + SeedSizes.CancelledAppointments + SeedSizes.NoShowAppointments) * factor;
-        var pastSlots = Shuffled(pastCount, rng, modulus: pastDays * SlotsPerDay);
         var todayStart = today.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+        var pastSlots = SlotsOverMonths(pastCount, rng, todayStart.AddDays(-pastDays), pastDays);
         for (var i = 0; i < pastCount; i++)
         {
             var status = i < SeedSizes.CompletedAppointments * factor ? AppointmentStatus.Completed
@@ -236,10 +243,13 @@ internal static class SyntheticDataBuilder
         var queues = Enum.GetValues<BloodType>().ToDictionary(t => t, _ => new Queue<BloodBag>());
         var next = 0;
 
-        // Fulfilled requests are issued on random days in the last (pastDays - 20) days, oldest first, so early donations build stock.
+        // Fulfilled requests are issued on days in the last (pastDays - IssueFreeDays) days, oldest first, so early donations build stock.
+        // Their days are spread over the months with the same month-to-month variation as the donations (every month gets some).
         var fulfilled = SeedSizes.FulfilledRequests * factor;
-        var issueDays = Enumerable.Range(0, fulfilled)
-            .Select(_ => todayStart.AddDays(-rng.Between(1, pastDays - 20)).AddHours(9).AddMinutes(rng.Between(0, 479)))
+        var issueWindowDays = pastDays - IssueFreeDays;
+        var issueWindowStart = todayStart.AddDays(-issueWindowDays);
+        var issueDays = DaysOverMonths(fulfilled, rng, issueWindowStart, issueWindowDays)
+            .Select(day => issueWindowStart.AddDays(day).AddHours(9).AddMinutes(rng.Between(0, 479)))
             .Order()
             .ToList();
 
@@ -308,7 +318,7 @@ internal static class SyntheticDataBuilder
 
         for (var i = 0; i < SeedSizes.CancelledRequests * factor; i++)
         {
-            set.Requests.Add(NewRequest(rng, rng.Pick(set.Patients), todayStart.AddDays(-rng.Between(5, pastDays - 20)), RequestStatus.Cancelled));
+            set.Requests.Add(NewRequest(rng, rng.Pick(set.Patients), todayStart.AddDays(-rng.Between(5, pastDays - IssueFreeDays)), RequestStatus.Cancelled));
         }
     }
 
@@ -343,6 +353,124 @@ internal static class SyntheticDataBuilder
 
     private static DateTime SlotTime(DateTime firstDay, int slotIndex) =>
         firstDay.AddDays(slotIndex / SlotsPerDay).AddHours(9).AddMinutes(30 * (slotIndex % SlotsPerDay));
+
+    /// <summary>
+    /// <paramref name="count"/> distinct clinic slot indexes (day * slots per day + slot) in random order over <paramref name="days"/> days from <paramref name="firstDay"/>, spread over the
+    /// calendar months with <see cref="MonthShares"/>: a month never holds more slots than it has, and no two rows share a slot.
+    /// </summary>
+    private static int[] SlotsOverMonths(int count, DeterministicRandom rng, DateTime firstDay, int days)
+    {
+        var months = MonthRanges(firstDay, days);
+        var perMonth = MonthShares(count, rng, months, capacities: [.. months.Select(m => (m.End - m.Start) * SlotsPerDay)]);
+        var slots = new List<int>(count);
+        for (var m = 0; m < months.Count; m++)
+        {
+            var first = months[m].Start * SlotsPerDay;
+            slots.AddRange(Shuffled(perMonth[m], rng, modulus: (months[m].End - months[m].Start) * SlotsPerDay).Select(i => first + i));
+        }
+
+        // The months were filled in order; shuffle so that the statuses handed out by position are not sorted by date.
+        for (var i = slots.Count - 1; i > 0; i--)
+        {
+            var j = rng.Next(i + 1);
+            (slots[i], slots[j]) = (slots[j], slots[i]);
+        }
+
+        return [.. slots];
+    }
+
+    /// <summary><paramref name="count"/> day offsets (0 to days - 1), spread over the calendar months with <see cref="MonthShares"/>; a day may repeat.</summary>
+    private static List<int> DaysOverMonths(int count, DeterministicRandom rng, DateTime firstDay, int days)
+    {
+        var months = MonthRanges(firstDay, days);
+        var perMonth = MonthShares(count, rng, months, capacities: null);
+        var result = new List<int>(count);
+        for (var m = 0; m < months.Count; m++)
+        {
+            for (var i = 0; i < perMonth[m]; i++)
+            {
+                result.Add(months[m].Start + rng.Next(months[m].End - months[m].Start));
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>The calendar months that the days [0, days) from <paramref name="firstDay"/> fall in, each as a range of day offsets.</summary>
+    private static List<(int Start, int End)> MonthRanges(DateTime firstDay, int days)
+    {
+        var months = new List<(int Start, int End)>();
+        var start = 0;
+        for (var d = 1; d <= days; d++)
+        {
+            if (d == days || firstDay.AddDays(d).Month != firstDay.AddDays(d - 1).Month)
+            {
+                months.Add((start, d));
+                start = d;
+            }
+        }
+
+        return months;
+    }
+
+    /// <summary>
+    /// How many of <paramref name="total"/> rows fall in each month: proportional to the days the month has, times a deterministic factor between 0.65 and 1.35 for that month
+    /// (the month-to-month variation) and a gentle rise towards the present (a clinic that is growing), but never fewer than a quarter of an even share, so no month is empty, and never
+    /// more than its <paramref name="capacities"/> allow. The shares add up to exactly <paramref name="total"/>.
+    /// </summary>
+    private static int[] MonthShares(int total, DeterministicRandom rng, List<(int Start, int End)> months, int[]? capacities)
+    {
+        var weights = new double[months.Count];
+        for (var m = 0; m < months.Count; m++)
+        {
+            var progress = months.Count == 1 ? 1.0 : m / (double)(months.Count - 1);
+            weights[m] = (months[m].End - months[m].Start) * (rng.Between(65, 135) / 100.0) * (0.85 + (0.3 * progress));
+        }
+
+        var shares = new int[months.Count];
+        var floor = total / (months.Count * 4);
+        var remaining = total;
+        for (var m = 0; m < months.Count; m++)
+        {
+            shares[m] = Math.Min(floor, capacities?[m] ?? int.MaxValue);
+            remaining -= shares[m];
+        }
+
+        // Hand out the rest by weight, largest remainder first; a month that reaches its capacity closes and the surplus goes to the others.
+        while (remaining > 0)
+        {
+            var open = Enumerable.Range(0, months.Count).Where(m => capacities is null || shares[m] < capacities[m]).ToList();
+            if (open.Count == 0)
+            {
+                throw new InvalidOperationException("The demo history has no room for that many rows.");
+            }
+
+            var weightSum = open.Sum(m => weights[m]);
+            var wanted = open.ToDictionary(m => m, m => remaining * weights[m] / weightSum);
+            foreach (var m in open)
+            {
+                var whole = Math.Min((int)wanted[m], (capacities?[m] ?? int.MaxValue) - shares[m]);
+                shares[m] += whole;
+                remaining -= whole;
+            }
+
+            foreach (var m in open.OrderByDescending(m => wanted[m] - Math.Floor(wanted[m])).ThenBy(m => m))
+            {
+                if (remaining == 0)
+                {
+                    break;
+                }
+
+                if (capacities is null || shares[m] < capacities[m])
+                {
+                    shares[m]++;
+                    remaining--;
+                }
+            }
+        }
+
+        return shares;
+    }
 
     /// <summary>Size of the name grid to draw from: every first name with every last name, or more when more people are needed.</summary>
     private static int NameSpace(int people) => Math.Max(people, SyntheticVocabulary.FirstNames.Count * SyntheticVocabulary.LastNames.Count);

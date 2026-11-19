@@ -18,6 +18,18 @@
     <Setter Property="local:TruncationTooltip.IsEnabled" Value="True" />
   </Style>
 
+  <!-- The two lines of a two-line cell (a name, then "#id" or a username): one line each, ellipsis and a tooltip with the whole text, so the cell (20 + 16 DIP) always fits the 40 DIP row. -->
+  <Style x:Key="DataGrid.PrimaryLine" TargetType="TextBlock" BasedOn="{StaticResource Text.Body}">
+    <Setter Property="TextWrapping" Value="NoWrap" />
+    <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    <Setter Property="local:TruncationTooltip.IsEnabled" Value="True" />
+  </Style>
+  <Style x:Key="DataGrid.SecondaryLine" TargetType="TextBlock" BasedOn="{StaticResource Text.Caption}">
+    <Setter Property="TextWrapping" Value="NoWrap" />
+    <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    <Setter Property="local:TruncationTooltip.IsEnabled" Value="True" />
+  </Style>
+
   <Style x:Key="DataGridColumnHeader.Lifestream" TargetType="DataGridColumnHeader">
     <Setter Property="FontFamily" Value="{DynamicResource Font.Family}" />
     <Setter Property="FontSize" Value="{StaticResource FontSize.Label}" />

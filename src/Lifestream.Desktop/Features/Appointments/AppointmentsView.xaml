@@ -50,8 +50,8 @@
         <controls:FormField Label="Blood type" feat:Edge.Right="{DynamicResource Space.16}">
           <ComboBox x:Name="BloodTypeBox" ItemsSource="{Binding BloodTypeOptions}" SelectedItem="{Binding BloodTypeFilter, Mode=TwoWay}" DisplayMemberPath="Display" MinWidth="150" AutomationProperties.Name="Blood type" />
         </controls:FormField>
-        <controls:FormField Label="Donor" feat:Edge.Right="{DynamicResource Space.16}" MinWidth="220">
-          <controls:RecordPicker x:Name="DonorFilterBox" Kind="Donor" Label="Donor" SelectedOption="{Binding DonorFilter, Mode=TwoWay}" />
+        <controls:FormField Label="Donor" feat:Edge.Right="{DynamicResource Space.16}" MinWidth="280">
+          <controls:RecordPicker x:Name="DonorFilterBox" Kind="Donor" Label="Donor" EmptyText="Any donor" SelectedOption="{Binding DonorFilter, Mode=TwoWay}" />
         </controls:FormField>
         <Button Style="{DynamicResource Button.Ghost}" Content="Clear filters" Command="{Binding ClearFiltersCommand}" VerticalAlignment="Bottom" feat:Edge.Bottom="{DynamicResource Space.16}"
                 Visibility="{Binding HasActiveFilters, Converter={StaticResource BoolToVisibility}}" AutomationProperties.Name="Clear filters" />
@@ -82,13 +82,13 @@
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate>
                     <StackPanel VerticalAlignment="Center" feat:Edge.Left="{DynamicResource Space.12}" feat:Edge.Right="{DynamicResource Space.12}">
-                      <TextBlock TextTrimming="CharacterEllipsis">
+                      <TextBlock TextTrimming="CharacterEllipsis" TextWrapping="NoWrap">
                         <Hyperlink Style="{StaticResource RecordLink}" Command="{Binding DataContext.OpenDonorCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}" CommandParameter="{Binding}"
                                    AutomationProperties.Name="Open donor">
                           <Run Text="{Binding DonorName, Mode=OneWay}" />
                         </Hyperlink>
                       </TextBlock>
-                      <TextBlock Style="{DynamicResource Text.Caption}" Foreground="{DynamicResource Brush.TextMuted}" Text="{Binding DonorId, Converter={StaticResource IdText}}" />
+                      <TextBlock Style="{DynamicResource DataGrid.SecondaryLine}" Foreground="{DynamicResource Brush.TextMuted}" Text="{Binding DonorId, Converter={StaticResource IdText}}" />
                     </StackPanel>
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>

@@ -80,13 +80,13 @@
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate>
                     <StackPanel VerticalAlignment="Center" feat:Edge.Left="{DynamicResource Space.12}" feat:Edge.Right="{DynamicResource Space.12}">
-                      <TextBlock TextTrimming="CharacterEllipsis">
+                      <TextBlock TextTrimming="CharacterEllipsis" TextWrapping="NoWrap">
                         <Hyperlink Style="{StaticResource RecordLink}" Command="{Binding DataContext.OpenPatientCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}" CommandParameter="{Binding}"
                                    AutomationProperties.Name="Open patient">
                           <Run Text="{Binding PatientName, Mode=OneWay}" />
                         </Hyperlink>
                       </TextBlock>
-                      <TextBlock Style="{DynamicResource Text.Caption}" Foreground="{DynamicResource Brush.TextMuted}" Text="{Binding PatientId, Converter={StaticResource IdText}}" />
+                      <TextBlock Style="{DynamicResource DataGrid.SecondaryLine}" Foreground="{DynamicResource Brush.TextMuted}" Text="{Binding PatientId, Converter={StaticResource IdText}}" />
                     </StackPanel>
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>

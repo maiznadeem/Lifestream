@@ -82,8 +82,8 @@
       </Popup>
     </Grid>
 
-    <!-- Chosen: a summary chip with Change. -->
-    <Border x:Name="Chip" Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibility}}" MinHeight="{DynamicResource Height.Control}"
+    <!-- Filter with nothing chosen: the placeholder ("Any donor") and a Choose action. Collapsed unless the view model says otherwise, so a picker without one shows nothing misleading. -->
+    <Border x:Name="Empty" Visibility="{Binding ShowEmpty, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed}" MinHeight="{DynamicResource Height.Control}"
             Background="{DynamicResource Brush.SurfaceRaised}" BorderBrush="{DynamicResource Brush.BorderInput}" BorderThickness="1"
             CornerRadius="{DynamicResource Radius.Control}" Padding="{DynamicResource Inset.L12R4}">
       <Grid>
@@ -91,9 +91,29 @@
           <ColumnDefinition Width="*" />
           <ColumnDefinition Width="Auto" />
         </Grid.ColumnDefinitions>
+        <TextBlock Style="{DynamicResource Text.Body}" Foreground="{DynamicResource Brush.TextMuted}" Text="{Binding EmptyText}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                   TextWrapping="NoWrap" />
+        <Button Grid.Column="1" Style="{DynamicResource Button.Ghost}" Content="Choose" Command="{Binding ChooseCommand}" AutomationProperties.Name="Choose record" />
+      </Grid>
+    </Border>
+
+    <!-- Chosen: a summary chip with Change, and (on a filter) a clear. Collapsed unless something is chosen. -->
+    <Border x:Name="Chip" Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed}" MinHeight="{DynamicResource Height.Control}"
+            Background="{DynamicResource Brush.SurfaceRaised}" BorderBrush="{DynamicResource Brush.BorderInput}" BorderThickness="1"
+            CornerRadius="{DynamicResource Radius.Control}" Padding="{DynamicResource Inset.L12R4}">
+      <Grid>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="Auto" />
+          <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
         <TextBlock Style="{DynamicResource Text.Body}" Text="{Binding SummaryText}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"
                    AutomationProperties.LiveSetting="Polite" />
         <Button Grid.Column="1" Style="{DynamicResource Button.Ghost}" Content="Change" Command="{Binding ChangeCommand}" AutomationProperties.Name="Change selection" />
+        <Button Grid.Column="2" Style="{DynamicResource Button.Ghost}" Padding="{DynamicResource Inset.H8}" MinWidth="32" Command="{Binding ClearCommand}" AutomationProperties.Name="Clear selection"
+                Visibility="{Binding IsFilter, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed}">
+          <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE711;" />
+        </Button>
       </Grid>
     </Border>
   </Grid>

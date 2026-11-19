@@ -7,7 +7,7 @@
     "Patients": 35,
     "Pending appointments": 70,
     "Pending requests": 40,
-    "Units in stock": 94,
+    "Units in stock": 36,
     "Expiring within 7 days": 10
   },
   "files": [
@@ -23,14 +23,14 @@
       "file": "dashboard.png",
       "width": 1366,
       "height": 768,
-      "sha256": "76d8a67ba35eddbfcc0f96376292d4aec7eeb74aa0894d091b0ab936ab737555"
+      "sha256": "27438e90866254c5c78195977ad916f2655aa50e8d1e42bd474ed47c272c6f8c"
     },
     {
       "screen": "donors",
       "file": "donors.png",
       "width": 1366,
       "height": 768,
-      "sha256": "8ceeeb1be7fee7c9d320241e74cd6c6558fc5b56ac5cf80fbafbb86908264f42"
+      "sha256": "2370aa83201e6b4afa7fefb4dcd94330493008f86dbbc0161190bf3c1c13e42d"
     },
     {
       "screen": "patients",
@@ -44,28 +44,28 @@
       "file": "appointments.png",
       "width": 1366,
       "height": 768,
-      "sha256": "ee2287330c5d02b0013442ef08bbdef013768db6fda5ace3cadd0ec0839c9215"
+      "sha256": "1f0508b6dc873f3ce70d7757310f95747cb735ed8b72369fe182bb79c520b703"
     },
     {
       "screen": "requests",
       "file": "requests.png",
       "width": 1366,
       "height": 768,
-      "sha256": "6fdfcee44485f84919002185be9471689c3d1e18503567dbbca77d3070637804"
+      "sha256": "b14fc2c19ca0c00ad48a6541db611134c6beba9646a953a70d6f7a931dde87ea"
     },
     {
       "screen": "stock",
       "file": "stock.png",
       "width": 1366,
       "height": 768,
-      "sha256": "cd66d0078f47ce14d7bceb359105e7779f447eb566d4e780e5fc321dd932985d"
+      "sha256": "559bd90643f5cffd5fdbbcb13e495b0117e9ffa4a18bb93e23ec4ae7dcdb508a"
     },
     {
       "screen": "receipts",
       "file": "receipts.png",
       "width": 1366,
       "height": 768,
-      "sha256": "6d56f74d26fd661fcde43003fcd21f0394a4792c9fb3309e1a1a3d702edfae7a"
+      "sha256": "bc2ab368afd2a004c05132d413fe5a24fb87914cfef14eb743a5cb4625bbf9a6"
     },
     {
       "screen": "staff",

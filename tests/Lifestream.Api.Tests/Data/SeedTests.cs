@@ -121,6 +121,49 @@ public sealed partial class SeedTests
         Assert.Equal(8, set.Patients.Select(p => p.BloodType).Distinct().Count());
     }
 
+    /// <summary>The first day of each of the dashboard's twelve monthly buckets for <paramref name="today"/>, oldest first (the dashboard's last 12 months, this month included).</summary>
+    private static List<DateOnly> DashboardMonths(DateOnly today) => [.. Enumerable.Range(0, 12).Select(i => new DateOnly(today.Year, today.Month, 1).AddMonths(i - 11))];
+
+    private static Dictionary<DateOnly, int> PerMonth(IEnumerable<DateTime> dates) =>
+        dates.GroupBy(d => new DateOnly(d.Year, d.Month, 1)).ToDictionary(g => g.Key, g => g.Count());
+
+    public static TheoryData<DateOnly> ManyDays => [new DateOnly(2026, 11, 19), new DateOnly(2026, 3, 1), new DateOnly(2026, 12, 31), new DateOnly(2027, 2, 28), new DateOnly(2026, 7, 4)];
+
+    [Theory]
+    [MemberData(nameof(ManyDays))]
+    public void DemoData_History_FillsEveryMonthOfTheDashboardsTwelveMonths_WithMonthToMonthVariation(DateOnly today)
+    {
+        var set = new DemoDataGenerator().Generate(today);
+        var donations = PerMonth(set.Receipts.Where(r => r.Kind == ReceiptKind.Donation).Select(r => r.CreatedAtUtc));
+        var issues = PerMonth(set.Receipts.Where(r => r.Kind == ReceiptKind.Issue).Select(r => r.CreatedAtUtc));
+        var months = DashboardMonths(today);
+
+        // Every bucket the chart draws (the current month too once it has a few days in it) has donations and issues.
+        var drawn = months.Where(m => m != months[^1] || today.Day >= 10).ToList();
+        Assert.All(drawn, m => Assert.True(donations.GetValueOrDefault(m) > 0, $"{today:yyyy-MM-dd}: no donations in {m:yyyy-MM}"));
+        Assert.All(drawn, m => Assert.True(issues.GetValueOrDefault(m) > 0, $"{today:yyyy-MM-dd}: no issues in {m:yyyy-MM}"));
+
+        // The months differ from each other: a flat histogram would look as made up as an empty one.
+        var complete = months.Take(11).Select(m => donations.GetValueOrDefault(m)).ToList();
+        Assert.True(complete.Max() >= complete.Min() * 1.3, $"{today:yyyy-MM-dd}: donations per month are {string.Join(", ", complete)}");
+        Assert.True(complete.Distinct().Count() >= 6, $"{today:yyyy-MM-dd}: donations per month are {string.Join(", ", complete)}");
+
+        // The history stays in the past and reaches back a full year.
+        Assert.All(set.Receipts, r => Assert.True(DateOnly.FromDateTime(r.CreatedAtUtc) < today));
+        Assert.True(DateOnly.FromDateTime(set.Receipts.Min(r => r.CreatedAtUtc)) <= months[0].AddDays(3), "the oldest receipt is newer than the first month of the chart");
+    }
+
+    [Fact]
+    public void DemoData_Variation_IsDeterministicPerDate_AndDiffersFromOneDateToTheNext()
+    {
+        var a = PerMonth(new DemoDataGenerator().Generate(Day).Receipts.Select(r => r.CreatedAtUtc));
+        var again = PerMonth(new DemoDataGenerator().Generate(Day).Receipts.Select(r => r.CreatedAtUtc));
+        var other = PerMonth(new DemoDataGenerator().Generate(Day.AddDays(1)).Receipts.Select(r => r.CreatedAtUtc));
+
+        Assert.Equal(a.OrderBy(x => x.Key), again.OrderBy(x => x.Key));
+        Assert.NotEqual(a.OrderBy(x => x.Key), other.OrderBy(x => x.Key));
+    }
+
     [Fact]
     public void ScaleData_Factor100_Has27000Receipts_AndIsDeterministic()
     {
