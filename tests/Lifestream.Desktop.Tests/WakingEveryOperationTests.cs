@@ -119,6 +119,8 @@ public sealed class WakingEveryOperationTests
         ["Stock.OpenRequestsCommand"] = "navigates to Requests with the group (a fake navigation here)",
         ["Receipts.PrintCommand"] = "prints the receipt already loaded in the panel (the printer, no API call)",
         ["Receipts.SavePdfCommand"] = "saves the receipt already loaded in the panel as a PDF (the printer, no API call)",
+        ["Dashboard.RunAttentionCommand"] = "navigates to the screen a Needs attention row names, with its filter (a fake navigation here)",
+        ["Dashboard.OpenAppointmentCommand"] = "navigates to Appointments with the row of Today's appointments (a fake navigation here)",
     };
 
     /// <summary>Commands that are disabled on a freshly loaded screen with the first record selected, each with the reason; they make no call of their own.</summary>
@@ -490,7 +492,7 @@ public sealed class WakingEveryOperationTests
         }
 
         var notCancelled = waiting.Where(w => !w.Token.IsCancellationRequested).Select(w => w.Method).ToList();
-        return notCancelled.Count == 0 ? null : $"{screen.Name}.{commandName}: Cancel did not cancel the HTTP request of {string.Join(",", notCancelled)}";
+        return notCancelled.Count == 0 ? null : $"{screen.Name}.{commandName}: Cancel did not cancel the HTTP request of {string.Join(",", notCancelled)} (requests the silent server holds, in order: {string.Join(",", waiting.Select(w => w.Method))})";
     }
 
     /// <summary>

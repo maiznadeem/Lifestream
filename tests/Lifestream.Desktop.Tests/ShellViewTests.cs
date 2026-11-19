@@ -497,7 +497,7 @@ public sealed class ShellViewTests
         });
 
         Assert.True(elapsed < 100, $"busy state took {elapsed} ms");
-        Assert.Equal("Signing in...", busyText);
+        Assert.Equal("Signing in", busyText); // direction A: the verb alone beside the spinner, no dots (LoginView sets it)
         Assert.True(spinnerVisible, "spinner layer visible");
         Assert.True(fieldsReadOnly, "fields read-only while busy");
         Assert.True(isDefault, "Enter submits through IsDefault");

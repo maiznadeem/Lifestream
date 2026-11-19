@@ -258,13 +258,19 @@ public sealed class FoundationTests
             var close = (FrameworkElement)window.Template.FindName("PART_Close", window);
             var host = (FrameworkElement)window.Template.FindName("ContentHost", window);
             var chrome = System.Windows.Shell.WindowChrome.GetWindowChrome(window);
-            window.TitleBarHeight = 40;
-            return (Min: (minimize.Width, minimize.Height), Close: (close.Width, close.Height), Row: Grid.GetRow(host), Span: Grid.GetRowSpan(host),
-                Caption44: 44.0, CaptionAfter: chrome.CaptionHeight, Inset: ChromeWindow.MaximizedInset);
+            var (min, closeSize, caption) = ((minimize.Width, minimize.Height), (close.Width, close.Height), chrome.CaptionHeight);
+            window.TitleBarHeight = 40; // what the shell sets in a Compact window
+            window.UpdateLayout();
+            return (Min: min, Close: closeSize, Caption: caption, Row: Grid.GetRow(host), Span: Grid.GetRowSpan(host),
+                MinAfter: (minimize.Width, minimize.Height), CloseAfter: (close.Width, close.Height), CaptionAfter: chrome.CaptionHeight, Inset: ChromeWindow.MaximizedInset);
         });
 
         Assert.Equal((46.0, 44.0), facts.Min);
-        Assert.Equal(46.0, facts.Close.Item1);
+        Assert.Equal((46.0, 44.0), facts.Close);
+        Assert.Equal(44, facts.Caption); // the drag area is the title bar
+        // The caption buttons follow the title bar: in a Compact window (40 DIP title bar) they are 46 x 40.
+        Assert.Equal((46.0, 40.0), facts.MinAfter);
+        Assert.Equal((46.0, 40.0), facts.CloseAfter);
         Assert.Equal(0, facts.Row);
         Assert.Equal(2, facts.Span);
         Assert.Equal(40, facts.CaptionAfter); // a compact window's 40 DIP title bar is also the drag area

@@ -20,8 +20,13 @@ public sealed class ColdDashboardRenderTests
     private const int Width = 1366;
     private const int Height = 736;
 
-    private static bool ChartsDrawn(byte[] png) =>
-        StaHost.CountPixelsNear(png, 0xFF, 0x7A, 0x8A, 3) > 400 && StaHost.CountPixelsNear(png, 0x7C, 0xB8, 0xFF, 3) > 400;
+    /// <summary>True when both series colours (Brush.Chart1 and Brush.Chart2 of the theme in use) are on screen in numbers only a drawn chart produces.</summary>
+    private static bool ChartsDrawn(byte[] png, System.Windows.FrameworkElement scope)
+    {
+        var one = ((System.Windows.Media.SolidColorBrush)scope.TryFindResource("Brush.Chart1")).Color;
+        var two = ((System.Windows.Media.SolidColorBrush)scope.TryFindResource("Brush.Chart2")).Color;
+        return StaHost.CountPixelsNear(png, one.R, one.G, one.B, 3) > 400 && StaHost.CountPixelsNear(png, two.R, two.G, two.B, 3) > 400;
+    }
 
     [Trait("Category", "Perf")] // asserts a wall-clock budget: runs in the perf pass (tests/perf/run-perf.ps1), not in the loaded default run
     [Trait("PerfPhase", "timing")]
@@ -55,7 +60,7 @@ public sealed class ColdDashboardRenderTests
             gate.SetResult();
             Hosted.PumpUntil(() => load.IsCompleted, 3000);
             var appliedMs = arrival.ElapsedMilliseconds; // the data is on the screen's model; the charts are drawn next
-            var drawn = Hosted.PumpUntil(() => ChartsDrawn(host.Capture()), 3000);
+            var drawn = Hosted.PumpUntil(() => ChartsDrawn(host.Capture(), host.Element), 3000);
             var drawnMs = arrival.ElapsedMilliseconds;
             FeatureHarness.Save(host, "ColdDashboard_Loaded.png");
             return (drawn, drawnMs, appliedMs, drawsBefore, warmedAfterMs);

@@ -71,9 +71,6 @@ public partial class ShellView : UserControl
             _model.PropertyChanged += OnModelChanged;
         }
 
-        // The palette's own view model (the shell owns it); views never take a DataContext in XAML.
-        Palette.DataContext = _model?.Palette;
-
         Apply();
     }
 
@@ -97,7 +94,9 @@ public partial class ShellView : UserControl
         AccountText.Visibility = IsRail ? Visibility.Collapsed : Visibility.Visible;
         AccountButton.HorizontalAlignment = IsRail ? HorizontalAlignment.Center : HorizontalAlignment.Stretch;
         AccountButton.Padding = IsRail ? ThemeTokens.Inset("Pad.4") : ThemeTokens.Inset("Inset.H12V10");
-        Wordmark.Visibility = Visibility.Visible;
+        // Beside the full sidebar and in a compact window the name follows the mark. Over a rail in a wider window (Ctrl+B) the search field starts where the
+        // name would be, so the mark stands alone.
+        Wordmark.Visibility = IsRail && !compact ? Visibility.Collapsed : Visibility.Visible;
 
         var titleHeight = ThemeTokens.Space(compact ? "Height.TitleBarCompact" : "Height.TitleBar");
         TitleRow.Height = new GridLength(titleHeight);
@@ -149,7 +148,6 @@ public partial class ShellView : UserControl
     {
         if (sender is Button button && Resources["AccountMenu"] is ContextMenu menu)
         {
-            menu.DataContext = DataContext;
             menu.PlacementTarget = button;
             menu.Placement = button == AvatarButton ? System.Windows.Controls.Primitives.PlacementMode.Bottom : System.Windows.Controls.Primitives.PlacementMode.Top;
             menu.IsOpen = true;

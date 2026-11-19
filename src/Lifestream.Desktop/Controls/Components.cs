@@ -187,6 +187,16 @@ public sealed class PageHeader : Control
     public static readonly DependencyProperty TabsProperty =
         DependencyProperty.Register(nameof(Tabs), typeof(object), typeof(PageHeader), new FrameworkPropertyMetadata(null));
 
+    /// <summary>
+    /// The load state of the page. While it is Loading, Waking or Error the count is hidden (there is no true number to show). The default style reads
+    /// it from the <c>State</c> of the view model the header is bound to, so a list screen need not set it.
+    /// </summary>
+    public static readonly DependencyProperty StateProperty =
+        DependencyProperty.Register(nameof(State), typeof(Lifestream.Client.Common.LoadState), typeof(PageHeader), new FrameworkPropertyMetadata(Lifestream.Client.Common.LoadState.Ready));
+
+    /// <summary>The page's load state.</summary>
+    public Lifestream.Client.Common.LoadState State { get => (Lifestream.Client.Common.LoadState)GetValue(StateProperty); set => SetValue(StateProperty, value); }
+
     /// <summary>The line above the title.</summary>
     public string? Overline { get => (string?)GetValue(OverlineProperty); set => SetValue(OverlineProperty, value); }
 
@@ -296,7 +306,7 @@ public sealed class Avatar : Control
 
     /// <summary>A photo; when set it replaces the initials.</summary>
     public static readonly DependencyProperty SourceProperty =
-        DependencyProperty.Register(nameof(Source), typeof(ImageSource), typeof(Avatar), new FrameworkPropertyMetadata(null, (d, e) => ((Avatar)d).SetValue(HasPhotoPropertyKey, e.NewValue is not null)));
+        DependencyProperty.Register(nameof(Source), typeof(ImageSource), typeof(Avatar), new FrameworkPropertyMetadata(null, (d, e) => ((Avatar)d).SetValue(HasPhotoPropertyKey, IsRealPhoto(e.NewValue as ImageSource))));
 
     /// <summary>True for a donor: BloodSoft fill and Blood text instead of Selected and Ink2.</summary>
     public static readonly DependencyProperty IsBloodProperty =
@@ -327,8 +337,14 @@ public sealed class Avatar : Control
     /// <summary>The diameter in DIP.</summary>
     public double Size { get => (double)GetValue(SizeProperty); set => SetValue(SizeProperty, value); }
 
-    /// <summary>True when <see cref="Source"/> is set.</summary>
+    /// <summary>True when <see cref="Source"/> is a real photo.</summary>
     public bool HasPhoto => (bool)GetValue(HasPhotoProperty);
+
+    /// <summary>
+    /// A person with no photo is shown by their initials, never by a blank or generic disc: no source, and the shared placeholder drawing that the
+    /// 2.0 <c>AvatarConverter</c> returns for "no photo" (<see cref="Services.DefaultAvatar.Image"/>), both count as no photo.
+    /// </summary>
+    private static bool IsRealPhoto(ImageSource? source) => source is not null && !ReferenceEquals(source, Services.DefaultAvatar.Image);
 
     /// <inheritdoc />
     protected override AutomationPeer OnCreateAutomationPeer() => new ComponentAutomationPeer(this, AutomationControlType.Image, nameof(Avatar));
@@ -691,4 +707,56 @@ public sealed class ModalOverlay : ContentControl
                 }));
         }
     }
+}
+
+/// <summary>
+/// A box that asks for no more than <see cref="Cap"/> of height for its content, but takes all the height it is given. A scrolling list beside a panel
+/// of a different height uses it: the list asks for a few rows, is as tall as its neighbour, and scrolls when it has more rows than room. With the
+/// default cap (no limit) it is a plain decorator and the content has its natural height.
+/// <code>
+/// &lt;controls:CappedHeightBox Cap="272"&gt;&lt;ScrollViewer&gt;...&lt;/ScrollViewer&gt;&lt;/controls:CappedHeightBox&gt;
+/// </code>
+/// </summary>
+public sealed class CappedHeightBox : Decorator
+{
+    /// <summary>The most height the box asks for, in DIP (no limit by default).</summary>
+    public static readonly DependencyProperty CapProperty =
+        DependencyProperty.Register(nameof(Cap), typeof(double), typeof(CappedHeightBox), new FrameworkPropertyMetadata(double.PositiveInfinity, FrameworkPropertyMetadataOptions.AffectsMeasure));
+
+    /// <summary>The most height the box asks for.</summary>
+    public double Cap { get => (double)GetValue(CapProperty); set => SetValue(CapProperty, value); }
+
+    /// <inheritdoc />
+    protected override Size MeasureOverride(Size constraint)
+    {
+        if (Child is not { } child)
+        {
+            return default;
+        }
+
+        // Measured within the cap, so a scroll viewer inside asks for the cap at most; arranged with whatever the box gets (Decorator does that).
+        child.Measure(new Size(constraint.Width, Math.Min(constraint.Height, Cap)));
+        return child.DesiredSize;
+    }
+}
+
+/// <summary>
+/// Keeps a blood group in one piece when a sentence wraps. WPF may break a line before the minus sign (U+2212), which leaves "(O" at the end of one
+/// line and "−)" at the start of the next; a word joiner (U+2060, no width) before each minus sign forbids that break. Use it on wrapping text that
+/// names blood groups: <c>Text="{Binding Detail, Converter={StaticResource KeepGroups}}"</c>. The bound text itself is unchanged (tooltips, automation
+/// names and copies keep the plain text).
+/// </summary>
+public sealed class KeepGroupsTogetherConverter : System.Windows.Data.IValueConverter
+{
+    private const string Minus = "\u2212";
+    private const string JoinedMinus = "\u2060\u2212";
+
+    /// <summary>The text with a word joiner before every minus sign.</summary>
+    public static string Join(string? text) => string.IsNullOrEmpty(text) ? string.Empty : text.Replace(JoinedMinus, Minus, StringComparison.Ordinal).Replace(Minus, JoinedMinus, StringComparison.Ordinal);
+
+    /// <inheritdoc />
+    public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture) => Join(value as string);
+
+    /// <inheritdoc />
+    public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture) => throw new NotSupportedException();
 }

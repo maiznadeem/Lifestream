@@ -116,17 +116,17 @@
               <StackPanel x:Name="CaptionButtons" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top" Panel.ZIndex="10">
                 <Button x:Name="PART_Minimize" Style="{StaticResource CaptionButton}" Command="{x:Static SystemCommands.MinimizeWindowCommand}"
                         AutomationProperties.Name="Minimize" ToolTip="Minimize">
-                  <controls:IconText Style="{StaticResource Text.Icon}" Text="&#xE921;" FontSize="10" />
+                  <controls:IconText Style="{StaticResource Text.Icon}" Text="&#xE921;" FontSize="{StaticResource Size.CaptionGlyph}" />
                 </Button>
                 <!-- Not hit-testable by WPF: Windows answers HTMAXBUTTON for it, which gives Snap Layouts. It highlights from IsMaximizeHovered. -->
                 <Border x:Name="PART_Maximize" Width="{StaticResource Width.CaptionButton}" Height="{Binding TitleBarHeight, RelativeSource={RelativeSource TemplatedParent}}" Background="Transparent"
                         AutomationProperties.Name="Maximize" AutomationProperties.HelpText="Maximize or restore the window">
-                  <controls:IconText x:Name="MaximizeGlyph" Style="{StaticResource Text.Icon}" Text="&#xE922;" FontSize="10" Foreground="{DynamicResource Brush.Ink}"
+                  <controls:IconText x:Name="MaximizeGlyph" Style="{StaticResource Text.Icon}" Text="&#xE922;" FontSize="{StaticResource Size.CaptionGlyph}" Foreground="{DynamicResource Brush.Ink}"
                                      HorizontalAlignment="Center" VerticalAlignment="Center" />
                 </Border>
                 <Button x:Name="PART_Close" Style="{StaticResource CaptionButton.Close}" Command="{x:Static SystemCommands.CloseWindowCommand}"
                         AutomationProperties.Name="Close" ToolTip="Close">
-                  <controls:IconText Style="{StaticResource Text.Icon}" Text="&#xE8BB;" FontSize="10" />
+                  <controls:IconText Style="{StaticResource Text.Icon}" Text="&#xE8BB;" FontSize="{StaticResource Size.CaptionGlyph}" />
                 </Button>
               </StackPanel>
             </Grid>

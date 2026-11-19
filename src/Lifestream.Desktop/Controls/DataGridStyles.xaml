@@ -133,8 +133,8 @@
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="DataGridRow">
-          <Border x:Name="RowBorder" Background="{TemplateBinding Background}" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="0,0,0,1"
-                  SnapsToDevicePixels="True">
+          <!-- The separator is drawn over the row's last pixel row, so a row is exactly Height.Row (44) tall, line included. -->
+          <Border x:Name="RowBorder" Background="{TemplateBinding Background}" SnapsToDevicePixels="True">
             <Grid>
               <SelectiveScrollingGrid>
                 <SelectiveScrollingGrid.ColumnDefinitions>
@@ -143,6 +143,7 @@
                 </SelectiveScrollingGrid.ColumnDefinitions>
                 <DataGridCellsPresenter Grid.Column="1" ItemsPanel="{TemplateBinding ItemsPanel}" SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" />
               </SelectiveScrollingGrid>
+              <Border x:Name="Separator" Height="1" VerticalAlignment="Bottom" Background="{DynamicResource Brush.Stroke}" IsHitTestVisible="False" SnapsToDevicePixels="True" />
               <!-- The selected row's 3 px bar, inside its left edge. -->
               <Border x:Name="SelectedBar" Width="3" HorizontalAlignment="Left" Background="{DynamicResource Brush.SelectedBar}" Visibility="Collapsed" IsHitTestVisible="False" />
             </Grid>

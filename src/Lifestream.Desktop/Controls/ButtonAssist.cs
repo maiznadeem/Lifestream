@@ -28,6 +28,16 @@ public static class ButtonAssist
     public static readonly DependencyProperty SheenProperty =
         DependencyProperty.RegisterAttached("Sheen", typeof(Brush), typeof(ButtonAssist), new FrameworkPropertyMetadata(null));
 
+    private static readonly DependencyPropertyKey HasLabelPropertyKey =
+        DependencyProperty.RegisterAttachedReadOnly("HasLabel", typeof(bool), typeof(ButtonAssist), new FrameworkPropertyMetadata(true));
+
+    /// <summary>
+    /// True while the button's content shows text. Set by <see cref="ButtonHost"/> (the root of the button template) each time the button is measured.
+    /// An icon-only button (no label, or a label that a narrow window has collapsed) turns busy with the spinner alone, so the busy layer never makes
+    /// it wider than its icon.
+    /// </summary>
+    public static readonly DependencyProperty HasLabelProperty = HasLabelPropertyKey.DependencyProperty;
+
     static ButtonAssist()
     {
         // A busy button ignores every click, however it was triggered (mouse, Enter, Space, IsDefault).
@@ -37,6 +47,10 @@ public static class ButtonAssist
     public static bool GetIsBusy(DependencyObject element) => (bool)(element ?? throw new ArgumentNullException(nameof(element))).GetValue(IsBusyProperty);
 
     public static void SetIsBusy(DependencyObject element, bool value) => (element ?? throw new ArgumentNullException(nameof(element))).SetValue(IsBusyProperty, value);
+
+    public static bool GetHasLabel(DependencyObject element) => (bool)(element ?? throw new ArgumentNullException(nameof(element))).GetValue(HasLabelProperty);
+
+    internal static void SetHasLabel(DependencyObject element, bool value) => element.SetValue(HasLabelPropertyKey, value);
 
     public static string GetBusyText(DependencyObject element) => (string)(element ?? throw new ArgumentNullException(nameof(element))).GetValue(BusyTextProperty);
 
@@ -107,5 +121,63 @@ public static class FocusAssist
         {
             SetShowRing(control, ShouldShowRing(control.IsKeyboardFocused, LastInputWasKeyboard));
         }
+    }
+}
+
+/// <summary>
+/// The root of the button template: a Grid that also tells the button whether its content shows text (<see cref="ButtonAssist.HasLabelProperty"/>).
+/// The label layer and the busy layer share its one cell and are both measured, so a button keeps its width when it turns busy; for a button that
+/// shows only an icon the template then drops the busy text, and the button stays as wide as its icon.
+/// </summary>
+public sealed class ButtonHost : Grid
+{
+    /// <inheritdoc />
+    protected override Size MeasureOverride(Size constraint)
+    {
+        var size = base.MeasureOverride(constraint);
+        if (TemplatedParent is not { } button || InternalChildren.OfType<ContentPresenter>().FirstOrDefault() is not { } content)
+        {
+            return size;
+        }
+
+        var hasLabel = ShowsText(content);
+        if (ButtonAssist.GetHasLabel(button) == hasLabel)
+        {
+            return size;
+        }
+
+        // The template's trigger shows or collapses the busy text at once; measure again with it.
+        ButtonAssist.SetHasLabel(button, hasLabel);
+        return base.MeasureOverride(constraint);
+    }
+
+    /// <summary>
+    /// True when a text element under <paramref name="node"/> takes up room. Collapsed text does not count (a label folded away in a narrow window); hidden
+    /// text does (the label of a busy button is hidden, not gone). Icons are drawn shapes, and an <see cref="IconText"/> glyph is an icon too.
+    /// </summary>
+    private static bool ShowsText(DependencyObject node)
+    {
+        if (node is UIElement element)
+        {
+            if (element.Visibility == Visibility.Collapsed || element is IconText)
+            {
+                return false;
+            }
+
+            if (element is TextBlock or AccessText)
+            {
+                return element.DesiredSize.Width > 0;
+            }
+        }
+
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(node); i++)
+        {
+            if (ShowsText(VisualTreeHelper.GetChild(node, i)))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

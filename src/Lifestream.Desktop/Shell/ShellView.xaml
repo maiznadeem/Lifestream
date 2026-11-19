@@ -199,6 +199,7 @@
     </Border>
 
     <!-- The command palette (Ctrl+K): over everything, 640 DIP wide, just under the title bar. -->
-    <shell:CommandPaletteView x:Name="Palette" Grid.RowSpan="2" Grid.ColumnSpan="2" />
+    <!-- The palette binds to its own view model, which the shell owns. -->
+    <shell:CommandPaletteView x:Name="Palette" Grid.RowSpan="2" Grid.ColumnSpan="2" DataContext="{Binding Palette}" />
   </Grid>
 </UserControl>

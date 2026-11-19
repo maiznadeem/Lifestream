@@ -658,6 +658,56 @@ public sealed class ComponentTests
     // Avatar and photos
 
     [Fact]
+    public void Avatar_WithASource_DrawsThePhotoOverTheInitials_AndGoesBackToInitialsWithoutOne()
+    {
+        // The photo sits in an ImageBrush inside the template. A TemplateBinding does not resolve there, so the photo never showed (Staff and Profile
+        // drew their own ellipse over the avatar until this was fixed).
+        var f = StaHost.Run(() =>
+        {
+            var pixels = new byte[32 * 32 * 4];
+            for (var i = 0; i < pixels.Length; i += 4)
+            {
+                (pixels[i], pixels[i + 1], pixels[i + 2], pixels[i + 3]) = (0, 255, 0, 255); // BGRA: pure green, a colour no theme token has
+            }
+
+            var photo = System.Windows.Media.Imaging.BitmapSource.Create(32, 32, 96, 96, PixelFormats.Bgra32, null, pixels, 32 * 4);
+            photo.Freeze();
+            var avatar = new Avatar { Size = 64, Initials = "HG", HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+            using var host = Hosted.Create(Canvas(120, 120, avatar), 120, 120);
+            host.Settle(100);
+
+            (byte B, byte G, byte R) Centre()
+            {
+                var data = host.Pixels();
+                var i = ((60 * 120) + 60) * 4;
+                return (data[i], data[i + 1], data[i + 2]);
+            }
+
+            var initials = host.All<TextBlock>().Single(t => avatar.IsAncestorOf(t));
+            var before = (Centre: Centre(), Initials: initials.IsVisible, avatar.HasPhoto);
+            avatar.Source = photo;
+            host.Settle(100);
+            var with = (Centre: Centre(), Initials: initials.IsVisible, avatar.HasPhoto);
+            avatar.Source = null;
+            host.Settle(100);
+            var after = (Centre: Centre(), Initials: initials.IsVisible, avatar.HasPhoto);
+            return (before, with, after);
+        });
+
+        Assert.False(f.before.HasPhoto);
+        Assert.True(f.before.Initials);
+        Assert.NotEqual(((byte)0, (byte)255, (byte)0), f.before.Centre);
+
+        Assert.True(f.with.HasPhoto);
+        Assert.False(f.with.Initials, "the initials are hidden under a photo");
+        Assert.Equal(((byte)0, (byte)255, (byte)0), f.with.Centre); // the photo is drawn
+
+        Assert.False(f.after.HasPhoto);
+        Assert.True(f.after.Initials);
+        Assert.Equal(f.before.Centre, f.after.Centre);
+    }
+
+    [Fact]
     public void Avatar_Default_IsOneSharedFrozenResource_AndPhotosDecodeAtALimitedSize()
     {
         var (same, frozen, decodedWidth, fromBytes, notAnImage) = StaHost.Run(() =>

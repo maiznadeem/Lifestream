@@ -69,20 +69,37 @@ public static class DemoData2
         return new(row.Id, row.DisplayName, row.Username, (Gender)(i % 3), new DateOnly(1985 + (i % 15), 1 + (i % 12), 1 + (i % 27)), row.Designation, row.Shift, row.Role, row.HasPhoto, row.Salary, row.Phone, false, $"rv-s{i}");
     }
 
-    /// <summary>A small valid JPEG (a flat colour), so a thumbnail has real bytes to decode.</summary>
+    /// <summary>A small valid JPEG (a drawn portrait), so a thumbnail has real bytes to decode and a render shows a photo.</summary>
     public static byte[] Jpeg()
     {
-        var bitmap = new System.Windows.Media.Imaging.WriteableBitmap(8, 8, 96, 96, System.Windows.Media.PixelFormats.Bgr32, null);
-        var pixels = new byte[8 * 8 * 4];
-        for (var i = 0; i < pixels.Length; i += 4)
+        // A small drawn portrait (a head with hair and shoulders on a pale background), so a render shows something a reader takes for a photo. A flat
+        // colour looked like a broken avatar in the design review.
+        const int size = 64;
+        var bitmap = new System.Windows.Media.Imaging.WriteableBitmap(size, size, 96, 96, System.Windows.Media.PixelFormats.Bgr32, null);
+        var pixels = new byte[size * size * 4];
+        static bool In(double x, double y, double cx, double cy, double rx, double ry) => (((x - cx) * (x - cx)) / (rx * rx)) + (((y - cy) * (y - cy)) / (ry * ry)) <= 1;
+        for (var y = 0; y < size; y++)
         {
-            pixels[i] = 0x90;
-            pixels[i + 1] = 0x60;
-            pixels[i + 2] = 0x40;
+            for (var x = 0; x < size; x++)
+            {
+                (byte R, byte G, byte B) colour = (0xC9, 0xD6, 0xE3); // background
+                if (In(x, y, 32, 70, 27, 25))
+                {
+                    colour = (0x3A, 0x4A, 0x5E); // shoulders
+                }
+
+                if (In(x, y, 32, 27, 13, 15))
+                {
+                    colour = y < 20 && In(x, y, 32, 24, 14, 14) ? ((byte)0x4A, (byte)0x35, (byte)0x28) : ((byte)0xE0, (byte)0xB8, (byte)0x99); // hair over the face
+                }
+
+                var i = ((y * size) + x) * 4;
+                (pixels[i], pixels[i + 1], pixels[i + 2]) = (colour.B, colour.G, colour.R);
+            }
         }
 
-        bitmap.WritePixels(new Int32Rect(0, 0, 8, 8), pixels, 8 * 4, 0);
-        var encoder = new System.Windows.Media.Imaging.JpegBitmapEncoder();
+        bitmap.WritePixels(new Int32Rect(0, 0, size, size), pixels, size * 4, 0);
+        var encoder = new System.Windows.Media.Imaging.JpegBitmapEncoder { QualityLevel = 90 };
         encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bitmap));
         using var stream = new MemoryStream();
         encoder.Save(stream);

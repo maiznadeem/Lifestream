@@ -88,6 +88,7 @@
   <Thickness x:Key="Inset.R8">0,0,8,0</Thickness>
   <Thickness x:Key="Inset.T12">0,12,0,0</Thickness>
   <Thickness x:Key="Inset.T16">0,16,0,0</Thickness>
+  <Thickness x:Key="Inset.T20">0,20,0,0</Thickness>
   <Thickness x:Key="Inset.T24">0,24,0,0</Thickness>
   <Thickness x:Key="Inset.T2R10">0,2,10,0</Thickness>
   <Thickness x:Key="Inset.T2R6">0,2,6,0</Thickness>
@@ -150,6 +151,8 @@
   <sys:Double x:Key="Size.FocusRing">2</sys:Double>
   <sys:Double x:Key="Size.Icon">18</sys:Double>
   <sys:Double x:Key="Size.IconSmall">16</sys:Double>
+  <!-- The glyphs of the three caption buttons (minimize, maximize, close): 10, as Windows draws them. An icon size, not a text size. -->
+  <sys:Double x:Key="Size.CaptionGlyph">10</sys:Double>
   <sys:Double x:Key="Size.Avatar">32</sys:Double>
   <!-- Overlay scrollbar: a 2 DIP thumb at rest, 6 DIP on a 12 DIP track under the pointer -->
   <sys:Double x:Key="Size.ScrollBar">12</sys:Double>
@@ -201,6 +204,8 @@
   <!-- Insets and radii of the direction A templates and screens (named by side: H/V both sides, L T R B one side; N is minus). -->
   <Thickness x:Key="Inset.T14">0,14,0,0</Thickness>
   <Thickness x:Key="Inset.L72T48R72B40">72,48,72,40</Thickness>
+  <!-- The sign-in form's inset in a compact window (the form side is 440 wide there). -->
+  <Thickness x:Key="Inset.L40T40R40B32">40,40,40,32</Thickness>
   <Thickness x:Key="Inset.T8B32">0,8,0,32</Thickness>
   <Thickness x:Key="Inset.B20">0,0,0,20</Thickness>
   <Thickness x:Key="Inset.R10">0,0,10,0</Thickness>
@@ -266,6 +271,8 @@
   <Thickness x:Key="Inset.L32T24R32">32,24,32,0</Thickness>
   <Thickness x:Key="Inset.L32T20R32B24">32,20,32,24</Thickness>
   <Thickness x:Key="Inset.R14">0,0,14,0</Thickness>
+  <!-- A scroll viewer reaches 14 into the page's right padding (Inset.RN14) and insets its content by the same (Inset.R14), so its overlay bar sits beside the content, never over it. -->
+  <Thickness x:Key="Inset.RN14">0,0,-14,0</Thickness>
   <Thickness x:Key="Inset.HN10">-10,0,-10,0</Thickness>
   <Thickness x:Key="Inset.B8">0,0,0,8</Thickness>
   <Thickness x:Key="Inset.R20B20">0,0,20,20</Thickness>

@@ -1,6 +1,7 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                    xmlns:controls="clr-namespace:Lifestream.Desktop.Controls">
+                    xmlns:controls="clr-namespace:Lifestream.Desktop.Controls"
+                    xmlns:common="clr-namespace:Lifestream.Client.Common;assembly=Lifestream.Client">
   <ResourceDictionary.MergedDictionaries>
     <ResourceDictionary Source="/Lifestream;component/Theme/Tokens.xaml" />
     <ResourceDictionary Source="/Lifestream;component/Theme/Motion.xaml" />
@@ -16,7 +17,8 @@
   <Thickness x:Key="Components.Pad.Badge">7,0,7,0</Thickness>
   <Thickness x:Key="Components.Pad.Tag">6,0,6,0</Thickness>
   <Thickness x:Key="Components.Gap.Subtitle">10,0,0,0</Thickness>
-  <Thickness x:Key="Components.Pad.SidePanel">24,24,24,0</Thickness>
+  <!-- 20 under the content: a form's sticky footer keeps its divider above its buttons and clear air below them. -->
+  <Thickness x:Key="Components.Pad.SidePanel">24,24,24,20</Thickness>
   <Thickness x:Key="Components.Pad.DialogTitle">24,20,24,0</Thickness>
   <Thickness x:Key="Components.Pad.DialogFooter">24,16,24,16</Thickness>
 
@@ -84,6 +86,8 @@
   <Style TargetType="controls:PageHeader">
     <Setter Property="Focusable" Value="False" />
     <Setter Property="IsTabStop" Value="False" />
+    <!-- The page's load state, read from the screen's view model when it has one (a view can set State itself): the count is hidden until the list is loaded. -->
+    <Setter Property="State" Value="{Binding State, FallbackValue={x:Static common:LoadState.Ready}}" />
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="controls:PageHeader">
@@ -121,6 +125,16 @@
               <Setter TargetName="CountBadge" Property="Visibility" Value="Collapsed" />
             </Trigger>
             <Trigger Property="Count" Value="">
+              <Setter TargetName="CountBadge" Property="Visibility" Value="Collapsed" />
+            </Trigger>
+            <!-- While the page is loading, waking the server or failed there is no count to state: a "0" would be false. -->
+            <Trigger Property="State" Value="Loading">
+              <Setter TargetName="CountBadge" Property="Visibility" Value="Collapsed" />
+            </Trigger>
+            <Trigger Property="State" Value="Waking">
+              <Setter TargetName="CountBadge" Property="Visibility" Value="Collapsed" />
+            </Trigger>
+            <Trigger Property="State" Value="Error">
               <Setter TargetName="CountBadge" Property="Visibility" Value="Collapsed" />
             </Trigger>
             <Trigger Property="Actions" Value="{x:Null}">
@@ -195,7 +209,8 @@
     </Style.Triggers>
   </Style>
 
-  <!-- BloodGroupTag: Blood on BloodSoft, 12 SemiBold, tabular figures, min width 34, 22 tall; large: 32 tall, 15, min width 46. -->
+  <!-- BloodGroupTag: Blood on BloodSoft, 12 SemiBold, min width 34, 22 tall; large: 32 tall, 15, min width 46. Both sizes are Blood text: the text takes the tag's
+       own Foreground, not the text colour of the panel it sits in. -->
   <Style TargetType="controls:BloodGroupTag">
     <Setter Property="Focusable" Value="False" />
     <Setter Property="IsTabStop" Value="False" />
@@ -213,7 +228,7 @@
       <Setter.Value>
         <ControlTemplate TargetType="controls:BloodGroupTag">
           <Border Background="{TemplateBinding Background}" CornerRadius="{StaticResource Radius.Small}" Padding="{TemplateBinding Padding}" SnapsToDevicePixels="True">
-            <TextBlock Text="{TemplateBinding Text}" TextWrapping="NoWrap" HorizontalAlignment="Center" VerticalAlignment="Center" Typography.NumeralAlignment="Tabular" />
+            <TextBlock Text="{TemplateBinding Text}" TextWrapping="NoWrap" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{TemplateBinding Foreground}" />
           </Border>
         </ControlTemplate>
       </Setter.Value>
@@ -245,10 +260,11 @@
         <ControlTemplate TargetType="controls:Avatar">
           <Grid SnapsToDevicePixels="True">
             <Ellipse Fill="{TemplateBinding Background}" />
-            <TextBlock x:Name="InitialsText" Text="{TemplateBinding Initials}" TextWrapping="NoWrap" HorizontalAlignment="Center" VerticalAlignment="Center" />
+            <TextBlock x:Name="InitialsText" Text="{TemplateBinding Initials}" Foreground="{TemplateBinding Foreground}" TextWrapping="NoWrap" HorizontalAlignment="Center" VerticalAlignment="Center" />
             <Ellipse x:Name="Photo" Visibility="Collapsed">
               <Ellipse.Fill>
-                <ImageBrush ImageSource="{TemplateBinding Source}" Stretch="UniformToFill" />
+                <!-- A Binding, not a TemplateBinding: the brush is a Freezable inside the template, where a TemplateBinding does not resolve. -->
+                <ImageBrush ImageSource="{Binding Source, RelativeSource={RelativeSource TemplatedParent}}" Stretch="UniformToFill" />
               </Ellipse.Fill>
             </Ellipse>
           </Grid>
@@ -262,6 +278,10 @@
       </Setter.Value>
     </Setter>
     <Style.Triggers>
+      <!-- A selected table row is filled with Selected, the avatar's own colour: there the disc is Layer, so it does not vanish behind its letters. -->
+      <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=DataGridRow}, FallbackValue=False}" Value="True">
+        <Setter Property="Background" Value="{DynamicResource Brush.Layer}" />
+      </DataTrigger>
       <Trigger Property="IsBlood" Value="True">
         <Setter Property="Background" Value="{DynamicResource Brush.BloodSoft}" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.Blood}" />
@@ -373,6 +393,12 @@
         </ControlTemplate>
       </Setter.Value>
     </Setter>
+    <Style.Triggers>
+      <!-- A compact window (below 1280 DIP) narrows the panel; a view that sets PanelWidth itself keeps its own width. -->
+      <Trigger Property="controls:Responsive.Breakpoint" Value="Compact">
+        <Setter Property="PanelWidth" Value="{StaticResource Width.PanelCompact}" />
+      </Trigger>
+    </Style.Triggers>
   </Style>
 
   <!-- DialogSurface: Layer, radius 12, 1 px Stroke, the dialog shadow in a Border behind, title / body / footer. -->

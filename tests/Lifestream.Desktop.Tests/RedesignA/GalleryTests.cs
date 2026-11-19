@@ -59,11 +59,14 @@ public sealed class GalleryTests
                 board.Children.Add(row);
             }
 
-            var fields = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 12, 0, 16) };
+            var fields = new WrapPanel { Margin = new Thickness(0, 12, 0, 16) };
             fields.Children.Add(Field("Search", new TextBox { Width = 240 }, box => { box.SetResourceReference(FrameworkElement.StyleProperty, "TextBox.Search"); InputAssist.SetPlaceholder(box, "Search name or phone"); SearchAssist.SetShortcut(box, "Ctrl F"); }));
             fields.Children.Add(Field("Donor name", new TextBox { Width = 200, Text = "Adrian Mu", Tag = "focus" }, _ => { }));
             fields.Children.Add(new FormField { Label = "Phone", Error = "Enter the full number, like +1-555-0175.", Width = 240, Margin = new Thickness(0, 0, 16, 0), Content = new TextBox { Text = "+1-555-01" } });
-            fields.Children.Add(Field("Donor ID", new TextBox { Width = 160, Text = "D-0175", IsEnabled = false }, _ => { }));
+            // Read-only keeps ink text on a quiet fill (it can be read and copied); disabled is muted. An error from a FormField gives any input the Critical edge.
+            fields.Children.Add(Field("Donor ID (read-only)", new TextBox { Width = 150, Text = "D-0175", IsReadOnly = true }, _ => { }));
+            fields.Children.Add(Field("Staff ID (disabled)", new TextBox { Width = 150, Text = "S-0002", IsEnabled = false }, _ => { }));
+            fields.Children.Add(new FormField { Label = "Temporary password", Error = "Type the temporary password again.", Width = 220, Margin = new Thickness(0, 0, 16, 0), Content = new PasswordField() });
             fields.Children.Add(Field("Blood group", new ComboBox { Width = 180, ItemsSource = new[] { "All blood groups", "O−" }, SelectedIndex = 0 }, _ => { }));
             board.Children.Add(fields);
 
@@ -93,7 +96,20 @@ public sealed class GalleryTests
             badges.Children.Add(new Badge { Text = "Low stock", Kind = BadgeKind.Critical, Icon = IconKind.Alert, Margin = new Thickness(0, 0, 8, 0) });
             badges.Children.Add(new Badge { Text = "Expires in 2 days", Kind = BadgeKind.Warning, Icon = IconKind.Clock, Margin = new Thickness(0, 0, 8, 0) });
             badges.Children.Add(new Avatar { Initials = "AM", IsBlood = true, Margin = new Thickness(8, 0, 8, 0) });
-            badges.Children.Add(new Avatar { Initials = "CB" });
+            badges.Children.Add(new Avatar { Initials = "CB", Margin = new Thickness(0, 0, 8, 0) });
+            // No real photo (the placeholder drawing of 2.0 is not one): initials. A real photo: the photo.
+            badges.Children.Add(new Avatar { Initials = "SS", Source = Lifestream.Desktop.Services.DefaultAvatar.Image, Margin = new Thickness(0, 0, 8, 0) });
+            badges.Children.Add(new Avatar { Initials = "HG", Source = Lifestream.Desktop.Services.PhotoDecoder.Decode(Lifestream.Desktop.Tests.Features.DemoData2.Jpeg(), 64), Margin = new Thickness(0, 0, 16, 0) });
+            badges.Children.Add(new BloodGroupTag { Text = "O−", IsLarge = true, Margin = new Thickness(0, 0, 16, 0) });
+            var tabs = new StackPanel { Orientation = Orientation.Horizontal };
+            foreach (var (tab, on) in new[] { ("All 8", true), ("Low 2", false), ("Expiring 3", false) })
+            {
+                var option = new RadioButton { Content = tab, IsChecked = on, GroupName = "tabs" };
+                option.SetResourceReference(FrameworkElement.StyleProperty, "Tab.Option");
+                tabs.Children.Add(option);
+            }
+
+            badges.Children.Add(tabs);
             board.Children.Add(badges);
 
             var lower = new StackPanel { Orientation = Orientation.Horizontal };
@@ -102,6 +118,15 @@ public sealed class GalleryTests
             var surfaceText = new StackPanel();
             surfaceText.Children.Add(new TextBlock { Text = "Cancel this appointment?", FontWeight = FontWeights.SemiBold });
             surfaceText.Children.Add(new TextBlock { Text = "Asher Devereux, today at 11:00.", Margin = new Thickness(0, 6, 0, 0) });
+            // The inline confirm of a destructive action: the safe choice first, the action named in full.
+            var confirm = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 12, 0, 0) };
+            var keep = new Button { Content = "Keep appointment", Margin = new Thickness(0, 0, 8, 0) };
+            keep.SetResourceReference(FrameworkElement.StyleProperty, "Button.Secondary.Small");
+            var cancelIt = new Button { Content = "Cancel appointment" };
+            cancelIt.SetResourceReference(FrameworkElement.StyleProperty, "Button.Danger.Small");
+            confirm.Children.Add(keep);
+            confirm.Children.Add(cancelIt);
+            surfaceText.Children.Add(confirm);
             var right = new StackPanel();
             right.Children.Add(new ElevatedSurface { Level = ElevationLevel.Flyout, Padding = new Thickness(14, 12, 14, 12), Width = 320, Content = surfaceText });
             right.Children.Add(progress);

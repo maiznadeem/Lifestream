@@ -346,7 +346,7 @@
           <Grid x:Name="Root" Background="Transparent" SnapsToDevicePixels="True">
             <Border x:Name="HoverLayer" Background="{DynamicResource Brush.Hover}" Opacity="0" CornerRadius="{StaticResource Radius.Small}" IsHitTestVisible="False" />
             <ContentPresenter x:Name="Header" ContentSource="Header" Margin="{TemplateBinding Padding}" HorizontalAlignment="Center" VerticalAlignment="Center" RecognizesAccessKey="True" />
-            <Border x:Name="Bar" Height="2" VerticalAlignment="Bottom" Background="{DynamicResource Brush.Blood}" Visibility="Collapsed" IsHitTestVisible="False" />
+            <Border x:Name="Bar" Height="2" VerticalAlignment="Bottom" Background="{DynamicResource Brush.SelectedBar}" Visibility="Collapsed" IsHitTestVisible="False" />
             <controls:CrispBorder x:Name="FocusRing" Margin="{DynamicResource Inset.Neg3}" CornerRadius="{StaticResource Radius.Panel}" BorderThickness="{StaticResource Thickness.FocusRing}"
                     BorderBrush="{DynamicResource Brush.Focus}" Visibility="Collapsed" IsHitTestVisible="False" />
           </Grid>
@@ -437,7 +437,7 @@
           <Grid x:Name="Root" Background="Transparent" SnapsToDevicePixels="True">
             <Border x:Name="HoverLayer" Background="{DynamicResource Brush.Hover}" Opacity="0" CornerRadius="{StaticResource Radius.Small}" IsHitTestVisible="False" />
             <ContentPresenter x:Name="Header" Margin="{TemplateBinding Padding}" HorizontalAlignment="Center" VerticalAlignment="Center" RecognizesAccessKey="True" />
-            <Border x:Name="Bar" Height="2" VerticalAlignment="Bottom" Background="{DynamicResource Brush.Blood}" Visibility="Collapsed" IsHitTestVisible="False" />
+            <Border x:Name="Bar" Height="2" VerticalAlignment="Bottom" Background="{DynamicResource Brush.SelectedBar}" Visibility="Collapsed" IsHitTestVisible="False" />
             <controls:CrispBorder x:Name="FocusRing" Margin="{DynamicResource Inset.Neg3}" CornerRadius="{StaticResource Radius.Panel}" BorderThickness="{StaticResource Thickness.FocusRing}"
                     BorderBrush="{DynamicResource Brush.Focus}" Visibility="Collapsed" IsHitTestVisible="False" />
           </Grid>

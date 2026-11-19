@@ -45,6 +45,8 @@
     <Setter Property="Padding" Value="{StaticResource Pad.Field}" />
     <Setter Property="FocusVisualStyle" Value="{x:Null}" />
     <Setter Property="VerticalContentAlignment" Value="Center" />
+    <!-- An error is shown by the field itself (Critical edge and bar) and in words by FormField: WPF's red adorner rectangle is switched off on every input. -->
+    <Setter Property="Validation.ErrorTemplate" Value="{x:Null}" />
   </Style>
 
   <Style x:Key="TextBox.Lifestream" TargetType="TextBox" BasedOn="{StaticResource Input.Base}">
@@ -114,12 +116,12 @@
               <Setter TargetName="BottomEdge" Property="Background" Value="{DynamicResource Brush.Critical}" />
               <Setter TargetName="ErrorBar" Property="Visibility" Value="Visible" />
             </Trigger>
-            <!-- A field inside a FormField that shows an error looks like a field in error too. -->
-            <DataTrigger Binding="{Binding HasError, RelativeSource={RelativeSource AncestorType=controls:FormField}}" Value="True">
+            <!-- The same look when a FormField around the field shows an error, or the composite input the field is part of has one (InputAssist.HasError, inherited). -->
+            <Trigger Property="assist:InputAssist.HasError" Value="True">
               <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brush.Critical}" />
               <Setter TargetName="BottomEdge" Property="Background" Value="{DynamicResource Brush.Critical}" />
               <Setter TargetName="ErrorBar" Property="Visibility" Value="Visible" />
-            </DataTrigger>
+            </Trigger>
             <Trigger Property="IsEnabled" Value="False">
               <Setter Property="Foreground" Value="{DynamicResource Brush.Ink3}" />
               <Setter TargetName="Box" Property="Background" Value="{DynamicResource Brush.Layer2}" />
@@ -232,12 +234,12 @@
               <Setter TargetName="BottomEdge" Property="Background" Value="{DynamicResource Brush.Critical}" />
               <Setter TargetName="ErrorBar" Property="Visibility" Value="Visible" />
             </Trigger>
-            <!-- A field inside a FormField that shows an error looks like a field in error too. -->
-            <DataTrigger Binding="{Binding HasError, RelativeSource={RelativeSource AncestorType=controls:FormField}}" Value="True">
+            <!-- The same look when a FormField around the field shows an error, or the composite input the field is part of has one (InputAssist.HasError, inherited). -->
+            <Trigger Property="assist:InputAssist.HasError" Value="True">
               <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brush.Critical}" />
               <Setter TargetName="BottomEdge" Property="Background" Value="{DynamicResource Brush.Critical}" />
               <Setter TargetName="ErrorBar" Property="Visibility" Value="Visible" />
-            </DataTrigger>
+            </Trigger>
             <Trigger Property="IsEnabled" Value="False">
               <Setter Property="Foreground" Value="{DynamicResource Brush.Ink3}" />
               <Setter TargetName="Box" Property="Background" Value="{DynamicResource Brush.Layer2}" />
@@ -316,12 +318,12 @@
               <Setter TargetName="BottomEdge" Property="Background" Value="{DynamicResource Brush.Critical}" />
               <Setter TargetName="ErrorBar" Property="Visibility" Value="Visible" />
             </Trigger>
-            <!-- A field inside a FormField that shows an error looks like a field in error too. -->
-            <DataTrigger Binding="{Binding HasError, RelativeSource={RelativeSource AncestorType=controls:FormField}}" Value="True">
+            <!-- The same look when a FormField around the field shows an error, or the composite input the field is part of has one (InputAssist.HasError, inherited). -->
+            <Trigger Property="assist:InputAssist.HasError" Value="True">
               <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brush.Critical}" />
               <Setter TargetName="BottomEdge" Property="Background" Value="{DynamicResource Brush.Critical}" />
               <Setter TargetName="ErrorBar" Property="Visibility" Value="Visible" />
-            </DataTrigger>
+            </Trigger>
             <Trigger Property="IsEnabled" Value="False">
               <Setter Property="Foreground" Value="{DynamicResource Brush.Ink3}" />
               <Setter TargetName="Box" Property="Background" Value="{DynamicResource Brush.Layer2}" />
@@ -414,6 +416,12 @@
                       <Setter TargetName="BottomEdge" Property="Background" Value="{DynamicResource Brush.Critical}" />
                       <Setter TargetName="ErrorBar" Property="Visibility" Value="Visible" />
                     </DataTrigger>
+                    <!-- And inside a FormField that shows an error (InputAssist.HasError, inherited). -->
+                    <Trigger Property="assist:InputAssist.HasError" Value="True">
+                      <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brush.Critical}" />
+                      <Setter TargetName="BottomEdge" Property="Background" Value="{DynamicResource Brush.Critical}" />
+                      <Setter TargetName="ErrorBar" Property="Visibility" Value="Visible" />
+                    </Trigger>
                     <Trigger Property="IsEnabled" Value="False">
                       <Setter TargetName="Box" Property="Background" Value="{DynamicResource Brush.Layer2}" />
                       <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brush.Stroke}" />
@@ -489,6 +497,7 @@
 
   <!-- Check box: 18 x 18, radius 4. Checked: Primary fill and a 13 px Check in OnPrimary; indeterminate: an 8 x 2 bar; the label is 13 px Ink2 with an 8 px gap. -->
   <Style x:Key="CheckBox.Lifestream" TargetType="CheckBox">
+    <Setter Property="Validation.ErrorTemplate" Value="{x:Null}" />
     <Setter Property="FontFamily" Value="{DynamicResource Font.Family}" />
     <Setter Property="FontSize" Value="{StaticResource FontSize.Label}" />
     <Setter Property="Foreground" Value="{DynamicResource Brush.Ink2}" />

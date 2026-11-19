@@ -120,6 +120,38 @@ public sealed class DataGridTests
         Assert.Equal(selected.BarToken, selected.BarPixel);
     }
 
+    [Fact]
+    public void DataGrid_AColumnWithARightHeaderAlignment_PutsItsHeaderOverItsNumbers_TheOthersStayLeft()
+    {
+        var f = StaHost.Run(() =>
+        {
+            var grid = Grid(Rows(4));
+            var units = new DataGridTextColumn { Header = "Units", Binding = new Binding(nameof(Row.Id)), Width = 140 };
+            ColumnAssist.SetHeaderAlignment(units, HorizontalAlignment.Right);
+            grid.Columns.Add(units);
+            using var host = Hosted.Create(Stage(grid, 900, 400), 900, 400);
+            host.Settle(300);
+
+            (double Left, double Right, double Width, HorizontalAlignment Alignment, double MinHeight, Brush Background) Header(string text)
+            {
+                var header = host.All<System.Windows.Controls.Primitives.DataGridColumnHeader>().First(h => (string)h.Content == text);
+                var label = Hosted.Descendants(header).OfType<TextBlock>().First(t => t.Text == text);
+                var bounds = Hosted.BoundsOf(label, header);
+                return (bounds.Left, header.ActualWidth - bounds.Right, header.ActualWidth, header.HorizontalContentAlignment, header.MinHeight, header.Background);
+            }
+
+            return (Units: Header("Units"), Phone: Header("Phone"));
+        });
+
+        Assert.Equal(HorizontalAlignment.Right, f.Units.Alignment);
+        Assert.Equal(12, f.Units.Right, 1.0); // the header text ends at the header's right padding (Inset.H12), where the numbers end
+        Assert.True(f.Units.Left > 60, $"the Units header text starts {f.Units.Left} from the left of a {f.Units.Width} wide header");
+        Assert.Equal(12, f.Phone.Left, 1.0); // a column that asks for nothing keeps its header on the left
+        // The aligned header is still the grid's header (same height and fill), only moved.
+        Assert.Equal(f.Phone.MinHeight, f.Units.MinHeight);
+        Assert.Same(f.Phone.Background, f.Units.Background);
+    }
+
     private static Color Pixel(byte[] bgra, int width, int x, int y)
     {
         var i = ((y * width) + x) * 4;
@@ -129,7 +161,7 @@ public sealed class DataGridTests
     [Fact]
     public void DataGrid_SortIndicators_FollowViewModelState_AndSurviveANewPageOfItems()
     {
-        var (ascending, descending, afterFilter, commandCalls, other) = StaHost.Run(() =>
+        var (ascending, descending, afterFilter, commandCalls, other, nameAfterClick) = StaHost.Run(() =>
         {
             var calls = new List<object?>();
             var grid = Grid(Rows(5));
@@ -163,7 +195,7 @@ public sealed class DataGridTests
             // The header is a button: what a click does is its protected OnClick, which raises the grid's Sorting event.
             typeof(System.Windows.Controls.Primitives.ButtonBase).GetMethod("OnClick", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.Invoke(phone, null);
             host.Settle(100);
-            return (asc, desc, afterItems, calls.ToList(), Indicator("Phone"));
+            return (asc, desc, afterItems, calls.ToList(), Indicator("Phone"), Indicator("Name"));
         });
 
         Assert.True(ascending.Visible);
@@ -175,7 +207,11 @@ public sealed class DataGridTests
         Assert.True(afterFilter.Visible);
         Assert.Equal(0, afterFilter.Angle); // still the descending sort set above
         Assert.Equal(["phone"], commandCalls.Select(c => c?.ToString()));
-        Assert.False(other.Visible); // the view model has not changed the sort, so no other header shows an indicator
+        // The click moved the indicator to Phone, ascending (the 2.0 test asserted the ascending glyph here).
+        Assert.True(other.Visible);
+        Assert.Equal("Chevd", other.Kind);
+        Assert.Equal(180, other.Angle);
+        Assert.False(nameAfterClick.Visible, "the indicator left the Name header");
     }
 
     private sealed class RelayStub(Action<object?> execute) : System.Windows.Input.ICommand

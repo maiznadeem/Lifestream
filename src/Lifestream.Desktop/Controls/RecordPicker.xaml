@@ -4,6 +4,17 @@
              xmlns:controls="clr-namespace:Lifestream.Desktop.Controls"
              xmlns:services="clr-namespace:Lifestream.Desktop.Services"
              Focusable="False" IsTabStop="False">
+  <!-- A validation error on the control shows as the field look of the box inside (InputAssist.HasError, inherited, as a FormField sets it too); no WPF adorner. -->
+  <UserControl.Style>
+    <Style TargetType="UserControl">
+      <Setter Property="Validation.ErrorTemplate" Value="{x:Null}" />
+      <Style.Triggers>
+        <Trigger Property="Validation.HasError" Value="True">
+          <Setter Property="controls:InputAssist.HasError" Value="True" />
+        </Trigger>
+      </Style.Triggers>
+    </Style>
+  </UserControl.Style>
   <UserControl.Resources>
     <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
     <services:HasTextToVisibilityConverter x:Key="HasText" />

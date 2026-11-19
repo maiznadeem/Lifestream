@@ -74,21 +74,29 @@ public sealed class Part2ShellScreenTests
                 _ = shell.StartAsync();
                 host.Settle(500);
                 var result = new List<(string Title, Type? View, string Heading)>();
+                // The call each screen makes for its own data. In direction A the shell (sidebar counts and the account line, read once at start) and the
+                // dashboard call some of the same routes, so the calls are counted per visit: what the route's count grew by while the screen opened.
+                var loads = new Dictionary<string, string> { ["Appointments"] = "GetAppointmentsAsync", ["Requests"] = "GetRequestsAsync", ["Receipts"] = "GetReceiptsAsync", ["Staff"] = "GetStaffAsync" };
+                var visits = new Dictionary<string, int>();
                 foreach (var screen in Screens)
                 {
+                    var before = rig.Api.CountOf(loads[screen.Title]);
                     Hosted.Await(() => shell.OpenAsync(shell.Items.Single(i => i.Destination.Title == screen.Title).Destination));
                     host.Settle(500);
+                    visits[screen.Title] = rig.Api.CountOf(loads[screen.Title]) - before;
                     var view = host.All<FrameworkElement>().FirstOrDefault(e => e.GetType() == screen.View);
                     result.Add((screen.Title, view?.GetType(), shell.PageTitle));
                     Assert.NotNull(view);
                     Assert.Same(shell.CurrentPage, view.DataContext); // one view model per visit, set once by the host
                 }
 
+                var profileBefore = rig.Api.CountOf("GetProfileAsync");
                 Hosted.Await(() => shell.ProfileCommand.ExecuteAsync());
                 host.Settle(500);
                 var profile = host.All<ProfileView>().FirstOrDefault();
                 return (result, Profile: profile is not null && ReferenceEquals(profile.DataContext, shell.CurrentPage), ProfileTitle: shell.PageTitle,
-                    Calls: (rig.Api.CountOf("GetAppointmentsAsync"), rig.Api.CountOf("GetRequestsAsync"), rig.Api.CountOf("GetReceiptsAsync"), rig.Api.CountOf("GetStaffAsync"), rig.Api.CountOf("GetProfileAsync")));
+                    Calls: (visits["Appointments"], visits["Requests"], visits["Receipts"], visits["Staff"], rig.Api.CountOf("GetProfileAsync") - profileBefore),
+                    Totals: (rig.Api.CountOf("GetReceiptsAsync"), rig.Api.CountOf("GetStaffAsync")));
             }
         });
 
@@ -97,6 +105,7 @@ public sealed class Part2ShellScreenTests
         Assert.True(facts.Profile);
         Assert.Equal("Profile", facts.ProfileTitle);
         Assert.Equal((1, 1, 1, 1, 1), facts.Calls); // exactly one call per data set per visit
+        Assert.Equal((1, 1), facts.Totals); // and the routes only a screen calls were not called again afterwards
     }
 
     [Fact]

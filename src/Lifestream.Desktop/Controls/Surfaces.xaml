@@ -216,6 +216,12 @@
         </ControlTemplate>
       </Setter.Value>
     </Setter>
+    <Style.Triggers>
+      <!-- While the field shows an error, the input inside takes the error look (the Critical edge and bar), whatever kind of input it is. -->
+      <Trigger Property="HasError" Value="True">
+        <Setter Property="controls:InputAssist.HasError" Value="True" />
+      </Trigger>
+    </Style.Triggers>
   </Style>
 
   <!-- Chart frame: the Section look (Layer panel, 15 SemiBold heading, a subtle "View as table" toggle), then the chart or the same numbers as a table. -->
