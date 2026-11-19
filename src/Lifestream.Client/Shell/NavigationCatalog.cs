@@ -17,6 +17,12 @@ public enum Audience
 /// <summary>One sidebar entry. The title is also the page title and the window title suffix (SHELL-21, SHELL-23).</summary>
 public sealed record Destination(string Title, string Group, string IconGlyph, Type ViewModelType, Audience Audience = Audience.Everyone)
 {
+    /// <summary>The vector icon of direction A (an IconKind name in the Desktop).</summary>
+    public string Icon { get; init; } = string.Empty;
+
+    /// <summary>What the sidebar count of this destination counts ("still to come today"), for screen readers; empty when it has no count.</summary>
+    public string BadgeNoun { get; init; } = string.Empty;
+
     public bool IsAllowedFor(SessionUser? user) => Audience switch
     {
         Audience.Everyone => user is not null,
@@ -26,7 +32,7 @@ public sealed record Destination(string Title, string Group, string IconGlyph, T
 }
 
 /// <summary>
-/// The sidebar: five groups, eight destinations (at most 8, SHELL-21). The feature tasks replace the placeholder view
+/// The sidebar: Dashboard on its own, then four groups, eight destinations (at most 8, SHELL-21). The feature tasks replace the placeholder view
 /// model type of their entry with the real one; nothing else here changes.
 /// </summary>
 public static class NavigationCatalog
@@ -34,14 +40,14 @@ public static class NavigationCatalog
     // Segoe Fluent Icons code points.
     public static IReadOnlyList<Destination> Default { get; } =
     [
-        new("Dashboard", "Overview", "", typeof(Features.Dashboard.DashboardViewModel)),
-        new("Donors", "Donations", "", typeof(Features.Donors.DonorsViewModel)),
-        new("Appointments", "Donations", "", typeof(Features.Appointments.AppointmentsViewModel)),
-        new("Patients", "Transfusions", "", typeof(Features.Patients.PatientsViewModel)),
-        new("Requests", "Transfusions", "", typeof(Features.Requests.RequestsViewModel)),
-        new("Stock", "Inventory", "", typeof(Features.Stock.StockViewModel)),
-        new("Receipts", "Inventory", "", typeof(Features.Receipts.ReceiptsViewModel)),
-        new("Staff", "Administration", "", typeof(Features.Staff.StaffViewModel), Audience.AdminOrDemo),
+        new("Dashboard", "", "", typeof(Features.Dashboard.DashboardViewModel)) { Icon = "Home" },
+        new("Donors", "Donations", "", typeof(Features.Donors.DonorsViewModel)) { Icon = "Donor" },
+        new("Appointments", "Donations", "", typeof(Features.Appointments.AppointmentsViewModel)) { Icon = "Cal", BadgeNoun = "still to come today" },
+        new("Patients", "Transfusions", "", typeof(Features.Patients.PatientsViewModel)) { Icon = "Patient" },
+        new("Requests", "Transfusions", "", typeof(Features.Requests.RequestsViewModel)) { Icon = "Request", BadgeNoun = "open" },
+        new("Stock", "Inventory", "", typeof(Features.Stock.StockViewModel)) { Icon = "Stock", BadgeNoun = "groups below minimum" },
+        new("Receipts", "Inventory", "", typeof(Features.Receipts.ReceiptsViewModel)) { Icon = "Receipt" },
+        new("Staff", "Administration", "", typeof(Features.Staff.StaffViewModel), Audience.AdminOrDemo) { Icon = "Staff" },
     ];
 
     /// <summary>Where "Profile" in the account menu goes.</summary>

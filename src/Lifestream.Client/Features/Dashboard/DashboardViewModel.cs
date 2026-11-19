@@ -50,6 +50,76 @@ public sealed record LowStockAlert(BloodType BloodType, int Available, int Thres
     public string Text => $"{BloodType.ToDisplay()}: low stock, {Available:N0} of {Threshold:N0} units";
 }
 
+/// <summary>How urgent a "Needs attention" item is: its icon tint.</summary>
+public enum AttentionKind
+{
+    Critical,
+    Warning,
+    Info,
+}
+
+/// <summary>
+/// One row of "Needs attention": what is wrong, why it matters (who is waiting, by when) and the one action that deals with it. The action opens
+/// the screen that holds the work, already on the right record or filter.
+/// </summary>
+public sealed record AttentionItem(AttentionKind Kind, string Icon, string Title, string Detail, string ActionText, string Destination, ListPrefilter Prefilter)
+{
+    public string AutomationName => $"{Title}. {Detail}";
+}
+
+/// <summary>Where a person booked for today stands.</summary>
+public enum TodayState
+{
+    /// <summary>The donation is recorded.</summary>
+    Done,
+
+    /// <summary>The first appointment still to come: the one to check in.</summary>
+    Next,
+
+    /// <summary>Later today.</summary>
+    Pending,
+}
+
+/// <summary>One row of "Today's appointments".</summary>
+public sealed record TodayAppointment(int Id, int DonorId, string Time, string DonorName, string Group, TodayState State, bool IsFirstTime)
+{
+    public bool IsDone => State == TodayState.Done;
+
+    public bool IsNext => State == TodayState.Next;
+
+    public string AutomationName => $"{Time}, {DonorName}, {Group}" + State switch
+    {
+        TodayState.Done => ", donated",
+        TodayState.Next => ", next",
+        _ => string.Empty,
+    } + (IsFirstTime ? ", first-time donor" : string.Empty);
+}
+
+/// <summary>
+/// One meter of "Stock by blood group": the units available, the share expiring within 7 days (hatched) and the group's minimum (a tick). The meter
+/// reads up to twice the largest minimum, so the minimum sits in the middle and a full group fills the bar.
+/// </summary>
+public sealed record StockMeter(BloodType BloodType, int Available, int Expiring, int Threshold, int Scale)
+{
+    public string Group => BloodType.ToTypographic();
+
+    public bool IsLow => Available < Threshold;
+
+    public bool IsEmpty => Available == 0;
+
+    public double FillFraction => Scale <= 0 ? 0 : Math.Min(1, (double)Available / Scale);
+
+    public double ExpiringFraction => Scale <= 0 ? 0 : Math.Min(FillFraction, (double)Expiring / Scale);
+
+    public double MinimumFraction => Scale <= 0 ? 0 : Math.Min(1, (double)Threshold / Scale);
+
+    public string CountText => Available.ToString("N0", CultureInfo.CurrentCulture);
+
+    public string UnitText => Available == 1 ? "unit" : "units";
+
+    public string AutomationName => $"{Group}: {CountText} {UnitText}" + (Expiring > 0 ? $", {Expiring} expiring within 7 days" : string.Empty) + (IsLow ? $", below the minimum of {Threshold}" : string.Empty);
+}
+
 /// <summary>One bar of the demographics chart.</summary>
 public sealed record GenderBar(Gender Gender, int Count)
 {
@@ -68,13 +138,33 @@ public sealed partial class DashboardViewModel : ViewModelBase
 
     private readonly ILifestreamApiClient _api;
     private readonly INavigationService _navigation;
+    private readonly Session.ISessionService? _session;
     private DashboardResponse? _fetched;
+    private IReadOnlyList<Contracts.Stock.StockItem> _stock = [];
+    private IReadOnlyList<Contracts.Appointments.AppointmentListItem> _today = [];
+    private IReadOnlyList<Contracts.Requests.RequestListItem> _requests = [];
+    private HashSet<int> _firstTimers = [];
     private bool _changingPeriod;
 
-    public DashboardViewModel(ILifestreamApiClient api, INavigationService navigation)
+    public DashboardViewModel(ILifestreamApiClient api, INavigationService navigation, Session.ISessionService? session = null)
     {
         _api = api;
         _navigation = navigation;
+        _session = session;
+        RunAttentionCommand = Command(async (parameter, _) =>
+        {
+            if (parameter is AttentionItem item)
+            {
+                await OpenAsync(item.Destination, item.Prefilter).ConfigureAwait(true);
+            }
+        });
+        OpenAppointmentCommand = Command(async (parameter, _) =>
+        {
+            if (parameter is TodayAppointment row)
+            {
+                await OpenAsync("Appointments", new ListPrefilter(RecordId: row.Id)).ConfigureAwait(true);
+            }
+        });
         Periods =
         [
             new("Last 3 months", 3),
@@ -115,6 +205,56 @@ public sealed partial class DashboardViewModel : ViewModelBase
     public AsyncRelayCommand OpenLowStockCommand { get; }
 
     public AsyncRelayCommand RetryCommand { get; }
+
+    /// <summary>Runs the action of a "Needs attention" item (the parameter): opens its screen on the record or filter.</summary>
+    public AsyncRelayCommand RunAttentionCommand { get; }
+
+    /// <summary>Opens a row of "Today's appointments" (the parameter) on the Appointments screen.</summary>
+    public AsyncRelayCommand OpenAppointmentCommand { get; }
+
+    /// <summary>"Thursday, 19 November 2026": the line above the greeting.</summary>
+    public string DateLine => Clock.GetLocalNow().ToString("dddd, d MMMM yyyy", CultureInfo.CurrentCulture);
+
+    /// <summary>"Good morning, Hana" (afternoon from 12:00, evening from 18:00).</summary>
+    public string Greeting
+    {
+        get
+        {
+            var hour = Clock.GetLocalNow().Hour;
+            var part = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+            var name = _session?.User?.DisplayName?.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault();
+            return string.IsNullOrEmpty(name) ? part : $"{part}, {name}";
+        }
+    }
+
+    /// <summary>What needs doing now, most urgent first: requests the stock cannot cover, bags about to expire, groups below their minimum, requests due soon.</summary>
+    public ObservableCollection<AttentionItem> Attention { get; } = [];
+
+    /// <summary>"4 items".</summary>
+    [ObservableProperty]
+    public partial string AttentionCountText { get; set; } = string.Empty;
+
+    /// <summary>Today's appointments in time order (cancelled ones left out).</summary>
+    public ObservableCollection<TodayAppointment> Today { get; } = [];
+
+    /// <summary>"3 of 8 seen".</summary>
+    [ObservableProperty]
+    public partial string TodaySeenText { get; set; } = string.Empty;
+
+    /// <summary>One meter per blood group, in the usual order.</summary>
+    public ObservableCollection<StockMeter> StockMeters { get; } = [];
+
+    /// <summary>"37 units".</summary>
+    [ObservableProperty]
+    public partial string StockTotalText { get; set; } = string.Empty;
+
+    /// <summary>"Minimum, 10 units" (the legend of the meters' tick).</summary>
+    [ObservableProperty]
+    public partial string MinimumText { get; set; } = string.Empty;
+
+    /// <summary>The x-axis labels of the 12-month line chart: the month, with the year under it on the first month and on every January.</summary>
+    [ObservableProperty]
+    public partial IReadOnlyList<string> ChartMonthLabels { get; set; } = [];
 
     [ObservableProperty]
     public partial PeriodOption SelectedPeriod { get; set; } = null!;
@@ -186,7 +326,36 @@ public sealed partial class DashboardViewModel : ViewModelBase
         var (start, end) = RangeFor(SelectedPeriod.Months, today);
         // The dashboard's months and days are the user's local calendar: say how far it is from UTC so a record at 23:30 local lands on the right day.
         var offsetMinutes = (int)Clock.GetLocalNow().Offset.TotalMinutes;
-        _fetched = (await _api.GetDashboardAsync(start, end, offsetMinutes, ct).ConfigureAwait(false)).Unwrap();
+        var dashboard = _api.GetDashboardAsync(start, end, offsetMinutes, ct);
+        // The blocks of direction A's dashboard come from the existing endpoints, in parallel with the dashboard call. Each is best effort: a block whose
+        // call failed shows its empty state, and only the dashboard call itself can fail the screen.
+        var local = Clock.GetLocalNow();
+        var dayStart = new DateTimeOffset(local.Date, local.Offset).UtcDateTime;
+        var stock = Quietly(() => _api.GetStockAsync(ct));
+        var todays = Quietly(() => _api.GetAppointmentsAsync(new Contracts.Appointments.AppointmentQuery(FromUtc: dayStart, ToUtc: dayStart.AddDays(1), PageSize: 50, Sort: Contracts.SortKeys.Slot), ct));
+        var requests = Quietly(() => _api.GetRequestsAsync(new Contracts.Requests.RequestQuery(Status: RequestStatus.Pending, PageSize: 50, Sort: Contracts.SortKeys.RequiredBy), ct));
+        _fetched = (await dashboard.ConfigureAwait(false)).Unwrap();
+        _stock = (await stock.ConfigureAwait(false)) is { IsOk: true } s ? s.Value : [];
+        _today = (await todays.ConfigureAwait(false)) is { IsOk: true } t ? [.. t.Value.Items.Where(a => a.Status != AppointmentStatus.Cancelled).OrderBy(a => a.SlotStartUtc)] : [];
+        _requests = (await requests.ConfigureAwait(false)) is { IsOk: true } r ? r.Value.Items : [];
+
+        // First-time donors among those still to come: a donor who has never given (no last donation). At most one call per person, in parallel.
+        var pending = _today.Where(a => a.Status == AppointmentStatus.Pending).Select(a => a.DonorId).Distinct().Take(12).ToList();
+        var details = await Task.WhenAll(pending.Select(id => Quietly(() => _api.GetDonorAsync(id, ct)))).ConfigureAwait(false);
+        _firstTimers = [.. details.Where(d => d is { IsOk: true } && d.Value.LastDonated is null).Select(d => d!.Value.Id)];
+    }
+
+    /// <summary>Runs a secondary call; a failure or an exception becomes null instead of failing the screen.</summary>
+    private static async Task<ApiResult<T>?> Quietly<T>(Func<Task<ApiResult<T>>> call)
+    {
+        try
+        {
+            return await call().ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TimeoutException or IOException or System.Text.Json.JsonException)
+        {
+            return null;
+        }
     }
 
     protected override void Apply()
@@ -230,8 +399,116 @@ public sealed partial class DashboardViewModel : ViewModelBase
         }
 
         DemographicsTable = new(["Gender", "Donors"], [.. Demographics.Select(b => (IReadOnlyList<string>)[b.Label, b.Count.ToString("N0", CultureInfo.CurrentCulture)])]);
+        ApplyStock();
+        ApplyToday();
+        ApplyAttention();
+        OnPropertyChanged(nameof(Greeting));
+        OnPropertyChanged(nameof(DateLine));
         RebuildChart();
     }
+
+    private void ApplyStock()
+    {
+        StockMeters.Clear();
+        var items = _stock.Count > 0 ? _stock : _fetched?.LowStock ?? [];
+        var threshold = items.Count > 0 ? items.Max(i => i.Threshold) : 0;
+        var scale = Math.Max(threshold * 2, items.Count > 0 ? items.Max(i => i.Available) : 0);
+        foreach (var item in items.OrderBy(i => i.BloodType))
+        {
+            StockMeters.Add(new StockMeter(item.BloodType, item.Available, item.ExpiringSoon, item.Threshold, scale));
+        }
+
+        var total = items.Sum(i => i.Available);
+        StockTotalText = items.Count == 0 ? string.Empty : $"{total.ToString("N0", CultureInfo.CurrentCulture)} {(total == 1 ? "unit" : "units")}";
+        MinimumText = threshold > 0 ? $"Minimum, {threshold.ToString("N0", CultureInfo.CurrentCulture)} units" : string.Empty;
+    }
+
+    private string LocalTime(DateTime utc) => TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utc, DateTimeKind.Utc), Clock.LocalTimeZone).ToString("HH:mm", CultureInfo.CurrentCulture);
+
+    private void ApplyToday()
+    {
+        Today.Clear();
+        var nextFound = false;
+        foreach (var a in _today)
+        {
+            var state = a.Status == AppointmentStatus.Completed ? TodayState.Done : TodayState.Pending;
+            if (state == TodayState.Pending && !nextFound && a.Status == AppointmentStatus.Pending)
+            {
+                state = TodayState.Next;
+                nextFound = true;
+            }
+
+            Today.Add(new TodayAppointment(a.Id, a.DonorId, LocalTime(a.SlotStartUtc), a.DonorName, a.DonorBloodType.ToTypographic(), state, _firstTimers.Contains(a.DonorId)));
+        }
+
+        TodaySeenText = Today.Count == 0 ? string.Empty : $"{Today.Count(t => t.IsDone)} of {Today.Count} seen";
+    }
+
+    /// <summary>
+    /// Builds "Needs attention" from the stock, the open requests and today's appointments (direction A): a request that no compatible stock can cover,
+    /// bags expiring within 7 days (and the request that could use them), the groups below their minimum, and the next request that is due within
+    /// 3 days and can be fulfilled.
+    /// </summary>
+    private void ApplyAttention()
+    {
+        Attention.Clear();
+        var today = DateOnly.FromDateTime(Clock.GetLocalNow().DateTime);
+        var available = _stock.ToDictionary(i => i.BloodType, i => i.Available);
+        int Cover(BloodType patient) => available.Where(p => p.Key.CanGiveTo(patient)).Sum(p => p.Value);
+        static string Day(DateOnly d) => d.ToString("ddd d MMM", CultureInfo.CurrentCulture);
+
+        foreach (var request in _requests.Where(r => Cover(r.BloodType) < r.Units).OrderBy(r => r.RequiredBy).Take(2))
+        {
+            var cover = Cover(request.BloodType);
+            var title = available.GetValueOrDefault(request.BloodType) == 0 ? $"{request.BloodType.ToTypographic()} is out of stock" : $"Not enough blood for {request.PatientName}";
+            var detail = $"{request.PatientName} needs {Units(request.Units)} by {Day(request.RequiredBy)}" + (cover > 0 ? $"; {Units(cover)} can be given." : ".");
+            var donor = Today.FirstOrDefault(t => t.State != TodayState.Done && _today.First(a => a.Id == t.Id).DonorBloodType.CanGiveTo(request.BloodType));
+            if (donor is not null)
+            {
+                detail += $" {donor.DonorName} ({donor.Group}) comes in at {donor.Time}.";
+            }
+
+            Attention.Add(new(AttentionKind.Critical, "Alert", title, detail, "Open request", "Requests", new ListPrefilter(RecordId: request.Id)));
+        }
+
+        foreach (var item in _stock.Where(i => i.ExpiringSoon > 0).OrderByDescending(i => i.ExpiringSoon).Take(1))
+        {
+            var detail = "Use them first.";
+            var user = _requests.Where(r => item.BloodType.CanGiveTo(r.BloodType)).OrderBy(r => r.BloodType == item.BloodType ? 0 : 1).ThenBy(r => r.RequiredBy).FirstOrDefault();
+            if (user is not null)
+            {
+                detail = $"Use them for {user.PatientName}’s request ({Units(user.Units)}, due {user.RequiredBy.ToString("ddd", CultureInfo.CurrentCulture)}).";
+            }
+
+            Attention.Add(new(AttentionKind.Warning, "Clock", $"{item.ExpiringSoon} {item.BloodType.ToTypographic()} {(item.ExpiringSoon == 1 ? "bag expires" : "bags expire")} within 7 days", detail,
+                "Review bags", "Stock", new ListPrefilter(BloodType: item.BloodType, StockView: StockFilter.ExpiringSoon)));
+        }
+
+        var low = _stock.Where(i => i.BelowThreshold).OrderBy(i => i.BloodType).ToList();
+        if (low.Count > 0)
+        {
+            var threshold = low.Max(i => i.Threshold);
+            Attention.Add(new(AttentionKind.Critical, "Stock", low.Count == 1 ? $"{low[0].BloodType.ToTypographic()} is below {threshold} units" : $"{low.Count} of {_stock.Count} blood groups are below {threshold} units",
+                string.Join(", ", low.Select(i => $"{i.BloodType.ToTypographic()} {i.Available}")) + ".", "Open stock", "Stock", new ListPrefilter(StockView: StockFilter.BelowThreshold)));
+        }
+
+        foreach (var request in _requests.Where(r => Cover(r.BloodType) >= r.Units && r.RequiredBy <= today.AddDays(3)).OrderBy(r => r.RequiredBy).Take(1))
+        {
+            var due = request.RequiredBy == today ? "today" : request.RequiredBy == today.AddDays(1) ? "tomorrow" : $"on {request.RequiredBy.ToString("dddd", CultureInfo.CurrentCulture)}";
+            var same = available.GetValueOrDefault(request.BloodType);
+            Attention.Add(new(AttentionKind.Info, "Request", $"{request.PatientName}’s request is due {due}",
+                $"{request.BloodType.ToTypographic()}, {Units(request.Units)}. {same} {request.BloodType.ToTypographic()} {(same == 1 ? "bag is" : "bags are")} available.", "Fulfil", "Requests", new ListPrefilter(RecordId: request.Id)));
+        }
+
+        AttentionCountText = Attention.Count switch
+        {
+            0 => string.Empty,
+            1 => "1 item",
+            var n => $"{n} items",
+        };
+    }
+
+    private static string Units(int n) => n == 1 ? "1 unit" : $"{n.ToString("N0", CultureInfo.CurrentCulture)} units";
 
     private void RebuildChart()
     {
@@ -254,6 +531,7 @@ public sealed partial class DashboardViewModel : ViewModelBase
         }
 
         MonthLabels = [.. data.Months.Select(MonthLabel)];
+        ChartMonthLabels = [.. data.Months.Select((m, i) => i == 0 || m.Month == 1 ? m.ToString("MMM", CultureInfo.InvariantCulture) + "\n" + m.Year.ToString(CultureInfo.InvariantCulture) : m.ToString("MMM", CultureInfo.InvariantCulture))];
         DonatedByMonth = donated;
         IssuedByMonth = issued;
         DonationsTable = new(

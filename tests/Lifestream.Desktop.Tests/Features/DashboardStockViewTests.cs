@@ -65,7 +65,12 @@ public sealed class DashboardStockViewTests
         Assert.False(facts.contentVisible);
         Assert.True(facts.drawn, "the charts were not drawn");
         Assert.True(facts.drawnMs < 300, $"charts took {facts.drawnMs} ms after the data arrived");
-        Assert.Equal(["GetDashboardAsync"], facts.Calls); // one API call for the whole dashboard
+        // One dashboard call for the numbers and the chart; direction A's blocks (stock meters, today's appointments, open requests) read the existing
+        // endpoints in parallel, best effort.
+        Assert.Equal(1, facts.Calls.Count(c => c == "GetDashboardAsync"));
+        Assert.Contains("GetStockAsync", facts.Calls);
+        Assert.Contains("GetAppointmentsAsync", facts.Calls);
+        Assert.Contains("GetRequestsAsync", facts.Calls);
     }
 
     [Fact]
@@ -82,19 +87,18 @@ public sealed class DashboardStockViewTests
 
             var x = (LiveChartsCore.SkiaSharpView.Axis)view.DonationChart.XAxes.First();
             var y = (LiveChartsCore.SkiaSharpView.Axis)view.DonationChart.YAxes.First();
-            var demographicsY = (LiveChartsCore.SkiaSharpView.Axis)view.GenderChart.YAxes.First();
-            var series = view.DonationChart.Series.Cast<LiveChartsCore.SkiaSharpView.ColumnSeries<int>>().ToList();
-            return (XName: x.Name, XLabels: x.Labels!.ToList(), YMin: y.MinLimit, DemographicsYMin: demographicsY.MinLimit, Series: series.Select(s => s.Name).ToList(),
-                Donated: series[0].Values!.ToList(), Model: vm.DonatedByMonth.ToList(), ModelLabels: vm.MonthLabels.ToList());
+            var series = view.DonationChart.Series.OfType<LiveChartsCore.SkiaSharpView.LineSeries<int>>().ToList();
+            return (XName: x.Name, XLabels: x.Labels!.ToList(), YMin: y.MinLimit, Series: series.Select(s => s.Name).ToList(),
+                Donated: series[0].Values!.ToList(), Model: vm.DonatedByMonth.ToList(), ModelLabels: vm.ChartMonthLabels.ToList(), Buckets: vm.MonthLabels.Count);
         });
 
-        Assert.Equal("Month", facts.XName);
+        Assert.Null(facts.XName); // direction A: no axis titles; the panel header names the chart
         Assert.Equal(facts.ModelLabels, facts.XLabels); // the axis labels come from the same month buckets as the data
         Assert.Equal(12, facts.XLabels.Count);
+        Assert.Equal(facts.Buckets, facts.XLabels.Count);
         Assert.Equal(facts.Model, facts.Donated);
         Assert.Equal(0d, facts.YMin);
-        Assert.Equal(0d, facts.DemographicsYMin);
-        Assert.Equal(["Donated", "Issued"], facts.Series);
+        Assert.Equal(["Donated", "Issued"], facts.Series); // two lines, plus the end markers
     }
 
     [Fact]
@@ -123,50 +127,6 @@ public sealed class DashboardStockViewTests
         Assert.Equal(12, facts.Rows);
         Assert.Equal(["Month", "Donated", "Issued"], facts.Headers);
         Assert.Equal(facts.Model, facts.First);
-    }
-
-    [Fact]
-    public void Dashboard_DemographicsChart_IsALabelledBarChart_WithEveryGender_AndReadableLabels_FakeApi()
-    {
-        var facts = StaHost.Run(() =>
-        {
-            using var rig = FeatureHarness.NewRig();
-            var vm = FeatureHarness.Create<DashboardViewModel>(rig);
-            var view = FeatureHarness.DashboardView(vm);
-            using var host = Hosted.Create(view, Width, Height);
-            Hosted.Await(() => vm.LoadAsync());
-            host.Settle(500);
-
-            var bars = (LiveChartsCore.SkiaSharpView.ColumnSeries<int>)view.GenderChart.Series.Single();
-            var labels = ((LiveChartsCore.SkiaSharpView.Axis)view.GenderChart.XAxes.Single()).Labels!.ToList();
-            var paint = (LiveChartsCore.SkiaSharpView.Painting.SolidColorPaint)bars.DataLabelsPaint!;
-            var surface = (Color)view.TryFindResource("Color.SurfaceRaised");
-            return (Labels: labels, Values: bars.Values!.ToList(), HasDataLabels: bars.DataLabelsPaint is not null, Ratio: Contrast(paint.Color.Red, paint.Color.Green, paint.Color.Blue, surface), Size: bars.DataLabelsSize);
-        });
-
-        Assert.Equal(["Male", "Female", "Other"], facts.Labels);
-        Assert.Equal([61, 63, 4], facts.Values);
-        Assert.True(facts.HasDataLabels);
-        Assert.True(facts.Ratio >= 4.5, $"data label contrast {facts.Ratio:F2}:1");
-        Assert.True(facts.Size >= 12);
-    }
-
-    private static double Contrast(byte r, byte g, byte b, Color background)
-    {
-        static double Lum(byte r, byte g, byte b)
-        {
-            static double F(byte c)
-            {
-                var s = c / 255d;
-                return s <= 0.03928 ? s / 12.92 : Math.Pow((s + 0.055) / 1.055, 2.4);
-            }
-
-            return (0.2126 * F(r)) + (0.7152 * F(g)) + (0.0722 * F(b));
-        }
-
-        var a = Lum(r, g, b);
-        var c = Lum(background.R, background.G, background.B);
-        return (Math.Max(a, c) + 0.05) / (Math.Min(a, c) + 0.05);
     }
 
     [Fact]

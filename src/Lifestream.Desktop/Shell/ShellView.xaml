@@ -3,119 +3,202 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="clr-namespace:Lifestream.Desktop.Controls"
              xmlns:services="clr-namespace:Lifestream.Desktop.Services"
+             xmlns:shell="clr-namespace:Lifestream.Desktop.Shell"
+             xmlns:common="clr-namespace:Lifestream.Client.Common;assembly=Lifestream.Client"
              Focusable="False">
   <UserControl.Resources>
-    <services:AvatarConverter x:Key="Avatar" />
     <services:HasTextToVisibilityConverter x:Key="HasText" />
+    <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+    <ContextMenu x:Key="AccountMenu" Style="{DynamicResource ContextMenu.Lifestream}">
+      <MenuItem Style="{DynamicResource MenuItem.Lifestream}" Header="Profile" AutomationProperties.Name="Profile"
+                Command="{Binding PlacementTarget.DataContext.ProfileCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+      <MenuItem Style="{DynamicResource MenuItem.Lifestream}" Header="Change password" AutomationProperties.Name="Change password"
+                Command="{Binding PlacementTarget.DataContext.ChangePasswordCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+      <MenuItem Style="{DynamicResource MenuItem.Lifestream}" Header="Theme" AutomationProperties.Name="Theme">
+        <MenuItem Style="{DynamicResource MenuItem.Lifestream}" Header="Light" AutomationProperties.Name="Light theme"
+                  Command="{Binding PlacementTarget.DataContext.SetThemeCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" CommandParameter="{x:Static common:ThemeMode.Light}" />
+        <MenuItem Style="{DynamicResource MenuItem.Lifestream}" Header="Dark" AutomationProperties.Name="Dark theme"
+                  Command="{Binding PlacementTarget.DataContext.SetThemeCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" CommandParameter="{x:Static common:ThemeMode.Dark}" />
+        <MenuItem Style="{DynamicResource MenuItem.Lifestream}" Header="Match Windows" AutomationProperties.Name="Match the Windows theme"
+                  Command="{Binding PlacementTarget.DataContext.SetThemeCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" CommandParameter="{x:Static common:ThemeMode.System}" />
+      </MenuItem>
+      <MenuItem Style="{DynamicResource MenuItem.Lifestream}" Header="Collapse the sidebar" InputGestureText="Ctrl+B" AutomationProperties.Name="Collapse or expand the sidebar"
+                Command="{Binding PlacementTarget.DataContext.ToggleNavCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+      <Separator />
+      <MenuItem Style="{DynamicResource MenuItem.Lifestream}" Header="Sign out" AutomationProperties.Name="Sign out"
+                Command="{Binding PlacementTarget.DataContext.SignOutCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+    </ContextMenu>
   </UserControl.Resources>
   <UserControl.InputBindings>
+    <KeyBinding Key="K" Modifiers="Control" Command="{Binding OpenPaletteCommand}" />
     <KeyBinding Key="F" Modifiers="Control" Command="{Binding SearchCommand}" />
     <KeyBinding Key="N" Modifiers="Control" Command="{Binding NewRecordCommand}" />
+    <KeyBinding Key="B" Modifiers="Control" Command="{Binding ToggleNavCommand}" />
+    <KeyBinding Key="D" Modifiers="Control" Command="{Binding RecordDonationCommand}" />
+    <KeyBinding Key="D1" Modifiers="Alt" Command="{Binding NavigateToIndexCommand}" CommandParameter="1" />
+    <KeyBinding Key="D2" Modifiers="Alt" Command="{Binding NavigateToIndexCommand}" CommandParameter="2" />
+    <KeyBinding Key="D3" Modifiers="Alt" Command="{Binding NavigateToIndexCommand}" CommandParameter="3" />
+    <KeyBinding Key="D4" Modifiers="Alt" Command="{Binding NavigateToIndexCommand}" CommandParameter="4" />
+    <KeyBinding Key="D5" Modifiers="Alt" Command="{Binding NavigateToIndexCommand}" CommandParameter="5" />
+    <KeyBinding Key="D6" Modifiers="Alt" Command="{Binding NavigateToIndexCommand}" CommandParameter="6" />
+    <KeyBinding Key="D7" Modifiers="Alt" Command="{Binding NavigateToIndexCommand}" CommandParameter="7" />
+    <KeyBinding Key="D8" Modifiers="Alt" Command="{Binding NavigateToIndexCommand}" CommandParameter="8" />
   </UserControl.InputBindings>
-  <Grid Background="{DynamicResource Brush.SurfaceCanvas}">
+
+  <!-- The shell of direction A: the 44 DIP title bar and the sidebar sit on Mica (Brush.Mica, transparent where Windows draws real Mica); the page
+       sits on the canvas, inset with a rounded top-left corner. The caption buttons belong to the window and float over the title bar's right end. -->
+  <Grid x:Name="Root" controls:Responsive.Source="True" Background="{DynamicResource Brush.Mica}">
+    <Grid.RowDefinitions>
+      <RowDefinition x:Name="TitleRow" Height="{DynamicResource Grid.Height.Caption}" />
+      <RowDefinition Height="*" />
+    </Grid.RowDefinitions>
     <Grid.ColumnDefinitions>
-      <ColumnDefinition Width="{DynamicResource Grid.Width.Sidebar}" />
+      <ColumnDefinition x:Name="NavColumn" Width="{DynamicResource Grid.Width.Sidebar}" />
       <ColumnDefinition Width="*" />
     </Grid.ColumnDefinitions>
 
-    <!-- Sidebar: the logo is pinned in its own row, outside the scroll region; the groups fit at 640 DIP, so nothing scrolls. -->
-    <Grid Background="{DynamicResource Brush.SurfaceRaised}" KeyboardNavigation.TabNavigation="Local" AutomationProperties.Name="Navigation">
-      <Grid.RowDefinitions>
-        <RowDefinition Height="Auto" />
-        <RowDefinition Height="*" />
-      </Grid.RowDefinitions>
-      <StackPanel x:Name="LogoRow" Orientation="Horizontal" Margin="{DynamicResource Inset.L20T16R20B8}" Height="40">
-        <Image Source="{DynamicResource Image.Logo}" Width="28" Height="28" />
-        <TextBlock Style="{DynamicResource Text.Heading}" Text="Lifestream" VerticalAlignment="Center" Margin="{DynamicResource Inset.L12}" TextWrapping="NoWrap" />
+    <!-- Title bar: the mark and name over the sidebar, then the search field (it opens the palette), notifications and the account. -->
+    <StackPanel x:Name="TitleMark" Grid.ColumnSpan="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0" TextOptions.TextRenderingMode="Grayscale">
+      <controls:LogoMark Width="20" Height="20" Margin="0,0,10,0" />
+      <TextBlock x:Name="Wordmark" Text="Lifestream" FontSize="{DynamicResource FontSize.Body}" FontWeight="SemiBold" Foreground="{DynamicResource Brush.Ink}" VerticalAlignment="Center" />
+    </StackPanel>
+    <Grid Grid.Column="1" Margin="14,0,0,0" TextOptions.TextRenderingMode="Grayscale">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*" />
+        <ColumnDefinition Width="Auto" />
+        <ColumnDefinition Width="{x:Static shell:ShellView.CaptionButtonsColumn}" />
+      </Grid.ColumnDefinitions>
+      <Button x:Name="SearchField" Style="{DynamicResource TitleSearch}" Content="Search donors, patients, requests and bags" HorizontalAlignment="Left"
+              Width="{DynamicResource Width.TitleSearch}" MaxWidth="{DynamicResource Width.TitleSearch}" Command="{Binding OpenPaletteCommand}"
+              AutomationProperties.Name="Search and commands" AutomationProperties.AcceleratorKey="Ctrl+K" ToolTip="Search and commands (Ctrl+K)" />
+      <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,8,0">
+        <Button x:Name="CompactSearch" Style="{DynamicResource TitleBarButton}" Command="{Binding OpenPaletteCommand}" Visibility="Collapsed" Margin="0,0,6,0"
+                AutomationProperties.Name="Search and commands" ToolTip="Search and commands (Ctrl+K)">
+          <StackPanel Orientation="Horizontal">
+            <controls:Icon Kind="Search" Size="16" VerticalAlignment="Center" Margin="0,0,8,0" />
+            <Border Style="{DynamicResource Kbd}">
+              <TextBlock Style="{DynamicResource Kbd.Text}" Text="Ctrl K" />
+            </Border>
+          </StackPanel>
+        </Button>
+        <Button x:Name="NotificationsButton" Style="{DynamicResource TitleBarButton}" Width="32" Padding="0" Click="OnNotificationsClick"
+                AutomationProperties.Name="{Binding NotificationsName, RelativeSource={RelativeSource AncestorType=shell:ShellView}}"
+                ToolTip="{Binding NotificationsName, RelativeSource={RelativeSource AncestorType=shell:ShellView}}">
+          <Grid>
+            <controls:Icon Kind="Bell" Size="16" />
+            <Ellipse x:Name="BellDot" Width="6" Height="6" Fill="{DynamicResource Brush.Critical}" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-1,-1,0"
+                     Visibility="{Binding HasAttention, RelativeSource={RelativeSource AncestorType=shell:ShellView}, Converter={StaticResource BoolToVisibility}}" />
+          </Grid>
+        </Button>
+        <Button x:Name="AvatarButton" Style="{DynamicResource TitleBarButton}" Width="40" Padding="0" Margin="4,0,0,0" Click="OnAccountClick"
+                AutomationProperties.Name="Account menu" AutomationProperties.HelpText="{Binding DisplayName}" ToolTip="{Binding DisplayName}">
+          <controls:Avatar Initials="{Binding Initials}" IsBlood="True" Size="26" />
+        </Button>
       </StackPanel>
-      <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Focusable="False" x:Name="NavScroll">
-        <ItemsControl ItemsSource="{Binding Groups}" Focusable="False">
+    </Grid>
+
+    <!-- Sidebar: the groups (scrolling only when the window is very short), then the account card at the foot. -->
+    <DockPanel x:Name="Nav" Grid.Row="1" Margin="8,6,8,12" KeyboardNavigation.TabNavigation="Local" AutomationProperties.Name="Navigation" TextOptions.TextRenderingMode="Grayscale">
+      <Button x:Name="AccountButton" DockPanel.Dock="Bottom" Style="{DynamicResource AccountButton}" Click="OnAccountClick" HorizontalAlignment="Stretch"
+              AutomationProperties.Name="Account menu" AutomationProperties.HelpText="{Binding DisplayName}" ToolTip="Account menu">
+        <StackPanel Orientation="Horizontal">
+          <controls:Avatar Initials="{Binding Initials}" IsBlood="True" Size="32" />
+          <StackPanel x:Name="AccountText" Margin="10,0,0,0" VerticalAlignment="Center">
+            <TextBlock Text="{Binding DisplayName}" FontSize="{DynamicResource FontSize.Label}" FontWeight="SemiBold" Foreground="{DynamicResource Brush.Ink}" TextTrimming="CharacterEllipsis" MaxWidth="150" />
+            <TextBlock Text="{Binding UserSubtitle}" FontSize="{DynamicResource FontSize.Caption}" Foreground="{DynamicResource Brush.Ink3}" TextTrimming="CharacterEllipsis" MaxWidth="150" />
+          </StackPanel>
+        </StackPanel>
+      </Button>
+      <ScrollViewer x:Name="NavScroll" VerticalScrollBarVisibility="Auto" Focusable="False">
+        <ItemsControl x:Name="NavGroups" ItemsSource="{Binding Groups}" Focusable="False">
           <ItemsControl.ItemTemplate>
             <DataTemplate>
               <StackPanel>
-                <TextBlock Style="{DynamicResource NavGroupHeader}" Text="{Binding Title}" TextWrapping="NoWrap" />
+                <TextBlock x:Name="GroupHeader" Style="{DynamicResource NavGroupHeader}" Text="{Binding Title}" TextWrapping="NoWrap" />
+                <Rectangle x:Name="RailSeparator" Height="1" Width="24" Fill="{DynamicResource Brush.Stroke2}" Margin="0,6,0,6" Visibility="Collapsed" />
                 <ItemsControl ItemsSource="{Binding Items}" Focusable="False">
                   <ItemsControl.ItemTemplate>
                     <DataTemplate>
-                      <RadioButton Style="{DynamicResource NavItem}" Content="{Binding Title}" Tag="{Binding IconGlyph}"
+                      <RadioButton x:Name="Item" Style="{DynamicResource NavItem}" Content="{Binding Title}"
                                    IsChecked="{Binding IsSelected, Mode=OneWay}"
                                    Command="{Binding DataContext.NavigateCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}"
-                                   AutomationProperties.Name="{Binding Title}" />
+                                   AutomationProperties.Name="{Binding AutomationName}" AutomationProperties.AcceleratorKey="{Binding Shortcut}" />
+                      <DataTemplate.Triggers>
+                        <DataTrigger Binding="{Binding IsRail, RelativeSource={RelativeSource AncestorType=shell:ShellView}}" Value="True">
+                          <Setter TargetName="Item" Property="Style" Value="{DynamicResource RailItem}" />
+                          <Setter TargetName="Item" Property="ToolTip" Value="{Binding ToolTip}" />
+                        </DataTrigger>
+                      </DataTemplate.Triggers>
                     </DataTemplate>
                   </ItemsControl.ItemTemplate>
                 </ItemsControl>
               </StackPanel>
+              <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding Title}" Value="">
+                  <Setter TargetName="GroupHeader" Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsRail, RelativeSource={RelativeSource AncestorType=shell:ShellView}}" Value="True">
+                  <Setter TargetName="GroupHeader" Property="Visibility" Value="Collapsed" />
+                  <Setter TargetName="RailSeparator" Property="Visibility" Value="Visible" />
+                </DataTrigger>
+                <MultiDataTrigger>
+                  <MultiDataTrigger.Conditions>
+                    <Condition Binding="{Binding IsRail, RelativeSource={RelativeSource AncestorType=shell:ShellView}}" Value="True" />
+                    <Condition Binding="{Binding Title}" Value="" />
+                  </MultiDataTrigger.Conditions>
+                  <Setter TargetName="RailSeparator" Property="Visibility" Value="Collapsed" />
+                </MultiDataTrigger>
+              </DataTemplate.Triggers>
             </DataTemplate>
           </ItemsControl.ItemTemplate>
         </ItemsControl>
       </ScrollViewer>
-    </Grid>
+    </DockPanel>
 
-    <Grid Grid.Column="1">
-      <Grid.RowDefinitions>
-        <RowDefinition Height="64" />
-        <RowDefinition Height="Auto" />
-        <RowDefinition Height="Auto" />
-        <RowDefinition Height="*" />
-      </Grid.RowDefinitions>
+    <!-- The page area: canvas, a 1 DIP stroke on its left and top edges and a rounded top-left corner where it meets the sidebar and title bar. -->
+    <Border x:Name="ContentArea" Grid.Row="1" Grid.Column="1" Background="{DynamicResource Brush.Canvas}" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="1,1,0,0"
+            CornerRadius="{DynamicResource Radius.ContentCorner}" SnapsToDevicePixels="True">
+      <Grid x:Name="ContentGrid">
+        <Grid.RowDefinitions>
+          <RowDefinition Height="Auto" />
+          <RowDefinition Height="Auto" />
+          <RowDefinition Height="Auto" />
+          <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
 
-      <!-- Header: page title and the account control -->
-      <Grid Margin="{DynamicResource Inset.L24R16}">
-        <Grid.ColumnDefinitions>
-          <ColumnDefinition Width="*" />
-          <ColumnDefinition Width="Auto" />
-        </Grid.ColumnDefinitions>
-        <TextBlock Style="{DynamicResource Text.Title}" Text="{Binding PageTitle}" VerticalAlignment="Center" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+        <!-- Update prompt -->
+        <controls:CrispBorder Margin="32,16,32,0" Padding="16,8,12,8" Background="{DynamicResource Brush.InfoSoft}" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="1"
+                              CornerRadius="{DynamicResource Radius.Panel}" Visibility="{Binding UpdatePrompt, Converter={StaticResource HasText}}" AutomationProperties.LiveSetting="Polite">
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel Orientation="Horizontal">
+              <controls:Icon Kind="Info" Size="18" Foreground="{DynamicResource Brush.Info}" VerticalAlignment="Center" Margin="0,0,12,0" />
+              <TextBlock Style="{DynamicResource Text.Body}" Text="{Binding UpdatePrompt}" VerticalAlignment="Center" AutomationProperties.Name="Update ready" />
+            </StackPanel>
+            <Button Grid.Column="1" Style="{DynamicResource Button.Primary.Small}" Content="Restart and update" Command="{Binding ApplyUpdateCommand}"
+                    controls:ButtonAssist.IsBusy="{Binding ApplyUpdateCommand.IsRunning}" controls:ButtonAssist.BusyText="Updating" />
+          </Grid>
+        </controls:CrispBorder>
+
+        <!-- The waking notice of a toast's action (Undo): the toast outlives the screen that showed it, so this notice belongs to the shell (SHELL-07). -->
+        <controls:WakingNotice x:Name="ToastActionWakingNotice" Grid.Row="1" Margin="32,16,32,0" HorizontalAlignment="Left" MaxWidth="560"
+                               IsActive="{Binding IsToastActionWaking}" CancelCommand="{Binding CancelToastActionCommand}" />
+
+        <!-- The title of a screen that has no page header of its own yet (screens not yet rebuilt to direction A). -->
+        <TextBlock x:Name="LegacyTitle" Grid.Row="2" Style="{DynamicResource Text.Title}" Text="{Binding PageTitle}" Margin="32,24,32,0" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
                    AutomationProperties.HeadingLevel="Level1" />
-        <Button x:Name="AccountButton" Grid.Column="1" Style="{DynamicResource AccountButton}" VerticalAlignment="Center" Click="OnAccountClick"
-                AutomationProperties.Name="Account menu" AutomationProperties.HelpText="{Binding DisplayName}" ToolTip="Account menu">
-          <StackPanel Orientation="Horizontal">
-            <Border Width="28" Height="28" CornerRadius="{DynamicResource Radius.14}" ClipToBounds="True" Margin="{DynamicResource Inset.R8}">
-              <Image Source="{Binding Converter={StaticResource Avatar}}" Stretch="UniformToFill" />
-            </Border>
-            <TextBlock Style="{DynamicResource Text.Body}" Text="{Binding DisplayName}" VerticalAlignment="Center" TextWrapping="NoWrap" MaxWidth="180" TextTrimming="CharacterEllipsis" />
-            <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE70D;" FontSize="12" VerticalAlignment="Center" Margin="{DynamicResource Inset.L8}" />
-          </StackPanel>
-          <Button.ContextMenu>
-            <ContextMenu Style="{DynamicResource ContextMenu.Lifestream}" PlacementTarget="{Binding RelativeSource={RelativeSource Self}}" Placement="Bottom">
-              <MenuItem Style="{DynamicResource MenuItem.Lifestream}" Header="Profile" AutomationProperties.Name="Profile"
-                        Command="{Binding PlacementTarget.DataContext.ProfileCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-              <MenuItem Style="{DynamicResource MenuItem.Lifestream}" Header="Change password" AutomationProperties.Name="Change password"
-                        Command="{Binding PlacementTarget.DataContext.ChangePasswordCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-              <MenuItem Style="{DynamicResource MenuItem.Lifestream}" Header="Sign out" AutomationProperties.Name="Sign out"
-                        Command="{Binding PlacementTarget.DataContext.SignOutCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-            </ContextMenu>
-          </Button.ContextMenu>
-        </Button>
-      </Grid>
 
-      <!-- Update prompt -->
-      <controls:CrispBorder Grid.Row="1" Margin="{DynamicResource Inset.L24R24B8}" Padding="{DynamicResource Inset.H16V8}" Background="{DynamicResource Brush.SurfaceRaised}" BorderBrush="{DynamicResource Brush.StatusInfo}" BorderThickness="1"
-              CornerRadius="{DynamicResource Radius.Card}" Visibility="{Binding UpdatePrompt, Converter={StaticResource HasText}}" AutomationProperties.LiveSetting="Polite">
-        <Grid>
-          <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="*" />
-            <ColumnDefinition Width="Auto" />
-          </Grid.ColumnDefinitions>
-          <StackPanel Orientation="Horizontal">
-            <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE895;" Foreground="{DynamicResource Brush.StatusInfo}" VerticalAlignment="Center" Margin="{DynamicResource Inset.R12}" />
-            <TextBlock Style="{DynamicResource Text.Body}" Text="{Binding UpdatePrompt}" VerticalAlignment="Center" AutomationProperties.Name="Update ready" />
-          </StackPanel>
-          <Button Grid.Column="1" Style="{DynamicResource Button.Primary}" Content="Restart and update" Command="{Binding ApplyUpdateCommand}"
-                  controls:ButtonAssist.IsBusy="{Binding ApplyUpdateCommand.IsRunning}" controls:ButtonAssist.BusyText="Updating..." />
-        </Grid>
-      </controls:CrispBorder>
-
-      <!-- The waking notice of a toast's action (Undo): the toast outlives the screen that showed it, so this notice belongs to the shell and shows on every screen (SHELL-07). -->
-      <controls:WakingNotice x:Name="ToastActionWakingNotice" Grid.Row="2" Margin="{DynamicResource Inset.L24R24B8}" HorizontalAlignment="Left" MaxWidth="560"
-                             IsActive="{Binding IsToastActionWaking}" CancelCommand="{Binding CancelToastActionCommand}" />
-
-      <!-- The page: one view per visit, created from the view model by the locator and given that view model as its DataContext. -->
-      <Grid Grid.Row="3" Margin="{DynamicResource Inset.L24R24B24}">
-        <ContentControl x:Name="PageHost" Content="{Binding CurrentPage}" ContentTemplateSelector="{x:Static services:ViewLocator.Instance}" IsTabStop="False" Focusable="False"
+        <!-- The page: one view per visit, created from the view model by the locator and given that view model as its DataContext. -->
+        <ContentControl x:Name="PageHost" Grid.Row="3" Margin="32,20,32,24" Content="{Binding CurrentPage}" ContentTemplateSelector="{x:Static services:ViewLocator.Instance}" IsTabStop="False" Focusable="False"
                         HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" />
+        <controls:ToastHost Grid.Row="3" DataContext="{Binding Toasts}" ItemsSource="{Binding Toasts}" />
       </Grid>
-      <controls:ToastHost Grid.Row="3" DataContext="{Binding Toasts}" ItemsSource="{Binding Toasts}" />
-    </Grid>
+    </Border>
+
+    <!-- The command palette (Ctrl+K): over everything, 640 DIP wide, just under the title bar. -->
+    <shell:CommandPaletteView x:Name="Palette" Grid.RowSpan="2" Grid.ColumnSpan="2" DataContext="{Binding Palette}" />
   </Grid>
 </UserControl>

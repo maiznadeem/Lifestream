@@ -118,7 +118,21 @@ public sealed class FakeApiClient : ILifestreamApiClient
 
     public Task<ApiResult<PagedResult<DonorListItem>>> GetDonorsAsync(DonorQuery query, CancellationToken ct = default) => Run<PagedResult<DonorListItem>>(nameof(GetDonorsAsync), ct);
 
-    public Task<ApiResult<DonorDetail>> GetDonorAsync(int id, CancellationToken ct = default) => Run<DonorDetail>(nameof(GetDonorAsync), ct);
+    public Task<ApiResult<DonorDetail>> GetDonorAsync(int id, CancellationToken ct = default) =>
+        DonorById is { } byId ? RecordThen(nameof(GetDonorAsync), () => byId(id)) : Run<DonorDetail>(nameof(GetDonorAsync), ct);
+
+    /// <summary>When set, answers GET donors/{id} per id (the scripted handler cannot see the id).</summary>
+    public Func<int, ApiResult<DonorDetail>>? DonorById { get; set; }
+
+    private Task<ApiResult<T>> RecordThen<T>(string name, Func<ApiResult<T>> answer)
+    {
+        lock (_gate)
+        {
+            _calls.Add(name);
+        }
+
+        return Task.FromResult(answer());
+    }
 
     public Task<ApiResult<DonorDetail>> CreateDonorAsync(CreateDonorRequest request, CancellationToken ct = default) => Run<DonorDetail>(nameof(CreateDonorAsync), ct);
 
