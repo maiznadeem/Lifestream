@@ -158,10 +158,28 @@ public sealed class WakingEveryOperationTests
 
     private static object? Selected(ViewModelBase vm) => vm.GetType().GetProperty("SelectedItem")?.GetValue(vm);
 
+    /// <summary>True when the text runs past the right edge of the control that holds it (the notice, the banner), so the user would see it cut off.</summary>
+    private static bool Clipped(TextBlock text, FrameworkElement root)
+    {
+        DependencyObject? holder = VisualTreeHelper.GetParent(text);
+        while (holder is not null and not Border { ActualWidth: > 0 })
+        {
+            holder = VisualTreeHelper.GetParent(holder);
+        }
+
+        return holder is Border border && Hosted.BoundsOf(text, border).Right > border.ActualWidth + 0.5 && root.IsVisible;
+    }
+
     /// <summary>The visible "Waking up the server" texts and the visible Cancel button that sits with one of them (within three levels of containers).</summary>
     private static (List<TextBlock> Texts, Button? Cancel) WakingSurface(Hosted host)
     {
         var texts = host.All<TextBlock>().Where(t => t.IsVisible && (t.Text ?? string.Empty).Contains("Waking up the server", StringComparison.Ordinal)).ToList();
+        var clipped = texts.FirstOrDefault(t => Clipped(t, host.Element));
+        if (clipped is not null)
+        {
+            texts = []; // text that runs past the edge of what holds it is not something the user can read: it counts as not shown
+        }
+
         foreach (var text in texts)
         {
             DependencyObject? level = text;
