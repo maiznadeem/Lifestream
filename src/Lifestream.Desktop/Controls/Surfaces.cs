@@ -146,6 +146,9 @@ public sealed class StatusChip : Control
     public static readonly DependencyProperty DisplayTextProperty = DependencyProperty.Register(nameof(DisplayText), typeof(string), typeof(StatusChip), new FrameworkPropertyMetadata("Pending"));
     public static readonly DependencyProperty AccentBrushProperty = DependencyProperty.Register(nameof(AccentBrush), typeof(Brush), typeof(StatusChip), new FrameworkPropertyMetadata(null));
 
+    /// <summary>Replaces the chip's text when the record's own word is more exact ("No show", "Fulfilled"); the icon and colour stay those of <see cref="Status"/>.</summary>
+    public static readonly DependencyProperty LabelProperty = DependencyProperty.Register(nameof(Label), typeof(string), typeof(StatusChip), new FrameworkPropertyMetadata(null, OnStatusChanged));
+
     public StatusChip()
     {
         Loaded += (_, _) => Apply();
@@ -153,6 +156,8 @@ public sealed class StatusChip : Control
     }
 
     public StatusKind Status { get => (StatusKind)GetValue(StatusProperty); set => SetValue(StatusProperty, value); }
+
+    public string? Label { get => (string?)GetValue(LabelProperty); set => SetValue(LabelProperty, value); }
 
     public string Glyph { get => (string)GetValue(GlyphProperty); private set => SetValue(GlyphProperty, value); }
 
@@ -178,9 +183,9 @@ public sealed class StatusChip : Control
     {
         var (glyph, text, key) = Describe(Status);
         Glyph = glyph;
-        DisplayText = text;
+        DisplayText = string.IsNullOrEmpty(Label) ? text : Label;
         AccentBrush = TryFindResource(key) as Brush;
-        AutomationProperties.SetName(this, text);
+        AutomationProperties.SetName(this, DisplayText);
     }
 
     protected override AutomationPeer OnCreateAutomationPeer() => new FrameworkElementAutomationPeer(this);

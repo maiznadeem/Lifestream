@@ -1,6 +1,5 @@
 using Lifestream.Client.Navigation;
 using Lifestream.Client.Shell;
-using Lifestream.Client.Shell.Placeholders;
 using Lifestream.Client.Tests.Fakes;
 
 namespace Lifestream.Client.Tests;
@@ -38,7 +37,7 @@ public sealed class SidebarHighlightTests
         await shell.StartAsync();
 
         await shell.ProfileCommand.ExecuteAsync();
-        Assert.IsType<ProfilePlaceholderViewModel>(shell.CurrentPage);
+        Assert.IsType<Lifestream.Client.Features.Profile.ProfileViewModel>(shell.CurrentPage); // the real profile screen replaced the placeholder
         Assert.DoesNotContain(shell.Items, i => i.IsSelected);
 
         await shell.BackToDashboardCommand.ExecuteAsync();

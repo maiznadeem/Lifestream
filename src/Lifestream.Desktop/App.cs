@@ -3,9 +3,14 @@ using System.Windows;
 using Lifestream.Client;
 using Lifestream.Client.Api;
 using Lifestream.Client.Common;
+using Lifestream.Client.Features.Profile;
+using Lifestream.Client.Features.Receipts;
 using Lifestream.Client.Lookups;
 using Lifestream.Client.Navigation;
 using Lifestream.Desktop.Controls;
+using Lifestream.Desktop.Features.Dialogs;
+using Lifestream.Desktop.Features.Profile;
+using Lifestream.Desktop.Features.Receipts;
 using Lifestream.Desktop.Services;
 using Lifestream.Desktop.Theme;
 using Microsoft.Extensions.Configuration;
@@ -40,6 +45,7 @@ public sealed class App : Application
 
         var windows = (WpfWindowHost)provider.GetRequiredService<IWindowHost>();
         provider.GetRequiredService<DialogService>().Presenter = new WpfDialogPresenter(() => windows.ActiveWindow);
+        provider.GetRequiredService<FormDialogService>().Presenter = new WpfFormDialogPresenter(() => windows.ActiveWindow);
 
         _exceptions = new GlobalExceptionHandler(provider.GetRequiredService<IErrorReporter>(), Dispatcher);
         _exceptions.Install();
@@ -65,6 +71,8 @@ public sealed class App : Application
         services.AddSingleton<IWindowHost, WpfWindowHost>();
         services.AddSingleton<Lifestream.Client.Updates.IUpdateSource>(_ => new StoreAwareUpdateSource(new WindowsPackageIdentityProbe(), () => new VelopackFeed(ReleaseRepositoryUrl)));
         services.AddSingleton<ISessionExpiredWatcher, SessionExpiredWatcher>();
+        services.AddSingleton<IReceiptPrinter, WpfReceiptPrinter>();
+        services.AddSingleton<IPhotoPicker, WpfPhotoPicker>();
     }
 }
 
