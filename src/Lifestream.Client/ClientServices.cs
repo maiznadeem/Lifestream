@@ -26,7 +26,9 @@ public static class ClientServices
 
         // One HttpClient for the life of the app: one HTTP/2 connection for every call (SHELL-08).
         services.AddSingleton(p => ApiHttpClientFactory.Create(apiBaseAddress, p.GetRequiredService<WakePolicy>(), p.GetRequiredService<ServerStatus>()));
-        services.AddSingleton<ILifestreamApiClient, LifestreamApiClient>();
+        // Screens get the client through the operation scope wrapper: every call is cancellable by the operation it runs in (SHELL-07).
+        services.AddSingleton<LifestreamApiClient>();
+        services.AddSingleton<ILifestreamApiClient>(p => ScopedApiClient.Wrap(p.GetRequiredService<LifestreamApiClient>(), p.GetRequiredService<WakePolicy>()));
 
         services.AddSingleton<ToastService>();
         services.AddSingleton<IToastService>(p => p.GetRequiredService<ToastService>());

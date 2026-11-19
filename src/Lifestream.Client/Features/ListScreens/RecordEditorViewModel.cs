@@ -33,9 +33,9 @@ public abstract partial class RecordEditorViewModel : FormViewModelBase
         Today = clock;
         RecordType = recordType;
         IsNew = isNew;
-        SaveCommand = new AsyncRelayCommand(SaveAsync, () => CanSave);
-        CancelCommand = new AsyncRelayCommand(CancelAsync);
-        ReloadCommand = new AsyncRelayCommand(ReloadAsync);
+        SaveCommand = Command(SaveAsync, () => CanSave);
+        CancelCommand = Command(CancelAsync);
+        ReloadCommand = Command(ReloadAsync);
         ErrorsChanged += (_, _) => OnPropertyChanged("Item[]"); // lets the view bind {Binding [Name]} to a field's message
     }
 
@@ -141,17 +141,28 @@ public abstract partial class RecordEditorViewModel : FormViewModelBase
 
         var submit = PrepareSubmit();
         ApiProblem? problem = null;
+        var cancelled = false;
         await RunBusyAsync(async () =>
         {
             try
             {
-                problem = await Task.Run(() => submit(ct), ct).ConfigureAwait(true);
+                problem = await RunOperationAsync(token => submit(token), ct).ConfigureAwait(true);
             }
             catch (ApiProblemException ex)
             {
                 problem = ex.Problem;
             }
+            catch (OperationCanceledException)
+            {
+                cancelled = true;
+            }
         }).ConfigureAwait(true);
+
+        if (cancelled)
+        {
+            FormError = $"The request was cancelled. Your changes are still here, so you can save the {RecordType} again.";
+            return;
+        }
 
         if (problem is null)
         {
@@ -196,8 +207,10 @@ public abstract partial class RecordEditorViewModel : FormViewModelBase
 
     private async Task CancelAsync(CancellationToken ct)
     {
-        if (SaveCommand.IsRunning)
+        if (SaveCommand.IsRunning || ReloadCommand.IsRunning)
         {
+            // A request is in flight: Cancel stops it (the HTTP call is cancelled and never reaches the server) and the form stays open.
+            Operations.Cancel();
             return;
         }
 
@@ -213,7 +226,25 @@ public abstract partial class RecordEditorViewModel : FormViewModelBase
     {
         var reload = PrepareReload();
         ApiProblem? problem = null;
-        await RunBusyAsync(async () => problem = await Task.Run(() => reload(ct), ct).ConfigureAwait(true)).ConfigureAwait(true);
+        var cancelled = false;
+        await RunBusyAsync(async () =>
+        {
+            try
+            {
+                problem = await RunOperationAsync(token => reload(token), ct).ConfigureAwait(true);
+            }
+            catch (OperationCanceledException)
+            {
+                cancelled = true;
+            }
+        }).ConfigureAwait(true);
+
+        if (cancelled)
+        {
+            FormError = "The request was cancelled. Reload again to see the latest version.";
+            return;
+        }
+
         if (problem is null)
         {
             ApplyReloaded();

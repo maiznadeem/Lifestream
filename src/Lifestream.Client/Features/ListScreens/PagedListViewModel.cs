@@ -42,13 +42,13 @@ public abstract partial class PagedListViewModel<TItem> : ViewModelBase
         SearchText = ViewState.Search ?? string.Empty;
         _restoring = false;
 
-        SearchNowCommand = new AsyncRelayCommand(_ =>
+        SearchNowCommand = Command(_ =>
         {
             CancelDebounce();
             Page = 1;
             return RefreshAsync();
         });
-        ClearFiltersCommand = new AsyncRelayCommand(_ =>
+        ClearFiltersCommand = Command(_ =>
         {
             CancelDebounce();
             _restoring = true;
@@ -61,15 +61,15 @@ public abstract partial class PagedListViewModel<TItem> : ViewModelBase
             OnFiltersChanged();
             return RefreshAsync();
         });
-        NextPageCommand = new AsyncRelayCommand(_ => GoToPageAsync(Page + 1), () => HasNextPage);
-        PreviousPageCommand = new AsyncRelayCommand(_ => GoToPageAsync(Page - 1), () => HasPreviousPage);
-        SortCommand = new AsyncRelayCommand((expression, _) =>
+        NextPageCommand = Command(_ => GoToPageAsync(Page + 1), () => HasNextPage);
+        PreviousPageCommand = Command(_ => GoToPageAsync(Page - 1), () => HasPreviousPage);
+        SortCommand = Command((expression, _) =>
         {
             ApplySort(expression as string);
             Page = 1;
             return RefreshAsync();
         });
-        RetryCommand = new AsyncRelayCommand(_ => RefreshAsync());
+        RetryCommand = Command(_ => RefreshAsync());
     }
 
     /// <summary>The rows of the current page.</summary>
@@ -168,6 +168,7 @@ public abstract partial class PagedListViewModel<TItem> : ViewModelBase
     internal Task PendingRefresh { get; private set; } = Task.CompletedTask;
 
     /// <summary>Calls the list endpoint with the screen's own filters.</summary>
+    [RunsInOperation("FetchAsync calls it, and LoadAsync runs FetchAsync inside Operations.RunAsync.")]
     protected abstract Task<ApiResult<PagedResult<TItem>>> FetchPageAsync(ListRequest request, CancellationToken ct);
 
     /// <summary>Call after a filter other than the search box changed: the filter applies immediately (FEAT-02).</summary>

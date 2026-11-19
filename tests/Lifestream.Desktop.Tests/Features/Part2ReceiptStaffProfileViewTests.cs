@@ -211,7 +211,7 @@ public sealed class Part2ReceiptStaffProfileViewTests
                 Count: host.All<TextBlock>().Where(t => t.IsVisible).Select(t => t.Text).First(t => t.StartsWith("Showing", StringComparison.Ordinal)));
         });
 
-        Assert.Equal(["Name", "Designation", "Shift", "Role", "Salary", "Phone"], facts.Headers);
+        Assert.Equal(["Name", "Designation", "Shift", "Role"], facts.Headers); // salary and phone are never in the list payload: they are in the detail pane (admin only)
         Assert.DoesNotContain(facts.Headers, h => h!.Contains("assword", StringComparison.Ordinal));
         Assert.Equal(1, facts.Sortable); // only the name column sorts: the API sorts staff by name or username (Contracts SortKeys)
         Assert.Equal(0, facts.PasswordControls);

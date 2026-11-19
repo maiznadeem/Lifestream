@@ -1,0 +1,18 @@
+<UserControl x:Class="Lifestream.Desktop.Controls.WakingNotice"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:Lifestream.Desktop.Controls"
+             Focusable="False" IsTabStop="False">
+  <!-- The one "Waking up the server" notice of every operation that is not a screen load (a save, a dialog's submit, a detail pane, a record picker). It is shown while IsActive, and Cancel stops the HTTP request itself (SHELL-07). -->
+  <Border x:Name="Root" Padding="{DynamicResource Inset.H12V8}" Background="{DynamicResource Brush.SurfaceRaised}" BorderBrush="{DynamicResource Brush.StatusInfo}" BorderThickness="1"
+          CornerRadius="{DynamicResource Radius.Control}" AutomationProperties.LiveSetting="Polite" AutomationProperties.Name="Waking up the server">
+    <StackPanel>
+      <StackPanel Orientation="Horizontal">
+        <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE895;" Foreground="{DynamicResource Brush.StatusInfo}" VerticalAlignment="Top" Margin="{DynamicResource Inset.T2R10}" />
+        <TextBlock x:Name="Message" Style="{DynamicResource Text.Body}" TextWrapping="Wrap" MaxWidth="360" />
+      </StackPanel>
+      <Button x:Name="CancelWakingButton" Style="{DynamicResource Button.Secondary}" Content="Cancel" Command="{Binding CancelCommand, RelativeSource={RelativeSource AncestorType=controls:WakingNotice}}"
+              HorizontalAlignment="Left" Margin="{DynamicResource Inset.T8}" MinHeight="32" AutomationProperties.Name="Cancel the request" />
+    </StackPanel>
+  </Border>
+</UserControl>

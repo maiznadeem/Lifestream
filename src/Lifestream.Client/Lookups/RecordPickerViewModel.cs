@@ -19,19 +19,27 @@ public sealed partial class RecordPickerViewModel : ObservableObject, IDisposabl
     private CancellationTokenSource? _searchCts;
     private ITimer? _timer;
     private readonly SynchronizationContext? _context = SynchronizationContext.Current;
+    private readonly IServerStatus? _serverStatus;
 
-    public RecordPickerViewModel(ILifestreamApiClient api, RecordKind kind, TimeProvider? clock = null, TimeSpan? debounce = null)
+    public RecordPickerViewModel(ILifestreamApiClient api, RecordKind kind, TimeProvider? clock = null, TimeSpan? debounce = null, IServerStatus? serverStatus = null)
     {
         _api = api;
         Kind = kind;
         _clock = clock ?? TimeProvider.System;
         _debounce = debounce ?? TimeSpan.FromMilliseconds(300);
-        ChangeCommand = new AsyncRelayCommand(_ =>
+        Operations = new OperationRunner(() => serverStatus, () => _clock);
+        Operations.Changed += (_, _) => Post(() => IsWaking = Operations.IsWaking);
+        _serverStatus = serverStatus;
+        if (serverStatus is not null)
+        {
+            serverStatus.Changed += OnServerStatusChanged;
+        }
+        ChangeCommand = new AsyncRelayCommand((_, _) =>
         {
             Selected = null;
             IsOpen = true;
             return SearchNowAsync();
-        });
+        }, runner: Operations);
         ClearCommand = new AsyncRelayCommand(_ =>
         {
             Selected = null;
@@ -43,10 +51,26 @@ public sealed partial class RecordPickerViewModel : ObservableObject, IDisposabl
 
     public RecordKind Kind { get; }
 
+    /// <summary>The runner of the search: it can be cancelled down to the HTTP request, like every operation (SHELL-07).</summary>
+    public OperationRunner Operations { get; }
+
     public ObservableCollection<RecordOption> Options { get; } = [];
 
     public AsyncRelayCommand ChangeCommand { get; }
 
+    /// <summary>The "Cancel" of the waking state: stops the search request itself.</summary>
+    [NoOperationRunner("It only cancels the search in flight; it makes no API call.")]
+    public AsyncRelayCommand CancelSearchCommand => field ??= new AsyncRelayCommand(_ =>
+    {
+        Operations.Cancel();
+        return Task.CompletedTask;
+    });
+
+    /// <summary>True while a search is waiting on a waking server (after 3 s): the control shows "Waking up the server" with Cancel (SHELL-07).</summary>
+    [ObservableProperty]
+    public partial bool IsWaking { get; set; }
+
+    [NoOperationRunner("It only clears the chosen record; it makes no API call.")]
     public AsyncRelayCommand ClearCommand { get; }
 
     /// <summary>The label above the control; set by the screen ("Donor", "Patient"...).</summary>
@@ -119,7 +143,8 @@ public sealed partial class RecordPickerViewModel : ObservableObject, IDisposabl
         SearchError = null;
         try
         {
-            var result = await _api.SearchRecordsAsync(Kind, SearchText.Trim(), cts.Token).ConfigureAwait(true);
+            var text = SearchText.Trim();
+            var result = await Operations.ScopeAsync(ct => _api.SearchRecordsAsync(Kind, text, ct), cts.Token).ConfigureAwait(true);
             if (cts.IsCancellationRequested)
             {
                 return;
@@ -140,7 +165,12 @@ public sealed partial class RecordPickerViewModel : ObservableObject, IDisposabl
         }
         catch (OperationCanceledException)
         {
-            // A newer search replaced this one.
+            if (ReferenceEquals(_searchCts, cts))
+            {
+                SearchError = "The search was cancelled. Type again to search.";
+            }
+
+            // Otherwise a newer search replaced this one.
         }
         finally
         {
@@ -151,6 +181,8 @@ public sealed partial class RecordPickerViewModel : ObservableObject, IDisposabl
             }
         }
     }
+
+    private void OnServerStatusChanged(object? sender, EventArgs e) => Operations.StatusChanged();
 
     private void Post(Action action)
     {
@@ -166,6 +198,12 @@ public sealed partial class RecordPickerViewModel : ObservableObject, IDisposabl
 
     public void Dispose()
     {
+        if (_serverStatus is not null)
+        {
+            _serverStatus.Changed -= OnServerStatusChanged;
+        }
+
+        Operations.Dispose();
         _timer?.Dispose();
         _searchCts?.Cancel();
         _searchCts?.Dispose();

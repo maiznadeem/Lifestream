@@ -488,6 +488,8 @@ public sealed class ComponentTests
 
         public string Phone { get; set; } = "5551234";
 
+        public override bool HasUnsavedChanges => false;
+
         protected override string? ValidateField(string field) => field switch
         {
             "Name" when Name.Length == 0 => "Enter a name.",

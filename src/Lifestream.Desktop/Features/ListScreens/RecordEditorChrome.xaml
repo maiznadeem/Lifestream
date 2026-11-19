@@ -18,6 +18,8 @@
       </Grid.RowDefinitions>
       <TextBlock Style="{DynamicResource Text.Title}" Text="{Binding Title}" TextWrapping="Wrap" AutomationProperties.HeadingLevel="Level1" />
       <StackPanel Grid.Row="1" feat:Edge.Top="{DynamicResource Space.8}" feat:Edge.Bottom="{DynamicResource Space.8}">
+        <!-- A save or a reload is waiting on a waking server: say so, and let the user cancel the request (SHELL-07). -->
+        <controls:WakingNotice x:Name="Waking" IsActive="{Binding IsOperationWaking}" CancelCommand="{Binding CancelOperationCommand}" feat:Edge.Bottom="{DynamicResource Space.8}" />
         <!-- Someone else changed the record (409): reload, never overwrite. -->
         <Border feat:Edge.PadX="{DynamicResource Space.12}" feat:Edge.PadY="{DynamicResource Space.8}" feat:Edge.Bottom="{DynamicResource Space.8}" Background="{DynamicResource Brush.SurfacePressed}" BorderBrush="{DynamicResource Brush.StatusWarning}" BorderThickness="1"
                 CornerRadius="{DynamicResource Radius.Control}" Visibility="{Binding HasConflict, Converter={StaticResource BoolToVisibility}}" AutomationProperties.LiveSetting="Assertive">

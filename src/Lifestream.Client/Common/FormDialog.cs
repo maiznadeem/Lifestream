@@ -19,7 +19,11 @@ public interface IFormDialogService
     Task<bool> ShowAsync(DialogViewModel viewModel);
 }
 
-public sealed class FormDialogService : IFormDialogService
+/// <summary>
+/// Opens form dialogs. Before the dialog is shown it is given the server status and clock (so its submit shows the waking state and can be
+/// cancelled) and the dialog service (so closing it with unsaved input asks "Discard changes?").
+/// </summary>
+public sealed class FormDialogService(IServerStatus? serverStatus = null, IDialogService? dialogs = null, TimeProvider? clock = null) : IFormDialogService
 {
     public IFormDialogPresenter? Presenter { get; set; }
 
@@ -31,6 +35,7 @@ public sealed class FormDialogService : IFormDialogService
             return false;
         }
 
+        viewModel.Bind(serverStatus, clock ?? TimeProvider.System, dialogs);
         await Presenter.ShowAsync(viewModel).ConfigureAwait(true);
         return viewModel.Completed;
     }
@@ -50,14 +55,29 @@ public abstract partial class DialogViewModel : FormViewModelBase
         PrimaryText = primaryText;
         PrimaryBusyText = primaryBusyText ?? primaryText ?? string.Empty;
         CancelText = cancelText;
-        PrimaryCommand = new AsyncRelayCommand(RunPrimaryAsync, () => CanRunPrimary);
-        CancelCommand = new AsyncRelayCommand(_ =>
-        {
-            Close();
-            return Task.CompletedTask;
-        });
+        PrimaryCommand = Command(RunPrimaryAsync, () => CanRunPrimary);
+        CancelCommand = Command(CancelAsync);
         ErrorsChanged += (_, _) => OnPropertyChanged("Item[]"); // lets the view bind {Binding [Name]} to a field's message
     }
+
+    /// <summary>Gives the dialog the app's server status, clock and dialog service (called by <see cref="FormDialogService"/> before it is shown).</summary>
+    internal void Bind(IServerStatus? serverStatus, TimeProvider clock, IDialogService? dialogs)
+    {
+        Dialogs = dialogs;
+        if (!_bound)
+        {
+            Attach(serverStatus, clock);
+            _bound = true;
+        }
+    }
+
+    private bool _bound;
+
+    /// <summary>Asks "Discard changes?" when closing with unsaved input.</summary>
+    internal IDialogService? Dialogs { get; private set; }
+
+    /// <summary>True once the dialog has been told to close: the window then really closes (any earlier close, such as the X, is routed through <see cref="CancelCommand"/> first).</summary>
+    public bool IsClosing { get; private set; }
 
     /// <summary>Raised once when the dialog should close.</summary>
     public event EventHandler? CloseRequested;
@@ -121,6 +141,31 @@ public abstract partial class DialogViewModel : FormViewModelBase
         OnPropertyChanged(nameof(HasUnsavedChanges));
     }
 
+    /// <summary>
+    /// Every way out of the dialog (Esc, the Cancel button, the window's X) comes here. While the primary action is running it cancels the request
+    /// (the HTTP call stops; the dialog stays open so nothing typed is lost). Otherwise a dialog with unsaved input asks "Discard changes?" and
+    /// closes only when the user agrees (SHELL-24).
+    /// </summary>
+    private async Task CancelAsync(CancellationToken ct)
+    {
+        if (PrimaryCommand.IsRunning)
+        {
+            Operations.Cancel();
+            return;
+        }
+
+        if (HasUnsavedChanges)
+        {
+            var dialogs = Dialogs ?? throw new InvalidOperationException("This dialog has unsaved changes but was not opened through the form dialog service, so it cannot ask \"Discard changes?\".");
+            if (!await dialogs.ConfirmAsync("Discard changes?", "You have unsaved changes in this dialog. If you close it now they will be lost.", "Discard changes").ConfigureAwait(true))
+            {
+                return;
+            }
+        }
+
+        Close();
+    }
+
     private async Task RunPrimaryAsync(CancellationToken ct)
     {
         FormError = null;
@@ -136,17 +181,28 @@ public abstract partial class DialogViewModel : FormViewModelBase
         }
 
         ApiProblem? problem = null;
+        var cancelled = false;
         await RunBusyAsync(async () =>
         {
             try
             {
-                problem = await Task.Run(() => submit(ct), ct).ConfigureAwait(true);
+                problem = await RunOperationAsync(token => submit(token), ct).ConfigureAwait(true);
             }
             catch (ApiProblemException ex)
             {
                 problem = ex.Problem;
             }
+            catch (OperationCanceledException)
+            {
+                cancelled = true;
+            }
         }).ConfigureAwait(true);
+
+        if (cancelled)
+        {
+            FormError = "The request was cancelled. What you entered is still here, so you can try again.";
+            return;
+        }
 
         if (problem is null)
         {
@@ -162,5 +218,9 @@ public abstract partial class DialogViewModel : FormViewModelBase
     protected override void OnBusyChanged(bool isBusy) => RaisePrimaryChanged();
 
     /// <summary>Closes the dialog (once).</summary>
-    protected void Close() => CloseRequested?.Invoke(this, EventArgs.Empty);
+    protected void Close()
+    {
+        IsClosing = true;
+        CloseRequested?.Invoke(this, EventArgs.Empty);
+    }
 }

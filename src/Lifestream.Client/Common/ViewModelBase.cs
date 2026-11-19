@@ -17,7 +17,79 @@ public abstract partial class ViewModelBase : ObservableObject, IDisposable
     private IServerStatus? _serverStatus;
     private SynchronizationContext? _context;
 
-    protected ViewModelBase(LoadState initialState = LoadState.Loading) => State = initialState;
+    protected ViewModelBase(LoadState initialState = LoadState.Loading)
+    {
+        State = initialState;
+        _context = SynchronizationContext.Current;
+        Operations = new OperationRunner(() => _serverStatus, () => Clock, () => WakingAfter);
+        Operations.Changed += OnOperationsChanged;
+    }
+
+    /// <summary>
+    /// The one runner of every API-calling operation of this view model (SHELL-07): loads, detail panes, saves, deletes, dialog submits and
+    /// sign-in all run through it, so each shows the waking state after 3 s and can be cancelled down to the HTTP request.
+    /// </summary>
+    public OperationRunner Operations { get; }
+
+    /// <summary>True while a call of this view model is waiting on a waking server for more than 3 s: the view shows "Waking up the server" with Cancel.</summary>
+    public bool IsOperationWaking => Operations.IsWaking;
+
+    /// <summary>The text of the waking state (the same on every screen, dialog and editor).</summary>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "Bound from XAML, which needs instance properties.")]
+    public string OperationWakingText => WakingTexts.Operation;
+
+    /// <summary>The "Cancel" of the waking state: cancels every running operation of this view model, down to the HTTP request.</summary>
+    [NoOperationRunner("It only cancels the runner; it makes no API call.")]
+    public AsyncRelayCommand CancelOperationCommand => _cancelOperationCommand ??= new AsyncRelayCommand(_ =>
+    {
+        Operations.Cancel();
+        return Task.CompletedTask;
+    });
+
+    private AsyncRelayCommand? _cancelOperationCommand;
+
+    /// <summary>Creates a command that runs through <see cref="Operations"/>; every command of a view model is made with this (or <see cref="NoOperationRunnerAttribute"/> says why not).</summary>
+    protected AsyncRelayCommand Command(Func<CancellationToken, Task> execute, Func<bool>? canExecute = null) => new(execute, canExecute, Operations);
+
+    /// <summary>Creates a command with a parameter that runs through <see cref="Operations"/>.</summary>
+    protected AsyncRelayCommand Command(Func<object?, CancellationToken, Task> execute, Func<object?, bool>? canExecute = null, bool allowConcurrent = false) => new(execute, canExecute, allowConcurrent, Operations);
+
+    /// <summary>Runs API work off the UI thread inside an operation of this view model (a detail pane, a lookup, a photo).</summary>
+    protected Task<T> RunOperationAsync<T>(Func<CancellationToken, Task<T>> work, CancellationToken ct = default) => Operations.RunAsync(work, ct);
+
+    /// <summary><see cref="RunOperationAsync{T}"/> for work with no result.</summary>
+    protected Task RunOperationAsync(Func<CancellationToken, Task> work, CancellationToken ct = default) => Operations.RunAsync(work, ct);
+
+    /// <summary>Called on the view model's context when <see cref="IsOperationWaking"/> changes.</summary>
+    protected virtual void OnOperationWakingChanged(bool isWaking)
+    {
+    }
+
+    private bool _operationWaking;
+
+    private void OnOperationsChanged(object? sender, EventArgs e) =>
+        Post(() =>
+        {
+            var waking = Operations.IsWaking;
+            if (waking == _operationWaking)
+            {
+                return;
+            }
+
+            _operationWaking = waking;
+            OnPropertyChanged(nameof(IsOperationWaking));
+            OnOperationWakingChanged(waking);
+        });
+
+    /// <summary>The server status this view model was attached to (null before it is attached).</summary>
+    protected IServerStatus? CurrentServerStatus => _serverStatus;
+
+    /// <summary>Gives a child view model (an editor, a dialog) the status and clock of this one, so its operations show the waking state too.</summary>
+    protected void AttachChild(ViewModelBase child)
+    {
+        ArgumentNullException.ThrowIfNull(child);
+        child.Attach(_serverStatus, Clock);
+    }
 
     /// <summary>Raised by Ctrl+F: the page's search box should take keyboard focus (SHELL-34).</summary>
     public event EventHandler? FocusSearchRequested;
@@ -72,6 +144,7 @@ public abstract partial class ViewModelBase : ObservableObject, IDisposable
     internal TimeProvider Clock { get; set; } = TimeProvider.System;
 
     /// <summary>Runs on a thread-pool thread. Call the API and keep the results in fields; do not touch bound collections here.</summary>
+    [RunsInOperation("LoadAsync calls it inside Operations.RunAsync.")]
     protected virtual Task FetchAsync(CancellationToken ct) => Task.CompletedTask;
 
     /// <summary>Runs on the original (UI) context after a successful fetch: publish the fetched data to bound members.</summary>
@@ -96,6 +169,8 @@ public abstract partial class ViewModelBase : ObservableObject, IDisposable
         {
             status.Changed += OnServerStatusChanged;
         }
+
+        Operations.StatusChanged();
     }
 
     /// <summary>Loads (or reloads) the data. Safe to call again: the previous load is cancelled first.</summary>
@@ -114,7 +189,7 @@ public abstract partial class ViewModelBase : ObservableObject, IDisposable
 
         try
         {
-            await Task.Run(() => FetchAsync(cts.Token), cts.Token).ConfigureAwait(true);
+            await Operations.RunAsync(ct => FetchAsync(ct), cts.Token).ConfigureAwait(true);
             if (cts.IsCancellationRequested)
             {
                 return;
@@ -161,6 +236,7 @@ public abstract partial class ViewModelBase : ObservableObject, IDisposable
     public void CancelLoad() => _loadCts?.Cancel();
 
     /// <summary>The "Cancel" button of the waking banner, on every screen that shows one (SHELL-07).</summary>
+    [NoOperationRunner("It only cancels the load in flight; it makes no API call.")]
     public AsyncRelayCommand CancelLoadCommand => _cancelLoadCommand ??= new AsyncRelayCommand(_ =>
     {
         CancelLoad();
@@ -240,7 +316,9 @@ public abstract partial class ViewModelBase : ObservableObject, IDisposable
         }
     }
 
-    private void OnServerStatusChanged(object? sender, EventArgs e) =>
+    private void OnServerStatusChanged(object? sender, EventArgs e)
+    {
+        Operations.StatusChanged(); // a call of this view model may now be waiting on a waking server
         Post(() =>
         {
             if (_serverStatus?.State == ServerState.Waking && State == LoadState.Loading)
@@ -252,8 +330,9 @@ public abstract partial class ViewModelBase : ObservableObject, IDisposable
                 State = LoadState.Loading;
             }
         });
+    }
 
-    private void Post(Action action)
+    protected void Post(Action action)
     {
         if (_context is null || SynchronizationContext.Current == _context)
         {
@@ -319,6 +398,9 @@ public abstract partial class ViewModelBase : ObservableObject, IDisposable
             {
                 _serverStatus.Changed -= OnServerStatusChanged;
             }
+
+            Operations.Changed -= OnOperationsChanged;
+            Operations.Dispose();
         }
     }
 }

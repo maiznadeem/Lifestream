@@ -79,7 +79,8 @@ public sealed class Rig : IDisposable
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddLifestreamClient(new Uri("https://api.test/"), currentVersion ?? new Version(2, 0, 0));
-        services.AddSingleton<ILifestreamApiClient>(Api);
+        // As in the app, screens get the client through the operation scope wrapper; strict, so an API call made outside a runner fails the test (SHELL-07).
+        services.AddSingleton(ScopedApiClient.Wrap(Api, strict: true));
         services.AddSingleton<IUpdateSource>(Updates);
         services.AddSingleton<IWindowHost>(Windows);
         services.AddSingleton(dispatcher ?? new InlineUiDispatcher());

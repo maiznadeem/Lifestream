@@ -85,7 +85,7 @@ public sealed class ReceiptsViewModel : SortedRecordListViewModel<ReceiptRow, Re
             _kindFilter = KindOptions.First(o => o.Value == kind);
         }
 
-        OpenReceiptCommand = new AsyncRelayCommand((parameter, _) =>
+        OpenReceiptCommand = Command((parameter, _) =>
         {
             var id = parameter switch
             {
@@ -94,8 +94,8 @@ public sealed class ReceiptsViewModel : SortedRecordListViewModel<ReceiptRow, Re
             };
             return id is { } receiptId ? _viewer.ShowAsync(receiptId, isDuplicate: true) : Task.CompletedTask;
         });
-        OpenPartyCommand = new AsyncRelayCommand((parameter, _) => parameter is ReceiptRow row ? OpenPartyAsync(row) : Task.CompletedTask);
-        OpenSourceCommand = new AsyncRelayCommand(async (parameter, _) =>
+        OpenPartyCommand = Command((parameter, _) => parameter is ReceiptRow row ? OpenPartyAsync(row) : Task.CompletedTask);
+        OpenSourceCommand = Command(async (parameter, _) =>
         {
             // The appointment or request the receipt was issued for, opened by its id.
             if (parameter is ReceiptRow { Item: { } item })
@@ -122,12 +122,12 @@ public sealed class ReceiptsViewModel : SortedRecordListViewModel<ReceiptRow, Re
         int? personId = null;
         if (item.Kind == ReceiptKind.Donation && item.AppointmentId is { } appointmentId)
         {
-            var appointment = await Task.Run(() => _api.GetAppointmentAsync(appointmentId)).ConfigureAwait(true);
+            var appointment = await RunOperationAsync(ct => _api.GetAppointmentAsync(appointmentId, ct)).ConfigureAwait(true);
             personId = appointment.IsOk ? appointment.Value.DonorId : null;
         }
         else if (item.Kind == ReceiptKind.Issue && item.RequestId is { } requestId)
         {
-            var request = await Task.Run(() => _api.GetRequestAsync(requestId)).ConfigureAwait(true);
+            var request = await RunOperationAsync(ct => _api.GetRequestAsync(requestId, ct)).ConfigureAwait(true);
             personId = request.IsOk ? request.Value.PatientId : null;
         }
 

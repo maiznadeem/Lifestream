@@ -29,7 +29,7 @@ public enum StockFilter
 /// the selected record. The editor opens in a side drawer. Delete asks first, names the record, changes the list only after the API
 /// confirms, shows a plain message on failure and offers Undo after success (FEAT-06).
 /// </summary>
-public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListViewModel<TItem>, INavigationParameterReceiver, IDirtyTracking, IScrollMemory
+public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListViewModel<TItem>, INavigationParameterReceiver, IHasUnsavedChanges, IScrollMemory
     where TItem : class
     where TDetail : class
 {
@@ -53,14 +53,19 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
             _bloodTypeFilter = BloodTypeOptions.First(o => o.Value == remembered);
         }
 
-        AddCommand = new AsyncRelayCommand(_ => AddAsync());
-        EditCommand = new AsyncRelayCommand(_ =>
+        AddCommand = Command(_ => AddAsync());
+        EditCommand = Command(_ =>
         {
             OpenEditor(Detail);
             return Task.CompletedTask;
         }, () => Detail is not null && !IsEditing);
-        DeleteCommand = new AsyncRelayCommand(_ => DeleteSelectedAsync(), () => Detail is { } record && !IsEditing && CanDelete(record));
-        RetryDetailCommand = new AsyncRelayCommand(_ => LoadDetailAsync(_selectedId));
+        DeleteCommand = Command(_ => DeleteSelectedAsync(), () => Detail is { } record && !IsEditing && CanDelete(record));
+        RetryDetailCommand = Command(_ => LoadDetailAsync(_selectedId));
+        CancelDetailCommand = Command(_ =>
+        {
+            _detailCts?.Cancel();
+            return Task.CompletedTask;
+        });
     }
 
     /// <summary>The list's scroll position, kept in the session's <see cref="ListViewState"/> (SHELL-24).</summary>
@@ -111,6 +116,9 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
 
     public AsyncRelayCommand RetryDetailCommand { get; }
 
+    /// <summary>The "Cancel" of the detail pane's waking state: stops the detail request itself and offers Retry (SHELL-07).</summary>
+    public AsyncRelayCommand CancelDetailCommand { get; }
+
     /// <summary>Ctrl+N opens the new-record drawer.</summary>
     public override AsyncRelayCommand? NewCommand => AddCommand;
 
@@ -131,8 +139,11 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
     public partial TDetail? Detail { get; set; }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasDetail), nameof(ShowDetailSkeleton), nameof(HasDetailError))]
+    [NotifyPropertyChangedFor(nameof(HasDetail), nameof(ShowDetailSkeleton), nameof(HasDetailError), nameof(IsDetailWaking))]
     public partial LoadState DetailState { get; set; } = LoadState.Ready;
+
+    /// <summary>True while the detail request is waiting on a waking server (after 3 s): the pane shows "Waking up the server" with Cancel (SHELL-07).</summary>
+    public bool IsDetailWaking => DetailState == LoadState.Waking;
 
     [ObservableProperty]
     public partial string? DetailError { get; set; }
@@ -159,7 +170,12 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
 
     public string DetailTitle => Detail is { } d ? NameOfDetail(d) : $"No {RecordType} selected";
 
-    public string NoSelectionText => $"Select a {RecordType} to see their details.";
+    public string NoSelectionText => $"Select {Article(RecordType)} {RecordType} to see {(RecordIsPerson ? "their" : "its")} details.";
+
+    /// <summary>True when the record is a person (donor, patient, staff member): their details. Other records (an appointment, a request, a receipt) have its details.</summary>
+    protected virtual bool RecordIsPerson => false;
+
+    private static string Article(string noun) => noun.Length > 0 && "aeiou".Contains(char.ToLowerInvariant(noun[0]), StringComparison.Ordinal) ? "an" : "a";
 
     protected abstract int IdOf(TItem item);
 
@@ -169,16 +185,20 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
 
     protected abstract string NameOf(TItem item);
 
+    [RunsInOperation("LoadDetailAsync calls it inside RunOperationAsync.")]
     protected abstract Task<ApiResult<TDetail>> GetDetailAsync(int id, CancellationToken ct);
 
     /// <summary>Extra detail lines that need their own call (a donor's eligibility). Failures must be returned as a line, never thrown.</summary>
+    [RunsInOperation("LoadDetailAsync calls it inside RunOperationAsync.")]
     protected virtual Task<IReadOnlyList<DetailFact>> GetExtraFactsAsync(int id, CancellationToken ct) => Task.FromResult<IReadOnlyList<DetailFact>>([]);
 
     protected abstract IReadOnlyList<DetailFact> FactsOf(TDetail detail);
 
+    [RunsInOperation("DeleteSelectedAsync calls it inside RunOperationAsync.")]
     protected abstract Task<ApiResult> DeleteRecordAsync(int id, CancellationToken ct);
 
     /// <summary>Puts a deleted record back (Undo). The API restores it with the same id and every value, so nothing the list does not show (a last-donation date) is lost.</summary>
+    [RunsInOperation("UndoAsync calls it inside RunOperationAsync.")]
     protected abstract Task<ApiResult<TDetail>> RestoreAsync(TDetail deleted, CancellationToken ct);
 
     /// <summary>Whether the selected record may be deleted at all (the signed-in admin's own staff record may not).</summary>
@@ -277,7 +297,10 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
 
     private void ClearDetail()
     {
+        _detailWakingTimer?.Dispose();
+        _detailWakingTimer = null;
         _detailCts?.Cancel();
+        _detailCts = null;
         Detail = null;
         DetailFacts = [];
         DetailError = null;
@@ -298,13 +321,14 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
         _detailCts = cts;
         DetailError = null;
         DetailState = LoadState.Loading;
+        WatchDetailWaking(cts);
         try
         {
-            await Task.Run(async () =>
+            await RunOperationAsync(async ct =>
             {
-                var result = await GetDetailAsync(recordId, cts.Token).ConfigureAwait(false);
+                var result = await GetDetailAsync(recordId, ct).ConfigureAwait(false);
                 _fetchedDetail = result.Unwrap();
-                _fetchedExtraFacts = await GetExtraFactsAsync(recordId, cts.Token).ConfigureAwait(false);
+                _fetchedExtraFacts = await GetExtraFactsAsync(recordId, ct).ConfigureAwait(false);
             }, cts.Token).ConfigureAwait(true);
             if (cts.IsCancellationRequested || _fetchedDetail is not { } detail)
             {
@@ -317,7 +341,14 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
         }
         catch (OperationCanceledException)
         {
-            // A newer selection replaced this one.
+            if (ReferenceEquals(_detailCts, cts))
+            {
+                // Not replaced by a newer selection and not cleared: the user cancelled the request. Say so and offer Retry.
+                Detail = null;
+                DetailFacts = [];
+                DetailError = "The request was cancelled.";
+                DetailState = LoadState.Error;
+            }
         }
         catch (ApiProblemException ex) when (!cts.IsCancellationRequested)
         {
@@ -329,6 +360,44 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
         catch (ApiProblemException)
         {
             // Replaced by a newer selection.
+        }
+    }
+
+    private ITimer? _detailWakingTimer;
+
+    /// <summary>The detail pane shows the waking state after the same 3 s as every operation, also when the server is already waking for another call (SHELL-07).</summary>
+    private void WatchDetailWaking(CancellationTokenSource cts)
+    {
+        _detailWakingTimer?.Dispose();
+        _detailWakingTimer = null;
+        if (!Operations.IsWaking && CurrentServerStatus?.State != ServerState.Waking)
+        {
+            return;
+        }
+
+        _detailWakingTimer = Clock.CreateTimer(
+            _ => Post(() =>
+            {
+                if (ReferenceEquals(_detailCts, cts) && DetailState == LoadState.Loading && CurrentServerStatus?.State == ServerState.Waking)
+                {
+                    DetailState = LoadState.Waking;
+                }
+            }),
+            null,
+            WakingAfter,
+            Timeout.InfiniteTimeSpan);
+    }
+
+    protected override void OnOperationWakingChanged(bool isWaking)
+    {
+        base.OnOperationWakingChanged(isWaking);
+        if (isWaking && DetailState == LoadState.Loading && _detailCts is not null)
+        {
+            DetailState = LoadState.Waking;
+        }
+        else if (!isWaking && DetailState == LoadState.Waking)
+        {
+            DetailState = LoadState.Loading;
         }
     }
 
@@ -353,6 +422,7 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
         }
 
         var editor = CreateEditor(existing);
+        AttachChild(editor); // its save and reload show the waking state and can be cancelled like every operation (SHELL-07)
         editor.Closed += OnEditorClosed;
         Editor = editor;
     }
@@ -407,7 +477,7 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
 
         var id = IdOfDetail(record);
         ApiResult result = null!;
-        await RunBusyAsync(async () => result = await Task.Run(() => DeleteRecordAsync(id, CancellationToken.None)).ConfigureAwait(true)).ConfigureAwait(true);
+        await RunBusyAsync(async () => result = await RunOperationAsync(ct => DeleteRecordAsync(id, ct)).ConfigureAwait(true)).ConfigureAwait(true);
         if (!result.IsOk)
         {
             // The list stays exactly as it was; only a message says why.
@@ -425,7 +495,7 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
     private async Task UndoAsync(TDetail deleted)
     {
         var name = NameOfDetail(deleted);
-        var result = await Task.Run(() => RestoreAsync(deleted, CancellationToken.None)).ConfigureAwait(true);
+        var result = await RunOperationAsync(ct => RestoreAsync(deleted, ct)).ConfigureAwait(true);
         if (!result.IsOk)
         {
             Toasts.Show(ToastKind.Error, $"Couldn't restore {RecordType} '{name}'. {ProblemText.For(result.Problem!, RecordType, name)}");
@@ -441,6 +511,7 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
     {
         if (disposing)
         {
+            _detailWakingTimer?.Dispose();
             var detail = _detailCts;
             _detailCts = null;
             detail?.Cancel();

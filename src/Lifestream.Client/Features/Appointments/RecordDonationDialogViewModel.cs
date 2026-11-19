@@ -72,6 +72,11 @@ public sealed partial class RecordDonationDialogViewModel : DialogViewModel
 
     protected override string RecordType => "donation";
 
+    private string _prefilledReason = string.Empty;
+
+    /// <summary>True when the units, the notes or the reason differ from what the dialog opened with (SHELL-24).</summary>
+    public override bool HasUnsavedChanges => Units != 1 || !string.IsNullOrWhiteSpace(Notes) || !string.Equals(OverrideReason, _prefilledReason, StringComparison.Ordinal);
+
     /// <summary>Recording waits for the eligibility check: pressing it earlier would record an ineligible donor with no reason. A check that failed does not block it (the API judges the donor again and refuses without a reason).</summary>
     protected override bool CanRunPrimary => Banner.State is not (BannerState.Checking or BannerState.Hidden);
 
@@ -81,8 +86,8 @@ public sealed partial class RecordDonationDialogViewModel : DialogViewModel
     {
         Banner.ShowChecking();
         var id = _appointment.DonorId;
-        var donorTask = Task.Run(() => _api.GetDonorAsync(id));
-        var eligibilityTask = Task.Run(() => _api.GetDonorEligibilityAsync(id));
+        var donorTask = RunOperationAsync(ct => _api.GetDonorAsync(id, ct));
+        var eligibilityTask = RunOperationAsync(ct => _api.GetDonorEligibilityAsync(id, ct));
         var donor = await donorTask.ConfigureAwait(true);
         var eligibility = await eligibilityTask.ConfigureAwait(true);
         if (!donor.IsOk || !eligibility.IsOk)
@@ -95,6 +100,7 @@ public sealed partial class RecordDonationDialogViewModel : DialogViewModel
         if (Banner.RequiresReason && string.IsNullOrWhiteSpace(OverrideReason) && !string.IsNullOrWhiteSpace(_appointment.OverrideReason))
         {
             OverrideReason = _appointment.OverrideReason; // the reason given when it was booked
+            _prefilledReason = OverrideReason; // what the dialog opened with is not an unsaved change
         }
     }
 
