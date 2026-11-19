@@ -193,8 +193,8 @@ public sealed class SharedListsAndSourceTests(ApiFixture fx) : IClassFixture<Api
                 }
             }
 
-            // Raw SQL lives in one file, which is parameterised with SqlParameter.
-            if (raw.IsMatch(text) && name is not ("BloodBagSql.cs" or "Lists.cs" or "ApiSetup.cs"))
+            // Raw SQL lives in a few files, which are parameterised with SqlParameter (LoginAttempts.cs: the login counters, whose statements must not vary with the name).
+            if (raw.IsMatch(text) && name is not ("BloodBagSql.cs" or "Lists.cs" or "ApiSetup.cs" or "LoginAttempts.cs"))
             {
                 offenders.Add($"{name}: raw SQL outside the allowed files");
             }

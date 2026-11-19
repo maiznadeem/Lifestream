@@ -26,8 +26,8 @@ public sealed class HighLockoutFixture : ApiFixture
     protected override void Configure(Dictionary<string, string?> settings) => settings["Auth:MaxFailedAttempts"] = "1000";
 }
 
-/// <summary>Makes every save of a Staff row fail while <see cref="Mode"/> is set: a clash with another writer, or a plain failure.</summary>
-public sealed class StaffWriteFailer : SaveChangesInterceptor
+/// <summary>Makes every write of a sign-in counter (the UPDATE of a StaffCredential row) fail while <see cref="Mode"/> is set: a clash with another writer, or a plain failure.</summary>
+public sealed class StaffWriteFailer : DbCommandInterceptor
 {
     public enum FailMode
     {
@@ -38,14 +38,14 @@ public sealed class StaffWriteFailer : SaveChangesInterceptor
 
     public FailMode Mode { get; set; }
 
-    public override ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+    public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(System.Data.Common.DbCommand command, CommandEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
     {
-        if (Mode != FailMode.None && eventData.Context!.ChangeTracker.Entries<Lifestream.Data.Entities.StaffCredential>().Any(e => e.State == EntityState.Modified))
+        if (Mode != FailMode.None && command.CommandText.StartsWith("UPDATE StaffCredential", StringComparison.Ordinal) && command.Parameters.Cast<System.Data.Common.DbParameter>().Any(p => p.ParameterName == "@write" && (int)p.Value! == 1))
         {
             throw Mode == FailMode.ConcurrencyClash ? new DbUpdateConcurrencyException("simulated clash") : new InvalidOperationException("simulated write failure");
         }
 
-        return base.SavingChangesAsync(eventData, result, cancellationToken);
+        return base.NonQueryExecutingAsync(command, eventData, result, cancellationToken);
     }
 }
 
