@@ -1,6 +1,8 @@
 using System.Text.RegularExpressions;
+using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Media;
 using Lifestream.Client.Features.Appointments;
 using Lifestream.Client.Features.Donors;
@@ -183,5 +185,64 @@ public sealed class Part3FeatureViewTests
         Assert.True(facts.ValueContrast >= 4.5, $"value contrast {facts.ValueContrast:F2}");
         Assert.Equal(2, facts.LabelCount);
         Assert.True(facts.LabelContrast >= 4.5, $"label contrast {facts.LabelContrast:F2}");
+    }
+
+    [Fact]
+    public void ReceiptDocument_OnScreenAndInPrint_IsSetInTheBundledInter_FakeApi()
+    {
+        var facts = StaHost.Run(() =>
+        {
+            var document = ReceiptDocument.From(DemoData2.ReceiptDetail(1), isDuplicate: true, zone: TimeZoneInfo.Utc);
+            var flow = ReceiptDocumentBuilder.Build(document);
+            var viewer = new FlowDocumentScrollViewer { Document = flow };
+            using var host = Hosted.Create(viewer, Width, Height);
+            host.Settle(300);
+            Part2Harness.Save(host, "ReceiptDocument_Inter.png");
+
+            static string Resolve(FontFamily family, FontStyle style, FontWeight weight, FontStretch stretch)
+            {
+                var typeface = new Typeface(family, style, weight, stretch);
+                Assert.True(typeface.TryGetGlyphTypeface(out var glyphs), "the typeface did not resolve to a font file");
+                return glyphs.Win32FamilyNames.Values.First() + "|" + glyphs.FontUri.AbsolutePath;
+            }
+
+            var runs = new List<Run>();
+            void Collect(TextElement element)
+            {
+                switch (element)
+                {
+                    case Run run:
+                        runs.Add(run);
+                        break;
+                    case Paragraph paragraph:
+                        paragraph.Inlines.OfType<Run>().ToList().ForEach(runs.Add);
+                        break;
+                    case Table table:
+                        table.RowGroups.SelectMany(g => g.Rows).SelectMany(r => r.Cells).SelectMany(c => c.Blocks).OfType<Paragraph>().ToList().ForEach(Collect);
+                        break;
+                }
+            }
+
+            flow.Blocks.ToList().ForEach(Collect);
+            // For print and PDF the document is paginated on its own, with no viewer: the family is on the document itself.
+            var paginator = ((IDocumentPaginatorSource)flow).DocumentPaginator;
+            paginator.PageSize = new Size(794, 1123);
+            paginator.ComputePageCount();
+            return (
+                Document: Resolve(flow.FontFamily, flow.FontStyle, flow.FontWeight, flow.FontStretch),
+                Runs: runs.Select(r => Resolve(r.FontFamily, r.FontStyle, r.FontWeight, r.FontStretch)).Distinct().ToList(),
+                RunCount: runs.Count,
+                Source: flow.FontFamily.Source,
+                Pages: paginator.PageCount);
+        });
+
+        static bool IsBundledInter(string face) =>
+            face.StartsWith("Inter Variable Text", StringComparison.Ordinal) && face.EndsWith("|/Lifestream;component/Fonts/intervariable.ttf", StringComparison.OrdinalIgnoreCase);
+
+        Assert.True(IsBundledInter(facts.Document), facts.Document);
+        Assert.True(facts.RunCount >= 5, "the receipt's text runs were not found");
+        Assert.All(facts.Runs, face => Assert.True(IsBundledInter(face), face));
+        Assert.DoesNotContain("Segoe", facts.Source, StringComparison.OrdinalIgnoreCase);
+        Assert.True(facts.Pages >= 1);
     }
 }

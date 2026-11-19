@@ -8,7 +8,7 @@ namespace Lifestream.Desktop.Features.Receipts;
 
 /// <summary>
 /// Turns a <see cref="ReceiptDocument"/> into the FlowDocument that is shown in the receipt view, sent to the printer and saved as PDF (FEAT-18). The
-/// page is paper: dark text on white, whatever the app's theme is, so a printed receipt looks right on any printer.
+/// page is paper: dark text on white, whatever the app's theme is, so a printed receipt looks right on any printer. It is set in the app's one bundled font (the theme's Font.Family).
 /// </summary>
 public static class ReceiptDocumentBuilder
 {
@@ -17,7 +17,7 @@ public static class ReceiptDocumentBuilder
         ArgumentNullException.ThrowIfNull(receipt);
         var document = new FlowDocument
         {
-            FontFamily = new FontFamily("Segoe UI Variable, Segoe UI"),
+            FontFamily = ThemeLoader.Resources["Font.Family"] as FontFamily ?? throw new InvalidOperationException("The theme has no Font.Family resource."), // the bundled Inter, on screen and in print (SHELL-26)
             FontSize = 14,
             Foreground = Brushes.Black,
             Background = Brushes.White,
