@@ -1,0 +1,100 @@
+# Reviewed allow-list of the SECOND scanner (gitleaks) in tools/scan-artifacts.ps1, for third-party content only.
+# One entry per line:  file name|rule|sha256
+#   file name  the plain file name the finding is in (an archive member's own name, or the member a string-dump line came from),
+#              no path, no wildcard. Names starting with Lifestream or appsettings are refused (exit 2): product files are never listed.
+#   rule       the gitleaks rule id (lifestream-db-password, lifestream-db-password-yaml, lifestream-db-userid, ...)
+#   sha256     SHA-256 (UTF-8) of the matched text: the matchSha256 of a LOCAL run with -ShowMatchHashes (refused in CI).
+# Each group has a comment saying what the text is and where it comes from. Never add a credential here; remove the credential.
+#
+# Stock mcr.microsoft.com/dotnet/aspnet:11.0 linux/amd64 layers (Debian base), reviewed 2026-11-19 from the layer blobs: every match was
+# read; none is a credential (code variables, documentation text, localisation labels, lintian tags).
+# tests/infra/ScanRealArtifacts.Tests.ps1 fails when an entry here matches nothing any more.
+
+# usr/share/lintian/overrides/base-passwd: the lintian tag "passwd: no-debconf-config".
+base-passwd|lifestream-db-password-yaml|4038f67085ea90ffdfc9ea8a8daa3ff7fb82ba438da75afa47b5bf10a7d4a12c
+# usr/bin/c_rehash (perl script): the variable $pwd (pwd=`pwd`, pwd=Cwd::getcwd(), a =~ match).
+c_rehash|lifestream-db-password|028fd4fe86098a631dc07ae8bb373a08765461aed5c8130913c61eff75716244
+c_rehash|lifestream-db-password|1eca8c6bd48ebfc16ef0c51e4334b7baf3299628ed08dae8a98849e130673c02
+c_rehash|lifestream-db-password|f43b316aeba76d0020ae2fc3ef18ed371e4a7342bee66577a81fd3bb6f247e87
+# perl-base Config_heavy.pl: Configure results passwd='define' and pwd='define' (feature probes).
+Config_heavy.pl|lifestream-db-password|ca3a61c2da358017745e2eb026698c101c8809a7fd2e209af05feffaf29dd2ae
+Config_heavy.pl|lifestream-db-password|f42636128a7a1a3787019896852476efbdd8614e96ca4034e5dc07d844cafe6e
+# perl-base Cwd.pm: assignments to the variable $pwd from commands and Win32/Dos::GetCwd calls.
+Cwd.pm|lifestream-db-password|1eca8c6bd48ebfc16ef0c51e4334b7baf3299628ed08dae8a98849e130673c02
+Cwd.pm|lifestream-db-password|24dfbf07dad95418c77313d73fd7f240e488834fbf2f5d23ecd9b7f93d04ba07
+Cwd.pm|lifestream-db-password|6607bc803aedb926db5fed2dbdfa1c8f4ddb0879bb143f3501d951ea40042ba3
+Cwd.pm|lifestream-db-password|6a170a518da53e4570494c367b402ca5a6f2b316c20e27ebe349af8002484aa5
+Cwd.pm|lifestream-db-password|7c464126b5723d56a73b07faf09ca5eb2e032db3d3f17efe7a7f459495f4d1ad
+Cwd.pm|lifestream-db-password|804160d8d881beb702f15a23c0f7cbf776668dc9bf808543c605028001a01510
+Cwd.pm|lifestream-db-password|9d392b863fd224818b6083e2a118024851a6c14377e78bac51341d871dfdb3d8
+Cwd.pm|lifestream-db-password|c0c4303763366b58dbb36904de64ac569fe7b8acdab29727210a1f92ad6a11d8
+# etc/debconf.conf: commented-out documentation example of the LDAP driver ("uid=admin,dc=domain,dc=com", a DN).
+debconf.conf|lifestream-db-userid|91fa356e109835c44bceecb8c312a40e70c1396845fd3b05c12439f0371c59b6
+# coreutils localisation file (locales/id|stat/<lang>.ftl): the labels "-uid = ..." and "password = <description>" of the help text.
+eo.ftl|lifestream-db-password|c4a511d1572e02da9b841010ed385c304bb846d53195143c4d58580bd723fd42
+eo.ftl|lifestream-db-userid|838fc8ecfc819b43a05ca8b2187a4e2b20f2665e4d40fec72fc9ce78da9fe668
+eo.ftl|lifestream-db-userid|b16432e24507460f934e401dfd621e32ee1f1ea8ef9a64c5976564808d865184
+# coreutils localisation file (locales/id|stat/<lang>.ftl): the labels "-uid = ..." and "password = <description>" of the help text.
+es-ES.ftl|lifestream-db-password|1b8c4920c0220cb8274b127c172b0493e177b4d6ef50f45ebdea462ff63e2114
+es-ES.ftl|lifestream-db-userid|1b3239f92bb0831af8bbf008d1294c37baaed51af6deb0407c43d1157da0eb4a
+es-ES.ftl|lifestream-db-userid|be76fa2765e26874b716480653878e4399ee3558b3ab86a45601ca300e228817
+# coreutils localisation file (locales/id|stat/<lang>.ftl): the labels "-uid = ..." and "password = <description>" of the help text.
+fi.ftl|lifestream-db-password|4ee583f2ed121349c2f8f702c0ae1975c71577d973c6d8d36322a67a329bde96
+fi.ftl|lifestream-db-userid|1b3239f92bb0831af8bbf008d1294c37baaed51af6deb0407c43d1157da0eb4a
+# coreutils localisation file (locales/id|stat/<lang>.ftl): the labels "-uid = ..." and "password = <description>" of the help text.
+fr-FR.ftl|lifestream-db-password|14aa4f21728a76e0275f6162e9917d17e7efd73318930bb3e4bd1584fa7d20a5
+fr-FR.ftl|lifestream-db-userid|1b3239f92bb0831af8bbf008d1294c37baaed51af6deb0407c43d1157da0eb4a
+fr-FR.ftl|lifestream-db-userid|be76fa2765e26874b716480653878e4399ee3558b3ab86a45601ca300e228817
+# coreutils localisation file (locales/id|stat/<lang>.ftl): the labels "-uid = ..." and "password = <description>" of the help text.
+hu.ftl|lifestream-db-password|887d8153cf7b70b8a4c7e651c819f274c54a288260c9bb21e874ec91f0041e59
+hu.ftl|lifestream-db-userid|1b3239f92bb0831af8bbf008d1294c37baaed51af6deb0407c43d1157da0eb4a
+# coreutils localisation file (locales/id|stat/<lang>.ftl): the labels "-uid = ..." and "password = <description>" of the help text.
+ja.ftl|lifestream-db-password|dbc3cea7d632b99cf6cf30f61fb459860fe806944fbb0e1f1dc14afbd70f23bf
+ja.ftl|lifestream-db-userid|1b3239f92bb0831af8bbf008d1294c37baaed51af6deb0407c43d1157da0eb4a
+ja.ftl|lifestream-db-userid|be76fa2765e26874b716480653878e4399ee3558b3ab86a45601ca300e228817
+# coreutils localisation file (locales/id|stat/<lang>.ftl): the labels "-uid = ..." and "password = <description>" of the help text.
+kab.ftl|lifestream-db-userid|1b3239f92bb0831af8bbf008d1294c37baaed51af6deb0407c43d1157da0eb4a
+# debconf LDAP driver module (perl): the hash key "password =>" in a code line.
+LDAP.pm|lifestream-db-password|03a1b7b1addac6dcaa86e6f5a03c90bf5fa7173dcd6d9fa9ce34d5a2a093d399
+# etc/security/namespace.init: shell line passwd=$(getent passwd ...), a variable, not a value.
+namespace.init|lifestream-db-password|c2fa862c23497e96b16664c4dc70d4bb4163f8d1b1abf77b6156dc810289b68d
+# etc/nsswitch.conf: the stock name-service line "passwd: files" (a source list, no secret).
+nsswitch.conf|lifestream-db-password-yaml|210c11b824ffca327c4fe4387e08ad718ed40ad84ae9f82f75fe2cf06d27d537
+# etc/ssl/openssl.cnf: the commented-out stock example "password = secret" of the [req] section.
+openssl.cnf|lifestream-db-password|f2f5bf9228737e71292739ef5bda0a24acc3f2d594cead3a94588d99254bad97
+# usr/sbin/pam-auth-update (perl): the hash key 'password' => in a code line.
+pam-auth-update|lifestream-db-password|851dc034c6719118cf1e84269b40993cfd7b999b427b6858703d3ed96942343e
+# usr/share/lintian/overrides/passwd: lintian tags "passwd: elevated-privileges <mode> root/<group> [<path>]" for setuid tools.
+passwd|lifestream-db-password-yaml|146066381c0fcee200b3c0a41229f8c954d4f0adef2a9d116f241e7c0230f11a
+passwd|lifestream-db-password-yaml|6da8eab9e6077f738b77307b3459e4c779c7b2e11ca96b28154efee370237bd3
+passwd|lifestream-db-password-yaml|bcd5b07cf37fc0e2b36e338fa90c165f88aa6aa3e459c89ec2d547034091eed0
+passwd|lifestream-db-password-yaml|be7b5eb9ee510dfe9288776b13c2b9183d505c9dac273320e1fc539f908e50b4
+passwd|lifestream-db-password-yaml|d01de32eae81730111e68b6c44e832a7f4af18d6777d145125fed266e5796784
+passwd|lifestream-db-password-yaml|e2c649365a99280884756fa0cc363a571ac1295b17ee6bed1105a942c85de51d
+# perl-base File/Path.pm: the code variable $uid.
+Path.pm|lifestream-db-userid|d09f352121cae00294ba6945579921ac82db69ea0f6eff0fb2ea5a46682fbf73
+# coreutils localisation file (locales/id|stat/<lang>.ftl): the labels "-uid = ..." and "password = <description>" of the help text.
+pl.ftl|lifestream-db-password|714b131f1dbe4d4d4ffd0c352d129b6986da1426164fff9ff88966a5c8dba26f
+pl.ftl|lifestream-db-userid|1b3239f92bb0831af8bbf008d1294c37baaed51af6deb0407c43d1157da0eb4a
+pl.ftl|lifestream-db-userid|ea25ec2fbe6ef90bfbc703390b3965f7a84acb4e89df0fdd6b7dd0239b35cce5
+# perl-base POSIX.pm: the hash key 'uid' =>.
+POSIX.pm|lifestream-db-userid|dc5ecf0d231af3d0e0110629fffc496a836e3ccd62cbed8aef23a454f4895e7f
+# coreutils localisation file (locales/id|stat/<lang>.ftl): the labels "-uid = ..." and "password = <description>" of the help text.
+pt-BR.ftl|lifestream-db-password|fc02354c670e5fff072fd51ad6f58aa85e270e06a7d744ef8d889a1ec7bcb9cc
+pt-BR.ftl|lifestream-db-userid|1b3239f92bb0831af8bbf008d1294c37baaed51af6deb0407c43d1157da0eb4a
+# coreutils localisation file (locales/id|stat/<lang>.ftl): the labels "-uid = ..." and "password = <description>" of the help text.
+pt.ftl|lifestream-db-password|9781e96ec0c0575794f35c59f2222bf1b75826e225fa83a16f17b7d06c224b96
+pt.ftl|lifestream-db-userid|1b3239f92bb0831af8bbf008d1294c37baaed51af6deb0407c43d1157da0eb4a
+pt.ftl|lifestream-db-userid|be76fa2765e26874b716480653878e4399ee3558b3ab86a45601ca300e228817
+# coreutils localisation file (locales/id|stat/<lang>.ftl): the labels "-uid = ..." and "password = <description>" of the help text.
+sv.ftl|lifestream-db-password|eb9d56f5a647110b3bab0dcbb56b8bdb25dd8eba629770b622cedf06416f5aeb
+sv.ftl|lifestream-db-userid|1b3239f92bb0831af8bbf008d1294c37baaed51af6deb0407c43d1157da0eb4a
+sv.ftl|lifestream-db-userid|be76fa2765e26874b716480653878e4399ee3558b3ab86a45601ca300e228817
+# perl-base File/Temp.pm: an error message that prints uid=$info[4].
+Temp.pm|lifestream-db-userid|3599d97fef0955d52246a7c8e615e67a88d98edd44104345857eab282ffefb18
+# coreutils localisation file (locales/id|stat/<lang>.ftl): the labels "-uid = ..." and "password = <description>" of the help text.
+zh-Hans.ftl|lifestream-db-password|5ecd0d7aca9af19b0790d348144e1ff32077755265680ebfce23b547d6b061d3
+zh-Hans.ftl|lifestream-db-userid|1b3239f92bb0831af8bbf008d1294c37baaed51af6deb0407c43d1157da0eb4a
+# coreutils localisation file (locales/id|stat/<lang>.ftl): the labels "-uid = ..." and "password = <description>" of the help text.
+zh-Hant.ftl|lifestream-db-userid|1b3239f92bb0831af8bbf008d1294c37baaed51af6deb0407c43d1157da0eb4a
+zh-Hant.ftl|lifestream-db-userid|be76fa2765e26874b716480653878e4399ee3558b3ab86a45601ca300e228817

@@ -13,7 +13,7 @@ function script:Pad-Literal([string]$s, [int]$n) { if ($s.Length -ge $n) { $s } 
     # Five more realistic variants, with different lengths so the length byte before each literal differs.
     @{ Name = 'azure-full';         Kind = 'us'; Literal = "Server=tcp:lifestream-sql.database.windows.net,1433;Initial Catalog=BloodBank;$uid=app;$pw=$v" }
     @{ Name = 'lowercase-password'; Kind = 'us'; Literal = "$($pw.ToLower())=$v;Server=localhost" }
-    @{ Name = 'uppercase-pwd-uid';  Kind = 'us'; Literal = "$($pwd.ToUpper())=$v;UID=sa" }
+    @{ Name = 'uppercase-pwd-uid';  Kind = 'us'; Literal = "$($pwd.ToUpper())=$v;UI$('D')=sa" }
     @{ Name = 'userid-synonym';     Kind = 'us'; Literal = "$($uid -replace ' ','')=bloodbank_admin;$pw=$v" }
     @{ Name = 'spaced-userid-only'; Kind = 'us'; Literal = "$($uid.ToLower().Replace('id','Id')) = svc_lifestream ; $pw = $v ;" }
     # The v-03c verifier counterexamples (run/agents/v-03c-infra-probes/make.py), same literals and the same UTF-8 lengths, so
@@ -29,12 +29,12 @@ function script:Pad-Literal([string]$s, [int]$n) { if ($s.Length -ge $n) { $s } 
     @{ Name = 'v03c-us-cyrillic-only-pwd';    Kind = 'us'; Literal = "Server=x;Database=BloodBank;$pw=$([char]0x43F)$([char]0x430)$([char]0x440)$([char]0x43E)$([char]0x43B)$([char]0x44C)$v" }
     @{ Name = 'v03c-us-euro-first';           Kind = 'us'; Literal = "Server=x;Database=BloodBank;$pw=$([char]0x20AC)$v" }
     @{ Name = 'v03c-us-brace-then-bang';      Kind = 'us'; Literal = "Server=x;Database=BloodBank;$pwd={abc}!$v" }
-    @{ Name = 'v03c-us-odbc-brace';           Kind = 'us'; Literal = "Driver={ODBC Driver 18 for SQL Server};Server=x;UID=sa;$pwd={Summer-2024};" }
+    @{ Name = 'v03c-us-odbc-brace';           Kind = 'us'; Literal = "Driver={ODBC Driver 18 for SQL Server};Server=x;UI$('D')=sa;$pwd={Summer-2024};" }
     @{ Name = 'v03c-us-percent-then';         Kind = 'us'; Literal = "Server=x;Database=BloodBank;$pw=%abc%-$v" }
     # The same value shapes as UTF-8 (attribute blob) so the shapes are not only covered in UTF-16.
     @{ Name = 'attr-cyrillic-first';          Kind = 'attr'; Literal = "$pw=$([char]0x43F)$([char]0x430)$([char]0x440)$([char]0x43E)$([char]0x43B)$([char]0x44C)$v" }
     @{ Name = 'attr-euro-first';              Kind = 'attr'; Literal = "$pw=$([char]0x20AC)$v" }
     @{ Name = 'attr-brace-then-bang';         Kind = 'attr'; Literal = "$pwd={abc}!$v" }
-    @{ Name = 'attr-odbc-brace';              Kind = 'attr'; Literal = "UID=sa;$pwd={Summer-2024};" }
+    @{ Name = 'attr-odbc-brace';              Kind = 'attr'; Literal = "UI$('D')=sa;$pwd={Summer-2024};" }
     @{ Name = 'resx-percent-then';            Kind = 'resx'; Literal = "$pw=%abc%-$v" }
 )

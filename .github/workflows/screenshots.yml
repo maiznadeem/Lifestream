@@ -30,13 +30,20 @@ jobs:
           global-json-file: global.json
 
       - name: Build
-        run: dotnet build tests/Lifestream.Desktop.Tests -c Release
+        run: ./tools/run-logged.ps1 -Log "$env:RUNNER_TEMP/screenshots/build.log" -Command "dotnet build tests/Lifestream.Desktop.Tests -c Release"
 
       - name: Generate screenshots (demo dataset only)
         shell: pwsh
-        run: ./tools/generate-screenshots.ps1 -OutputDir "$env:RUNNER_TEMP/screenshots/readme" -StoreDir "$env:RUNNER_TEMP/screenshots/store"
+        run: ./tools/run-logged.ps1 -Log "$env:RUNNER_TEMP/screenshots/generate.log" -Command "./tools/generate-screenshots.ps1 -OutputDir '$env:RUNNER_TEMP/screenshots/readme' -StoreDir '$env:RUNNER_TEMP/screenshots/store'"
+
+      # What is uploaded (every image, the manifest and the logs next to them) is scanned first; the upload runs only after a clean scan.
+      - name: Scan the screenshots and their logs for credentials
+        id: scan-screenshots
+        shell: pwsh
+        run: ./tools/scan-artifacts.ps1 -Path "$env:RUNNER_TEMP/screenshots" -ReportPath "$env:RUNNER_TEMP/scan-screenshots.json"
 
       - name: Upload screenshots
+        if: steps.scan-screenshots.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: screenshots
