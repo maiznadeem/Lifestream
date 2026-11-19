@@ -52,19 +52,23 @@ jobs:
           echo "SQL Server did not become ready" >&2
           exit 1
 
+      # Build and test output is written to a file, scanned (both scanners), and printed to the job log only after a clean scan
+      # (tools/run-logged.ps1); on a finding only a redacted summary is printed. The exit code is the command's own, or 1 on a finding.
       - name: Build (warnings are errors)
+        shell: pwsh
         run: >
-          dotnet build tests/Lifestream.Domain.Tests tests/Lifestream.Client.Tests tests/Lifestream.Api.Tests
-          -c Release
+          ./tools/run-logged.ps1 -Log "$env:RUNNER_TEMP/test-logs/build.log" -Command
+          'dotnet build tests/Lifestream.Domain.Tests tests/Lifestream.Client.Tests tests/Lifestream.Api.Tests -c Release'
 
-      # Test output is kept (bash with pipefail: a failing test run still fails the step) and scanned for credentials.
       - name: Test
-        shell: bash
+        shell: pwsh
         run: |
-          mkdir -p "$RUNNER_TEMP/test-logs"
-          dotnet test tests/Lifestream.Domain.Tests -c Release --no-build 2>&1 | tee "$RUNNER_TEMP/test-logs/domain.log"
-          dotnet test tests/Lifestream.Client.Tests -c Release --no-build 2>&1 | tee "$RUNNER_TEMP/test-logs/client.log"
-          dotnet test tests/Lifestream.Api.Tests -c Release --no-build 2>&1 | tee "$RUNNER_TEMP/test-logs/api.log"
+          $failed = 0
+          foreach ($t in 'Domain', 'Client', 'Api') {
+            ./tools/run-logged.ps1 -Log "$env:RUNNER_TEMP/test-logs/$($t.ToLower()).log" -Command "dotnet test tests/Lifestream.$t.Tests -c Release --no-build"
+            if ($LASTEXITCODE -ne 0) { $failed++ }
+          }
+          if ($failed -gt 0) { exit 1 }
 
       - name: Scan the test logs for credentials
         if: always()
@@ -87,14 +91,14 @@ jobs:
           global-json-file: global.json
 
       - name: Gate, build (whole solution, warnings are errors)
-        run: dotnet build Lifestream.slnx -c Release
+        run: ./tools/run-logged.ps1 -Log "$env:RUNNER_TEMP/test-logs/desktop-build.log" -Command "dotnet build Lifestream.slnx -c Release"
 
       - name: Gate, Desktop and Client tests (off-screen renders, no window is shown)
         run: |
           New-Item -ItemType Directory -Force "$env:RUNNER_TEMP/test-logs", "$env:LIFESTREAM_CAPTURE_DIR" | Out-Null
-          dotnet test tests/Lifestream.Client.Tests -c Release --no-build 2>&1 | Tee-Object "$env:RUNNER_TEMP/test-logs/client.log"
+          ./tools/run-logged.ps1 -Log "$env:RUNNER_TEMP/test-logs/client.log" -Command "dotnet test tests/Lifestream.Client.Tests -c Release --no-build"
           $client = $LASTEXITCODE
-          dotnet test tests/Lifestream.Desktop.Tests -c Release --no-build 2>&1 | Tee-Object "$env:RUNNER_TEMP/test-logs/desktop.log"
+          ./tools/run-logged.ps1 -Log "$env:RUNNER_TEMP/test-logs/desktop.log" -Command "dotnet test tests/Lifestream.Desktop.Tests -c Release --no-build"
           $desktop = $LASTEXITCODE
           if ($client -ne 0 -or $desktop -ne 0) { exit 1 }
 

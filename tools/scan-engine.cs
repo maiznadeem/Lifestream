@@ -15,6 +15,7 @@
 // SHA-256 of the matched text); source lines only through the source allow-list (tests/ path + rule + SHA-256 of the line).
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Formats.Tar;
 using System.IO;
 using System.IO.Compression;
@@ -37,6 +38,7 @@ namespace LifestreamScan
         public string MatchSha256 { get; set; }
         public int Line { get; set; }
         public string LineSha256 { get; set; }
+        public string MatchText { get; set; }   // only with ShowHashes (local review, refused in CI), never printed to the console
     }
 
     public sealed class Engine
@@ -46,6 +48,12 @@ namespace LifestreamScan
         // Local opt-in only (scan-artifacts.ps1 -ShowMatchHashes, refused in CI): put matchSha256 / lineSha256 into the findings.
         public bool ShowHashes;
         public long MaxEntryBytes = 512L * 1024 * 1024;
+        // When set, every string the extractors find (metadata user strings, attribute blobs, constants, resources, BAML, the contents of
+        // decompressed resources and of text archive members, UTF-16 text decoded) is also written here as UTF-8 text, for the second
+        // scanner (gitleaks). Each scanned file gets one dump file; "<DumpMarker> <label>" lines say which member the text came from.
+        public string DumpDir;
+        public readonly string DumpMarker = "@@LIFESTREAM-DUMP-" + System.Guid.NewGuid().ToString("N") + "@@";
+        public long DumpedStrings;
         // "path|rule|lineSha256", path relative to the repository root (source files only).
         public readonly HashSet<string> SourceAllow = new HashSet<string>(StringComparer.Ordinal);
         // "file name (lower case)|rule|matchSha256" (everything that is not a source file).
@@ -69,9 +77,11 @@ namespace LifestreamScan
         static readonly RegexOptions Cs = RegexOptions.CultureInvariant | RegexOptions.Compiled;
         const string Boundary = @"(?<![A-Za-z0-9_$@%.\-])";
 
-        // Binary mode: keyword anywhere, "=" or ":" (not "==", "=>", "::", "=~", ":="), optional quote before the separator (JSON).
+        // Binary mode: keyword anywhere, "=" or ":", optional quote before the separator (JSON). A value may start with ~ > = :
+        // (Password=~x, DB_PASSWORD=>x are passwords); only the loose forms "password = ~x", "password => x" and "password::x"
+        // are operators and not values (IsOperatorForm).
         static readonly Regex BinaryKeyword = new Regex(
-            @"(?<kw>password|passwd|pwd|user[ \t]*id|uid|accountkey|sharedaccesskey|client_?secret)[""']?[ \t]*[=:](?![=:>~])[ \t]*", Ci);
+            @"(?<kw>password|passwd|pwd|user[ \t]*id|uid|accountkey|sharedaccesskey|client_?secret)[""']?(?<pre>[ \t]*)(?<sep>[=:])(?<post>[ \t]*)", Ci);
         // Connection-string keys. A user id next to another user id is not a connection string, so for the user-id keywords only the
         // other keys count (group "id" is the user-id keys).
         static readonly Regex ContextKey = new Regex(
@@ -82,28 +92,37 @@ namespace LifestreamScan
             public string Name;
             public Regex Rx;
             public bool SourceOnly;
+            public bool NotSource;        // not for .cs/.xaml source files, which are full of "password:" named arguments and dotted names
             public bool Keyword = true;   // false: the whole match is the hit (JWT, PEM, URL credentials)
         }
 
         static readonly TextRule[] TextRules =
         {
-            new TextRule { Name = "PasswordValue", Rx = new Regex(Boundary + @"(?:password|pwd)\s*=(?![=>~])\s*",Ci) },
-            // Prefixed keys (DbPassword=, MSSQL_SA_PASSWORD=, AdminPwd=) in the tight key=value form only, so C# "NewPassword = x;" is code.
-            new TextRule { Name = "PasswordValue", Rx = new Regex(Boundary + @"(?:[A-Za-z0-9_]+password|(?:db|sql|sa|admin|app)_?pwd)=(?![=>~])", Ci) },
+            new TextRule { Name = "PasswordValue", Rx = new Regex(Boundary + @"(?:password|passwd|pwd)(?<pre>\s*)(?<sep>=)(?<post>\s*)",Ci) },
+            // Prefixed keys (DbPassword=, MSSQL_SA_PASSWORD=, Database__Pwd=) in the tight key=value form only, so C# "NewPassword = x;" is code.
+            new TextRule { Name = "PasswordValue", Rx = new Regex(Boundary + @"(?:[A-Za-z0-9_]+(?:password|passwd)|(?:db|sql|sa|admin|app|database|mssql|user)_*pwd)=", Ci) },
+            // Dotted and dashed keys of configuration files and command lines: spring.datasource.password=x, --db-password=x.
+            new TextRule { Name = "PasswordValue", NotSource = true, Rx = new Regex(Boundary + @"(?:[A-Za-z0-9_]*[.\-])+(?:password|passwd|pwd)=", Ci) },
+            // YAML and similar: "password: x" at the start of a line, with any key prefix (db_password:, spring.datasource.password:).
+            new TextRule { Name = "PasswordValue", NotSource = true, Rx = new Regex(@"(?m)^[ \t\-]*[A-Za-z0-9_.\-]*(?:password|passwd|pwd)[ \t]*(?<sep>:)(?<post>[ \t]+)", Ci) },
             // Source files only: a quoted literal assigned to a member (vm.Password = "x").
             new TextRule { Name = "PasswordValue", SourceOnly = true, Rx = new Regex(@"(?<=[A-Za-z0-9_\])]\.)(?:password|pwd)\s*=(?![=>~])\s*(?="")", Ci) },
             // "User ID" (any case, with a space) and the exact synonym "UserID"; identifier-style userId is code.
-            new TextRule { Name = "UserIdValue", Rx = new Regex(Boundary + @"(?:(?i:user\s+id)|UserID)\s*=(?![=>~])\s*",Cs) },
-            new TextRule { Name = "SecretValue", Rx = new Regex(Boundary + @"(?:accountkey|sharedaccesskey|client_?secret)\s*=(?![=>~])\s*",Ci) },
+            new TextRule { Name = "UserIdValue", Rx = new Regex(Boundary + @"(?:(?i:user\s+id)|UserID)(?<pre>\s*)(?<sep>=)(?<post>\s*)",Cs) },
+            // The bare ODBC key UID=, tight form only.
+            new TextRule { Name = "UserIdValue", Rx = new Regex(Boundary + @"uid=",Ci) },
+            new TextRule { Name = "SecretValue", Rx = new Regex(Boundary + @"(?:accountkey|sharedaccesskey|client_?secret)(?<pre>\s*)(?<sep>=)(?<post>\s*)",Ci) },
             // JSON: "Password": "x", "client_secret": "x"
             new TextRule { Name = "PasswordValue", Rx = new Regex(@"""(?:password|passwd|pwd|[A-Za-z0-9_]+password)""\s*:\s*(?="")", Ci) },
             new TextRule { Name = "SecretValue", Rx = new Regex(@"""(?:accountkey|sharedaccesskey|client_?secret)""\s*:\s*(?="")", Ci) },
-            new TextRule { Name = "SqlHostCreds", Rx = new Regex(@"database\.windows\.net[^\r\n]{0,400}?" + Boundary + @"(?:password|pwd|user\s*id|uid)\s*=(?![=>~])\s*",Ci) },
+            new TextRule { Name = "SqlHostCreds", Rx = new Regex(@"database\.windows\.net[^\r\n]{0,400}?" + Boundary + @"(?:password|pwd|user\s*id|uid)(?<pre>\s*)(?<sep>=)(?<post>\s*)",Ci) },
         };
 
         static readonly TextRule[] WholeRules =
         {
             new TextRule { Name = "SqlHostCreds", Keyword = false, Rx = new Regex(@"://[^/\s:@]{1,100}:[^/\s@]{1,200}@[^\s/]*database\.windows\.net", Ci) },
+            // scheme://user:secret@host for any scheme (mssql://, postgres://, jdbc:sqlserver://, https://); the secret is not a placeholder.
+            new TextRule { Name = "UrlCredentials", Keyword = false, Rx = new Regex(@"://(?<u>[^/\s:@'""<>]{1,100}):(?<p>[^/\s@'""<>]{1,200})@[A-Za-z0-9\[]", Cs) },
             new TextRule { Name = "Jwt", Keyword = false, Rx = new Regex(@"\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{10,}", Cs) },
             new TextRule { Name = "PrivateKey", Keyword = false, Rx = new Regex(@"-----BEGIN [A-Z ]{0,30}PRIVATE KEY-----\s*[A-Za-z0-9+/=]{16}", Cs) },
         };
@@ -111,27 +130,29 @@ namespace LifestreamScan
         // Strings worth running the text rules on (cheap pre-filter for the many short strings read out of metadata).
         static readonly Regex Trigger = new Regex(@"pass|pwd|user|uid|key|secret|eyJ|PRIVATE|windows\.net", Ci);
 
-        // A value that is exactly one of these is not a credential: format items, template variables, printf conversions,
-        // XAML markup extensions, <your password>, a mask of asterisks.
-        const string PlaceholderToken =
-            @"\{\d+(?:,-?\d+)?(?::[^{}]*)?\}|\{[A-Za-z_][\w.]*\}|\{\{[A-Za-z_][\w.]*\}\}|\{[ \t]*\$[A-Za-z_][\w-]*[ \t]*\}|\$\{[^}\s]{1,60}\}|\$\([^)\s]{1,60}\)" +
-            @"|%[-+ #0]*\d*(?:\.\d+)?(?:hh|h|ll|l|L|q|j|z|t)?[diouxXeEfgGcsp]|%\d+\$[sd]|%[A-Za-z_]\w{0,60}%";
-        static readonly Regex Placeholder = new Regex(
-            @"^(?:" + PlaceholderToken + @"|<[A-Za-z][\w \-]{0,40}>|\*+" +
-            @"|\{(?:Binding|TemplateBinding|StaticResource|DynamicResource|x:Static|x:Null|x:Type|RelativeSource)(?:[ ,][^{}]*)?\})$", Cs);
-        // A template: one or more placeholders with only punctuation around them ("%s%u%s", "(%5u/%8U)", "%lu)", "{0}{1}").
-        // A value that has letters or digits besides its placeholders ({abc}!secret, %abc%-secret) is a value.
-        static readonly Regex PlaceholderTokens = new Regex(PlaceholderToken, Cs);
+        // The ONLY values that are not credentials: the whole value must equal one of these entries. Nothing that merely "looks like"
+        // a placeholder is skipped: PWD={anything} is ODBC quoting of a real password, {abc}, %abc% and <your password> are values.
+        // Adding an entry is a reviewed change (tests/infra/ScanPlaceholders.Tests.ps1 pins the list). The empty value is no value.
+        public static readonly string[] PlaceholderValues =
+        {
+            "{0}", "{1}", "{2}", "{3}", "{4}", "{5}", "{6}", "{7}", "{8}", "{9}",
+            "$(Password)", "${PASSWORD}", "%PASSWORD%", "<password>", "***",
+        };
+        static readonly HashSet<string> PlaceholderSet = new HashSet<string>(PlaceholderValues, StringComparer.Ordinal);
         // After a binary-mode value: more words on the same line that are not a further key=value pair. "password = Display the id
         // as ...", "passwd: password updated successfully" are messages; "password=Secret123 host=db" (libpq) is not prose.
         static readonly Regex ProseAfter = new Regex(@"^[ \t]+[^\s=:;,'""<>]+(?![^\s=:;,'""<>]*[=:])", Cs);
         // "UID= PARTLABEL=": the key has no value; the spaces led to the next key.
         static readonly Regex NextKey = new Regex(@"^[A-Za-z_][A-Za-z0-9_]*[=:]$", Cs);
-        static readonly Regex AnglePlaceholder = new Regex(@"^<[A-Za-z][\w \-]{0,40}>", Cs);
+        // The next "key=" after a ";" or ",": the key before it had an empty value.
+        static readonly Regex NextKeyAfter = new Regex(@"^[ \t]*[A-Za-z_][\w .\-]{0,40}[ \t]*=", Cs);
+        static readonly Regex AnglePlaceholder =new Regex(@"^<[A-Za-z][\w \-]{0,40}>", Cs);
         // A user id that is a GUID (uid=<guid>, urn:uuid:<guid>/...) identifies someone; it is not a secret.
         static readonly Regex Guid = new Regex(@"^\{?[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\}?(?![0-9A-Za-z])", Cs);
         static readonly Regex XamlMarkup = new Regex(@"^\{[A-Za-z][\w:.]*(?:\s[^""]*)?\}$", Cs);
         static readonly Regex CsAssignment = new Regex(@"^[A-Za-z_]+ = \S", Cs);
+        // password = Environment.GetEnvironmentVariable("NAME") in code: the value comes from the environment, it is not in the source.
+        static readonly Regex EnvRead = new Regex(@"^(?:System\.)?Environment\.GetEnvironmentVariable\($", Cs);
         static readonly Regex CsIdentifierChain = new Regex(@"^[A-Za-z_@]\w*(?:\.[A-Za-z_@]\w*)*(?:\(\))?$", Cs);
 
         static readonly Encoding Latin1 = Encoding.Latin1;
@@ -259,7 +280,17 @@ namespace LifestreamScan
                 consumed = k0;
                 return t.Substring(1, k0 - 1);
             }
-            if (IsValueTerminator(c) && c != '<') return "";   // a value may start with < (but not with > ; , or a quote)
+            // A value may start with < > , ; or a backtick (Password=,x  DB_PASSWORD=>x  PWD=;x): that character is part of the value
+            // when more value characters follow it. A lone one, or ";" / "," followed by the next key (Password=;Server=x), is no value.
+            if (c == '>' || c == ',' || c == ';' || c == '`')
+            {
+                if (t.Length < 2 || IsValueTerminator(t[1]) || ((c == ';' || c == ',') && NextKeyAfter.IsMatch(t.Substring(1)))) return "";
+                int k1 = 2;
+                while (k1 < t.Length && !IsValueTerminator(t[k1])) k1++;
+                consumed = k1;
+                return t.Substring(0, k1);
+            }
+            if (IsValueTerminator(c) && c != '<') return "";
             int start = 1;
             if (c == '{')
             {
@@ -291,19 +322,30 @@ namespace LifestreamScan
 
         static bool IsCredentialValue(string rule, string value, bool binary, bool context)
         {
-            if (value.Length == 0 || Placeholder.IsMatch(value)) return false;
-            if (rule == "UserIdValue" && Guid.IsMatch(value)) return false;
-            if (IsTemplate(value)) return false;
+            if (value.Length == 0 || PlaceholderSet.Contains(value)) return false;
+            if (rule == "UserIdValue" && (Guid.IsMatch(value) || UserIdReference.IsMatch(value))) return false;
             if (!binary) return true;
             return context || CodePoints(value) >= 6;
         }
 
-        static bool IsTemplate(string value)
+        // "password = ~x", "password => x", "password == x", "password::x": operators of code, not a key=value pair. A TIGHT pair
+        // (Password=~x, PWD==x, DB_PASSWORD=>x) is a value that starts with that character. "password: >" and "password: ~" (YAML
+        // block scalar, null) are not values either. Groups pre/post are the whitespace around the separator (absent = tight).
+        static bool IsOperatorForm(string text, Match m)
         {
-            if (!PlaceholderTokens.IsMatch(value)) return false;
-            string rest = PlaceholderTokens.Replace(value, "");
-            foreach (char c in rest) if (char.IsLetterOrDigit(c)) return false;
-            return true;
+            int next = m.Index + m.Length;
+            if (next >= text.Length) return false;
+            char c = text[next];
+            char sep = m.Groups["sep"].Success && m.Groups["sep"].Length > 0 ? m.Groups["sep"].Value[0] : '=';
+            bool loose = m.Groups["pre"].Length > 0 || m.Groups["post"].Length > 0;
+            if (sep == ':')
+            {
+                if (c == ':') return true;
+                if (!loose) return false;
+                char c2 = next + 1 < text.Length ? text[next + 1] : '\n';
+                return (c == '>' || c == '~') && (char.IsWhiteSpace(c2) || c2 == '|');
+            }
+            return loose && (c == '=' || c == '>' || c == '~' || c == ':');
         }
 
         static string RuleFor(string keyword)
@@ -326,6 +368,8 @@ namespace LifestreamScan
             public string Name;
             public string SourcePath;
             public bool Member;
+            public bool Inflated;      // content that came out of a decompressed resource or bundle entry: text rules apply as for a file
+            public int Depth;
             public readonly HashSet<string> Seen = new HashSet<string>(StringComparer.Ordinal);
             public int Count;
         }
@@ -335,7 +379,7 @@ namespace LifestreamScan
             string leaf = entryName.Replace('\\', '/');
             int slash = leaf.TrimEnd('/').LastIndexOf('/');
             if (slash >= 0) leaf = leaf.Substring(slash + 1);
-            return new Ctx { Label = parent.Label + "!/" + entryName, Name = leaf, Member = true };
+            return new Ctx { Label = parent.Label + "!/" + entryName, Name = leaf, Member = true, Depth = parent.Depth + 1 };
         }
 
         void Report(Ctx ctx, string rule, View view, int index, string matchText, int line, string lineSha)
@@ -360,7 +404,7 @@ namespace LifestreamScan
             // The hashes are only used above, to match the allow-lists. A hash of a matched value (or of the line holding it) is never
             // part of a finding unless the caller opted in locally (ShowHashes): for a short or guessable value it is as good as the value.
             Findings.Add(new Finding { File = ctx.Label, Rule = rule, Encoding = view.Enc, Offset = offset, Line = line,
-                                       MatchSha256 = ShowHashes ? sha : null, LineSha256 = ShowHashes ? lineSha : null });
+                                       MatchSha256 = ShowHashes ? sha : null, LineSha256 = ShowHashes ? lineSha : null, MatchText = ShowHashes ? matchText : null });
         }
 
         // ------------------------------------------------------------------ rules over a view
@@ -369,6 +413,7 @@ namespace LifestreamScan
             foreach (Match m in BinaryKeyword.Matches(v.Text))
             {
                 int consumed;
+                if (IsOperatorForm(v.Text, m)) continue;
                 string tail = v.Tail(m.Index + m.Length);
                 string value = ParseValue(tail, out consumed);
                 if (value.Length == 0) continue;
@@ -414,10 +459,17 @@ namespace LifestreamScan
             return (c & 0xFE) == 0 && hi != 0 && ((hi & 1) == 1 || (hi >= 0x80 && hi <= 0xDF));
         }
 
+        // scheme://user:{0}@host and the like carry a placeholder, not a password.
+        static bool WholeHit(TextRule r, Match m)
+        {
+            if (r.Name == "UrlCredentials") return !PlaceholderSet.Contains(m.Groups["p"].Value);
+            return true;
+        }
+
         void ScanWholeRules(View v, Ctx ctx)
         {
             foreach (var r in WholeRules)
-                foreach (Match m in r.Rx.Matches(v.Text)) Report(ctx, r.Name, v, m.Index, m.Value, 0, null);
+                foreach (Match m in r.Rx.Matches(v.Text)) { if (WholeHit(r, m)) Report(ctx, r.Name, v, m.Index, m.Value, 0, null); }
         }
 
         void ScanTextView(View v, Ctx ctx, string sourceExt, bool[] code)
@@ -425,8 +477,14 @@ namespace LifestreamScan
             foreach (var r in TextRules)
             {
                 if (r.SourceOnly && sourceExt == null) continue;
+                if (r.NotSource && sourceExt != null) continue;
                 foreach (Match m in r.Rx.Matches(v.Text))
                 {
+                    if (IsOperatorForm(v.Text, m))
+                        continue;
+                    // In source CODE (not inside a string or comment) a tight "password==x" / "pwd=>x" is still an operator.
+                    int nx = m.Index + m.Length;
+                    if (sourceExt != null && nx < v.Text.Length && "=>~:".IndexOf(v.Text[nx]) >= 0 && (code == null || code[m.Index])) continue;
                     string tail = v.Tail(m.Index + m.Length);
                     int consumed;
                     string value = ParseValue(tail, out consumed);
@@ -444,6 +502,7 @@ namespace LifestreamScan
             {
                 foreach (Match m in r.Rx.Matches(v.Text))
                 {
+                    if (!WholeHit(r, m)) continue;
                     int line = 0; string lineSha = null;
                     if (sourceExt != null) LineOf(v.Text, m.Index, out line, out lineSha);
                     Report(ctx, r.Name, v, m.Index, m.Value, line, lineSha);
@@ -460,10 +519,17 @@ namespace LifestreamScan
             lineSha = Convert.ToHexString(SHA256.HashData(Latin1.GetBytes(lineText))).ToLowerInvariant();
         }
 
+        bool[] _interp;
+        // Inside an interpolated C# string a value made only of holes ({name}, {{Type.Member}}, joined by - _ . :) comes from a variable.
+        static readonly Regex HoleValue = new Regex(@"^(?=.*\{)(?:\{\{?[A-Za-z_][\w.]*\}\}?|[-_.:])+$", Cs);
+        // A user id given as a reference or a description (${migrator.clientId}, <client id>) names an identity; it is not a secret.
+        static readonly Regex UserIdReference = new Regex(@"^(?:\$\{[A-Za-z_][\w.]*\}|<[A-Za-z][\w \-]{0,40}>)$", Cs);
+
         // Source precision: a XAML markup extension is not a value; a C# assignment from an identifier or member, written with
         // spaces around "=", is code when the keyword is in code (not in a string literal of any kind, not in a comment).
-        static bool IsBenignSource(string ext, string text, Match m, string tail, int consumed, string value, bool[] code)
+        bool IsBenignSource(string ext, string text, Match m, string tail, int consumed, string value, bool[] code)
         {
+            if (_interp != null && _interp[m.Index] && HoleValue.IsMatch(value)) return true;
             if (ext == ".xaml" || ext == ".axaml")
                 return consumed > 0 && tail.Length > 0 && tail[0] == '"' && XamlMarkup.IsMatch(value);
             if (code == null) return false;
@@ -471,13 +537,17 @@ namespace LifestreamScan
             string matchText = m.Value + tail.Substring(0, Math.Min(consumed, tail.Length));
             if (!CsAssignment.IsMatch(matchText)) return false;
             if (tail.Length > 0 && (tail[0] == '"' || tail[0] == '\'')) return false;
-            return CsIdentifierChain.IsMatch(value);
+            return CsIdentifierChain.IsMatch(value) || EnvRead.IsMatch(value);
         }
 
         // true for each character of C# code; false inside comments, string literals (regular, verbatim, interpolated, raw) and chars.
-        public static bool[] ClassifyCSharp(string t)
+        public static bool[] ClassifyCSharp(string t) { bool[] interp; return ClassifyCSharp(t, out interp); }
+
+        // interp[i] is true for each character inside an interpolated string literal ($"...", $@"...", $$"""...""").
+        public static bool[] ClassifyCSharp(string t, out bool[] interp)
         {
             var code = new bool[t.Length + 1];
+            interp = new bool[t.Length + 1];
             int i = 0, n = t.Length;
             while (i < n)
             {
@@ -487,8 +557,8 @@ namespace LifestreamScan
                 if (c == '/' && d == '/') { while (i < n && t[i] != '\n') i++; continue; }
                 if (c == '/' && d == '*') { int e = t.IndexOf("*/", i + 2, StringComparison.Ordinal); i = e < 0 ? n : e + 2; continue; }
                 // prefixes: $, $$..., @, $@, @$
-                int p = i; bool verbatim = false;
-                while (p < n && (t[p] == '$' || t[p] == '@')) { if (t[p] == '@') verbatim = true; p++; }
+                int p = i; bool verbatim = false, dollar = false;
+                while (p < n && (t[p] == '$' || t[p] == '@')) { if (t[p] == '@') verbatim = true; else dollar = true; p++; }
                 if (p < n && t[p] == '"' && (p > i || c == '"'))
                 {
                     int q = 0; while (p + q < n && t[p + q] == '"') q++;
@@ -498,6 +568,7 @@ namespace LifestreamScan
                         int e = t.IndexOf(close, p + q, StringComparison.Ordinal);
                         i = e < 0 ? n : e + q;
                         while (i < n && t[i] == '"') i++;
+                        if (dollar) for (int k = start; k < i && k < interp.Length; k++) interp[k] = true;
                         continue;
                     }
                     int j = p + 1;
@@ -510,6 +581,7 @@ namespace LifestreamScan
                         while (j < n && t[j] != '"' && t[j] != '\n') { if (t[j] == '\\') j++; j++; }
                     }
                     i = Math.Min(n, j + 1);
+                    if (dollar) for (int k = start; k < i && k < interp.Length; k++) interp[k] = true;
                     continue;
                 }
                 if (c == '\'')
@@ -548,6 +620,67 @@ namespace LifestreamScan
                 // Never a silent pass: a file the scanner could not finish makes the scan exit 2.
                 Errors.Add("could not scan " + path + ": " + e.GetType().Name + ": " + e.Message);
             }
+            finally { DumpEnd(); }
+        }
+
+        // ------------------------------------------------------------------ the text dump for the second scanner
+        StreamWriter _dump; string _dumpLabel; int _dumpSeq;
+        readonly HashSet<ulong> _dumpSeen = new HashSet<ulong>();
+
+        void DumpEnd()
+        {
+            if (_dump != null) { _dump.Dispose(); _dump = null; }
+            _dumpLabel = null;
+        }
+
+        static ulong Fnv(string name, string text)
+        {
+            ulong h = 14695981039346656037UL;
+            foreach (char c in name) { h ^= c; h *= 1099511628211UL; }
+            h ^= 0; h *= 1099511628211UL;
+            foreach (char c in text) { h ^= c; h *= 1099511628211UL; }
+            return h;
+        }
+
+        // One string or one text member, once per (file name, text): the same system DLL in the nupkg, the zip and Setup.exe is dumped once,
+        // and a text that only ONE file name holds (a credential in the product's own assembly) is never hidden by another file's copy.
+        void DumpWrite(Ctx ctx, string text)
+        {
+            if (DumpDir == null || string.IsNullOrEmpty(text)) return;
+            if (!_dumpSeen.Add(Fnv(ctx.Name.ToLowerInvariant(), text))) return;
+            if (_dump == null)
+            {
+                Directory.CreateDirectory(DumpDir);
+                _dump = new StreamWriter(Path.Combine(DumpDir, (++_dumpSeq).ToString("D6") + ".txt"), false, new UTF8Encoding(false));
+                _dumpLabel = null;
+            }
+            if (_dumpLabel != ctx.Label) { _dump.Write("\n" + DumpMarker + " " + ctx.Label + "\n"); _dumpLabel = ctx.Label; }
+            _dump.Write(text);
+            _dump.Write('\n');
+            DumpedStrings++;
+        }
+
+        // Text members of archives, and UTF-16 text of any file, decoded to UTF-8 (a plain UTF-8 file on disk is read by gitleaks itself).
+        void DumpContent(Stream s, Ctx ctx, byte[] head, long length)
+        {
+            if (DumpDir == null || length == 0 || length > 32L * 1024 * 1024 || head.Length < 2) return;
+            if (head[0] == 'M' && head[1] == 'Z') return;   // .NET strings are dumped from the metadata
+            bool le = (head[0] == 0xFF && head[1] == 0xFE) || (head.Length >= 8 && head[1] == 0 && head[3] == 0 && head[5] == 0 && head[7] == 0 && head[0] != 0);
+            bool be = !le && ((head[0] == 0xFE && head[1] == 0xFF) || (head.Length >= 8 && head[0] == 0 && head[2] == 0 && head[4] == 0 && head[6] == 0 && head[1] != 0));
+            if (!le && !be && (!ctx.Member || !IsTextChunk(head, head.Length))) return;
+            var buf = new byte[length];
+            s.Position = 0;
+            ReadFull(s, buf, 0, buf.Length);
+            s.Position = 0;
+            string text;
+            if (le || be)
+            {
+                int skip = (buf.Length >= 2 && ((buf[0] == 0xFF && buf[1] == 0xFE) || (buf[0] == 0xFE && buf[1] == 0xFF))) ? 2 : 0;
+                int n = ((buf.Length - skip) >> 1) * 2;
+                text = (le ? Encoding.Unicode : Encoding.BigEndianUnicode).GetString(buf, skip, n);
+            }
+            else text = Encoding.UTF8.GetString(buf);
+            DumpWrite(ctx, text);
         }
 
         void ScanSource(Stream s, Ctx ctx)
@@ -560,8 +693,11 @@ namespace LifestreamScan
             BytesScanned += buf.Length;
             string ext = Path.GetExtension(ctx.SourcePath).ToLowerInvariant();
             var view = new Utf8View(buf, buf.Length, 0);
-            bool[] code = (ext == ".cs" || ext == ".csx" || ext == ".razor" || ext == ".cshtml") ? ClassifyCSharp(view.Text) : null;
+            bool[] code = null, interp = null;
+            if (ext == ".cs" || ext == ".csx" || ext == ".razor" || ext == ".cshtml") code = ClassifyCSharp(view.Text, out interp);
+            _interp = interp;
             ScanTextView(view, ctx, ext, code);
+            _interp = null;
         }
 
         void ScanStream(Stream s, Ctx ctx, int depth)
@@ -576,9 +712,13 @@ namespace LifestreamScan
             {
                 if (head.Length >= 2 && head[0] == 0x1F && head[1] == 0x8B && ScanGzip(s, ctx, depth)) return;
                 if (head.Length >= 263 && head[257] == 'u' && head[258] == 's' && head[259] == 't' && head[260] == 'a' && head[261] == 'r' && ScanTar(s, ctx, depth)) return;
+                if (ctx.Name.EndsWith(".br", StringComparison.OrdinalIgnoreCase) && ScanBrotliFile(s, ctx, depth)) return;
                 mask = ScanZip(s, ctx, depth);
+                // A .NET single-file bundle (apphost with its assemblies appended, optionally deflate-compressed).
+                if (mask == null && length >= 1024 && length <= 4L * MaxEntryBytes) mask = ScanBundle(s, ctx, depth);
             }
             if (head.Length >= 2 && head[0] == 'M' && head[1] == 'Z' && length <= MaxEntryBytes) ScanMetadata(s, ctx);
+            DumpContent(s, ctx, head, length);
             RawScan(s, ctx, mask);
         }
 
@@ -627,6 +767,8 @@ namespace LifestreamScan
         {
             var u8 = new Utf8View(buf, len, basePos);
             if (text) { ScanTextView(u8, ctx, null, null); return; }
+            // Decompressed text (a gzip resource holding a config or a connection string) is read like a file as well.
+            if (ctx.Inflated && IsTextChunk(buf, len)) ScanTextView(u8, ctx, null, null);
             ScanBinaryView(u8, ctx);
             for (int shift = 0; shift <= 1; shift++)
             {
@@ -638,7 +780,9 @@ namespace LifestreamScan
         // A string read out of metadata: the text rules (the string starts at its real start, so the word boundary is meaningful).
         void ScanString(string s, Ctx ctx, string enc, long offset)
         {
-            if (s.Length < 5 || !Trigger.IsMatch(s)) return;
+            if (s.Length < 5) return;
+            if (DumpDir != null) DumpWrite(ctx, s);
+            if (!Trigger.IsMatch(s)) return;
             ScanTextView(new StringView(s, enc, offset), ctx, null, null);
         }
 
@@ -772,6 +916,162 @@ namespace LifestreamScan
             return zip64 ? null : mask;
         }
 
+        // ------------------------------------------------------------------ decompression and single-file bundles
+        // gzip and zlib are recognised by their header; brotli and raw deflate have none, so they are tried on a blob that is not text
+        // and kept only when the whole stream decodes. The output is capped (an error, never a silent pass).
+        byte[] Inflate(byte[] data, int start, int end, Ctx ctx, out string kind)
+        {
+            kind = null;
+            int len = end - start;
+            if (len < 8) return null;
+            var tries = new List<string>();
+            if (data[start] == 0x1F && data[start + 1] == 0x8B) tries.Add("gzip");
+            else if (data[start] == 0x78 && ((data[start] << 8) | data[start + 1]) % 31 == 0) tries.Add("zlib");
+            tries.Add("brotli");
+            tries.Add("deflate");
+            foreach (string k in tries)
+            {
+                try
+                {
+                    using (var input = new MemoryStream(data, start, len, false))
+                    using (Stream ds = k == "gzip" ? (Stream)new GZipStream(input, CompressionMode.Decompress)
+                                     : k == "zlib" ? new ZLibStream(input, CompressionMode.Decompress)
+                                     : k == "brotli" ? new BrotliStream(input, CompressionMode.Decompress)
+                                     : new DeflateStream(input, CompressionMode.Decompress))
+                    using (var output = new MemoryStream())
+                    {
+                        CopyLimited(ds, output, 256L * 1024 * 1024);
+                        if (output.Length >= 8) { kind = k; return output.ToArray(); }
+                    }
+                }
+                catch (EntryTooLargeException e) { Errors.Add("skipped a " + k + " resource in " + ctx.Label + " (" + e.Message + ")"); return null; }
+                catch (Exception e) when (e is InvalidDataException || e is IOException || e is InvalidOperationException || e is NotSupportedException) { }
+            }
+            return null;
+        }
+
+        bool ScanBrotliFile(Stream s, Ctx ctx, int depth)
+        {
+            s.Position = 0;
+            try
+            {
+                using (var br = new BrotliStream(s, CompressionMode.Decompress, true))
+                using (var ms = new MemoryStream())
+                {
+                    CopyLimited(br, ms, 256L * 1024 * 1024);
+                    if (ms.Length == 0) { s.Position = 0; return false; }
+                    var child = Child(ctx, ctx.Name.Substring(0, ctx.Name.Length - 3));
+                    child.Inflated = true;
+                    FilesScanned++;
+                    ScanStream(ms, child, depth + 1);
+                    return true;
+                }
+            }
+            catch (EntryTooLargeException e) { Errors.Add("skipped " + ctx.Label + " (brotli content " + e.Message + ")"); return true; }
+            catch (Exception e) when (e is InvalidDataException || e is IOException || e is InvalidOperationException) { s.Position = 0; return false; }
+        }
+
+        // .NET single-file bundle: the apphost holds, 8 bytes before the 32-byte SHA-256 of ".net core bundle", the offset of the
+        // bundle header; the header lists every file with its offset, size and (since bundle version 6) deflate-compressed size.
+        // Every entry is scanned as a file of its own; returns the byte ranges of the entries so the raw scan skips them.
+        // The 32-byte marker the host (apphost or singlefilehost) carries right after the 8-byte offset of the bundle header.
+        static readonly byte[] BundleSignature = Convert.FromHexString("8b1202b96a612038727b930214d7a03213f5b9e6efae3318ee3b2dce24b36aae");
+
+        List<long[]> ScanBundle(Stream s, Ctx ctx, int depth)
+        {
+            long length = s.Length;
+            string lower = ctx.Name.ToLowerInvariant();
+            if (lower.EndsWith(".dll") || lower.EndsWith(".pdb") || lower.Contains(".so") || lower.EndsWith(".dylib")) return null;
+            var first = new byte[4];
+            s.Position = 0;
+            if (ReadFull(s, first, 0, 4) != 4 || !((first[0] == 'M' && first[1] == 'Z') || (first[0] == 0x7F && first[1] == 'E' && first[2] == 'L' && first[3] == 'F'))) { s.Position = 0; return null; }
+            // The marker can be anywhere (the single-file host is megabytes of code), so the file is searched in chunks.
+            long markerPos = -1;
+            var chunk = new byte[4 * 1024 * 1024 + 64];
+            long basePos = 0; int carry = 0;
+            s.Position = 0;
+            while (true)
+            {
+                int read = ReadFull(s, chunk, carry, 4 * 1024 * 1024);
+                if (read == 0) break;
+                int len = carry + read;
+                int at = new ReadOnlySpan<byte>(chunk, 0, len).IndexOf(BundleSignature);
+                if (at >= 0) { markerPos = basePos + at; break; }
+                if (read < 4 * 1024 * 1024) break;
+                int keep = BundleSignature.Length - 1;
+                Array.Copy(chunk, len - keep, chunk, 0, keep);
+                basePos += len - keep; carry = keep;
+            }
+            s.Position = 0;
+            if (markerPos < 8) return null;
+            var off8 = new byte[8];
+            s.Position = markerPos - 8;
+            ReadFull(s, off8, 0, 8);
+            s.Position = 0;
+            long headerOffset = BitConverter.ToInt64(off8, 0);
+            // The signature also sits in the code of an unbundled apphost with a zero offset: that is no bundle.
+            if (headerOffset <= 0 || headerOffset >= length - 32) return null;
+            var mask = new List<long[]>();
+            int scanned = 0;
+            try
+            {
+                s.Position = headerOffset;
+                using (var br = new BinaryReader(s, Encoding.UTF8, true))
+                {
+                    uint major = br.ReadUInt32(); br.ReadUInt32();
+                    if (major < 1 || major > 20) { s.Position = 0; return null; }
+                    int count = br.ReadInt32();
+                    if (count < 0 || count > 100000) { s.Position = 0; return null; }
+                    br.ReadString();                                   // bundle id
+                    if (major >= 2) { br.ReadInt64(); br.ReadInt64(); br.ReadInt64(); br.ReadInt64(); br.ReadUInt64(); }
+                    var entries = new List<Tuple<long, long, long, string>>();
+                    for (int i = 0; i < count; i++)
+                    {
+                        long off = br.ReadInt64(), size = br.ReadInt64(), comp = major >= 6 ? br.ReadInt64() : 0;
+                        br.ReadByte();                                  // file type
+                        string name = br.ReadString();
+                        entries.Add(Tuple.Create(off, size, comp, name));
+                    }
+                    foreach (var e in entries)
+                    {
+                        long off = e.Item1, size = e.Item2, comp = e.Item3; string name = e.Item4;
+                        long stored = comp > 0 ? comp : size;
+                        if (off < 0 || stored < 0 || off + stored > length) { Errors.Add("bundle " + ctx.Label + ": entry " + name + " is outside the file"); continue; }
+                        mask.Add(new[] { off, off + stored });
+                        if (size == 0) continue;
+                        if (size > MaxEntryBytes) { Errors.Add("skipped " + ctx.Label + "!/" + name + " (larger than " + (MaxEntryBytes >> 20) + " MB)"); continue; }
+                        var data = new byte[stored];
+                        s.Position = off;
+                        ReadFull(s, data, 0, data.Length);
+                        byte[] content = data;
+                        if (comp > 0)
+                        {
+                            using (var input = new MemoryStream(data, false))
+                            using (var ds = new DeflateStream(input, CompressionMode.Decompress))
+                            using (var output = new MemoryStream())
+                            {
+                                CopyLimited(ds, output, MaxEntryBytes);
+                                content = output.ToArray();
+                            }
+                        }
+                        var child = Child(ctx, name);
+                        FilesScanned++;
+                        using (var ms = new MemoryStream(content, false)) ScanStream(ms, child, depth + 1);
+                        scanned++;
+                    }
+                }
+            }
+            catch (Exception ex) when (ex is EndOfStreamException || ex is InvalidDataException || ex is IOException || ex is EntryTooLargeException || ex is ArgumentException || ex is FormatException)
+            {
+                // A file that only looked like a bundle is scanned raw as before; a real bundle we could not finish is an error.
+                if (scanned > 0) Errors.Add("bundle " + ctx.Label + " could not be read to the end: " + ex.Message);
+                s.Position = 0;
+                return scanned > 0 ? mask : null;
+            }
+            finally { s.Position = 0; }
+            return mask;
+        }
+
         // ------------------------------------------------------------------ .NET metadata
         void ScanMetadata(Stream s, Ctx ctx)
         {
@@ -876,6 +1176,20 @@ namespace LifestreamScan
                 if (text.IndexOf('\0') < 0) { ScanString(text, ctx, "metadata:resource-text", offset); return; }
             }
             catch (DecoderFallbackException) { }
+            // Not text: a compressed embedded resource (gzip, zlib, brotli, raw deflate) is inflated and scanned as a file of its own.
+            if (ctx.Depth < MaxArchiveDepth)
+            {
+                string kind;
+                byte[] inflated = Inflate(data, start, end, ctx, out kind);
+                if (inflated != null)
+                {
+                    var child = Child(ctx, "(" + kind + ")");
+                    child.Inflated = true;
+                    FilesScanned++;
+                    using (var ms = new MemoryStream(inflated, false)) ScanStream(ms, child, ctx.Depth + 1);
+                    return;
+                }
+            }
             var slice = new byte[end - start];
             Array.Copy(data, start, slice, 0, slice.Length);
             ScanLengthPrefixed(slice, ctx, "metadata:resource-stream", offset);

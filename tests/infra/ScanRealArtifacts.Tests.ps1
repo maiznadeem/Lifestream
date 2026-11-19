@@ -5,6 +5,10 @@
 #   - a Velopack Releases folder (full nupkg, Portable.zip, Setup.exe) packed from each publish;
 #   - the API publish (framework-dependent, as secret-scan.yml);
 #   - the stock mcr.microsoft.com/dotnet/aspnet:11.0 linux/amd64 layers, each layer blob scanned separately, as downloaded.
+# Scanner v3 adds the verifier's v-03d counterexamples, each in the REAL publish and in the vpk Releases packed from it: a connection
+# string in Lifestream.dll whose password value starts with a tilde, an appsettings.json password in braces, a shipped db.env whose
+# password values start with ~ and >, and gzip, brotli and raw-deflate compressed embedded resources; plus a compressed single-file bundle.
+# Both scanners run (as CI runs them); the clean artifacts must have zero findings from BOTH.
 # Planted: every artifact must fail. Clean: zero findings. The scan of a full publish must take under 2 minutes.
 # Missing tools fail the tests; they never skip. The plant is assembled from fragments so this file is clean when scanned.
 
@@ -71,18 +75,52 @@ BeforeAll {
         $lines.Insert($at + 1, '        <TextBlock Visibility="Collapsed" Tag="' + $script:Plant + '" />')
         Set-Content -LiteralPath $xaml -Value $lines -Encoding utf8
 
+        # The v3 plants (fake values, assembled from fragments).
+        $pw = 'Pass' + 'word'
+        $script:V3 = [ordered]@{ A = 'Rt4w' + 'Lm8q' + 'Zc2X'; B = 'Hb7n' + 'Ue3k' + 'Wq9Y'; C = 'Gs5p' + 'Ji1v' + 'Nd6T'; D = 'Mf2c' + 'Ox8r' + 'Ka4E'; E = 'Yv3h' + 'Pe7t' + 'Lu1B' }
+        $v3 = Join-Path $script:Work 'src-v3'; Copy-Source $v3
+        $d3 = Join-Path $v3 'src/Lifestream.Desktop'
+        Set-Content -LiteralPath (Join-Path $d3 'VerifierPlantV3.cs') -Encoding utf8 @"
+namespace Lifestream.Desktop;
+internal static class VerifierPlantV3
+{
+    internal static readonly string M1 = "Data Source=db.internal,1433;Initial Catalog=plantm1;$pw=~$($script:V3.A);Encrypt=True";
+}
+"@
+        Set-Content -LiteralPath (Join-Path $d3 'db.env') -Encoding ascii -NoNewline ("DB_$($pw.ToUpper())=~$($script:V3.B)`nMSSQL_SA_$($pw.ToUpper())=>$($script:V3.B)`n")
+        $app = Get-Content -Raw (Join-Path $d3 'appsettings.json')
+        $app = $app.TrimEnd().TrimEnd('}') + ",`n  `"Database`": { `"Server`": `"db.internal`", `"User`": `"plantm2`", `"$pw`": `"{$($script:V3.B)}`" }`n}`n"
+        Set-Content -LiteralPath (Join-Path $d3 'appsettings.json') -Value $app -Encoding utf8 -NoNewline
+        $kinds = @(@('gzip', 'seed.bin.gz', 'C'), @('brotli', 'seed.bin.br', 'D'), @('deflate', 'seed.bin.deflate', 'E'))
+        foreach ($k in $kinds) {
+            $bytes = [Text.Encoding]::UTF8.GetBytes("Server=tcp:db.internal,1433;Database=plant$($k[0]);$('User' + ' ID')=app;$pw=$($script:V3[$k[2]]);")
+            $ms = [IO.MemoryStream]::new()
+            $z = switch ($k[0]) { 'gzip' { [IO.Compression.GZipStream]::new($ms, [IO.Compression.CompressionLevel]::Optimal, $true) } 'brotli' { [IO.Compression.BrotliStream]::new($ms, [IO.Compression.CompressionLevel]::Optimal, $true) } default { [IO.Compression.DeflateStream]::new($ms, [IO.Compression.CompressionLevel]::Optimal, $true) } }
+            $z.Write($bytes, 0, $bytes.Length); $z.Dispose()
+            [IO.File]::WriteAllBytes((Join-Path $d3 $k[1]), $ms.ToArray())
+        }
+        $proj3 = Join-Path $d3 'Lifestream.Desktop.csproj'
+        $x = Get-Content -Raw $proj3
+        $needle = '<Content Include="appsettings.json" CopyToOutputDirectory="PreserveNewest" />'
+        if (-not $x.Contains($needle)) { throw 'Lifestream.Desktop.csproj has no appsettings.json Content line to plant after' }
+        $x = $x.Replace($needle, $needle + '<Content Include="db.env" CopyToOutputDirectory="PreserveNewest" /><EmbeddedResource Include="seed.bin.gz" /><EmbeddedResource Include="seed.bin.br" /><EmbeddedResource Include="seed.bin.deflate" />')
+        Set-Content -LiteralPath $proj3 -Value $x -Encoding utf8 -NoNewline
+
         $dotnet = Join-Path $script:DotnetDir 'dotnet.exe'
         $publish = @('publish', 'src/Lifestream.Desktop', '-c', 'Release', '-r', 'win-x64', '--self-contained', '-p:PublishReadyToRun=true', '-p:Version=2.0.1', '--nologo')
         $script:PubClean = Join-Path $script:Work 'pub-clean'; $script:PubPlanted = Join-Path $script:Work 'pub-planted'; $script:PubApi = Join-Path $script:Work 'pub-api'
         $sw = [Diagnostics.Stopwatch]::StartNew()
         $t1 = Start-Tool $dotnet (@('publish', (Join-Path $clean 'src/Lifestream.Desktop')) + $publish[2..($publish.Count - 1)] + @('-o', $script:PubClean)) (Join-Path $script:Work 'pub-clean.log')
         $t2 = Start-Tool $dotnet (@('publish', (Join-Path $planted 'src/Lifestream.Desktop')) + $publish[2..($publish.Count - 1)] + @('-o', $script:PubPlanted)) (Join-Path $script:Work 'pub-planted.log')
-        Wait-Tool $t1; Wait-Tool $t2
+        $script:PubV3 = Join-Path $script:Work 'pub-v3'
+        $t4 = Start-Tool $dotnet (@('publish', (Join-Path $v3 'src/Lifestream.Desktop')) + $publish[2..($publish.Count - 1)] + @('-o', $script:PubV3)) (Join-Path $script:Work 'pub-v3.log')
+        Wait-Tool $t1; Wait-Tool $t2; Wait-Tool $t4
         $t3 = Start-Tool $dotnet @('publish', (Join-Path $clean 'src/Lifestream.Api'), '-c', 'Release', '--nologo', '-o', $script:PubApi) (Join-Path $script:Work 'pub-api.log')
         Wait-Tool $t3
         $script:Timings.publishSeconds = [Math]::Round($sw.Elapsed.TotalSeconds, 1)
         $script:RelClean = Join-Path $script:Work 'Releases-clean'; $script:RelPlanted = Join-Path $script:Work 'Releases-planted'
-        foreach ($pair in @(@($script:PubClean, $script:RelClean), @($script:PubPlanted, $script:RelPlanted))) {
+        $script:RelV3 = Join-Path $script:Work 'Releases-v3'
+        foreach ($pair in @(@($script:PubClean, $script:RelClean), @($script:PubPlanted, $script:RelPlanted), @($script:PubV3, $script:RelV3))) {
             Wait-Tool (Start-Tool $script:Vpk @('pack', '--packId', 'Lifestream', '--packVersion', '2.0.1', '--packDir', $pair[0], '--mainExe', 'Lifestream.exe', '--runtime', 'win-x64', '--outputDir', $pair[1]) ($pair[1] + '.log') -NoDotnetRoot)
         }
     }
@@ -113,6 +151,12 @@ BeforeAll {
 }
 
 AfterAll {
+    # Evidence hook: LIFESTREAM_KEEP_V3_PLANTS=<folder> keeps the planted publish and its vpk Releases for a manual run of an older scanner.
+    if ($env:LIFESTREAM_KEEP_V3_PLANTS -and $script:PubV3) {
+        New-Item -ItemType Directory -Force -Path $env:LIFESTREAM_KEEP_V3_PLANTS | Out-Null
+        Copy-Item -LiteralPath $script:PubV3 -Destination (Join-Path $env:LIFESTREAM_KEEP_V3_PLANTS 'pub-v3') -Recurse -Force
+        Copy-Item -LiteralPath $script:RelV3 -Destination (Join-Path $env:LIFESTREAM_KEEP_V3_PLANTS 'Releases-v3') -Recurse -Force
+    }
     if ($env:LIFESTREAM_CAPTURE_DIR -and $script:Timings.Count) {
         New-Item -ItemType Directory -Force -Path $env:LIFESTREAM_CAPTURE_DIR | Out-Null
         $script:Timings | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $env:LIFESTREAM_CAPTURE_DIR 'scan-real-artifacts-timings.json')
@@ -154,6 +198,66 @@ Describe 'INFRA-01 real artifacts: planted builds fail, clean builds and the sto
             @($r.Report.findings | Where-Object { $_.file -like "*$container*Lifestream.dll" }).Count | Should -BeGreaterThan 0 -Because "$container`n$($r.Output)"
         }
         $r.Output | Should -Not -Match $script:Val
+    }
+
+    It 'the v3 publish really holds each plant: UTF-16 string in Lifestream.dll, the json value, the env lines, and three compressed resources (the fixture is real)' {
+        $hex = { param($f) [Convert]::ToHexString([IO.File]::ReadAllBytes((Join-Path $script:PubV3 $f))) }
+        $dll = & $hex 'Lifestream.dll'
+        $dll.IndexOf([Convert]::ToHexString([Text.Encoding]::Unicode.GetBytes('Pass' + 'word=~' + $script:V3.A))) | Should -BeGreaterOrEqual 0
+        (Get-Content -Raw (Join-Path $script:PubV3 'appsettings.json')) | Should -Match ('"Pass' + 'word": "\{' + $script:V3.B + '\}"')
+        (Get-Content -Raw (Join-Path $script:PubV3 'db.env')) | Should -Match ('DB_PASS' + 'WORD=~' + $script:V3.B)
+        (Get-Content -Raw (Join-Path $script:PubV3 'db.env')) | Should -Match ('MSSQL_SA_PASS' + 'WORD=>' + $script:V3.B)
+        foreach ($k in 'C', 'D', 'E') {
+            $dll.IndexOf([Convert]::ToHexString([Text.Encoding]::UTF8.GetBytes($script:V3[$k]))) | Should -BeLessThan 0 -Because "resource $k is compressed, its value is not in the dll as plain bytes"
+        }
+    }
+
+    It 'fails the v3 publish for each plant, from the own scanner alone: the dll string, appsettings.json, db.env and the gzip, brotli and deflate resources' {
+        $r = Invoke-Scan @($script:PubV3) (Join-Path $TestDrive 'rep-pub-v3-own.json') @('-SkipGitleaks')
+        $r.ExitCode | Should -Be 1 -Because $r.Output
+        $files = @($r.Report.findings | ForEach-Object { $_.file })
+        @($files | Where-Object { $_ -like '*\Lifestream.dll' }).Count | Should -BeGreaterThan 0 -Because $r.Output
+        @($files | Where-Object { $_ -like '*\appsettings.json' }).Count | Should -BeGreaterThan 0 -Because $r.Output
+        @($files | Where-Object { $_ -like '*\db.env' }).Count | Should -BeGreaterOrEqual 2 -Because 'the two env lines, one value starting with a tilde and one with a greater-than sign'
+        foreach ($kind in '(gzip)', '(brotli)', '(deflate)') { @($files | Where-Object { $_ -like "*Lifestream*!/$kind" }).Count | Should -BeGreaterThan 0 -Because "$kind resource`n$($r.Output)" }
+        $r.Output | Should -Not -Match ($script:V3.Values -join '|')
+    }
+
+    It 'fails the v3 publish from the second scanner alone as well: appsettings.json and db.env as files, the dll strings and the decompressed resources from the string dump' {
+        $r = Invoke-Scan @($script:PubV3) (Join-Path $TestDrive 'rep-pub-v3-both.json')
+        $r.ExitCode | Should -Be 1 -Because $r.Output
+        $gl = @($r.Report.gitleaks.findings)
+        @($gl | Where-Object { $_.source -eq 'artifact' -and $_.file -like '*appsettings.json' }).Count | Should -BeGreaterThan 0 -Because $r.Output
+        @($gl | Where-Object { $_.source -eq 'artifact' -and $_.file -like '*db.env' }).Count | Should -BeGreaterThan 0 -Because $r.Output
+        @($gl | Where-Object { $_.source -eq 'dump' -and $_.file -like '*Lifestream.dll' }).Count | Should -BeGreaterThan 0 -Because $r.Output
+        foreach ($kind in '(gzip)', '(brotli)', '(deflate)') { @($gl | Where-Object { $_.source -eq 'dump' -and $_.file -like "*Lifestream*!/$kind" }).Count | Should -BeGreaterThan 0 -Because "$kind`n$($r.Output)" }
+        $r.Output | Should -Not -Match ($script:V3.Values -join '|')
+    }
+
+    It 'fails the vpk Releases folder packed from the v3 publish: appsettings.json and db.env in the full nupkg, Portable.zip and Setup.exe each' {
+        $r = Invoke-Scan @($script:RelV3) (Join-Path $TestDrive 'rep-rel-v3.json')
+        $r.ExitCode | Should -Be 1 -Because $r.Output
+        foreach ($container in '-full.nupkg!/', '-Portable.zip!/', '-Setup.exe!/') {
+            foreach ($f in 'appsettings.json', 'db.env', 'Lifestream.dll') {
+                @($r.Report.findings | Where-Object { $_.file -like "*$container*$f" }).Count | Should -BeGreaterThan 0 -Because "$container $f`n$($r.Output)"
+            }
+        }
+        $r.Output | Should -Not -Match ($script:V3.Values -join '|')
+    }
+
+    It 'fails a compressed single-file bundle (EnableCompressionInSingleFile): the plant is inside a deflate-compressed bundle entry' {
+        $dir = Join-Path $script:Work 'bundle'; New-Item -ItemType Directory -Force -Path $dir | Out-Null
+        Set-Content (Join-Path $dir 'Bundle.csproj') '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net11.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings></PropertyGroup></Project>'
+        $pw = 'Pass' + 'word'
+        Set-Content (Join-Path $dir 'Program.cs') ('System.Console.WriteLine("Server=tcp:db.internal,1433;Database=bundle;' + 'User' + ' ID=app;' + $pw + '=' + $script:V3.A + ';");')
+        $out = Join-Path $script:Work 'bundle-out'
+        Wait-Tool (Start-Tool (Join-Path $script:DotnetDir 'dotnet.exe') @('publish', $dir, '-c', 'Release', '-r', 'win-x64', '--self-contained', '-p:PublishSingleFile=true', '-p:EnableCompressionInSingleFile=true', '--nologo', '-o', $out) (Join-Path $script:Work 'bundle.log'))
+        (Get-Item (Join-Path $out 'Bundle.exe')).Length | Should -BeGreaterThan 10MB -Because 'a single file that holds the runtime'
+        $hay = [Convert]::ToHexString([IO.File]::ReadAllBytes((Join-Path $out 'Bundle.exe')))
+        $hay.IndexOf([Convert]::ToHexString([Text.Encoding]::UTF8.GetBytes($script:V3.A))) | Should -BeLessThan 0 -Because 'the compressed bundle does not hold the value as plain bytes (so a raw scan cannot see it)'
+        $r = Invoke-Scan @($out) (Join-Path $TestDrive 'rep-bundle.json') @('-SkipGitleaks')
+        $r.ExitCode | Should -Be 1 -Because $r.Output
+        @($r.Report.findings | Where-Object { $_.file -like '*Bundle.exe!/Bundle.dll' }).Count | Should -BeGreaterThan 0 -Because $r.Output
     }
 
     It 'has zero findings on the clean Desktop publish, and scans it in under 2 minutes' {

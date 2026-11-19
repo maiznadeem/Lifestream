@@ -1,0 +1,82 @@
+# gitleaks configuration of the second scanner (tools/scan-artifacts.ps1 runs `gitleaks dir` with this file).
+# It keeps every default gitleaks rule and adds the database-credential forms the product cares about: ADO.NET / ODBC / JDBC
+# key=value pairs, JSON, YAML, environment and command-line keys, and scheme://user:secret@host. Go regular expressions (RE2).
+#
+# Placeholders: a value is ignored ONLY when the whole value equals an entry of the exact list in `placeholders` below (the same list
+# as tools/scan-engine.cs PlaceholderValues, optionally in quotes). Nothing that "looks like" a placeholder is skipped: PWD={x} is
+# ODBC quoting of a real password.
+# Third-party hits that were read and judged benign are not listed here: they are in tools/gitleaks-allowlist.txt, by file name,
+# rule and the SHA-256 of the matched text.
+
+title = "Lifestream credential rules"
+
+[extend]
+useDefault = true
+
+# A value: "quoted", 'quoted', {ODBC brace-quoted with }} escapes}, or a run up to whitespace ; , < > or a quote.
+# (The run may start with ~ > = : , ; or a backtick: those are part of a password.)
+
+[[rules]]
+id = "lifestream-db-password"
+description = "Password / Pwd / Passwd key=value (ADO.NET, ODBC, JDBC, env, .properties, command line), any key prefix"
+regex = '''(?i)(?:password|passwd|pwd)["']?[ \t]*=[ \t]*("[^"\r\n]{1,200}"|'[^'\r\n]{1,200}'|\{(?:[^}\r\n]|\}\}){1,200}\}|[^\s;"'<&]{1,200})'''
+secretGroup = 1
+keywords = ["password", "passwd", "pwd"]
+[[rules.allowlists]]
+description = "the exact placeholder list"
+regexTarget = "secret"
+regexes = ['''^["']?(?:\{[0-9]\}|\$\(Password\)|\$\{PASSWORD\}|%PASSWORD%|<password>|\*\*\*)?["']?$''']
+
+[[rules]]
+id = "lifestream-db-password-json"
+description = '"Password": "value" in JSON'
+regex = '''(?i)"[A-Za-z0-9_.\-]*(?:password|passwd|pwd)"[ \t]*:[ \t]*("[^"\r\n]{1,200}")'''
+secretGroup = 1
+keywords = ["password", "passwd", "pwd"]
+[[rules.allowlists]]
+regexTarget = "secret"
+regexes = ['''^["']?(?:\{[0-9]\}|\$\(Password\)|\$\{PASSWORD\}|%PASSWORD%|<password>|\*\*\*)?["']?$''']
+
+[[rules]]
+id = "lifestream-db-password-yaml"
+description = "password: value at the start of a line (YAML, .properties-like)"
+regex = '''(?im)^[ \t\-]*[A-Za-z0-9_.\-]*(?:password|passwd|pwd)[ \t]*:[ \t]+("[^"\r\n]{1,200}"|'[^'\r\n]{1,200}'|[^\s#"'|>][^\r\n#]{0,199})'''
+secretGroup = 1
+keywords = ["password", "passwd", "pwd"]
+[[rules.allowlists]]
+regexTarget = "secret"
+regexes = ['''^["']?(?:\{[0-9]\}|\$\(Password\)|\$\{PASSWORD\}|%PASSWORD%|<password>|\*\*\*)?["']?[ \t]*$''']
+
+[[rules]]
+id = "lifestream-db-userid"
+description = "User ID= / UID= in a connection string"
+regex = '''(?i)(?:^|[^A-Za-z0-9_])(?:user[ \t]*id|uid)[ \t]*=[ \t]*("[^"\r\n]{1,200}"|'[^'\r\n]{1,200}'|\{(?:[^}\r\n]|\}\}){1,200}\}|[^\s;"'<&]{1,200})'''
+secretGroup = 1
+keywords = ["user id", "userid", "uid"]
+[[rules.allowlists]]
+description = "placeholders, and a GUID (a user id that identifies someone is not a secret)"
+regexTarget = "secret"
+regexes = [
+  '''^["']?(?:\{[0-9]\}|\$\(Password\)|\$\{PASSWORD\}|%PASSWORD%|<password>|\*\*\*)?["']?$''',
+  '''^\{?[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\}?$''',
+]
+
+[[rules]]
+id = "lifestream-db-secret-key"
+description = "AccountKey= / SharedAccessKey= / client_secret= key=value"
+regex = '''(?i)(?:accountkey|sharedaccesskey|client_?secret)["']?[ \t]*=[ \t]*("[^"\r\n]{1,200}"|'[^'\r\n]{1,200}'|[^\s;"'<&]{1,200})'''
+secretGroup = 1
+keywords = ["accountkey", "sharedaccesskey", "client_secret", "clientsecret"]
+[[rules.allowlists]]
+regexTarget = "secret"
+regexes = ['''^["']?(?:\{[0-9]\}|\$\(Password\)|\$\{PASSWORD\}|%PASSWORD%|<password>|\*\*\*)?["']?$''']
+
+[[rules]]
+id = "lifestream-url-credentials"
+description = "scheme://user:secret@host (mssql://, postgres://, jdbc:sqlserver://, https://)"
+regex = '''://[^/\s:@'"<>]{1,100}:([^/\s@'"<>]{1,200})@[A-Za-z0-9\[]'''
+secretGroup = 1
+keywords = ["://"]
+[[rules.allowlists]]
+regexTarget = "secret"
+regexes = ['''^(?:\{[0-9]\}|\$\(Password\)|\$\{PASSWORD\}|%PASSWORD%|<password>|\*\*\*)$''']

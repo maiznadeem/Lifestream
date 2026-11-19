@@ -182,9 +182,36 @@ the script compiles with PowerShell's own .NET runtime (no SDK needed on the run
   manifest resource (`.resources` strings, BAML and other embedded streams); the text rules run on every string found there, so a
   literal of any length is caught.
 - **Text mode** (plain-text files on disk, logs, source): the keyword as a whole word and any value that is not a placeholder.
-- **Values** can be quoted, ODBC `{brace-quoted}` or plain, with any characters (Cyrillic, the euro sign ...). Only an exact
-  placeholder is not a value: `{0}`, `{name}`, `${NAME}`, `$(NAME)`, `%NAME%`, `%s`, `<your password>`, `*****`, XAML
-  `{Binding ...}` and templates made only of those. `{abc}!x` or `%abc%-x` are values.
+- **Values** can be quoted, ODBC brace-quoted or plain, with any characters (Cyrillic, the euro sign ...), and may start with any
+  character, including the ones that look like operators (tilde, greater-than, equals, colon, comma, semicolon, backtick): a password
+  key whose value begins with a tilde is a password. A value is skipped **only** when the whole value equals an entry of an exact list
+  (`PlaceholderValues` in `scan-engine.cs`, pinned by a test): the format items zero to nine in braces, the three template variables for
+  "Password" in the shell, Windows and PowerShell styles (`$(Password)`, `${PASSWORD}`, `%PASSWORD%`), `<password>`, three asterisks,
+  and the empty value. Nothing that merely looks like a placeholder is skipped: a brace-quoted ODBC password is a password, and any
+  other name in braces or percent signs, a `%s` format, `<your password>` or three-plus asterisks are values. Format strings and XAML
+  markup in third-party files are reviewed and allow-listed by hash instead. A user id given as a `${reference}`, a `<description>` or a
+  GUID names an identity and is not a secret; so is a C# interpolation hole (`{name}`) inside an interpolated string in source.
+- **Text forms**: the Password, Pwd and Passwd keys and any prefixed key (`DbPassword`, `MSSQL_SA_PASSWORD`, `Database__Pwd`, dotted
+  keys such as the Spring datasource password, command-line options such as `--db-password`) with an equals sign, the bare ODBC
+  `UID`, `User ID`, a YAML key of that kind at the start of a line, the JSON pair form of those keys, and credentials in front of
+  the host of a URL, for any scheme.
+- **Compressed content**: gzip, zlib, brotli and raw deflate embedded resources (and `.br` and `.gz` files) are inflated and scanned as
+  files of their own, as are the entries of a .NET single-file bundle (including `EnableCompressionInSingleFile`). Out of scope: UTF-32
+  and Base64 (or otherwise encoded) values; the item asks for UTF-8 and UTF-16.
+- **Second scanner: gitleaks** (pinned, `tools/fetch-gitleaks.ps1` downloads release 8.30.1 for Windows or Linux into the git-ignored
+  `tools/.bin/` and verifies the SHA-256 published in the release's checksums file; no binary is committed). On every artifact scan
+  `scan-artifacts.ps1` runs `gitleaks dir` with `tools/gitleaks-lifestream.toml` (all default rules plus database-credential rules for
+  ADO.NET, ODBC and JDBC key=value pairs, JSON, YAML, environment and command-line keys and URL credentials, with the same exact
+  placeholder list) over (a) each artifact path as it is (gitleaks opens archives up to the same depth) and (b) a text dump of every
+  string the own extractor found: .NET user strings, attribute blobs, constants, `.resources` and BAML strings, the contents of
+  decompressed resources, text archive members, and UTF-16 text decoded to UTF-8. The scan fails when **either** scanner finds something
+  that is not allow-listed; it exits 2 when gitleaks cannot run. Gitleaks does not run in source mode (`-GitTracked`): `secret-scan.yml`
+  scans the repository history with `gitleaks-action`. Third-party hits are allow-listed in `tools/gitleaks-allowlist.txt`
+  (`file name|rule|sha256 of the matched text`, commented, never a product file), today the 61 reviewed texts of the stock layers.
+  `-SkipGitleaks` exists for the own-engine unit tests only; a test fails if any workflow passes it.
+- **Logs**: `tools/run-logged.ps1 -Log <file> -Command '<command>'` writes a command's output to a file, scans it, and prints it to
+  the job log only after a clean scan (otherwise a redacted summary and exit 1). `ci.yml` runs every `dotnet build` and `dotnet test`
+  through it, and `screenshots.yml` scans the whole upload folder before the upload.
 - **Source tree**: `-GitTracked` scans what git lists (tracked files, plus new files that are not ignored), so ignored build output is
   never walked, while every tracked file is scanned and a tracked file under `bin`, `obj` or `TestResults` fails the scan. In C# an
   assignment from an identifier is code only where the keyword is in code; in any string literal or comment it is a finding.
@@ -195,14 +222,14 @@ the script compiles with PowerShell's own .NET runtime (no SDK needed on the run
 - **Allow-lists**, both reviewed by a person and both matched by hash, so an edit re-flags the text:
   `tools/secret-scan-allowlist.txt` (`path|rule|sha256 of the line`; only `tests/<Project>/TestSecrets.cs` lines, today none) and
   `tools/secret-scan-binary-allowlist.txt` (`file name|rule|sha256 of the matched text`) for benign strings in third-party files, today
-  the 20 public strings of the stock aspnet:11.0 layers. Names starting with `Lifestream` or `appsettings` are refused. Nothing is
+  the 25 public strings of the stock aspnet:11.0 layers. Names starting with `Lifestream` or `appsettings` are refused. Nothing is
   exempted by path or by rule.
 - **Images**: `tools/scan-image.sh <image>` scans `docker save` output, so each layer tar is scanned on its own and a file that one
   layer adds and a later layer deletes is still found, plus `docker image inspect` (baked environment variables) and the history.
 - The matched value is never printed, and neither is a hash of it: in a public CI log a SHA-256 of a short value can be
   brute-forced. Findings and reports carry the file, rule, encoding, offset (and line). The hash an allow-list entry needs comes from a
   local run with `-ShowMatchHashes`, which the scanner refuses when `CI` or `GITHUB_ACTIONS` is set. A full Desktop publish (250 MB)
-  scans in about 6 seconds and the Releases folder (1.1 GB, every member opened) in about 16.
+  scans in about 6 seconds with the own scanner and the Releases folder (1.1 GB, every member opened) in about 16; with gitleaks added about 17 and 35 seconds, and the 11 stock layers about 2 minutes.
 
 ## Every Azure CLI call passes the subscription
 

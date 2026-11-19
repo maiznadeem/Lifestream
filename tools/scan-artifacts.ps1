@@ -66,7 +66,10 @@ param(
     [int]$MaxArchiveDepth = 6,
     [int]$MaxFindingsPerFile = 20,
     [switch]$GitTracked,
-    [switch]$ShowMatchHashes
+    [switch]$ShowMatchHashes,
+    [switch]$SkipGitleaks,
+    [string]$GitleaksAllowlist,
+    [string]$GitleaksConfig
 )
 
 Set-StrictMode -Version Latest
@@ -79,11 +82,13 @@ if ($ShowMatchHashes -and ($env:CI -or $env:GITHUB_ACTIONS)) {
 
 $sourceExtensions = '.cs', '.csx', '.razor', '.cshtml', '.xaml', '.axaml'
 $buildOutputSegments = 'bin', 'obj', 'TestResults'
-$ruleNames = 'PasswordValue', 'UserIdValue', 'SecretValue', 'SqlHostCreds', 'Jwt', 'PrivateKey'
+$ruleNames = 'PasswordValue', 'UserIdValue', 'SecretValue', 'SqlHostCreds', 'UrlCredentials', 'Jwt', 'PrivateKey'
 if (-not $RepoRoot) { $RepoRoot = Split-Path -Parent $PSScriptRoot }
 $RepoRoot = [IO.Path]::GetFullPath($RepoRoot).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
 if (-not $Allowlist) { $Allowlist = Join-Path $PSScriptRoot 'secret-scan-allowlist.txt' }
 if (-not $BinaryAllowlist) { $BinaryAllowlist = Join-Path $PSScriptRoot 'secret-scan-binary-allowlist.txt' }
+if (-not $GitleaksAllowlist) { $GitleaksAllowlist = Join-Path $PSScriptRoot 'gitleaks-allowlist.txt' }
+if (-not $GitleaksConfig) { $GitleaksConfig = Join-Path $PSScriptRoot 'gitleaks-lifestream.toml' }
 
 # ---- the engine (tools/scan-engine.cs). LIFESTREAM_SCAN_ENGINE_CACHE (a folder) keeps the compiled DLL between runs (tests).
 if (-not ('LifestreamScan.Engine' -as [type])) {
@@ -139,6 +144,23 @@ if (Test-Path -LiteralPath $BinaryAllowlist) {
     }
 }
 
+# Second scanner (gitleaks): file name|rule|sha256 of the matched text, same rules as above (never the product's own files).
+$gitleaksAllow = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+if (Test-Path -LiteralPath $GitleaksAllowlist) {
+    $n = 0
+    foreach ($raw in Get-Content -LiteralPath $GitleaksAllowlist) {
+        $n++
+        $line = $raw.Trim()
+        if (-not $line -or $line.StartsWith('#')) { continue }
+        $parts = $line -split '\|'
+        if ($parts.Count -ne 3 -or $parts[2] -notmatch '^[0-9a-f]{64}$' -or -not $parts[1].Trim()) { Write-Host "ERROR: ${GitleaksAllowlist}:$n is not file-name|rule|sha256"; exit 2 }
+        $name = $parts[0].Trim()
+        if (-not $name -or $name -match '[\\/*?:]' -or $name.Contains('..')) { Write-Host "ERROR: ${GitleaksAllowlist}:$n '$name' must be a plain file name (no path, no wildcard)"; exit 2 }
+        if ($name -match '^(?i)(lifestream|appsettings)') { Write-Host "ERROR: ${GitleaksAllowlist}:$n lists $name; the product's own files (Lifestream*, appsettings*) may not be allow-listed"; exit 2 }
+        [void]$gitleaksAllow.Add(('{0}|{1}|{2}' -f $name.ToLowerInvariant(), $parts[1].Trim(), $parts[2]))
+    }
+}
+
 # ---- what to scan
 function Get-SourceRel([string]$full) {
     if (-not ($sourceExtensions -contains [IO.Path]::GetExtension($full).ToLowerInvariant())) { return $null }
@@ -183,13 +205,70 @@ foreach ($p in $expanded) {
 }
 if ($files.Count -eq 0) { Write-Host "ERROR: no files found under: $($Path -join ', ')"; exit 2 }
 
-foreach ($file in $files) { $engine.ScanFile($file, (Get-SourceRel $file)) }
+# The second scanner runs on artifacts, not on the source tree (secret-scan.yml's gitleaks job covers the repository and its history).
+$useGitleaks = -not $GitTracked -and -not $SkipGitleaks
+$dumpDir = $null
+if ($useGitleaks) {
+    $dumpDir = Join-Path ([IO.Path]::GetTempPath()) ('lifestream-scan-dump-' + [guid]::NewGuid().ToString('N'))
+    $engine.DumpDir = $dumpDir
+}
+$gitleaksFindings = [System.Collections.Generic.List[object]]::new()
+$gitleaksErrors = [System.Collections.Generic.List[string]]::new()
+$gitleaksAllowListed = 0
+$gitleaksUsed = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+$gitleaksRuns = 0
+try {
+    foreach ($file in $files) { $engine.ScanFile($file, (Get-SourceRel $file)) }
+    if ($useGitleaks) {
+        $glExe = @(& (Join-Path $PSScriptRoot 'fetch-gitleaks.ps1')) | Select-Object -Last 1
+        if (-not $glExe -or -not (Test-Path -LiteralPath ([string]$glExe))) { Write-Host 'ERROR: the second scanner (gitleaks) is not available: tools/fetch-gitleaks.ps1 failed'; exit 2 }
+        $glExe = [string]$glExe
+        # (a) the artifact folders and files as they are (gitleaks opens archives itself), (b) the text dump of every string the
+        # extractor found: metadata, resources, BAML, decompressed resources, archive text members, UTF-16 text decoded.
+        $targets = [System.Collections.Generic.List[object]]::new()
+        foreach ($p in $expanded) { $targets.Add(@{ Path = (Resolve-Path -LiteralPath $p).Path; Kind = 'artifact' }) }
+        if (Test-Path -LiteralPath $dumpDir) { $targets.Add(@{ Path = $dumpDir; Kind = 'dump' }) }
+        foreach ($t in $targets) {
+            $gitleaksRuns++
+            $reportFile = Join-Path ([IO.Path]::GetTempPath()) ('lifestream-gitleaks-' + [guid]::NewGuid().ToString('N') + '.json')
+            try {
+                # --exit-code 99: 99 = leaks found, 0 = clean, anything else (1 = usage or runtime error) = the scan itself failed.
+                $out = & $glExe dir $t.Path -c $GitleaksConfig --no-banner --no-color --log-level error --max-archive-depth $MaxArchiveDepth `
+                    -f json -r $reportFile --exit-code 99 2>&1 | Out-String
+                $code = $LASTEXITCODE
+                if ($code -ne 0 -and $code -ne 99) { $gitleaksErrors.Add("gitleaks failed (exit $code) on $($t.Kind) $($t.Path): $(($out -split "`n" | Select-Object -First 3) -join ' ')"); continue }
+                if ($code -eq 99) {
+                    $items = @(Get-Content -LiteralPath $reportFile -Raw | ConvertFrom-Json)
+                    foreach ($it in $items) {
+                        $label = [string]$it.File
+                        if ($t.Kind -eq 'dump') {
+                            # The dump file holds "<marker> <label>" lines; the finding belongs to the nearest one above its line.
+                            $markerPrefix = $engine.DumpMarker + ' '
+                            $cur = $null; $ln = 0
+                            foreach ($l in [IO.File]::ReadLines([string]$it.File)) { $ln++; if ($ln -gt $it.StartLine) { break }; if ($l.StartsWith($markerPrefix)) { $cur = $l.Substring($markerPrefix.Length) } }
+                            $label = if ($cur) { $cur } else { "(string dump $([IO.Path]::GetFileName($label)))" }
+                        }
+                        $leaf = ($label -split '[\\/!]' | Where-Object { $_ } | Select-Object -Last 1)
+                        $sha = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes([string]$it.Match))).ToLowerInvariant()
+                        $entry = '{0}|{1}|{2}' -f $leaf.ToLowerInvariant(), $it.RuleID, $sha
+                        if ($gitleaksAllow.Contains($entry)) { $gitleaksAllowListed++; [void]$gitleaksUsed.Add($entry); continue }
+                        $f = [ordered]@{ scanner = 'gitleaks'; file = $label; rule = [string]$it.RuleID; line = [int]$it.StartLine; source = $t.Kind }
+                        if ($ShowMatchHashes) { $f.matchSha256 = $sha }
+                        $gitleaksFindings.Add([pscustomobject]$f)
+                    }
+                }
+            } finally { Remove-Item -LiteralPath $reportFile -Force -ErrorAction SilentlyContinue }
+        }
+    }
+} finally {
+    if ($dumpDir) { Remove-Item -LiteralPath $dumpDir -Recurse -Force -ErrorAction SilentlyContinue }
+}
 $started.Stop()
 
 $findings = @($engine.Findings | ForEach-Object {
     $f = [ordered]@{ file = $_.File; rule = $_.Rule; encoding = $_.Encoding; offset = $_.Offset }
     if ($_.Line -gt 0) { $f.line = $_.Line }
-    if ($_.MatchSha256) { $f.matchSha256 = $_.MatchSha256 }
+    if ($_.MatchSha256) { $f.matchSha256 = $_.MatchSha256; $f.matchText = $_.MatchText }
     if ($_.LineSha256) { $f.lineSha256 = $_.LineSha256 }
     [pscustomobject]$f
 })
@@ -197,8 +276,9 @@ if ($ReportPath) {
     [pscustomobject]@{
         paths = @($Path); filesScanned = $engine.FilesScanned; bytesScanned = $engine.BytesScanned; seconds = [Math]::Round($started.Elapsed.TotalSeconds, 1)
         findings = $findings; findingsOverCap = $engine.FindingsOverCap; allowListed = $engine.AllowListed; allowListEntriesUsed = @($engine.AllowUsed | Sort-Object)
-        errors = @($engine.Errors); metadataErrors = $engine.MetadataErrors; trackedBuildOutput = @($trackedBuildOutput)
-    } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $ReportPath -Encoding utf8
+        errors = @($engine.Errors) + @($gitleaksErrors); metadataErrors = $engine.MetadataErrors; trackedBuildOutput = @($trackedBuildOutput)
+        gitleaks = [pscustomobject]@{ ran = $useGitleaks; runs = $gitleaksRuns; findings = @($gitleaksFindings); allowListed = $gitleaksAllowListed; allowListEntriesUsed = @($gitleaksUsed | Sort-Object); dumpedStrings = $engine.DumpedStrings }
+    } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $ReportPath -Encoding utf8
 }
 
 foreach ($f in $findings) {
@@ -209,9 +289,15 @@ foreach ($f in $findings) {
     Write-Host ("FINDING rule={0} encoding={1} offset={2} file={3}{4}" -f $f.rule, $f.encoding, $f.offset, $f.file, $tail)
 }
 if ($engine.FindingsOverCap -gt 0) { Write-Host "($($engine.FindingsOverCap) more finding(s) not listed: over $MaxFindingsPerFile per file)" }
+foreach ($f in $gitleaksFindings) {
+    $tail = if ($f.PSObject.Properties['matchSha256']) { ' matchSha256={0}' -f $f.matchSha256 } else { '' }
+    Write-Host ("FINDING scanner=gitleaks rule={0} line={1} file={2}{3}" -f $f.rule, $f.line, $f.file, $tail)
+}
+foreach ($e in $gitleaksErrors) { Write-Host "ERROR: $e" }
 foreach ($t in $trackedBuildOutput) { Write-Host "ERROR: tracked build output: $t (bin, obj and TestResults folders must not be in git; run git rm --cached on it)" }
 foreach ($e in $engine.Errors) { Write-Host "ERROR: $e" }
-Write-Host ("scanned {0} files, {1:N0} bytes: {2} finding(s), {3} error(s), {4} allow-listed, {5:N1} s" -f $engine.FilesScanned, $engine.BytesScanned, ($findings.Count + $engine.FindingsOverCap), $engine.Errors.Count, $engine.AllowListed, $started.Elapsed.TotalSeconds)
-if ($findings.Count -gt 0 -or $trackedBuildOutput.Count -gt 0) { exit 1 }
-if ($engine.Errors.Count -gt 0) { exit 2 }
+$glNote = if ($useGitleaks) { "$($gitleaksFindings.Count) finding(s) in $gitleaksRuns run(s), $($engine.DumpedStrings) strings dumped" } else { 'not run' }
+Write-Host ("scanned {0} files, {1:N0} bytes: {2} finding(s), {3} error(s), {4} allow-listed, {5:N1} s; gitleaks: {6}" -f $engine.FilesScanned, $engine.BytesScanned, ($findings.Count + $engine.FindingsOverCap + $gitleaksFindings.Count), ($engine.Errors.Count + $gitleaksErrors.Count), ($engine.AllowListed + $gitleaksAllowListed), $started.Elapsed.TotalSeconds, $glNote)
+if ($findings.Count -gt 0 -or $engine.FindingsOverCap -gt 0 -or $gitleaksFindings.Count -gt 0 -or $trackedBuildOutput.Count -gt 0) { exit 1 }
+if ($engine.Errors.Count -gt 0 -or $gitleaksErrors.Count -gt 0) { exit 2 }
 exit 0

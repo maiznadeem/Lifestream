@@ -250,23 +250,47 @@ Describe 'actionlint passes on every workflow, ci.yml included' {
 }
 
 Describe 'INFRA-01 workflows scan the logs: docker build output, vpk output, test logs and captures before upload' {
-    It 'ci.yml keeps the output of every dotnet test run and scans it (even when tests fail), in both jobs' {
+    It 'ci.yml writes the output of every dotnet build and test run to a file, scans it (both scanners) before it is printed, and scans the log folder even when tests fail, in both jobs' {
         foreach ($jobName in 'api', 'desktop') {
             $job = $script:Ci.Yaml.jobs[$jobName]
             $test = StepIndex $job { param($s) (Run $s) -match 'dotnet test' }
+            $build = StepIndex $job { param($s) (Run $s) -match 'dotnet build' }
             $scan = StepIndex $job { param($s) (Run $s) -match 'tools/scan-artifacts\.ps1 -Path "\$env:RUNNER_TEMP/test-logs"' }
             $test | Should -BeGreaterThan -1 -Because $jobName
+            $build | Should -BeGreaterThan -1 -Because $jobName
             $scan | Should -BeGreaterThan $test -Because $jobName
             $steps = @($job.steps)
             $steps[$scan].if | Should -Match 'always\(\)' -Because $jobName
-            $runs = [regex]::Matches((Run $steps[$test]), '(?m)^\s*dotnet test .*$')
-            $runs.Count | Should -BeGreaterThan 0
-            foreach ($m in $runs) { $m.Value | Should -Match '2>&1 \| (tee|Tee-Object) "\$(env:)?RUNNER_TEMP/test-logs/' -Because $m.Value }
+            # no command prints live: every dotnet command runs inside tools/run-logged.ps1 (file first, scan, then print)
+            foreach ($i in $build, $test) {
+                $lines = (Run $steps[$i]) -split "`n" | Where-Object { $_ -match 'dotnet (build|test)' }
+                foreach ($l in $lines) { $l | Should -Match 'run-logged\.ps1 .*-Log "\$env:RUNNER_TEMP/test-logs/.*-Command' -Because "$jobName`: $l" }
+            }
         }
-        # bash steps fail on the first failing pipeline only with pipefail (shell: bash); the pwsh step checks each exit code.
         $apiTest = @($script:Ci.Yaml.jobs.api.steps)[(StepIndex $script:Ci.Yaml.jobs.api { param($s) (Run $s) -match 'dotnet test' })]
-        $apiTest.shell | Should -Be 'bash'
+        (Run $apiTest) | Should -Match 'if \(\$failed -gt 0\) \{ exit 1 \}'
         (Run @($script:Ci.Yaml.jobs.desktop.steps)[(StepIndex $script:Ci.Yaml.jobs.desktop { param($s) (Run $s) -match 'dotnet test' })]) | Should -Match 'if \(\$client -ne 0 -or \$desktop -ne 0\) \{ exit 1 \}'
+    }
+
+    It 'screenshots.yml writes its build and generation output to files and uploads only after a clean scan of the whole upload folder' {
+        $shots = Load 'screenshots.yml'
+        $wf = $shots.Text
+        $job = $shots.Yaml.jobs.screenshots
+        $steps = @($job.steps)
+        $scan = StepIndex $job { param($s) (Run $s) -match 'scan-artifacts\.ps1 -Path "\$env:RUNNER_TEMP/screenshots"' }
+        $upload = StepIndex $job { param($s) (Uses $s) -like 'actions/upload-artifact*' }
+        $scan | Should -BeGreaterThan -1
+        $upload | Should -BeGreaterThan $scan
+        $steps[$scan].id | Should -Be 'scan-screenshots'
+        $steps[$upload].if | Should -Match "steps\.scan-screenshots\.outcome == 'success'"
+        $steps[$upload].with.path | Should -Match 'runner\.temp \}\}/screenshots$'
+        foreach ($m in [regex]::Matches($wf, '(?m)^\s*run: .*(dotnet build|generate-screenshots).*$')) { $m.Value | Should -Match 'run-logged\.ps1' -Because $m.Value }
+    }
+
+    It 'no workflow turns the second scanner off' {
+        foreach ($f in Get-ChildItem $script:Dir -Filter '*.yml') {
+            (Get-Content -Raw $f.FullName) | Should -Not -Match 'SkipGitleaks' -Because $f.Name
+        }
     }
 
     It 'ci.yml scans the render captures with the test logs and uploads them only when that scan passed' {

@@ -16,7 +16,7 @@ BeforeAll {
 
     function script:Invoke-Scan([string]$Path, [string[]]$Extra = @()) {
         # A child process so `exit` codes are what CI would see.
-        $out = & $script:Pwsh @script:PwshArgs $script:Scanner -Path $Path @Extra 2>&1 | Out-String
+        $out = & $script:Pwsh @script:PwshArgs $script:Scanner -Path $Path -SkipGitleaks @Extra 2>&1 | Out-String
         [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = $out }
     }
 
@@ -150,10 +150,11 @@ Describe 'scan-artifacts.ps1' {
             ('"' + $script:PwKey + '"'),
             ($script:PwKey + '{0}'),
             ($script:PwKey + '{0};User ID={1}'),
-            ($script:PwKey + '${DB_PASSWORD}'),
-            ($script:PwKey + '$(DbPassword);'),
+            ($script:PwKey + '${PASSWORD}'),
+            ($script:PwKey + '$(Password);'),
             ($script:PwKey + '%PASSWORD%'),
-            ($script:PwKey + '<your password here>'),
+            ($script:PwKey + '<password>'),
+            ($script:PwKey + '***'),
             'Authentication=Active Directory Managed Identity;Server=tcp:x.database.windows.net'
         )
         Set-Content -Encoding ascii (Join-Path $d 'doc.txt') $lines
@@ -265,7 +266,7 @@ Describe 'scan-artifacts.ps1' {
         $clean = New-Folder 'multi-clean'; Set-Content (Join-Path $clean 'a.txt') 'nothing here'
         $dirty = New-Folder 'multi-dirty'; Set-Content -Encoding ascii (Join-Path $dirty 'b.txt') ($script:PwKey + $script:Secret)
         (Invoke-Scan (Join-Path $dirty 'b.txt')).ExitCode | Should -Be 1
-        $out = & $script:Pwsh @script:PwshArgs $script:Scanner -Path $clean, $dirty 2>&1 | Out-String
+        $out = & $script:Pwsh @script:PwshArgs $script:Scanner -Path $clean, $dirty -SkipGitleaks 2>&1 | Out-String
         $LASTEXITCODE | Should -Be 1 -Because $out
     }
 
@@ -350,7 +351,7 @@ Describe 'INFRA-01 binary mode: keywords found anywhere, decided on the right si
             @{ Enc = $enc; Name = 'euro-first';        Text = ('Pass' + 'word=') + [string][char]0x20AC + ('Zq7x' + 'K2mP9') }
             @{ Enc = $enc; Name = 'brace-then-bang';   Text = ('P' + 'wd=') + '{abc}!' + ('Zq7x' + 'K2mP9') }
             @{ Enc = $enc; Name = 'percent-then';      Text = ('Pass' + 'word=') + '%abc%-' + ('Zq7x' + 'K2mP9') }
-            @{ Enc = $enc; Name = 'odbc-brace';        Text = 'Driver={ODBC Driver 18 for SQL Server};Server=x;UID=sa;' + ('P' + 'wd=') + '{Summer-2024};' }
+            @{ Enc = $enc; Name = 'odbc-brace';        Text = 'Driver={ODBC Driver 18 for SQL Server};Server=x;UI' + 'D=sa;' + ('P' + 'wd=') + '{Summer-2024};' }
             @{ Enc = $enc; Name = 'short-in-conn-str'; Text = 'Server=tcp:x;Database=BloodBank;' + ('P' + 'wd=') + 'ab1;' }
             @{ Enc = $enc; Name = 'json-colon';        Text = '{"' + ('pass' + 'word') + '": "' + ('Zq7x' + 'K2mP9') + '"}' }
             @{ Enc = $enc; Name = 'sa-env';            Text = 'MSSQL_SA_' + ('PASS' + 'WORD') + '=' + ('Zq7x' + 'K2mP9') }
@@ -367,11 +368,12 @@ Describe 'INFRA-01 binary mode: keywords found anywhere, decided on the right si
         $r.Output | Should -Not -Match 'Summer-2024'
     }
 
-    It 'does not flag a placeholder or template value in a binary file: <Text>' -ForEach @(
-        @{ Text = ('Pass' + 'word={0}') }, @{ Text = ('Pass' + 'word=%s') }, @{ Text = ('Pass' + 'word=${DB_PASSWORD}') }, @{ Text = ('Pass' + 'word=$(DbPassword)') }
-        @{ Text = ('Pass' + 'word=%PASSWORD%') }, @{ Text = ('Pass' + 'word=<your password here>') }, @{ Text = ('Pass' + 'word=********') }
-        @{ Text = ('Server={0};Database={1};User ' + 'ID={2};Pass' + 'word={3};') }, @{ Text = ('UID=%s%u%s') }, @{ Text = ('uid=%lu)') }
-        @{ Text = ('Pass' + 'word="{Binding Pass' + 'word, Mode=TwoWay}"') }, @{ Text = ('uid: { $uid }') }
+    # Only the exact list of tools/scan-engine.cs PlaceholderValues is skipped (tests/infra/ScanGitleaks.Tests.ps1 pins it and tests that
+    # everything else is flagged). Format strings, XAML markup and the like in third-party files are reviewed and allow-listed by hash.
+    It 'does not flag an exact placeholder value in a binary file: <Text>' -ForEach @(
+        @{ Text = ('Pass' + 'word={0}') }, @{ Text = ('Pass' + 'word=%PASSWORD%') }, @{ Text = ('Pass' + 'word=${PASSWORD}') }, @{ Text = ('Pass' + 'word=$(Password)') }
+        @{ Text = ('Pass' + 'word=<password>') }, @{ Text = ('Pass' + 'word=***') }
+        @{ Text = ('Server={0};Database={1};User ' + 'ID={2};Pass' + 'word={3};') }
         @{ Text = ('urn:uuid:C2F41010-65B3-11D1-A29F-00AA00C14882/') }
     ) {
         $d = New-Folder ('placeholder-' + [guid]::NewGuid().ToString('N'))

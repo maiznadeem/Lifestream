@@ -20,7 +20,7 @@ BeforeAll {
     else { $script:Pwsh = $hostPath; $script:PwshArgs = @('-NoProfile', '-File') }
 
     function script:Invoke-Scan([string]$Path, [string[]]$Extra = @()) {
-        $out = & $script:Pwsh @script:PwshArgs $script:Scanner -Path $Path @Extra 2>&1 | Out-String
+        $out = & $script:Pwsh @script:PwshArgs $script:Scanner -Path $Path -SkipGitleaks @Extra 2>&1 | Out-String
         [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = $out }
     }
     function script:Get-Sha([string]$s) { [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($s))).ToLowerInvariant() }

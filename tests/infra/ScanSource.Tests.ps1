@@ -12,7 +12,7 @@ BeforeAll {
 
     function script:Invoke-Scan([string[]]$ScanArgs, [string]$WorkDir = $script:Root) {
         Push-Location $WorkDir
-        try { $out = & $script:Pwsh @script:PwshArgs $script:Scanner @ScanArgs 2>&1 | Out-String; $code = $LASTEXITCODE } finally { Pop-Location }
+        try { $out = & $script:Pwsh @script:PwshArgs $script:Scanner @ScanArgs -SkipGitleaks 2>&1 | Out-String; $code = $LASTEXITCODE } finally { Pop-Location }
         [pscustomobject]@{ ExitCode = $code; Output = $out }
     }
 

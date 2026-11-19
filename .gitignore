@@ -48,3 +48,6 @@ coverage/
 tests/captures/*.tmp
 .dotnet/
 .vpk/
+
+# Second scanner binary (downloaded by tools/fetch-gitleaks.ps1)
+tools/.bin/
