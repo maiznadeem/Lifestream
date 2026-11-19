@@ -127,12 +127,14 @@ public sealed class RenderTests
             var chart = host.Find<FrameworkElement>("DonationsFrame");
             var layout = DashboardLayout.Read(host, dashboard);
             return (Png: png, view.Breakpoint, view.IsRail, Attention: dashboard.Attention.Select(a => a.Title).ToList(), Today: dashboard.Today.Count, Greeting: dashboard.Greeting,
+                FirstTimers: dashboard.Today.Where(a => a.IsFirstTime).Select(a => a.DonorName).ToList(),
                 AttentionBounds: Hosted.BoundsOf(attention, host.Element), ChartBounds: Hosted.BoundsOf(chart, host.Element), Badges: shell.Items.Where(i => i.Badge is not null).Select(i => $"{i.Title} {i.Badge}").ToList(),
                 Layout: layout);
         });
 
         Assert.Equal("Good morning, Hana", facts.Greeting);
         Assert.Equal(8, facts.Today);
+        Assert.Equal(["Elio Bergström"], facts.FirstTimers); // from the appointment list's own mark: the dashboard asks for no donor
         Assert.Equal("O\u2212 is out of stock", facts.Attention[0]);
         Assert.Contains("6 of 8 blood groups are below 10 units", facts.Attention);
         Assert.Contains("Stock 6", facts.Badges);

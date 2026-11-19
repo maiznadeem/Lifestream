@@ -223,9 +223,11 @@ public sealed class ShellRenderTests
             return;
         }
 
+        // Staff: the second person, whose details the demo data answers with (the page-area render opens the same one).
+        var row = page is Lifestream.Client.Features.Staff.StaffViewModel && items.Count > 1 ? items[1] : items[0];
         Hosted.Await(() =>
         {
-            selected.SetValue(page, items[0]);
+            selected.SetValue(page, row);
             return type.GetProperty("PendingDetail", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)?.GetValue(page) as Task ?? Task.CompletedTask;
         });
     }

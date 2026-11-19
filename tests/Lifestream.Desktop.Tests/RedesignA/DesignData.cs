@@ -4,7 +4,6 @@ using Lifestream.Contracts;
 using Lifestream.Contracts.Appointments;
 using Lifestream.Contracts.Auth;
 using Lifestream.Contracts.Dashboard;
-using Lifestream.Contracts.Donors;
 using Lifestream.Contracts.Health;
 using Lifestream.Contracts.Profile;
 using Lifestream.Contracts.Requests;
@@ -65,7 +64,8 @@ public static class DesignData
         {
             var parts = a.Time.Split(':');
             var slot = new DateTime(2026, 11, 19, int.Parse(parts[0], System.Globalization.CultureInfo.InvariantCulture), int.Parse(parts[1], System.Globalization.CultureInfo.InvariantCulture), 0, DateTimeKind.Utc);
-            return new AppointmentListItem(900 + i, a.Donor, a.Name, a.Group, slot.AddDays(-5), slot, a.Status);
+            // Elio Bergström (137) has not donated before: the list says so itself, which is where the dashboard reads it.
+            return new AppointmentListItem(900 + i, a.Donor, a.Name, a.Group, slot.AddDays(-5), slot, a.Status) { DonorFirstTime = a.Donor == 137 };
         }).ToList();
         api.On("GetAppointmentsAsync", ApiResult<PagedResult<AppointmentListItem>>.Ok(new PagedResult<AppointmentListItem>(appointments, appointments.Count, 1, 50)));
 
@@ -79,8 +79,6 @@ public static class DesignData
         };
         api.On("GetRequestsAsync", ApiResult<PagedResult<RequestListItem>>.Ok(new PagedResult<RequestListItem>(requests, 40, 1, 50)));
 
-        api.DonorById = id => ApiResult<DonorDetail>.Ok(new DonorDetail(id, "Donor " + id, new DateOnly(1990, 1, 1), Gender.Other, BloodType.OPos, null, null, DonorFrequency.Regular,
-            id == 137 ? null : new DateOnly(2026, 6, 1), "rv"));
         api.On("GetProfileAsync", ApiResult<ProfileResponse>.Ok(new ProfileResponse(7, "Hana Greenleaf", "hana.greenleaf", Designation.Doctor, Shift.Morning, "+1-555-0100", false, "rv")));
         api.On("GetReadinessAsync", ApiResult<ReadinessResponse>.Ok(new ReadinessResponse(DatabaseStates.Ready)));
     }

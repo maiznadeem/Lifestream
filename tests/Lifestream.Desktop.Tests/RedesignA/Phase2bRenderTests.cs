@@ -372,8 +372,15 @@ public sealed class Phase2bRenderTests
                         break;
                     case StaffViewModel staff:
                         Hosted.Await(() => staff.LoadAsync());
-                        staff.SalaryFromText = "2000";
-                        staff.SalaryToText = "3500";
+
+                        // As typing in the popup does it: on the UI's own context, so the reload the filter starts comes back to it. (Set from plain test
+                        // code, the reload finished on a pool thread and the list showed "couldn't show this data": the fix round's capture had that.)
+                        Hosted.Await(() =>
+                        {
+                            staff.SalaryFromText = "2000";
+                            staff.SalaryToText = "3500";
+                            return staff.PendingRefresh;
+                        });
                         break;
                     case ProfileViewModel profile:
                         Hosted.Await(() => profile.LoadAsync());
@@ -404,7 +411,9 @@ public sealed class Phase2bRenderTests
                     File.WriteAllBytes(Path.Combine(Directory, $"staff-salary-popup-{theme}.png"), popupHost.Capture());
                 }
 
-                return (Png: png, Canvas: ThemeService.ColorOf("Color.Canvas"), Texts: texts, Trimmed: trimmed);
+                var loadState = view.DataContext.GetType().GetProperty("State")?.GetValue(view.DataContext) as Client.Common.LoadState?;
+                var rows = host.All<DataGridRow>().Count(r => r.IsVisible);
+                return (Png: png, Canvas: ThemeService.ColorOf("Color.Canvas"), Texts: texts, Trimmed: trimmed, State: loadState, Rows: rows);
             }
             finally
             {
@@ -414,6 +423,7 @@ public sealed class Phase2bRenderTests
 
         Assert.True(StaHost.CountPixelsNear(facts.Png, facts.Canvas.R, facts.Canvas.G, facts.Canvas.B, 1) > 5000, "the theme's canvas colour is missing");
         Assert.True(facts.Trimmed.Count == 0, "cut off without a tooltip: " + string.Join(" | ", facts.Trimmed));
+        Assert.True(facts.State is null or Client.Common.LoadState.Ready, $"the screen is {facts.State}, not loaded: the render shows a state nobody asked for");
         switch (state)
         {
             case "stock-matrix":
@@ -426,6 +436,7 @@ public sealed class Phase2bRenderTests
                 break;
             case "staff-salary":
                 Assert.Contains("Salary: 2,000–3,500", facts.Texts);
+                Assert.True(facts.Rows > 0, "the filtered staff list shows no rows");
                 break;
             case "staff-editor":
                 Assert.Contains("New staff member", facts.Texts);
