@@ -7,10 +7,14 @@
   <Border x:Name="Root" Padding="{DynamicResource Inset.H12V8}" Background="{DynamicResource Brush.SurfaceRaised}" BorderBrush="{DynamicResource Brush.StatusInfo}" BorderThickness="1"
           CornerRadius="{DynamicResource Radius.Control}" AutomationProperties.LiveSetting="Polite" AutomationProperties.Name="Waking up the server">
     <StackPanel>
-      <StackPanel Orientation="Horizontal">
+      <Grid>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto" />
+          <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
         <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE895;" Foreground="{DynamicResource Brush.StatusInfo}" VerticalAlignment="Top" Margin="{DynamicResource Inset.T2R10}" />
-        <TextBlock x:Name="Message" Style="{DynamicResource Text.Body}" TextWrapping="Wrap" MaxWidth="360" />
-      </StackPanel>
+        <TextBlock x:Name="Message" Grid.Column="1" Style="{DynamicResource Text.Body}" TextWrapping="Wrap" />
+      </Grid>
       <Button x:Name="CancelWakingButton" Style="{DynamicResource Button.Secondary}" Content="Cancel" Command="{Binding CancelCommand, RelativeSource={RelativeSource AncestorType=controls:WakingNotice}}"
               HorizontalAlignment="Left" Margin="{DynamicResource Inset.T8}" MinHeight="32" AutomationProperties.Name="Cancel the request" />
     </StackPanel>

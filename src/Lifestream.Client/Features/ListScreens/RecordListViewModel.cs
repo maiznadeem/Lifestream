@@ -66,6 +66,12 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
             _detailCts?.Cancel();
             return Task.CompletedTask;
         });
+        CancelWakingCommand = new AsyncRelayCommand(_ =>
+        {
+            _detailCts?.Cancel();
+            Operations.Cancel();
+            return Task.CompletedTask;
+        });
     }
 
     /// <summary>The list's scroll position, kept in the session's <see cref="ListViewState"/> (SHELL-24).</summary>
@@ -119,6 +125,16 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
     /// <summary>The "Cancel" of the detail pane's waking state: stops the detail request itself and offers Retry (SHELL-07).</summary>
     public AsyncRelayCommand CancelDetailCommand { get; }
 
+    /// <summary>
+    /// The "Cancel" of the waking notice of the screen's detail pane: stops whatever is waiting on the server, the detail request or any other operation of
+    /// the screen (Delete, Undo, Cancel appointment, Cancel request, opening a linked record), down to the HTTP request (SHELL-07).
+    /// </summary>
+    [NoOperationRunner("It only cancels the screen's operations; it makes no API call.")]
+    public AsyncRelayCommand CancelWakingCommand { get; }
+
+    /// <summary>True while the detail request or any other operation of this screen is waiting on a waking server: the pane shows "Waking up the server" with Cancel (SHELL-07).</summary>
+    public bool ShowWakingNotice => IsDetailWaking || IsOperationWaking;
+
     /// <summary>Ctrl+N opens the new-record drawer.</summary>
     public override AsyncRelayCommand? NewCommand => AddCommand;
 
@@ -139,7 +155,7 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
     public partial TDetail? Detail { get; set; }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasDetail), nameof(ShowDetailSkeleton), nameof(HasDetailError), nameof(IsDetailWaking))]
+    [NotifyPropertyChangedFor(nameof(HasDetail), nameof(ShowDetailSkeleton), nameof(HasDetailError), nameof(IsDetailWaking), nameof(ShowWakingNotice))]
     public partial LoadState DetailState { get; set; } = LoadState.Ready;
 
     /// <summary>True while the detail request is waiting on a waking server (after 3 s): the pane shows "Waking up the server" with Cancel (SHELL-07).</summary>
@@ -391,6 +407,7 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
     protected override void OnOperationWakingChanged(bool isWaking)
     {
         base.OnOperationWakingChanged(isWaking);
+        OnPropertyChanged(nameof(ShowWakingNotice));
         if (isWaking && DetailState == LoadState.Loading && _detailCts is not null)
         {
             DetailState = LoadState.Waking;

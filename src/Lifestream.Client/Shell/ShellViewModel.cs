@@ -79,7 +79,14 @@ public sealed partial class ShellViewModel : ViewModelBase
         ProfileCommand = Command(_ => NavigateToTypeAsync(NavigationCatalog.ProfileViewModelType, "profile"));
         ChangePasswordCommand = Command(_ => NavigateToTypeAsync(NavigationCatalog.ProfileViewModelType, "change-password"));
         SignOutCommand = Command(_ => _flow.SignOutAsync());
-        ApplyUpdateCommand = Command(ct => Updates.ApplyAsync(ct));
+        ApplyUpdateCommand = Command(async ct =>
+        {
+            // Applying the update restarts the app at once, which would throw away a form with unsaved changes: ask first, like sign-out and closing the window (SHELL-24).
+            if (await Navigation.ConfirmDiscardAsync().ConfigureAwait(true))
+            {
+                await Updates.ApplyAsync(ct).ConfigureAwait(true);
+            }
+        });
         BackToDashboardCommand = Command(_ => OpenAsync(_catalog[0]));
         SearchCommand = Command(_ =>
         {
