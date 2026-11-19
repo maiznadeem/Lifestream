@@ -54,14 +54,8 @@ public sealed partial class ProfileViewModel : FormViewModelBase, INavigationPar
     private byte[]? _replacedPhoto;
     private bool _openPasswordDialog;
 
-    public ProfileViewModel(ILifestreamApiClient api, IToastService toasts, IPhotoPicker photos, IChangePasswordPrompt passwords)
-        : this(api, toasts, photos, passwords, null)
-    {
-    }
-
-    /// <summary>The screen as the app makes it: <paramref name="preferences"/> holds the appearance choice (light, dark or match Windows), which the app applies at once.</summary>
-    [Microsoft.Extensions.DependencyInjection.ActivatorUtilitiesConstructor]
-    public ProfileViewModel(ILifestreamApiClient api, IToastService toasts, IPhotoPicker photos, IChangePasswordPrompt passwords, UiPreferences? preferences)
+    /// <summary>Creates the screen; <paramref name="preferences"/> holds the appearance choice (light, dark or match Windows), which the app applies at once (without it the Appearance section is hidden).</summary>
+    public ProfileViewModel(ILifestreamApiClient api, IToastService toasts, IPhotoPicker photos, IChangePasswordPrompt passwords, UiPreferences? preferences = null)
     {
         _api = api;
         _preferences = preferences;

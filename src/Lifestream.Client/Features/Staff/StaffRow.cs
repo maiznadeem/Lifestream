@@ -71,4 +71,7 @@ public sealed partial class StaffRow : ObservableObject
 
     /// <summary>True the first time it is called for a row with a photo, so the photo is fetched once, however often the row is shown again.</summary>
     internal bool ClaimPhotoRequest() => HasPhoto && Interlocked.Exchange(ref _requested, 1) == 0;
+
+    /// <summary>Lets the row ask for its photo again (its request was cancelled before the photo arrived).</summary>
+    internal void ReleasePhotoRequest() => Interlocked.Exchange(ref _requested, 0);
 }

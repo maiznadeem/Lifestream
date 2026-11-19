@@ -75,20 +75,7 @@ public sealed class ReceiptsViewModel : SortedRecordListViewModel<ReceiptRow, Re
     private readonly IReceiptPrinter? _printer;
     private FilterOption<ReceiptKind> _kindFilter;
 
-    public ReceiptsViewModel(
-        ILifestreamApiClient api,
-        IListViewStateStore states,
-        IToastService toasts,
-        IDialogService dialogs,
-        IReceiptViewer viewer,
-        INavigationService navigation,
-        IUiDispatcher ui)
-        : this(api, states, toasts, dialogs, viewer, navigation, ui, null)
-    {
-    }
-
-    /// <summary>The screen as the app makes it: <paramref name="printer"/> lets the side panel print the selected receipt, or save it as a PDF, without opening it first.</summary>
-    [Microsoft.Extensions.DependencyInjection.ActivatorUtilitiesConstructor]
+    /// <summary>Creates the screen; <paramref name="printer"/> lets the side panel print the selected receipt, or save it as a PDF, without opening it first.</summary>
     public ReceiptsViewModel(
         ILifestreamApiClient api,
         IListViewStateStore states,
@@ -97,7 +84,7 @@ public sealed class ReceiptsViewModel : SortedRecordListViewModel<ReceiptRow, Re
         IReceiptViewer viewer,
         INavigationService navigation,
         IUiDispatcher ui,
-        IReceiptPrinter? printer)
+        IReceiptPrinter? printer = null)
         : base(states, "receipts", toasts, dialogs, ui)
     {
         _api = api;

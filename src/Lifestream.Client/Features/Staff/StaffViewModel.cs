@@ -24,7 +24,10 @@ public sealed partial class StaffViewModel : SortedRecordListViewModel<StaffRow,
     private readonly IFormDialogService _forms;
     private readonly ISessionService _session;
     private readonly SemaphoreSlim _photoGate = new(ConcurrentPhotoRequests);
-    private readonly CancellationTokenSource _photoCts = new();
+    private readonly HashSet<StaffRow> _deferredPhotos = [];
+    private readonly HashSet<StaffRow> _photosInFlight = [];
+    private IServerStatus? _resumeWatch;
+    private CancellationTokenSource _photoCts = new();
 
     public StaffViewModel(ILifestreamApiClient api, IListViewStateStore states, IToastService toasts, IDialogService dialogs, IFormDialogService forms, ISessionService session, IUiDispatcher ui)
         : base(states, "staff", toasts, dialogs, ui)
@@ -61,6 +64,11 @@ public sealed partial class StaffViewModel : SortedRecordListViewModel<StaffRow,
                 OnPropertyChanged(nameof(DetailStaffAccessText));
                 OnPropertyChanged(nameof(DetailSubtitle));
                 OnPropertyChanged(nameof(PanelOverline));
+            }
+
+            if (e.PropertyName == nameof(State))
+            {
+                OnStateChangedForPhotos();
             }
 
             if (e.PropertyName is nameof(SelectedItem) or nameof(Detail) or nameof(DetailState) or nameof(Editor))
@@ -228,20 +236,39 @@ public sealed partial class StaffViewModel : SortedRecordListViewModel<StaffRow,
     public async Task LoadPhotoAsync(StaffRow row)
     {
         ArgumentNullException.ThrowIfNull(row);
+        if (_disposed)
+        {
+            return;
+        }
+
+        if (State is LoadState.Loading or LoadState.Waking || _resumeWatch is not null)
+        {
+            // Rows shown while the list is (re)loading, or while the server is waking, wait for it: a photo request then would sit behind the load's waking banner, out of reach of
+            // its Cancel. They are fetched once the list is ready (OnStateChangedForPhotos).
+            _deferredPhotos.Add(row);
+            return;
+        }
+
         if (!row.ClaimPhotoRequest())
         {
             return;
         }
 
+        var token = _photoCts.Token;
+        _photosInFlight.Add(row);
         try
         {
-            await _photoGate.WaitAsync(_photoCts.Token).ConfigureAwait(true);
+            await _photoGate.WaitAsync(token).ConfigureAwait(true);
             try
             {
-                var result = await RunOperationAsync(ct => _api.GetStaffPhotoAsync(row.Id, ct), _photoCts.Token).ConfigureAwait(true);
+                var result = await RunOperationAsync(ct => _api.GetStaffPhotoAsync(row.Id, ct), token).ConfigureAwait(true);
                 if (result.IsOk)
                 {
                     row.Photo = result.Value;
+                }
+                else if (token.IsCancellationRequested)
+                {
+                    row.ReleasePhotoRequest();
                 }
             }
             finally
@@ -251,7 +278,85 @@ public sealed partial class StaffViewModel : SortedRecordListViewModel<StaffRow,
         }
         catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException)
         {
-            // The screen was left: nobody is waiting for the photo.
+            // A load started (the rows are being replaced), the server started waking, or the screen was left. The row may ask again.
+            row.ReleasePhotoRequest();
+        }
+        finally
+        {
+            _photosInFlight.Remove(row);
+        }
+    }
+
+    /// <summary>
+    /// A call of this screen waits on a waking server. Thumbnails are not worth waiting for: the photo requests in flight are cancelled at once (so no
+    /// request is left that the screen's Cancel can't reach), and the rows ask again when the server is awake.
+    /// </summary>
+    protected override void OnOperationWakingChanged(bool isWaking)
+    {
+        base.OnOperationWakingChanged(isWaking);
+        if (!isWaking || _disposed || _photosInFlight.Count == 0)
+        {
+            return;
+        }
+
+        _deferredPhotos.UnionWith(_photosInFlight);
+        _photoCts.Cancel();
+        _photoCts.Dispose();
+        _photoCts = new CancellationTokenSource();
+        if (_resumeWatch is null && CurrentServerStatus is { } status)
+        {
+            _resumeWatch = status;
+            status.Changed += OnServerAwake;
+        }
+    }
+
+    private void OnServerAwake(object? sender, EventArgs e)
+    {
+        if (_resumeWatch is not { State: not ServerState.Waking } status)
+        {
+            return;
+        }
+
+        status.Changed -= OnServerAwake;
+        _resumeWatch = null;
+        Post(() => OnStateChangedForPhotos());
+    }
+
+    /// <summary>
+    /// A load starting cancels the photo requests in flight (they belong to the rows being replaced, and the load's Cancel must reach every request);
+    /// once the list is ready, the rows that were shown during the load fetch their photos.
+    /// </summary>
+    private void OnStateChangedForPhotos()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        if (State is LoadState.Loading or LoadState.Waking)
+        {
+            if (!_photoCts.IsCancellationRequested)
+            {
+                _photoCts.Cancel();
+            }
+
+            return;
+        }
+
+        if (_photoCts.IsCancellationRequested)
+        {
+            _photoCts.Dispose();
+            _photoCts = new CancellationTokenSource();
+        }
+
+        if (State == LoadState.Ready && _deferredPhotos.Count > 0)
+        {
+            var shown = _deferredPhotos.Where(Items.Contains).ToList();
+            _deferredPhotos.Clear();
+            foreach (var row in shown)
+            {
+                _ = LoadPhotoAsync(row);
+            }
         }
     }
 
@@ -330,6 +435,11 @@ public sealed partial class StaffViewModel : SortedRecordListViewModel<StaffRow,
             _photoCts.Cancel();
             _photoCts.Dispose();
             _photoGate.Dispose();
+            if (_resumeWatch is { } status)
+            {
+                status.Changed -= OnServerAwake;
+                _resumeWatch = null;
+            }
         }
 
         base.Dispose(disposing);

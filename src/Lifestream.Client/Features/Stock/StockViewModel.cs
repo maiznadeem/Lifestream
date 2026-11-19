@@ -105,14 +105,8 @@ public sealed partial class StockViewModel : ViewModelBase, INavigationParameter
     private readonly ListViewState _state;
     private IReadOnlyList<StockItem> _fetched = [];
 
-    public StockViewModel(ILifestreamApiClient api, IListViewStateStore states)
-        : this(api, states, null)
-    {
-    }
-
-    /// <summary>The screen as the app makes it: <paramref name="navigation"/> opens the donors and requests of a group from its panel (without it those two actions are hidden).</summary>
-    [Microsoft.Extensions.DependencyInjection.ActivatorUtilitiesConstructor]
-    public StockViewModel(ILifestreamApiClient api, IListViewStateStore states, INavigationService? navigation)
+    /// <summary>Creates the screen; <paramref name="navigation"/> opens the donors and requests of a group from its panel (without it those two actions are hidden).</summary>
+    public StockViewModel(ILifestreamApiClient api, IListViewStateStore states, INavigationService? navigation = null)
     {
         ArgumentNullException.ThrowIfNull(states);
         _api = api;
