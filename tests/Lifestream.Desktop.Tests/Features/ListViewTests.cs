@@ -227,7 +227,7 @@ public sealed class ListViewTests
             var grid = host.Find<LifestreamDataGrid>("Grid");
             var nameColumn = grid.Columns.First(c => c.SortMemberPath == "name");
             var phoneColumn = grid.Columns.First(c => c.Header is "Phone");
-            return (before, NameSortable: nameColumn.CanUserSort, PhoneSortable: phoneColumn.CanUserSort, Sorts: grid.Columns.Select(c => c.SortMemberPath).Where(p => !string.IsNullOrEmpty(p)).ToList());
+            return (before, NameSortable: nameColumn.CanUserSort, PhoneSortable: phoneColumn.CanUserSort, Sorts: grid.Columns.Where(c => c.CanUserSort).Select(c => c.SortMemberPath).Where(p => !string.IsNullOrEmpty(p)).ToList());
         });
 
         Assert.False(facts.before.Item1);

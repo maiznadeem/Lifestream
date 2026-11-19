@@ -80,8 +80,8 @@ public sealed class StaffFilterAndContractTests(ApiFixture fx) : IClassFixture<A
         var me = await (await user.Client.GetApi(ApiRoutes.Me)).Read<ProfileResponse>();
 
         Assert.Equal(dob, me.DateOfBirth);
-        Assert.InRange(me.MemberSince, DateTime.UtcNow.AddMinutes(-5), DateTime.UtcNow.AddMinutes(5));
-        Assert.Equal(DateTimeKind.Utc, me.MemberSince.Kind);
+        Assert.InRange(me.MemberSinceUtc, DateTime.UtcNow.AddMinutes(-5), DateTime.UtcNow.AddMinutes(5));
+        Assert.Equal(DateTimeKind.Utc, me.MemberSinceUtc.Kind);
     }
 
     [Theory]

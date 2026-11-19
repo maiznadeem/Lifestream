@@ -16,7 +16,7 @@ public sealed record ProfileResponse(
     public DateOnly DateOfBirth { get; init; }
 
     /// <summary>When the account was created, UTC (the profile shows "Member since").</summary>
-    public DateTime MemberSince { get; init; }
+    public DateTime MemberSinceUtc { get; init; }
 }
 
 public sealed record UpdateProfileRequest(

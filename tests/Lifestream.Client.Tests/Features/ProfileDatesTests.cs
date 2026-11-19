@@ -10,7 +10,7 @@ public sealed class ProfileDatesTests
     public async Task Profile_ShowsTheDateOfBirthAndMemberSince_InTheSharedDateFormat_FakeApi()
     {
         var rig = new Part2Rig();
-        rig.Fake.On("GetProfileAsync", ApiResult<ProfileResponse>.Ok(Samples2.Profile() with { DateOfBirth = new DateOnly(1990, 5, 17), MemberSince = new DateTime(2026, 3, 2, 12, 0, 0, DateTimeKind.Utc) }));
+        rig.Fake.On("GetProfileAsync", ApiResult<ProfileResponse>.Ok(Samples2.Profile() with { DateOfBirth = new DateOnly(1990, 5, 17), MemberSinceUtc = new DateTime(2026, 3, 2, 12, 0, 0, DateTimeKind.Utc) }));
         var vm = rig.Profile();
 
         await vm.LoadAsync();

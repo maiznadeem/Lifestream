@@ -159,7 +159,7 @@ public sealed class Part3FeatureViewTests
         var facts = StaHost.Run(() =>
         {
             using var rig = Part2Harness.NewRig();
-            rig.Api.On("GetProfileAsync", ApiResult<ProfileResponse>.Ok(DemoData2.Profile() with { DateOfBirth = new DateOnly(1990, 5, 17), MemberSince = new DateTime(2026, 3, 2, 12, 0, 0, DateTimeKind.Utc) }));
+            rig.Api.On("GetProfileAsync", ApiResult<ProfileResponse>.Ok(DemoData2.Profile() with { DateOfBirth = new DateOnly(1990, 5, 17), MemberSinceUtc = new DateTime(2026, 3, 2, 12, 0, 0, DateTimeKind.Utc) }));
             var vm = Part2Harness.Create<ProfileViewModel>(rig);
             using var host = Hosted.Create(Part2Harness.OnCanvas(new ProfileView(), vm), Width, Height);
             Hosted.Await(() => vm.LoadAsync());

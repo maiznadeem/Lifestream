@@ -183,7 +183,7 @@ public sealed partial class ProfileViewModel : FormViewModelBase, INavigationPar
         DesignationText = profile.Designation.ToString();
         ShiftText = StaffText.Shift(profile.Shift);
         DateOfBirthText = profile.DateOfBirth == default ? NotRecorded : Formatting.Date(profile.DateOfBirth);
-        MemberSinceText = profile.MemberSince == default ? NotRecorded : Formatting.Date(DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(profile.MemberSince, DateTimeKind.Utc), TimeZoneInfo.Local)));
+        MemberSinceText = profile.MemberSinceUtc == default ? NotRecorded : Formatting.Date(DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(profile.MemberSinceUtc, DateTimeKind.Utc), TimeZoneInfo.Local)));
         _baselineName = profile.DisplayName.Trim();
         _baselinePhone = profile.Phone?.Trim() ?? string.Empty;
         DisplayName = _baselineName;
