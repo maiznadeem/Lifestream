@@ -85,6 +85,8 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
     /// <summary>For the editors this screen opens.</summary>
     protected IToastService Toasts { get; }
 
+    protected override IToastService? SessionToasts => Toasts;
+
     protected IDialogService Dialogs { get; }
 
     private const string BloodTypeKey = "bloodType";
@@ -520,26 +522,17 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
     private async Task UndoAsync(TDetail deleted, DateTimeOffset deletedAt, TimeProvider clock)
     {
         var name = NameOfDetail(deleted);
-        var epoch = Toasts.Epoch;
         bool WindowOpen() => clock.GetUtcNow() - deletedAt < UndoWindow.Duration;
-        void ShowUnlessSignedOut(ToastKind kind, string message, string? label = null, Func<Task>? action = null, TimeSpan? lifetime = null)
-        {
-            if (Toasts.Epoch == epoch)
-            {
-                Toasts.Show(kind, message, label, action, lifetime);
-            }
-        }
-
         void Failed(string reason)
         {
             if (!WindowOpen())
             {
-                ShowUnlessSignedOut(ToastKind.Error, $"Couldn't restore {RecordType} '{name}'. It can no longer be restored.");
+                Toasts.Show(ToastKind.Error, $"Couldn't restore {RecordType} '{name}'. It can no longer be restored.");
                 return;
             }
 
             var remaining = UndoWindow.Duration - (clock.GetUtcNow() - deletedAt);
-            ShowUnlessSignedOut(ToastKind.Warning, $"{Capitalise(RecordType)} '{name}' is still deleted.{(reason.Length > 0 ? " " + reason : string.Empty)}", "Retry undo", () => UndoAsync(deleted, deletedAt, clock), remaining);
+            Toasts.Show(ToastKind.Warning, $"{Capitalise(RecordType)} '{name}' is still deleted.{(reason.Length > 0 ? " " + reason : string.Empty)}", "Retry undo", () => UndoAsync(deleted, deletedAt, clock), remaining);
         }
 
         if (!WindowOpen())
@@ -567,7 +560,7 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
             if (problem.Status is 404 or 409 || problem.Code == ProblemCodes.DemoForbidden)
             {
                 // The server answered: a 404 means its window has closed (or the record is gone), the others will not change on a retry.
-                ShowUnlessSignedOut(ToastKind.Error, $"Couldn't restore {RecordType} '{name}'. {(problem.Status == 404 ? "It can no longer be restored." : ProblemText.For(problem, RecordType, name))}");
+                Toasts.Show(ToastKind.Error, $"Couldn't restore {RecordType} '{name}'. {(problem.Status == 404 ? "It can no longer be restored." : ProblemText.For(problem, RecordType, name))}");
                 return;
             }
 

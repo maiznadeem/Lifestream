@@ -24,6 +24,8 @@ public abstract partial class RecordEditorViewModel : FormViewModelBase
     private readonly IToastService _toasts;
     private readonly IDialogService _dialogs;
 
+    protected override IToastService? SessionToasts => _toasts;
+
     protected RecordEditorViewModel(IToastService toasts, IDialogService dialogs, TimeProvider clock, string recordType, bool isNew)
         : base()
     {

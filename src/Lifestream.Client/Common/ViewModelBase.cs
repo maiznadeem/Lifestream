@@ -53,11 +53,23 @@ public abstract partial class ViewModelBase : ObservableObject, IDisposable
     /// <param name="canExecute">Extra condition for <see cref="AsyncRelayCommand.CanExecute"/>.</param>
     /// <param name="opensModal">True when the command opens a modal dialog (a confirmation, a form, a viewer): it is disabled while any operation of this view model runs, so the screen's "Waking up the server" notice and its Cancel can never be hidden behind a modal (SHELL-07).</param>
     protected AsyncRelayCommand Command(Func<CancellationToken, Task> execute, Func<bool>? canExecute = null, bool opensModal = false) =>
-        Track(new(execute, opensModal ? () => !ModalBlocked && (canExecute?.Invoke() ?? true) : canExecute, Operations), opensModal);
+        Track(new(ct => InSession(() => execute(ct)), opensModal ? () => !ModalBlocked && (canExecute?.Invoke() ?? true) : canExecute, Operations), opensModal);
 
     /// <summary>Creates a command with a parameter that runs through <see cref="Operations"/>.</summary>
     protected AsyncRelayCommand Command(Func<object?, CancellationToken, Task> execute, Func<object?, bool>? canExecute = null, bool allowConcurrent = false, bool opensModal = false) =>
-        Track(new(execute, opensModal ? p => !ModalBlocked && (canExecute?.Invoke(p) ?? true) : canExecute, allowConcurrent, Operations), opensModal);
+        Track(new((p, ct) => InSession(() => execute(p, ct)), opensModal ? p => !ModalBlocked && (canExecute?.Invoke(p) ?? true) : canExecute, allowConcurrent, Operations), opensModal);
+
+    /// <summary>The toast service whose session a command of this view model belongs to; null for a view model that shows no toast.</summary>
+    protected virtual IToastService? SessionToasts => null;
+
+    /// <summary>Runs a command's work in the sign-in session it was started in, so a toast it raises after a sign-out is dropped by the toast service.</summary>
+    private Task InSession(Func<Task> work)
+    {
+        using (SessionToasts?.EnterSession())
+        {
+            return work();
+        }
+    }
 
     private readonly List<AsyncRelayCommand> _modalCommands = [];
     private OperationRunner? _shellOperations;

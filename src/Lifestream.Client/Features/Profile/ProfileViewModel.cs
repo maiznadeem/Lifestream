@@ -42,6 +42,8 @@ public sealed partial class ProfileViewModel : FormViewModelBase, INavigationPar
     private readonly ILifestreamApiClient _api;
     private readonly IToastService _toasts;
     private readonly IPhotoPicker _photos;
+
+    protected override IToastService? SessionToasts => _toasts;
     private readonly IChangePasswordPrompt _passwords;
     private ProfileResponse? _fetched;
     private byte[]? _fetchedPhoto;
