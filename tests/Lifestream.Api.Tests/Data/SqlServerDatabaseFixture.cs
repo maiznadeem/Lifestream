@@ -28,7 +28,7 @@ public class SqlServerDatabaseFixture : IAsyncLifetime
     public async ValueTask InitializeAsync()
     {
         var ct = TestContext.Current.CancellationToken;
-        await ExecuteOnMasterAsync($"CREATE DATABASE [{DatabaseName}]", ct);
+        await CreateDatabaseAsync(ct);
         if (ApplyMigrations)
         {
             await using var db = NewContext();
@@ -37,6 +37,28 @@ public class SqlServerDatabaseFixture : IAsyncLifetime
 
         ServerVersion = await ScalarAsync<string>("SELECT @@VERSION", ct);
         await OnMigratedAsync(ct);
+    }
+
+    /// <summary>
+    /// CREATE DATABASE copies the <c>model</c> database and needs an exclusive lock on it for a moment, so two creations at the same time (the many
+    /// fixtures of one parallel run, or another test run on the same server) can make one fail with error 1807, "Could not obtain exclusive lock on
+    /// database 'model'. Retry the operation later." That is the server asking for a retry; any other error is thrown at once.
+    /// </summary>
+    private async Task CreateDatabaseAsync(CancellationToken ct)
+    {
+        const int modelLocked = 1807;
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                await ExecuteOnMasterAsync($"CREATE DATABASE [{DatabaseName}]", ct);
+                return;
+            }
+            catch (SqlException ex) when (ex.Number == modelLocked && attempt < 30)
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(200 * attempt), ct);
+            }
+        }
     }
 
     /// <summary>False gives an empty database, for tests that apply the schema some other way (the idempotent script).</summary>
