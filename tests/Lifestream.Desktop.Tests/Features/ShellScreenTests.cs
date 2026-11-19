@@ -21,8 +21,8 @@ using Lifestream.Domain;
 namespace Lifestream.Desktop.Tests.Features;
 
 /// <summary>
-/// The feature screens inside the real shell: found by the view locator, opened from the sidebar, and captured as README screenshots
-/// (<c>Category=Screenshots</c>, written to <c>LIFESTREAM_CAPTURE_DIR</c>; INFRA-19 runs them). Everything is rendered off-screen from the fake API with demo-like data.
+/// The feature screens inside the real shell: found by the view locator, opened from the sidebar, and captured off-screen over the fake API with made-up
+/// data (DemoData.cs) for development. They are not the README screenshots (INFRA-19): those come from the real demo dataset through the real API, see EndToEnd/DemoScreenshotTests.cs.
 /// </summary>
 [Collection("Wpf")]
 public sealed class ShellScreenTests
@@ -175,15 +175,15 @@ public sealed class ShellScreenTests
         Assert.False(facts.DetailShown); // the form takes the detail pane's place
     }
 
-    // README screenshots (INFRA-19): one PNG per screen, at least 1366 x 768.
+    // Captures of each screen over the FAKE API and its made-up data (DemoData.cs), for looking at a view while developing. They are not the README screenshots: those come from
+    // the real demo dataset through the real API (EndToEnd/DemoScreenshotTests.cs, tools/generate-screenshots.ps1, INFRA-19).
 
     [Theory]
-    [Trait("Category", "Screenshots")]
     [InlineData("Dashboard", "dashboard.png")]
     [InlineData("Donors", "donors.png")]
     [InlineData("Patients", "patients.png")]
     [InlineData("Stock", "stock.png")]
-    public void Screenshot_FeatureScreen_IsCapturedFromTheDemoData(string title, string fileName)
+    public void FeatureScreen_IsCapturedFromFakeApiData_NotForTheReadme(string title, string fileName)
     {
         var size = StaHost.Run(() =>
         {

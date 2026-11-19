@@ -38,16 +38,33 @@ internal static class PerfEnv
             : throw new InvalidOperationException($"{name} is not set: the Category=Perf tests are driven by tests/perf/run-perf.ps1, which starts the local API and sets it.");
 }
 
-/// <summary>Appends one JSON line per measurement to <c>LIFESTREAM_PERF_RESULTS</c>; the script turns the lines into docs/perf/results.md.</summary>
+/// <summary>
+/// Appends one JSON line per measurement to <c>LIFESTREAM_PERF_RESULTS</c>; the script turns the lines into docs/perf/results.md. A measurement that could
+/// not be taken is a row of its own (<see cref="Missed"/>, never an infinite value), and a test declares up front the rows it will record
+/// (<see cref="Expect"/>) so the script can tell a row that never came from a run that is complete.
+/// </summary>
 internal static class PerfLog
 {
     private static readonly Lock Gate = new();
 
-    public static bool Record(string budget, string name, string stat, int n, double value, string unit, string limit, bool pass, string detail = "")
+    /// <summary>Where the lines go; the self-tests point it at a file of their own (per thread), the perf run at LIFESTREAM_PERF_RESULTS.</summary>
+    [ThreadStatic]
+    internal static string? PathOverride;
+
+    private static string? ResultsPath => PathOverride ?? (Environment.GetEnvironmentVariable("LIFESTREAM_PERF_RESULTS") is { Length: > 0 } path ? path : null);
+
+    /// <summary>Records one measurement. <paramref name="key"/> names the row for the "every expected row is present" check (default: the budget).</summary>
+    public static bool Record(string budget, string name, string stat, int n, double value, string unit, string limit, bool pass, string detail = "", string? key = null)
     {
-        var line = JsonSerializer.Serialize(new Dictionary<string, object?>
+        if (!double.IsFinite(value))
+        {
+            return Missed(budget, name, stat, n, limit, $"MISSED {key ?? budget}: {name} has no finite value ({value}). {detail}".TrimEnd(), key);
+        }
+
+        Append(new Dictionary<string, object?>
         {
             ["budget"] = budget,
+            ["key"] = key ?? budget,
             ["name"] = name,
             ["dataset"] = Environment.GetEnvironmentVariable("LIFESTREAM_PERF_LABEL") ?? "",
             ["stat"] = stat,
@@ -58,15 +75,48 @@ internal static class PerfLog
             ["pass"] = pass,
             ["detail"] = detail,
         });
-        if (Environment.GetEnvironmentVariable("LIFESTREAM_PERF_RESULTS") is { Length: > 0 } path)
+        return pass;
+    }
+
+    /// <summary>A measurement that could not be taken (a skeleton that never showed, a screen that did not load): a failed row with no value, never Infinity. <paramref name="detail"/> is the whole sentence, starting "MISSED &lt;key&gt;: ". Always returns false.</summary>
+    public static bool Missed(string budget, string name, string stat, int n, string limit, string detail, string? key = null)
+    {
+        Append(new Dictionary<string, object?>
+        {
+            ["budget"] = budget,
+            ["key"] = key ?? budget,
+            ["name"] = name,
+            ["dataset"] = Environment.GetEnvironmentVariable("LIFESTREAM_PERF_LABEL") ?? "",
+            ["stat"] = stat,
+            ["n"] = n,
+            ["value"] = 0.0,
+            ["unit"] = "",
+            ["limit"] = limit,
+            ["pass"] = false,
+            ["missed"] = true,
+            ["detail"] = detail,
+        });
+        return false;
+    }
+
+    /// <summary>Declares the row keys this test is about to record; the script fails the run when any of them has no row.</summary>
+    public static void Expect(params IEnumerable<string> keys) =>
+        Append(new Dictionary<string, object?>
+        {
+            ["expect"] = keys.ToArray(),
+            ["dataset"] = Environment.GetEnvironmentVariable("LIFESTREAM_PERF_LABEL") ?? "",
+        });
+
+    private static void Append(Dictionary<string, object?> row)
+    {
+        var line = JsonSerializer.Serialize(row);
+        if (ResultsPath is { } path)
         {
             lock (Gate)
             {
                 File.AppendAllText(path, line + Environment.NewLine);
             }
         }
-
-        return pass;
     }
 
     /// <summary>The p95 of a sample, nearest rank: the ceil(0.95 n)-th smallest value.</summary>
@@ -147,18 +197,25 @@ internal sealed class RealRig : IDisposable
 
     public ShellViewModel Shell => Provider.GetRequiredService<ShellViewModel>();
 
-    public static RealRig Create()
+    /// <summary>The window host the app flow talks to (the fake one: no window is ever created); after "Try the demo" its <c>Main</c> is the shell the flow opened.</summary>
+    public FakeWindowHost Windows => (FakeWindowHost)Provider.GetRequiredService<IWindowHost>();
+
+    /// <summary>The client stack over the API at <paramref name="apiBase"/> (default: the perf run's), not signed in: the sign-in screen is the caller's to drive.</summary>
+    public static RealRig CreateSignedOut(string? apiBase = null) => Create(apiBase, signIn: false);
+
+    public static RealRig Create(string? apiBase = null, bool signIn = true)
     {
+        var baseUri = new Uri(apiBase ?? PerfEnv.ApiBase);
         var probe = new ProbeHandler(
             new SocketsHttpHandler { AutomaticDecompression = System.Net.DecompressionMethods.GZip | System.Net.DecompressionMethods.Brotli },
             Environment.CurrentManagedThreadId);
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddLifestreamClient(new Uri(PerfEnv.ApiBase), new Version(2, 0, 0));
+        services.AddLifestreamClient(baseUri, new Version(2, 0, 0));
         // The one HttpClient of the app, replaced by the same client with the probe underneath (the last registration wins).
         services.AddSingleton(p => new HttpClient(new WakeAwareHandler(p.GetRequiredService<WakePolicy>(), p.GetRequiredService<ServerStatus>(), probe))
         {
-            BaseAddress = new Uri(PerfEnv.ApiBase),
+            BaseAddress = baseUri,
             DefaultRequestVersion = System.Net.HttpVersion.Version11, // the local API listens on plain http, where HTTP/2 needs prior knowledge; the deployed app uses HTTP/2 over TLS
             DefaultVersionPolicy = System.Net.Http.HttpVersionPolicy.RequestVersionOrLower,
             Timeout = Timeout.InfiniteTimeSpan,
@@ -167,6 +224,11 @@ internal sealed class RealRig : IDisposable
         services.AddSingleton<IWindowHost>(new FakeWindowHost());
         services.AddSingleton(WpfTestUi.Dispatcher());
         var provider = services.BuildServiceProvider();
+
+        if (!signIn)
+        {
+            return new RealRig(provider, probe);
+        }
 
         var api = provider.GetRequiredService<ILifestreamApiClient>();
         var login = api.LoginAsync(new LoginRequest(PerfEnv.User, PerfEnv.Password)).GetAwaiter().GetResult();
