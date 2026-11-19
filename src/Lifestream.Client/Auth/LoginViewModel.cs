@@ -48,17 +48,17 @@ public sealed partial class LoginViewModel : ViewModelBase
             updates.PropertyChanged += OnUpdatesChanged;
         }
 
-        ApplyUpdateCommand = new AsyncRelayCommand(ct => _updates?.ApplyAsync(ct) ?? Task.CompletedTask);
+        ApplyUpdateCommand = Command(ct => _updates?.ApplyAsync(ct) ?? Task.CompletedTask);
         if (serverStatus is not null)
         {
             serverStatus.Changed += OnServerStatusChanged;
             IsServerWaking = serverStatus.State == ServerState.Waking;
         }
 
-        SignInCommand = new AsyncRelayCommand(SignInAsync, () => CanSignIn);
-        DemoCommand = new AsyncRelayCommand(DemoAsync, () => !IsBusy);
-        RetryCommand = new AsyncRelayCommand(RetryAsync, () => Problem is LoginProblem.ServerUnreachable or LoginProblem.ServerWaking);
-        CancelCommand = new AsyncRelayCommand(_ =>
+        SignInCommand = Command(SignInAsync, () => CanSignIn);
+        DemoCommand = Command(DemoAsync, () => !IsBusy);
+        RetryCommand = Command(RetryAsync, () => Problem is LoginProblem.ServerUnreachable or LoginProblem.ServerWaking);
+        CancelCommand = Command(_ =>
         {
             SignInCommand.Cancel();
             DemoCommand.Cancel();
@@ -211,6 +211,13 @@ public sealed partial class LoginViewModel : ViewModelBase
         try
         {
             var result = await call(ct).ConfigureAwait(true);
+            if (result.IsOk && !IsUsable(result.Value))
+            {
+                // The server said 200 but the body is no sign-in (an empty object, a missing user or token): never open the main window on it.
+                Fail(new ApiProblem(200, InvalidResponseCode, "The sign-in response had no usable tokens."));
+                return;
+            }
+
             if (result.IsOk)
             {
                 Password = string.Empty;
@@ -235,6 +242,12 @@ public sealed partial class LoginViewModel : ViewModelBase
             IsBusy = false;
         }
     }
+
+    /// <summary>The problem code of an answer that was successful but not a usable sign-in.</summary>
+    public const string InvalidResponseCode = "invalid_sign_in_response";
+
+    private static bool IsUsable(TokenResponse? tokens) =>
+        tokens is { AccessToken.Length: > 0, RefreshToken.Length: > 0, User: { DisplayName: { Length: > 0 } } user } && Enum.IsDefined(user.Role);
 
     private void Fail(ApiProblem problem)
     {

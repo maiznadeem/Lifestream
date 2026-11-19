@@ -72,6 +72,7 @@
               </ListBox.ItemTemplate>
             </ListBox>
             <controls:Skeleton Kind="Picker" Visibility="{Binding IsSearching, Converter={StaticResource BoolToVisibility}}" />
+            <controls:WakingNotice x:Name="Waking" IsActive="{Binding IsWaking}" CancelCommand="{Binding CancelSearchCommand}" VerticalAlignment="Top" />
             <TextBlock x:Name="NoMatches" Style="{DynamicResource Text.Body}" Foreground="{DynamicResource Brush.TextSecondary}" Text="No matches" Margin="{DynamicResource Inset.H12V16}"
                        Visibility="{Binding HasNoMatches, Converter={StaticResource BoolToVisibility}}" />
             <TextBlock x:Name="SearchError" Style="{DynamicResource Text.Body}" Foreground="{DynamicResource Brush.StatusDanger}" Text="{Binding SearchError}" Margin="{DynamicResource Inset.H12V16}"

@@ -85,15 +85,15 @@ public sealed partial class DashboardViewModel : ViewModelBase
         _changingPeriod = true;
         SelectedPeriod = Periods[2]; // the last 12 months
         _changingPeriod = false;
-        OpenCardCommand = new AsyncRelayCommand((parameter, _) => OpenCardAsync(parameter));
-        OpenLowStockCommand = new AsyncRelayCommand(async (parameter, _) =>
+        OpenCardCommand = Command((parameter, _) => OpenCardAsync(parameter));
+        OpenLowStockCommand = Command(async (parameter, _) =>
         {
             if (parameter is LowStockAlert alert)
             {
                 await OpenAsync("Stock", new ListPrefilter(BloodType: alert.BloodType, StockView: StockFilter.BelowThreshold)).ConfigureAwait(true);
             }
         });
-        RetryCommand = new AsyncRelayCommand(ct => LoadAsync(ct));
+        RetryCommand = Command(ct => LoadAsync(ct));
     }
 
     public override string PageTitle => "Dashboard";

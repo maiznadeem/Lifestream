@@ -76,8 +76,10 @@ public sealed partial class ToastItem : ObservableObject, IDisposable
 
     public bool HasAction => ActionLabel is not null;
 
+    [NoOperationRunner("It only closes the toast; it makes no API call.")]
     public AsyncRelayCommand DismissCommand { get; }
 
+    [NoOperationRunner("It runs the action the screen gave the toast (Undo), and that action runs its own API call through the screen's operation runner.")]
     public AsyncRelayCommand ActionCommand { get; }
 
     /// <summary>A toast never loads anything; present so every view model offers the same state (SHELL-11).</summary>

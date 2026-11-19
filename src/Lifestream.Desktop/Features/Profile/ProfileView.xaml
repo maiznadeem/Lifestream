@@ -15,6 +15,7 @@
       <Border HorizontalAlignment="Left" VerticalAlignment="Top" MaxWidth="640" MinWidth="360" Background="{DynamicResource Brush.SurfaceRaised}" CornerRadius="{DynamicResource Radius.Card}" Padding="{DynamicResource Pad.24}"
               AutomationProperties.Name="Your profile">
         <StackPanel KeyboardNavigation.TabNavigation="Local">
+          <controls:WakingNotice x:Name="Waking" IsActive="{Binding IsOperationWaking}" CancelCommand="{Binding CancelOperationCommand}" feat:Edge.Bottom="{DynamicResource Space.16}" />
           <StackPanel Orientation="Horizontal" feat:Edge.Bottom="{DynamicResource Space.24}">
             <Ellipse Width="96" Height="96" feat:Edge.Right="{DynamicResource Space.24}" AutomationProperties.Name="Your photo">
               <Ellipse.Fill>
@@ -75,7 +76,7 @@
             <TextBox x:Name="NameBox" Text="{Binding DisplayName, UpdateSourceTrigger=PropertyChanged}" MaxLength="100" AutomationProperties.Name="Full name" />
           </controls:FormField>
           <controls:FormField Label="Phone" Hint="Digits only; a leading + is allowed" controls:FormFocus.FieldName="Phone" Error="{Binding [Phone]}">
-            <TextBox x:Name="PhoneBox" Text="{Binding Phone, UpdateSourceTrigger=PropertyChanged}" MaxLength="20" AutomationProperties.Name="Phone" />
+            <TextBox x:Name="PhoneBox" Text="{Binding Phone, UpdateSourceTrigger=PropertyChanged}" MaxLength="21" AutomationProperties.Name="Phone" />
           </controls:FormField>
 
           <Border feat:Edge.PadX="{DynamicResource Space.12}" feat:Edge.PadY="{DynamicResource Space.8}" feat:Edge.Bottom="{DynamicResource Space.12}" Background="{DynamicResource Brush.SurfacePressed}"

@@ -75,18 +75,18 @@ public sealed partial class ShellViewModel : ViewModelBase
         ];
 
         // Concurrent on purpose: the sidebar stays usable while a screen loads, and the newer click supersedes the older one (SHELL-07).
-        NavigateCommand = new AsyncRelayCommand((parameter, _) => parameter is NavItem item ? OpenAsync(item.Destination) : Task.CompletedTask, allowConcurrent: true);
-        ProfileCommand = new AsyncRelayCommand(_ => NavigateToTypeAsync(NavigationCatalog.ProfileViewModelType, "profile"));
-        ChangePasswordCommand = new AsyncRelayCommand(_ => NavigateToTypeAsync(NavigationCatalog.ProfileViewModelType, "change-password"));
-        SignOutCommand = new AsyncRelayCommand(_ => _flow.SignOutAsync());
-        ApplyUpdateCommand = new AsyncRelayCommand(ct => Updates.ApplyAsync(ct));
-        BackToDashboardCommand = new AsyncRelayCommand(_ => OpenAsync(_catalog[0]));
-        SearchCommand = new AsyncRelayCommand(_ =>
+        NavigateCommand = Command((parameter, _) => parameter is NavItem item ? OpenAsync(item.Destination) : Task.CompletedTask, allowConcurrent: true);
+        ProfileCommand = Command(_ => NavigateToTypeAsync(NavigationCatalog.ProfileViewModelType, "profile"));
+        ChangePasswordCommand = Command(_ => NavigateToTypeAsync(NavigationCatalog.ProfileViewModelType, "change-password"));
+        SignOutCommand = Command(_ => _flow.SignOutAsync());
+        ApplyUpdateCommand = Command(ct => Updates.ApplyAsync(ct));
+        BackToDashboardCommand = Command(_ => OpenAsync(_catalog[0]));
+        SearchCommand = Command(_ =>
         {
             Navigation.Current?.RequestFocusSearch();
             return Task.CompletedTask;
         });
-        NewRecordCommand = new AsyncRelayCommand(async _ =>
+        NewRecordCommand = Command(async _ =>
         {
             if (Navigation.Current?.NewCommand is { } command)
             {

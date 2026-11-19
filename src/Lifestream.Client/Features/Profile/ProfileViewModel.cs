@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Lifestream.Client.Api;
 using Lifestream.Client.Common;
@@ -32,7 +31,6 @@ public sealed class NoPhotoPicker : IPhotoPicker
 public sealed partial class ProfileViewModel : FormViewModelBase, INavigationParameterReceiver
 {
     public const int MaxName = 100;
-    public const int MaxPhone = 20;
 
     /// <summary>The navigation parameter the account menu's "Change password" sends: the screen opens with the dialog already open.</summary>
     public const string ChangePasswordParameter = "change-password";
@@ -40,7 +38,6 @@ public sealed partial class ProfileViewModel : FormViewModelBase, INavigationPar
     /// <summary>The largest photo the API accepts.</summary>
     public const int MaxPhotoBytes = 1024 * 1024;
 
-    private static readonly Regex PhonePattern = new(@"^\+?[0-9][0-9 ()\-]*$", RegexOptions.CultureInvariant | RegexOptions.NonBacktracking);
 
     private readonly ILifestreamApiClient _api;
     private readonly IToastService _toasts;
@@ -61,8 +58,8 @@ public sealed partial class ProfileViewModel : FormViewModelBase, INavigationPar
         _photos = photos;
         _passwords = passwords;
         DeclareFields(nameof(DisplayName), nameof(Phone));
-        SaveCommand = new AsyncRelayCommand(SaveAsync, () => HasUnsavedChanges && !IsBusy);
-        DiscardCommand = new AsyncRelayCommand(_ =>
+        SaveCommand = Command(SaveAsync, () => HasUnsavedChanges && !IsBusy);
+        DiscardCommand = Command(_ =>
         {
             DisplayName = _baselineName;
             Phone = _baselinePhone;
@@ -71,10 +68,10 @@ public sealed partial class ProfileViewModel : FormViewModelBase, INavigationPar
             ChangesChanged();
             return Task.CompletedTask;
         }, () => HasUnsavedChanges && !IsBusy);
-        PickPhotoCommand = new AsyncRelayCommand(PickPhotoAsync, () => !IsBusy);
-        ChangePasswordCommand = new AsyncRelayCommand(_ => _passwords.PromptAsync(), () => !IsBusy);
-        RetryCommand = new AsyncRelayCommand(ct => LoadAsync(ct));
-        ReloadCommand = new AsyncRelayCommand(ct => LoadAsync(ct));
+        PickPhotoCommand = Command(PickPhotoAsync, () => !IsBusy);
+        ChangePasswordCommand = Command(_ => _passwords.PromptAsync(), () => !IsBusy);
+        RetryCommand = Command(ct => LoadAsync(ct));
+        ReloadCommand = Command(ct => LoadAsync(ct));
         ErrorsChanged += (_, _) => OnPropertyChanged("Item[]");
     }
 
@@ -251,12 +248,7 @@ public sealed partial class ProfileViewModel : FormViewModelBase, INavigationPar
                     return null;
                 }
 
-                if (phone.Length > MaxPhone)
-                {
-                    return $"The phone number can be at most {MaxPhone} characters.";
-                }
-
-                return PhonePattern.IsMatch(phone) ? null : "Use digits only (a leading + and spaces, dashes or brackets are allowed).";
+                return PhoneRule.Validate(phone);
             default:
                 return null;
         }
@@ -316,35 +308,49 @@ public sealed partial class ProfileViewModel : FormViewModelBase, INavigationPar
         ApiProblem? problem = null;
         ProfileResponse? saved = null;
         var photoSaved = false;
+        var cancelled = false;
         await RunBusyAsync(async () =>
         {
-            problem = await Task.Run(async () =>
+            try
             {
-                if (update is not null)
+                problem = await RunOperationAsync(async token =>
                 {
-                    var result = await _api.UpdateProfileAsync(update, ct).ConfigureAwait(false);
-                    if (!result.IsOk)
+                    if (update is not null)
                     {
-                        return result.Problem;
+                        var result = await _api.UpdateProfileAsync(update, token).ConfigureAwait(false);
+                        if (!result.IsOk)
+                        {
+                            return result.Problem;
+                        }
+
+                        saved = result.Value;
                     }
 
-                    saved = result.Value;
-                }
-
-                if (photo is not null)
-                {
-                    var result = await _api.SetMyPhotoAsync(photo, ct).ConfigureAwait(false);
-                    if (!result.IsOk)
+                    if (photo is not null)
                     {
-                        return result.Problem;
+                        var result = await _api.SetMyPhotoAsync(photo, token).ConfigureAwait(false);
+                        if (!result.IsOk)
+                        {
+                            return result.Problem;
+                        }
+
+                        photoSaved = true;
                     }
 
-                    photoSaved = true;
-                }
-
-                return null;
-            }, ct).ConfigureAwait(true);
+                    return null;
+                }, ct).ConfigureAwait(true);
+            }
+            catch (OperationCanceledException)
+            {
+                cancelled = true;
+            }
         }).ConfigureAwait(true);
+
+        if (cancelled)
+        {
+            FormError = "The request was cancelled. Your changes are still here, so you can save again.";
+            return;
+        }
 
         if (saved is { } profile)
         {

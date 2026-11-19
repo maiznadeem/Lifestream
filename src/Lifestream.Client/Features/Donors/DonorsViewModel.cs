@@ -21,7 +21,7 @@ public sealed class DonorsViewModel : SortedRecordListViewModel<DonorListItem, D
     {
         this.api = api;
         this.navigation = navigation;
-        BookAppointmentCommand = new AsyncRelayCommand(
+        BookAppointmentCommand = Command(
             _ => Detail is { } donor ? this.navigation.NavigateTo<AppointmentsViewModel>(new RelatedRecord(RecordKind.Donor, donor.Id, donor.Name)) : Task.CompletedTask,
             () => Detail is not null && !IsEditing);
         PropertyChanged += (_, e) =>
@@ -41,6 +41,8 @@ public sealed class DonorsViewModel : SortedRecordListViewModel<DonorListItem, D
     protected override string PluralName => "donors";
 
     protected override string RecordType => "donor";
+
+    protected override bool RecordIsPerson => true;
 
     /// <summary>The columns that sort, as the API's validator names them (defined once in the contracts).</summary>
     public override IReadOnlyList<string> SortKeys { get; } = ContractSortKeys.Donors;

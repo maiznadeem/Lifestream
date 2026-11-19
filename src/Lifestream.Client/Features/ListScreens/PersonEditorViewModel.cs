@@ -1,6 +1,6 @@
-using System.Text.RegularExpressions;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Lifestream.Client.Common;
+using Lifestream.Client.Validation;
 using Lifestream.Contracts;
 using Lifestream.Domain;
 
@@ -19,13 +19,11 @@ public abstract partial class PersonEditorViewModel : RecordEditorViewModel
 {
     /// <summary>The longest name, phone and address the database stores.</summary>
     public const int MaxName = 100;
-    public const int MaxPhone = 20;
     public const int MaxAddress = 200;
 
     /// <summary>The earliest date of birth accepted (anything earlier is a typing slip or a default value).</summary>
     public static DateOnly EarliestDateOfBirth { get; } = new(1900, 1, 1);
 
-    private static readonly Regex PhonePattern = new(@"^\+?[0-9][0-9 ()\-]*$", RegexOptions.CultureInvariant | RegexOptions.NonBacktracking);
 
     private PersonValues _baseline = new(string.Empty, null, null, null, null, null);
 
@@ -165,12 +163,7 @@ public abstract partial class PersonEditorViewModel : RecordEditorViewModel
             return null; // optional
         }
 
-        if (phone.Length > MaxPhone)
-        {
-            return $"The phone number can be at most {MaxPhone} characters.";
-        }
-
-        return PhonePattern.IsMatch(phone) ? null : "Use digits only (a leading + and spaces, dashes or brackets are allowed).";
+        return PhoneRule.Validate(phone);
     }
 
     partial void OnNameChanged(string value) => FieldEdited(nameof(Name));

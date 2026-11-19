@@ -60,10 +60,10 @@ public sealed class AppointmentsViewModel : SortedRecordListViewModel<Appointmen
             _donorFilter = new RecordOption(donorId, savedName ?? $"Donor {donorId}", null);
         }
 
-        RescheduleCommand = new AsyncRelayCommand(_ => EditCommand.ExecuteAsync(), () => IsPending && EditCommand.CanExecute(null));
-        RecordDonationCommand = new AsyncRelayCommand(_ => RecordDonationAsync(), () => IsPending && !IsEditing);
-        CancelAppointmentCommand = new AsyncRelayCommand(_ => CancelSelectedAsync(), () => IsPending && !IsEditing);
-        FilterByDonorCommand = new AsyncRelayCommand((parameter, _) =>
+        RescheduleCommand = Command(_ => EditCommand.ExecuteAsync(), () => IsPending && EditCommand.CanExecute(null));
+        RecordDonationCommand = Command(_ => RecordDonationAsync(), () => IsPending && !IsEditing);
+        CancelAppointmentCommand = Command(_ => CancelSelectedAsync(), () => IsPending && !IsEditing);
+        FilterByDonorCommand = Command((parameter, _) =>
         {
             if (parameter is AppointmentListItem item)
             {
@@ -73,14 +73,14 @@ public sealed class AppointmentsViewModel : SortedRecordListViewModel<Appointmen
 
             return Task.CompletedTask;
         });
-        OpenDonorCommand = new AsyncRelayCommand(async (parameter, _) =>
+        OpenDonorCommand = Command(async (parameter, _) =>
         {
             if (parameter is AppointmentListItem item)
             {
                 await _navigation.NavigateTo<DonorsViewModel>(new ListPrefilter(RecordId: item.DonorId)).ConfigureAwait(true);
             }
         });
-        ViewReceiptCommand = new AsyncRelayCommand(_ => Detail?.ReceiptId is { } id ? _receipts.ShowAsync(id, isDuplicate: true) : Task.CompletedTask, () => Detail?.ReceiptId is not null);
+        ViewReceiptCommand = Command(_ => Detail?.ReceiptId is { } id ? _receipts.ShowAsync(id, isDuplicate: true) : Task.CompletedTask, () => Detail?.ReceiptId is not null);
         PropertyChanged += (_, e) =>
         {
             if (e.PropertyName is nameof(Detail) or nameof(Editor))
@@ -305,7 +305,7 @@ public sealed class AppointmentsViewModel : SortedRecordListViewModel<Appointmen
         }
 
         ApiResult result = null!;
-        await RunBusyAsync(async () => result = await Task.Run(() => _api.CancelAppointmentAsync(appointment.Id)).ConfigureAwait(true)).ConfigureAwait(true);
+        await RunBusyAsync(async () => result = await RunOperationAsync(ct => _api.CancelAppointmentAsync(appointment.Id, ct)).ConfigureAwait(true)).ConfigureAwait(true);
         if (!result.IsOk)
         {
             Toasts.Show(ToastKind.Error, ProblemText.For(result.Problem!, RecordType, appointment.DonorName));

@@ -12,7 +12,7 @@
        hover and selection change colour only and nothing shifts (SHELL-27). A RadioButton gives UI Automation a selected state. -->
   <Style x:Key="NavItem" TargetType="RadioButton">
     <Setter Property="GroupName" Value="Navigation" />
-    <Setter Property="FontFamily" Value="{StaticResource Font.Family}" />
+    <Setter Property="FontFamily" Value="{DynamicResource Font.Family}" />
     <Setter Property="FontSize" Value="{StaticResource FontSize.Body}" />
     <Setter Property="Foreground" Value="{DynamicResource Brush.TextPrimary}" />
     <Setter Property="Height" Value="{StaticResource Height.Row}" />
@@ -82,7 +82,7 @@
 
   <!-- Account menu -->
   <Style x:Key="MenuItem.Lifestream" TargetType="MenuItem">
-    <Setter Property="FontFamily" Value="{StaticResource Font.Family}" />
+    <Setter Property="FontFamily" Value="{DynamicResource Font.Family}" />
     <Setter Property="FontSize" Value="{StaticResource FontSize.Body}" />
     <Setter Property="Foreground" Value="{DynamicResource Brush.TextPrimary}" />
     <Setter Property="MinHeight" Value="{StaticResource Height.Compact}" />

@@ -31,6 +31,7 @@ public enum RecordKind
 public interface ILifestreamApiClient
 {
     /// <summary>Sends /healthz once, ignoring the outcome, so the container is already awake when the user has typed a password.</summary>
+    [Common.OutsideOperation("A service warms the container up before any screen exists.")]
     Task WarmUpAsync(CancellationToken ct = default);
 
     Task<ApiResult<ReadinessResponse>> GetReadinessAsync(CancellationToken ct = default);
@@ -44,6 +45,7 @@ public interface ILifestreamApiClient
     /// Revokes the given refresh token on the server: one attempt, no cold-start retries, a 5 s timeout. The caller takes the token
     /// from the session before clearing it, so sign-out never waits on this (SHELL-17).
     /// </summary>
+    [Common.OutsideOperation("Sign-out is made by the app flow after the screens are gone and must not wait on or be cancelled by one.")]
     Task<ApiResult> LogoutAsync(string refreshToken, CancellationToken ct = default);
 
     // Donors

@@ -290,7 +290,7 @@ public sealed partial class AppointmentEditorViewModel : RecordEditorViewModel
         Banner.ShowChecking();
         try
         {
-            var result = await Task.Run(() => _api.GetDonorAsync(id, cts.Token), cts.Token).ConfigureAwait(true);
+            var result = await Operations.RunAsync(ct => _api.GetDonorAsync(id, ct), cts.Token).ConfigureAwait(true);
             if (cts.IsCancellationRequested)
             {
                 return;
@@ -329,7 +329,7 @@ public sealed partial class AppointmentEditorViewModel : RecordEditorViewModel
         SlotsMessage = null;
         try
         {
-            var result = await Task.Run(() => _api.GetSlotsAsync(day, cts.Token), cts.Token).ConfigureAwait(true);
+            var result = await Operations.RunAsync(ct => _api.GetSlotsAsync(day, ct), cts.Token).ConfigureAwait(true);
             if (cts.IsCancellationRequested)
             {
                 return;

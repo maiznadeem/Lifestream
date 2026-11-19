@@ -22,7 +22,7 @@
   <sys:Double x:Key="LineHeight.Caption">16</sys:Double>
 
   <Style x:Key="Text.Base" TargetType="TextBlock">
-    <Setter Property="FontFamily" Value="{StaticResource Font.Family}" />
+    <Setter Property="FontFamily" Value="{DynamicResource Font.Family}" />
     <Setter Property="Foreground" Value="{DynamicResource Brush.TextPrimary}" />
     <Setter Property="TextWrapping" Value="Wrap" />
   </Style>

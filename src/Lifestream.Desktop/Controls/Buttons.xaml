@@ -102,7 +102,7 @@
   <Style x:Key="Button.Base" TargetType="Button">
     <Setter Property="Template" Value="{StaticResource Button.Template}" />
     <Setter Property="FocusVisualStyle" Value="{StaticResource FocusVisual.None}" />
-    <Setter Property="FontFamily" Value="{StaticResource Font.Family}" />
+    <Setter Property="FontFamily" Value="{DynamicResource Font.Family}" />
     <Setter Property="FontSize" Value="{StaticResource FontSize.Label}" />
     <Setter Property="FontWeight" Value="Medium" />
     <Setter Property="MinHeight" Value="{StaticResource Height.Control}" />

@@ -49,17 +49,17 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
             _statusFilter = StatusOptions.First(o => o.Value == status);
         }
 
-        FulfilCommand = new AsyncRelayCommand(_ => FulfilSelectedAsync(), () => IsPending && !IsEditing);
-        CancelRequestCommand = new AsyncRelayCommand(_ => CancelSelectedAsync(), () => IsPending && !IsEditing);
-        EditRequestCommand = new AsyncRelayCommand(_ => EditCommand.ExecuteAsync(), () => IsPending && EditCommand.CanExecute(null));
-        OpenPatientCommand = new AsyncRelayCommand(async (parameter, _) =>
+        FulfilCommand = Command(_ => FulfilSelectedAsync(), () => IsPending && !IsEditing);
+        CancelRequestCommand = Command(_ => CancelSelectedAsync(), () => IsPending && !IsEditing);
+        EditRequestCommand = Command(_ => EditCommand.ExecuteAsync(), () => IsPending && EditCommand.CanExecute(null));
+        OpenPatientCommand = Command(async (parameter, _) =>
         {
             if (parameter is RequestListItem item)
             {
                 await _navigation.NavigateTo<PatientsViewModel>(new ListPrefilter(RecordId: item.PatientId)).ConfigureAwait(true);
             }
         });
-        ViewReceiptCommand = new AsyncRelayCommand(_ => Detail?.ReceiptId is { } id ? _receipts.ShowAsync(id, isDuplicate: true) : Task.CompletedTask, () => Detail?.ReceiptId is not null);
+        ViewReceiptCommand = Command(_ => Detail?.ReceiptId is { } id ? _receipts.ShowAsync(id, isDuplicate: true) : Task.CompletedTask, () => Detail?.ReceiptId is not null);
         PropertyChanged += (_, e) =>
         {
             if (e.PropertyName is nameof(Detail) or nameof(Editor))
@@ -264,7 +264,7 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
         }
 
         ApiResult result = null!;
-        await RunBusyAsync(async () => result = await Task.Run(() => _api.CancelRequestAsync(request.Id)).ConfigureAwait(true)).ConfigureAwait(true);
+        await RunBusyAsync(async () => result = await RunOperationAsync(ct => _api.CancelRequestAsync(request.Id, ct)).ConfigureAwait(true)).ConfigureAwait(true);
         if (!result.IsOk)
         {
             Toasts.Show(ToastKind.Error, ProblemText.For(result.Problem!, RecordType, request.PatientName));

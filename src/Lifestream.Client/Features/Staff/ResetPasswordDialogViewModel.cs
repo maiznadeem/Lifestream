@@ -44,6 +44,8 @@ public sealed partial class ResetPasswordDialogViewModel : DialogViewModel
 
     protected override string RecordType => "staff member";
 
+    public override bool HasUnsavedChanges => TemporaryPassword.Length > 0 || ConfirmPassword.Length > 0;
+
     protected override string? ValidateField(string field)
     {
         switch (field)
