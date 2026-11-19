@@ -82,8 +82,9 @@ public sealed class LoginLockoutConcurrencyTests(ApiFixture fx) : IClassFixture<
         var user = await fx.AddStaffAsync(Role.Staff);
         var results = await BurstAsync(fx, user.Username, [.. Enumerable.Range(0, 40).Select(i => "wrong-guess-" + i)], i => $"203.0.113.{i + 1}");
 
-        Assert.Equal(5, results.Count(r => r.Status == 401));
-        Assert.Equal(35, results.Count(r => r.Status == 429 && r.Code == ProblemCodes.LockedOut));
+        var seen = string.Join(", ", results.GroupBy(r => $"{r.Status} {r.Code}").Select(g => $"{g.Key} x{g.Count()}"));
+        Assert.True(results.Count(r => r.Status == 401) == 5, $"expected 5 checked guesses (401); got {seen}");
+        Assert.True(results.Count(r => r.Status == 429 && r.Code == ProblemCodes.LockedOut) == 35, $"expected 35 locked out (429 {ProblemCodes.LockedOut}); got {seen}");
         Assert.All(results.Where(r => r.Status == 429), r => Assert.True(int.Parse(r.RetryAfter!, System.Globalization.CultureInfo.InvariantCulture) > 0));
 
         // The real database holds the lock; counting restarted when it began.
