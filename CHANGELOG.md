@@ -23,7 +23,8 @@ Lifestream 2.0 is a ground-up rewrite of the original course project. Everything
 
 - New look: a dark theme with one consistent set of colors, type and spacing, clear focus outlines, and buttons that show when they are idle, hovered, pressed, busy or unavailable.
 - Dashboard: donations and issues by month for the last 12 months (or another period), with a switch for each blood type, a "View as table" alternative, and cards for donors, patients, pending appointments and requests, and stock. Low and expiring stock is called out.
-- Donors, patients, appointments, requests, stock, receipts and staff: searchable, filterable, paged lists with a detail pane, names with the id underneath, status chips, and links that open the person or record a row refers to.
+- Donors, patients, appointments, requests, receipts and staff: searchable, paged lists with a detail pane next to the list. Appointments, requests, receipts and staff show the name with the id (or user name) underneath, appointments and requests show their status as a chip, and the names in appointments, requests and receipts are links that open the donor, patient or record the row refers to. Donors and patients show the name on one line. Text that does not fit a cell is cut off with an ellipsis and its full text appears in a tooltip.
+- Stock: one tile for each blood type with the units available, the units expiring soon and a low-stock flag, and two filters to choose which tiles to show. It is not a list.
 - Choosing a donor or patient uses a search box instead of typing an id. A filter that has nothing chosen shows "Any donor" and a Choose action.
 - Appointments: book from the free half-hour slots of a day, reschedule, cancel, and record the donation when the donor arrives. A donor who gave blood too recently is flagged and needs a reason to override.
 - Requests and stock: fulfil a request from the bags in stock; stock shows what is fresh, expiring or low for each blood type.

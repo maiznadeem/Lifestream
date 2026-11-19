@@ -7,8 +7,8 @@
     "Patients": 35,
     "Pending appointments": 70,
     "Pending requests": 40,
-    "Units in stock": 36,
-    "Expiring within 7 days": 10
+    "Units in stock": 37,
+    "Expiring within 7 days": 8
   },
   "files": [
     {
@@ -23,7 +23,7 @@
       "file": "dashboard.png",
       "width": 1366,
       "height": 768,
-      "sha256": "27438e90866254c5c78195977ad916f2655aa50e8d1e42bd474ed47c272c6f8c"
+      "sha256": "8ba7d57e1c58779f9f17b80adb8d8739790bcb2060c94ade16765fa48456b3f5"
     },
     {
       "screen": "donors",
@@ -58,14 +58,14 @@
       "file": "stock.png",
       "width": 1366,
       "height": 768,
-      "sha256": "559bd90643f5cffd5fdbbcb13e495b0117e9ffa4a18bb93e23ec4ae7dcdb508a"
+      "sha256": "ef5c6b2b40adf2f21ae34cf87eed3882aaa04499ba15aea426a11f67c25d2f37"
     },
     {
       "screen": "receipts",
       "file": "receipts.png",
       "width": 1366,
       "height": 768,
-      "sha256": "bc2ab368afd2a004c05132d413fe5a24fb87914cfef14eb743a5cb4625bbf9a6"
+      "sha256": "ba066f5440842cd545d582c73a54bc01431c106698b3c63f172832951ea64fd3"
     },
     {
       "screen": "staff",

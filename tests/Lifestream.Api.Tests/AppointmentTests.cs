@@ -227,10 +227,19 @@ public sealed class AppointmentTests(ApiFixture fx) : IClassFixture<ApiFixture>
             await Seed.AppointmentAsync(fx, first, Seed.Slot(20 + i, 10));
         }
 
-        // More appointments than donors, so the next appointment id is always ahead of the next donor id.
-        for (var i = 0; i < 3; i++)
+        // Other tests of this class fixture have created donors and appointments too, so the ids are read: filler appointments (on days that no other test uses)
+        // are added until the next appointment id is at least 2 ahead of the next donor id. Both pairs below then differ whatever ran before.
+        for (var filler = 0; filler < 500; filler++)
         {
-            await Seed.AppointmentAsync(fx, first!, Seed.Slot(25 + i, 11));
+            await using var idDb = fx.Db.NewContext();
+            var maxDonor = await idDb.Donors.Select(d => (int?)d.Id).MaxAsync(Ct) ?? 0;
+            var maxAppointment = await idDb.Appointments.Select(a => (int?)a.Id).MaxAsync(Ct) ?? 0;
+            if (maxAppointment >= maxDonor + 2)
+            {
+                break;
+            }
+
+            await Seed.AppointmentAsync(fx, first!, Seed.Slot(100 + filler, 11));
         }
 
         var (donor, target) = await PendingAsync(30, 10);

@@ -194,12 +194,12 @@ public sealed class LifestreamDataGrid : DataGrid
 
 /// <summary>
 /// Shows the full text of a trimmed (truncated) cell as a tooltip and nothing otherwise (SHELL-39). Set
-/// <c>controls:TruncationTooltip.IsEnabled="True"</c> on a TextBlock with <c>TextTrimming</c>.
+/// <c>controls:TruncationTooltip.IsEnabled="True"</c> on a TextBlock with <c>TextTrimming</c>. The property is inherited and set on the data grid cell style, so every text block in a cell has it.
 /// </summary>
 public static class TruncationTooltip
 {
     public static readonly DependencyProperty IsEnabledProperty =
-        DependencyProperty.RegisterAttached("IsEnabled", typeof(bool), typeof(TruncationTooltip), new PropertyMetadata(false, OnChanged));
+        DependencyProperty.RegisterAttached("IsEnabled", typeof(bool), typeof(TruncationTooltip), new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.Inherits, OnChanged));
 
     public static bool GetIsEnabled(DependencyObject element) => (bool)(element ?? throw new ArgumentNullException(nameof(element))).GetValue(IsEnabledProperty);
 
@@ -225,6 +225,13 @@ public static class TruncationTooltip
         return formatted.WidthIncludingTrailingWhitespace > block.ActualWidth + 0.5;
     }
 
+    /// <summary>The whole text of a block, also when it sits in inlines (a Hyperlink in a name cell), which the Text property does not report to a binding.</summary>
+    public static string FullText(TextBlock block)
+    {
+        ArgumentNullException.ThrowIfNull(block);
+        return new System.Windows.Documents.TextRange(block.ContentStart, block.ContentEnd).Text;
+    }
+
     private static void OnChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         if (d is not TextBlock block)
@@ -233,20 +240,43 @@ public static class TruncationTooltip
         }
 
         block.ToolTipOpening -= OnToolTipOpening;
+        block.Loaded -= OnRefresh;
+        block.DataContextChanged -= OnDataContextChanged;
         if ((bool)e.NewValue)
         {
             block.ToolTipOpening += OnToolTipOpening;
-            block.SetBinding(FrameworkElement.ToolTipProperty, new System.Windows.Data.Binding(nameof(TextBlock.Text)) { Source = block });
+            block.Loaded += OnRefresh;
+            block.DataContextChanged += OnDataContextChanged;
+            Refresh(block);
         }
-        else
+        else if (block.ReadLocalValue(FrameworkElement.ToolTipProperty) is string)
         {
             block.ClearValue(FrameworkElement.ToolTipProperty);
         }
     }
 
+    private static void OnRefresh(object sender, RoutedEventArgs e) => Refresh((TextBlock)sender);
+
+    private static void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e) => Refresh((TextBlock)sender);
+
+    private static void Refresh(TextBlock block)
+    {
+        var local = block.ReadLocalValue(FrameworkElement.ToolTipProperty);
+        if (local == DependencyProperty.UnsetValue || local is string)
+        {
+            block.ToolTip = FullText(block); // a tooltip someone set on purpose is left alone
+        }
+    }
+
     private static void OnToolTipOpening(object sender, ToolTipEventArgs e)
     {
-        if (sender is TextBlock block && !IsTrimmed(block))
+        if (sender is not TextBlock block)
+        {
+            return;
+        }
+
+        Refresh(block); // the text may have changed since the last refresh (a bound Run does not notify the block)
+        if (!IsTrimmed(block))
         {
             e.Handled = true; // text fits: no tooltip
         }

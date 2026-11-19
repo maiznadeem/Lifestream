@@ -154,6 +154,33 @@ public sealed partial class SeedTests
     }
 
     [Fact]
+    public void DemoData_EveryDayOfTwoYears_HasDonationsAndIssuesInEveryMonthOfTheDashboard()
+    {
+        // 730 consecutive dates (2026 and 2027, none of them a leap year): the oldest month used to have no issues on Jan 30 and 31.
+        var problems = new List<string>();
+        for (var today = new DateOnly(2026, 1, 1); today < new DateOnly(2028, 1, 1); today = today.AddDays(1))
+        {
+            var set = new DemoDataGenerator().Generate(today);
+            var donations = PerMonth(set.Receipts.Where(r => r.Kind == ReceiptKind.Donation).Select(r => r.CreatedAtUtc));
+            var issues = PerMonth(set.Receipts.Where(r => r.Kind == ReceiptKind.Issue).Select(r => r.CreatedAtUtc));
+            foreach (var month in DashboardMonths(today).Where(m => m != new DateOnly(today.Year, today.Month, 1)))
+            {
+                if (donations.GetValueOrDefault(month) == 0)
+                {
+                    problems.Add($"{today:yyyy-MM-dd}: no donations in {month:yyyy-MM}");
+                }
+
+                if (issues.GetValueOrDefault(month) == 0)
+                {
+                    problems.Add($"{today:yyyy-MM-dd}: no issues in {month:yyyy-MM}");
+                }
+            }
+        }
+
+        Assert.True(problems.Count == 0, $"{problems.Count} empty months, first: {string.Join("; ", problems.Take(6))}");
+    }
+
+    [Fact]
     public void DemoData_Variation_IsDeterministicPerDate_AndDiffersFromOneDateToTheNext()
     {
         var a = PerMonth(new DemoDataGenerator().Generate(Day).Receipts.Select(r => r.CreatedAtUtc));

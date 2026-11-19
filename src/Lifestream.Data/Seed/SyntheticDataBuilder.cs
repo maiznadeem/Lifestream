@@ -244,10 +244,12 @@ internal static class SyntheticDataBuilder
         var next = 0;
 
         // Fulfilled requests are issued on days in the last (pastDays - IssueFreeDays) days, oldest first, so early donations build stock.
-        // Their days are spread over the months with the same month-to-month variation as the donations (every month gets some).
+        // The window always reaches back to the first day of the dashboard's oldest month (11 months before this one), which on Jan 30 and 31 is
+        // further back than 335 days, so that month has issues too. Their days are spread over the months with the same month-to-month variation as the donations.
         var fulfilled = SeedSizes.FulfilledRequests * factor;
-        var issueWindowDays = pastDays - IssueFreeDays;
-        var issueWindowStart = todayStart.AddDays(-issueWindowDays);
+        var oldestDashboardMonth = new DateTime(today.Year, today.Month, 1, 0, 0, 0, DateTimeKind.Utc).AddMonths(-11);
+        var issueWindowStart = DateTimeMin(todayStart.AddDays(-(pastDays - IssueFreeDays)), oldestDashboardMonth);
+        var issueWindowDays = (int)(todayStart - issueWindowStart).TotalDays;
         var issueDays = DaysOverMonths(fulfilled, rng, issueWindowStart, issueWindowDays)
             .Select(day => issueWindowStart.AddDays(day).AddHours(9).AddMinutes(rng.Between(0, 479)))
             .Order()
@@ -340,6 +342,8 @@ internal static class SyntheticDataBuilder
             Status = status,
         };
     }
+
+    private static DateTime DateTimeMin(DateTime a, DateTime b) => a <= b ? a : b;
 
     private static void SetDonorHistory(DemoDataSet set)
     {
