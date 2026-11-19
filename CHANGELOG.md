@@ -2,9 +2,11 @@
 
 All notable changes to Lifestream are listed here. The section of a version is also the text of its release on the GitHub Releases page.
 
-## [2.1.0] - In progress
+## [2.1.0] - 2026-11-20
 
-Lifestream 2.1 brings a new, calmer design built for the PC it runs on. This section grows as the release comes together.
+Lifestream 2.1 brings a new, calmer design built for the PC it runs on, and finishes every screen to the same pattern: the same paging, the same panel
+beside the list, the same place for each action, and the details the work needs (which requests stock can cover, which bag to use first, where each
+donation went).
 
 ### Look and feel
 
@@ -35,6 +37,88 @@ Lifestream 2.1 brings a new, calmer design built for the PC it runs on. This sec
 - Stock by blood group shows each group's units, the share that expires within 7 days and the minimum.
 - Donations and issues over the last 12 months are a line chart, with the same numbers available as a table.
 - The taskbar button shows how many blood groups are below their minimum.
+
+### Every list
+
+- Every list has the same footer: how many records it is showing ("Showing 1–50 of 118") and the page controls.
+- Selecting a row opens its details in a panel on the right, which reaches the edge of the window. The panel's actions are always in the same order: the
+  main action as the one dark button, then Edit, then a "..." menu that holds the rare and the irreversible ones under their full names ("Delete staff
+  member", "Cancel appointment"). Those ask first, and the question names the record.
+- Each screen has one dark button at a time: while a panel is open, the button in the page header steps back.
+- Names are shown in full. The name column takes the room its names need and the other columns share the rest; in a small window the least important
+  column folds away instead of a name being cut, and the filters move under the search field instead of running off the edge.
+- Records have one kind of code everywhere, on screen and on printed receipts: D-0175 for a donor, P-0053 for a patient, A-0905 for an appointment,
+  R-0148 for a request, RC-0001 for a receipt, S-0002 for a staff member and B-0412 for a blood bag.
+- Every status is a word with an icon or a dot, never a colour alone.
+- When a list is empty or cannot be loaded, the message sits where the list would be, says why, and offers the next step.
+
+### Donors
+
+- Filter by eligibility and by when someone last donated, as well as by blood group.
+- The list shows how many times each donor has donated. A donor who cannot donate is marked, and the panel says why.
+- The panel shows the donation history: each donation, its bag, and where the bag went (issued to which patient and when, expired, or still in stock),
+  with the donor's totals.
+
+### Patients
+
+- The list shows who is waiting for blood. The panel lists each waiting request with its urgency and whether stock can cover it, with a Fulfil button,
+  and says which blood groups the patient can receive.
+
+### Appointments
+
+- Tabs for Today, Upcoming, Past and Cancelled, each with its count.
+- Today is the day's agenda: who has donated, who is next, who is donating for the first time, and Record donation on each appointment still to come.
+- Filter by donor with a chip that searches as you type.
+
+### Requests
+
+- Tabs for Open, Due in 48 h, Fulfilled and Cancelled, each with its count. Open requests are listed by the date the blood is needed, overdue first.
+- A Cover column says whether stock can fulfil each request, how many units are short, or that there is no stock of that group.
+- Before you fulfil a request, the panel lists the bags that will be issued, oldest first, each with its code, its donor and its use-by date.
+
+### Stock
+
+- Stock by age: for each blood group, how many bags are in each week of their shelf life, with the bags that expire within 7 days in their own column.
+- The panel lists the group's bags in the order to use them, with each bag's code, collection date, expiry and days left, and shows what the group
+  can be given to and can receive.
+
+### Receipts
+
+- Tabs for all receipts, donations and blood issues, each with its count. The date and time, the kind and who issued a receipt are always shown in full.
+- The panel shows the receipt as it prints, with Print, Save as PDF and a link to its appointment or request. Reprints are marked as copies.
+
+### Staff and profile
+
+- Staff: filter by salary range, see each person's photo, job title, role and what the role may do. The panel offers Edit and Reset password; Delete
+  staff member is in the "..." menu.
+- Your profile is one centred page: your account, your details, security, appearance and the keyboard shortcuts. Save and Discard appear only when
+  something has changed.
+- Forms mark the optional fields instead of every required one, and every field for a secret has a button to show what you typed.
+
+### Accessibility
+
+- Text and controls meet the contrast rules on every surface in both themes. A scroll bar's thumb is quiet at rest and clearly visible while you point
+  at it, drag it, or move through a list with the keyboard.
+- Nothing is cut off: a value that does not fit gets a wider column, wraps, or shows its full text in a tooltip.
+
+### Server
+
+The desktop app and the server are released together. For anyone who uses the API directly, 2.1 only adds to it; nothing that existed has changed.
+
+- New read-only requests: a donor's donations with their bags, the counts behind the Appointments and Requests tabs, the bags a fulfil would issue, the
+  bags of one blood group in use-first order, and receipt counts by kind.
+- New optional fields on existing answers: the age bands of each group's stock, the number of donations on a donor in the list, and a first-time mark
+  on an appointment.
+- New optional filters on existing lists: donors by eligibility and by last donation, and appointments and requests by tab, with the caller's time
+  zone offset so that "today" is the caller's day.
+- Fixed: when many wrong sign-in attempts arrived at the same moment, some were answered "the system is busy" and were not counted towards the lockout.
+  Every wrong attempt is now counted and answered as a wrong sign-in or as too many attempts.
+
+### Known limits
+
+- There is no "check in" step for an appointment: the server does not record one, so the agenda offers Record donation.
+- Fulfilling a request issues the oldest bags of the group; the bags cannot be chosen by hand.
+- The columns of a list cannot be chosen, and there is one row height.
 
 ## [2.0.2] - 2026-11-19
 

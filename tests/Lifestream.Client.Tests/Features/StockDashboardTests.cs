@@ -163,7 +163,30 @@ public sealed class StockDashboardTests
         await load;
 
         Assert.Equal(LoadState.Ready, vm.State);
-        Assert.Equal(["GetDashboardAsync"], rig.Recorder.Calls.Select(c => c.Name)); // exactly one API call fills every block
+
+        // Exactly one API call per data set of direction A's dashboard (the figures and charts, the stock, today's appointments, the open requests), started
+        // together; never one per row (a call per donor to find the first-time ones was a regression) and never the same one twice.
+        Assert.Equal(["GetDashboardAsync", "GetStockAsync", "GetAppointmentsAsync", "GetRequestsAsync"], rig.Recorder.Calls.Select(c => c.Name));
+    }
+
+    [Fact]
+    public async Task Dashboard_MarksFirstTimeDonorsFromTheAppointmentList_WithoutAskingForEachDonor()
+    {
+        var rig = new FeatureRig();
+        var slot = DateTime.UtcNow.Date.AddHours(12);
+        Lifestream.Contracts.Appointments.AppointmentListItem[] today =
+        [
+            new(1, 101, "Returning Donor", BloodType.OPos, slot.AddDays(-3), slot, AppointmentStatus.Pending),
+            new(2, 102, "New Donor", BloodType.APos, slot.AddDays(-3), slot.AddMinutes(30), AppointmentStatus.Pending) { DonorFirstTime = true },
+        ];
+        rig.Fake.On("GetDashboardAsync", ApiResult<DashboardResponse>.Ok(Samples.Dashboard()));
+        rig.Fake.On("GetAppointmentsAsync", ApiResult<Lifestream.Contracts.PagedResult<Lifestream.Contracts.Appointments.AppointmentListItem>>.Ok(new(today, today.Length, 1, 50)));
+        var vm = rig.Dashboard();
+
+        await vm.LoadAsync();
+
+        Assert.Equal([false, true], vm.Today.Select(a => a.IsFirstTime));
+        Assert.DoesNotContain("GetDonorAsync", rig.Recorder.Calls.Select(c => c.Name));
     }
 
     // FEAT-28

@@ -414,10 +414,9 @@ public sealed partial class DashboardViewModel : ViewModelBase
         _today = (await todays.ConfigureAwait(false)) is { IsOk: true } t ? [.. t.Value.Items.Where(a => a.Status != AppointmentStatus.Cancelled).OrderBy(a => a.SlotStartUtc)] : [];
         _requests = (await requests.ConfigureAwait(false)) is { IsOk: true } r ? r.Value.Items : [];
 
-        // First-time donors among those still to come: a donor who has never given (no last donation). At most one call per person, in parallel.
-        var pending = _today.Where(a => a.Status == AppointmentStatus.Pending).Select(a => a.DonorId).Distinct().Take(12).ToList();
-        var details = await Task.WhenAll(pending.Select(id => Quietly(() => _api.GetDonorAsync(id, ct)))).ConfigureAwait(false);
-        _firstTimers = [.. details.Where(d => d is { IsOk: true } && d.Value.LastDonated is null).Select(d => d!.Value.Id)];
+        // First-time donors among those still to come. The appointment list says so itself (no completed donation before the slot), so the dashboard is
+        // four requests, one per data set, however many people come today: it does not ask for each donor.
+        _firstTimers = [.. _today.Where(a => a.Status == AppointmentStatus.Pending && a.DonorFirstTime).Select(a => a.DonorId)];
     }
 
     /// <summary>Runs a secondary call; a failure or an exception becomes null instead of failing the screen.</summary>
