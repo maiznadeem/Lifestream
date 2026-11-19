@@ -25,6 +25,19 @@ public sealed class Part2AppointmentRequestViewTests
 
     private static Button ButtonNamed(Hosted host, string name) => host.All<Button>().First(b => b.IsVisible && AutomationProperties.GetName(b) == name);
 
+    /// <summary>Switches the Requests screen to its Fulfilled tab (as a click does) and returns the status chips and the columns shown there.</summary>
+    private static (List<string> Chips, List<string?> Columns) ClosedChips(RequestsViewModel vm, Hosted host, LifestreamDataGrid grid)
+    {
+        Hosted.Await(() =>
+        {
+            vm.IsFulfilledView = true;
+            return vm.PendingRefresh;
+        });
+        host.Settle(300);
+        return ([.. Part2Harness.Visible<StatusChip>(host).Select(c => c.DisplayText).Distinct().Order()],
+            [.. grid.Columns.Where(c => c.Visibility == Visibility.Visible).Select(c => c.Header?.ToString())]);
+    }
+
     private static Task SelectFirst<TItem, TDetail>(Lifestream.Client.Features.ListScreens.RecordListViewModel<TItem, TDetail> vm)
         where TItem : class
         where TDetail : class
@@ -63,13 +76,15 @@ public sealed class Part2AppointmentRequestViewTests
                 ChipTexts: chips.Select(c => c.DisplayText).Distinct().Order().ToList(),
                 LocalTimes: texts.Any(t => Regex.IsMatch(t, @"^\d{2}:\d{2}$")),
                 DayHeadings: texts.Count(t => Regex.IsMatch(t, @"^((Today|Tomorrow|Yesterday), )?[A-Z][a-z]{2} \d{2} [A-Z][a-z]{2}( \d{4})?$")),
-                Actions: new[] { "Record donation", "Reschedule", "Cancel appointment" }.Select(n => host.All<Button>().Any(b => b.IsVisible && AutomationProperties.GetName(b) == n)).ToList(),
+                Actions: new[] { "Record donation", "Reschedule" }.Select(n => host.All<Button>().Any(b => b.IsVisible && AutomationProperties.GetName(b) == n)).ToList(),
+                // The destructive action is in the panel's "..." menu, with its full label (direction A: one action row, [Primary] [Edit] [...]).
+                MenuItems: host.All<Lifestream.Desktop.Features.ListScreens.MenuButton>().Where(m => m.IsVisible).SelectMany(m => m.ContextMenu!.Items.OfType<MenuItem>()).Select(i => i.Header as string).ToList(),
                 Skeletons: host.All<Skeleton>().Count(s => s.IsVisible),
                 Calls: (rig.Api.CountOf("GetAppointmentsAsync"), rig.Api.CountOf("GetAppointmentAsync")));
         });
 
         Assert.Equal("Showing 1–50 of 86", facts.Count);
-        Assert.Equal(["Time", "Donor", "Group", "Status", "Booked on"], facts.Headers); // no id column, no constant or always-empty column; the day is the group heading
+        Assert.Equal(["Time", "Donor", "Group", "Status", "Next step", "Booked on"], facts.Headers); // no id column; the day is the group heading; Next step only on the Today tab
         Assert.Equal(["slot"], facts.Sortable);
         Assert.All(facts.Sortable, key => Assert.Contains(key, facts.VmKeys)); // a column only sorts by a key the screen declares (and the API accepts)
         Assert.True(facts.DonorIds > 3); // "D-0101": the donor's code, as secondary text under the name
@@ -82,6 +97,7 @@ public sealed class Part2AppointmentRequestViewTests
         Assert.True(facts.LocalTimes); // "14:00": the local time of day in the row
         Assert.True(facts.DayHeadings > 0); // and the local day as the heading of its group
         Assert.All(facts.Actions, Assert.True);
+        Assert.Contains("Cancel appointment", facts.MenuItems);
         Assert.Equal(0, facts.Skeletons);
         Assert.Equal((1, 1), facts.Calls);
     }
@@ -120,7 +136,7 @@ public sealed class Part2AppointmentRequestViewTests
 
         Assert.True(facts.skeletonShown);
         Assert.False(facts.gridShown);
-        Assert.Equal("No appointments yet", facts.Title);
+        Assert.Equal("No appointments today", facts.Title); // the empty state names the view (the Today tab opens first)
         Assert.Equal(1, facts.ErrorShown);
     }
 
@@ -271,21 +287,24 @@ public sealed class Part2AppointmentRequestViewTests
                 Sortable: grid.Columns.Where(c => c.CanUserSort).Select(c => c.SortMemberPath).ToList(),
                 Keys: vm.SortKeys,
                 Patient: texts.Contains(DemoData.Name(4)),
-                Ids: texts.Count(t => Regex.IsMatch(t, @"^P-02\d\d$")),
-                Chips: Part2Harness.Visible<StatusChip>(host).Select(c => c.DisplayText).Distinct().Order().ToList(),
+                Ids: texts.Count(t => Regex.IsMatch(t, @"^R-\d{4} · P-02\d\d$")), // the request's code and the patient's, as secondary text under the name
+                OpenColumns: grid.Columns.Where(c => c.Visibility == Visibility.Visible).Select(c => c.Header?.ToString()).ToList(),
                 SearchLabel: InputAssist.GetPlaceholder(host.Find<TextBox>("SearchBox")),
-                Fulfil: host.All<Button>().Any(b => b.IsVisible && AutomationProperties.GetName(b) == "Fulfil request"));
+                Fulfil: host.All<Button>().Any(b => b.IsVisible && AutomationProperties.GetName(b) == "Fulfil request"),
+                Chips: ClosedChips(vm, host, grid));
         });
 
         Assert.Equal("Showing 1–40 of 40", facts.Count);
-        Assert.Equal(["Patient", "Group", "Units", "Needed by", "Urgency", "Status"], facts.Headers);
+        Assert.Equal(["Patient", "Group", "Units", "Needed by", "Urgency", "Cover", "Status"], facts.Headers);
+        Assert.DoesNotContain("Status", facts.OpenColumns); // the Open tab: every row is pending, so no Status column repeating "Pending"
+        Assert.Contains("Cover", facts.OpenColumns);
         Assert.Equal(["requiredBy"], facts.Sortable);
         Assert.All(facts.Sortable, key => Assert.Contains(key, facts.Keys));
         Assert.True(facts.Patient);
         Assert.True(facts.Ids > 3);
-        Assert.Contains("Pending", facts.Chips);
-        Assert.Contains("Fulfilled", facts.Chips);
-        Assert.Equal("Search by patient name or number", facts.SearchLabel); // the one search box says what it finds
+        Assert.Contains("Fulfilled", facts.Chips.Chips); // the Fulfilled tab shows each request's status as a chip
+        Assert.Contains("Status", facts.Chips.Columns);
+        Assert.Equal("Search patient or request ID", facts.SearchLabel); // the one search box says what it finds
         Assert.True(facts.Fulfil);
     }
 
@@ -315,7 +334,7 @@ public sealed class Part2AppointmentRequestViewTests
         });
 
         Assert.True(facts.skeleton);
-        Assert.Equal("No requests yet", facts.Empty);
+        Assert.Equal("No requests waiting for blood", facts.Empty); // the empty state names the view (Open)
     }
 
     [Fact]

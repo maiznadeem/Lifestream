@@ -119,6 +119,9 @@ public sealed class WakingEveryOperationTests
         ["Stock.OpenRequestsCommand"] = "navigates to Requests with the group (a fake navigation here)",
         ["Receipts.PrintCommand"] = "prints the receipt already loaded in the panel (the printer, no API call)",
         ["Receipts.SavePdfCommand"] = "saves the receipt already loaded in the panel as a PDF (the printer, no API call)",
+        ["Patients.FulfilRequestCommand"] = "navigates to Requests with the request to fulfil (a fake navigation here; the fulfil step is covered by the Requests tests)",
+        ["Appointments.CheckInCommand"] = "selects the row, whose detail is already loaded in this state (selecting a row is covered by the detail tests)",
+        ["Appointments.RecordDonationForCommand"] = "selects the row and opens the record-donation dialog (a fake dialog here; recording is covered by RecordDonationCommand)",
     };
 
     /// <summary>Commands that are disabled on a freshly loaded screen with the first record selected, each with the reason; they make no call of their own.</summary>
