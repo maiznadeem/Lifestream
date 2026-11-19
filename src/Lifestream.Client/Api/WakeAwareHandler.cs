@@ -143,7 +143,7 @@ public sealed class WakeAwareHandler(WakePolicy policy, ServerStatus status, Htt
             var code = JsonText.Property(doc.RootElement, "code");
             return code != ProblemCodes.DatabaseResting;
         }
-        catch (JsonException)
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException or ArgumentException or NotSupportedException)
         {
             return true;
         }
