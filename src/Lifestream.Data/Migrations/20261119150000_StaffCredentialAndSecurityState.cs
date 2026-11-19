@@ -104,11 +104,38 @@ public partial class StaffCredentialAndSecurityState : Migration
             table: "UnknownLogin",
             column: "Name",
             unique: true);
+
+        migrationBuilder.CreateIndex(
+            name: "IX_Staff_IsProtected",
+            table: "Staff",
+            column: "IsProtected");
+
+        migrationBuilder.CreateIndex(
+            name: "IX_Staff_Role",
+            table: "Staff",
+            column: "Role");
+
+        migrationBuilder.CreateIndex(
+            name: "IX_Staff_Salary",
+            table: "Staff",
+            column: "Salary");
     }
 
     /// <inheritdoc />
     protected override void Down(MigrationBuilder migrationBuilder)
     {
+        migrationBuilder.DropIndex(
+            name: "IX_Staff_IsProtected",
+            table: "Staff");
+
+        migrationBuilder.DropIndex(
+            name: "IX_Staff_Role",
+            table: "Staff");
+
+        migrationBuilder.DropIndex(
+            name: "IX_Staff_Salary",
+            table: "Staff");
+
         migrationBuilder.AddColumn<int>(
             name: "FailedLoginCount",
             table: "Staff",

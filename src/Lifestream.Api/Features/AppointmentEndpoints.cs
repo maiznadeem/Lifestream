@@ -5,6 +5,7 @@ using Lifestream.Contracts;
 using Lifestream.Contracts.Appointments;
 using Lifestream.Contracts.Receipts;
 using Lifestream.Data;
+using Lifestream.Data.Queries;
 using Lifestream.Data.Entities;
 using Lifestream.Domain;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -63,10 +64,10 @@ public static class AppointmentEndpoints
 
         if (Lists.CleanSearch(q.Search) is { } term)
         {
-            // Donor ids by name or contact (two prefix seeks), then the appointments of those donors; a numeric term also matches the id.
-            var like = Lists.PrefixPattern(term);
-            var donorIds = db.Donors.Where(d => EF.Functions.Like(d.Name, like, "\\") || EF.Functions.Like(d.Phone!, like, "\\")).Select(d => d.Id);
-            filtered = int.TryParse(term, out var id)
+            // Donor ids by name (and phone, for a term long enough to be one: prefix seeks), then the appointments of those donors; a term that is a whole number also matches the id.
+            var parsed = SearchQueries.ParseTerm(term);
+            var donorIds = db.Donors.NameOrPhoneMatching(parsed).Select(d => d.Id);
+            filtered = parsed.Id is { } id
                 ? filtered.Where(a => a.Id == id || donorIds.Contains(a.DonorId))
                 : filtered.Where(a => donorIds.Contains(a.DonorId));
         }

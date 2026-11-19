@@ -40,7 +40,7 @@ public sealed class StaffWriteFailer : SaveChangesInterceptor
 
     public override ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
     {
-        if (Mode != FailMode.None && eventData.Context!.ChangeTracker.Entries<Lifestream.Data.Entities.Staff>().Any(e => e.State == EntityState.Modified))
+        if (Mode != FailMode.None && eventData.Context!.ChangeTracker.Entries<Lifestream.Data.Entities.StaffCredential>().Any(e => e.State == EntityState.Modified))
         {
             throw Mode == FailMode.ConcurrencyClash ? new DbUpdateConcurrencyException("simulated clash") : new InvalidOperationException("simulated write failure");
         }

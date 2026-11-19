@@ -30,7 +30,7 @@ public sealed class StaffCredentialRowVersionTests(ApiFixture fx) : IClassFixtur
         var user = await fx.AddStaffAsync(Role.Staff);
         Assert.Equal(1, await fx.Db.ScalarAsync<int>($"SELECT COUNT(*) FROM StaffCredential WHERE StaffId = {user.Id}", Ct));
         Assert.Equal(0, await fx.Db.ScalarAsync<int>("SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID('Staff') AND name IN ('PasswordHash','FailedLoginCount','LockoutEndUtc','MustChangePassword')", Ct));
-        Assert.Equal(1, await fx.Db.ScalarAsync<int>("SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID('StaffCredential') AND name IN ('PasswordHash','FailedCount','LockoutEndUtc','MustChangePassword','SecurityStamp','RowVersion') HAVING COUNT(*) = 6", Ct));
+        Assert.Equal(6, await fx.Db.ScalarAsync<int>("SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID('StaffCredential') AND name IN ('PasswordHash','FailedCount','LockoutEndUtc','MustChangePassword','SecurityStamp','RowVersion')", Ct));
     }
 
     [Fact]

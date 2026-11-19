@@ -251,7 +251,7 @@ public sealed class ListQueryPlanTests(ScaleDatabaseFixture fixture) : IClassFix
         "Appointments" => AppointmentFilter(db.Appointments, f, await DonorIds(db, f, s), s).CountAsync(Ct),
         "Requests" => RequestFilter(db.Requests, f, await PatientIds(db, f, s), s).CountAsync(Ct),
         "Receipts" => f.Contains("Search")
-            ? HitFilter(SearchQueries.ReceiptsMatching(db, s.DonorPrefix, null), f, s).CountAsync(Ct)
+            ? HitFilter(SearchQueries.ReceiptsMatching(db, SearchQueries.ParseTerm(s.DonorPrefix) with { Id = null }), f, s).CountAsync(Ct)
             : ReceiptFilter(db.Receipts, f, s).CountAsync(Ct),
         "Staff" => (f.Contains("Search") ? db.Staff.NameStartsWith(s.StaffPrefix) : db.Staff).CountAsync(Ct),
         _ => throw new InvalidOperationException(list),
@@ -323,7 +323,7 @@ public sealed class ListQueryPlanTests(ScaleDatabaseFixture fixture) : IClassFix
         List<int> ids;
         if (f.Contains("Search"))
         {
-            var hits = HitFilter(SearchQueries.ReceiptsMatching(db, s.DonorPrefix, null), f, s);
+            var hits = HitFilter(SearchQueries.ReceiptsMatching(db, SearchQueries.ParseTerm(s.DonorPrefix) with { Id = null }), f, s);
             var orderedHits = sort == "date" ? hits.OrderBy(h => h.CreatedAtUtc).ThenBy(h => h.Id) : hits.OrderByDescending(h => h.CreatedAtUtc).ThenByDescending(h => h.Id);
             ids = await orderedHits.Select(h => h.Id).Skip((page - 1) * PageSize).Take(PageSize).ToListAsync(Ct);
         }

@@ -4,6 +4,7 @@ using Lifestream.Api.Infrastructure;
 using Lifestream.Contracts;
 using Lifestream.Contracts.Staff;
 using Lifestream.Data;
+using Lifestream.Data.Queries;
 using Lifestream.Data.Entities;
 using Lifestream.Data.Security;
 using Lifestream.Domain;
@@ -129,7 +130,7 @@ public static class StaffEndpoints
         if (Lists.CleanSearch(q.Search) is { } term)
         {
             var like = Lists.PrefixPattern(term);
-            var id = int.TryParse(term, out var parsed) ? parsed : -1;
+            var id = SearchQueries.ParseTerm(term).Id ?? -1;
             filtered = filtered.Where(s => s.Id == id || EF.Functions.Like(s.DisplayName, like, "\\") || EF.Functions.Like(s.Username, like, "\\"));
         }
 

@@ -1470,6 +1470,30 @@ IF NOT EXISTS (
     WHERE [MigrationId] = N'20261119150000_StaffCredentialAndSecurityState'
 )
 BEGIN
+    CREATE INDEX [IX_Staff_IsProtected] ON [Staff] ([IsProtected]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261119150000_StaffCredentialAndSecurityState'
+)
+BEGIN
+    CREATE INDEX [IX_Staff_Role] ON [Staff] ([Role]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261119150000_StaffCredentialAndSecurityState'
+)
+BEGIN
+    CREATE INDEX [IX_Staff_Salary] ON [Staff] ([Salary]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261119150000_StaffCredentialAndSecurityState'
+)
+BEGIN
     INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
     VALUES (N'20261119150000_StaffCredentialAndSecurityState', N'11.0.0');
 END;

@@ -5,6 +5,7 @@ using Lifestream.Contracts;
 using Lifestream.Contracts.Lookups;
 using Lifestream.Contracts.Profile;
 using Lifestream.Data;
+using Lifestream.Data.Queries;
 using Lifestream.Data.Security;
 using Lifestream.Data.Seed;
 using Lifestream.Domain;
@@ -170,7 +171,7 @@ public static class LookupEndpoints
         if (Lists.CleanSearch(search) is { } term)
         {
             var like = Lists.PrefixPattern(term);
-            var id = int.TryParse(term, out var parsed) ? parsed : -1;
+            var id = SearchQueries.ParseTerm(term).Id ?? -1;
             query = query.Where(s => s.Id == id || EF.Functions.Like(s.DisplayName, like, "\\") || EF.Functions.Like(s.Username, like, "\\"));
         }
 
@@ -183,9 +184,9 @@ public static class LookupEndpoints
         var query = db.Appointments.AsNoTracking().Where(a => a.Status == AppointmentStatus.Pending);
         if (Lists.CleanSearch(search) is { } term)
         {
-            var like = Lists.PrefixPattern(term);
-            var id = int.TryParse(term, out var parsed) ? parsed : -1;
-            query = query.Where(a => a.Id == id || EF.Functions.Like(a.Donor!.Name, like, "\\") || EF.Functions.Like(a.Donor.Phone!, like, "\\"));
+            var parsed = SearchQueries.ParseTerm(term);
+            var donorIds = db.Donors.NameOrPhoneMatching(parsed).Select(d => d.Id);
+            query = parsed.Id is { } id ? query.Where(a => a.Id == id || donorIds.Contains(a.DonorId)) : query.Where(a => donorIds.Contains(a.DonorId));
         }
 
         var rows = await query.OrderBy(a => a.SlotStartUtc).ThenBy(a => a.Id).Take(Take).Select(a => new { a.Id, Donor = a.Donor!.Name, a.SlotStartUtc }).ToListAsync(ct);
@@ -197,9 +198,9 @@ public static class LookupEndpoints
         var query = db.Requests.AsNoTracking().Where(r => r.Status == RequestStatus.Pending);
         if (Lists.CleanSearch(search) is { } term)
         {
-            var like = Lists.PrefixPattern(term);
-            var id = int.TryParse(term, out var parsed) ? parsed : -1;
-            query = query.Where(r => r.Id == id || EF.Functions.Like(r.Patient!.Name, like, "\\") || EF.Functions.Like(r.Patient.Phone!, like, "\\"));
+            var parsed = SearchQueries.ParseTerm(term);
+            var patientIds = db.Patients.NameOrPhoneMatching(parsed).Select(p => p.Id);
+            query = parsed.Id is { } id ? query.Where(r => r.Id == id || patientIds.Contains(r.PatientId)) : query.Where(r => patientIds.Contains(r.PatientId));
         }
 
         var rows = await query.OrderBy(r => r.RequiredBy).ThenBy(r => r.Id).Take(Take).Select(r => new { r.Id, Patient = r.Patient!.Name, r.BloodType, r.Units }).ToListAsync(ct);

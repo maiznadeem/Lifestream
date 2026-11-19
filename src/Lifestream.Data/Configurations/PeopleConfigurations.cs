@@ -129,7 +129,11 @@ internal sealed class StaffConfiguration : IEntityTypeConfiguration<Staff>
         b.HasIndex(x => x.DisplayName);
 
         // Every demo request resolves the demo account (WHERE IsDemo = 1) and every login excludes it: one tiny filtered index holds just that row.
-        // IsProtected is not indexed: the API only tests it on a row it already found by Id, or as "not protected" (nearly every row), which no index helps.
+        // The other columns the API filters Staff by have an index too (every filtered column is indexed, whatever the table's size today): Salary (the salary range),
+        // Role (the administrator checks) and IsProtected (what the demo account may see).
+        b.HasIndex(x => x.Salary);
+        b.HasIndex(x => x.Role);
+        b.HasIndex(x => x.IsProtected);
         b.HasIndex(x => x.IsDemo).HasFilter("[IsDemo] = 1").IncludeProperties(x => x.DisplayName);
     }
 }

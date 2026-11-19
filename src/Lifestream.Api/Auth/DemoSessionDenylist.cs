@@ -1,6 +1,6 @@
-using System.Data;
 using System.Runtime.CompilerServices;
 using Lifestream.Data;
+using Lifestream.Data.Entities;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -51,12 +51,17 @@ public sealed class DemoSessionDenylist(LifestreamDbContext db, TimeProvider tim
     public async Task RevokeFamilyAsync(Guid family, DateTime until, CancellationToken ct)
     {
         await PurgeAsync(Now, ct);
-        await db.Database.ExecuteSqlRawAsync(
-            "MERGE [DemoRevocation] WITH (HOLDLOCK) AS t USING (SELECT @k AS [Key], @u AS [ExpiresAtUtc]) AS s ON t.[Key] = s.[Key] " +
-            "WHEN MATCHED AND t.[ExpiresAtUtc] < s.[ExpiresAtUtc] THEN UPDATE SET [ExpiresAtUtc] = s.[ExpiresAtUtc] " +
-            "WHEN NOT MATCHED THEN INSERT ([Key], [ExpiresAtUtc]) VALUES (s.[Key], s.[ExpiresAtUtc]);",
-            [KeyParameter(FamilyKey(family)), TimeParameter("@u", until)],
-            ct);
+        var key = FamilyKey(family);
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            // An existing row only ever moves later; a new row is inserted, and a racing insert of the same key is retried as an update.
+            if (await db.DemoRevocations.Where(r => r.Key == key).ExecuteUpdateAsync(s => s.SetProperty(r => r.ExpiresAtUtc, r => r.ExpiresAtUtc > until ? r.ExpiresAtUtc : until), ct) == 1
+                || await TryInsertAsync(key, until, ct))
+            {
+                break;
+            }
+        }
+
         RevocationCache.Clear(cache);
     }
 
@@ -73,12 +78,26 @@ public sealed class DemoSessionDenylist(LifestreamDbContext db, TimeProvider tim
             return true;
         }
 
-        // ...otherwise the first caller inserts the row and every later one finds it.
-        var inserted = await db.Database.ExecuteSqlRawAsync(
-            "INSERT INTO [DemoRevocation] ([Key], [ExpiresAtUtc]) SELECT @k, @u WHERE NOT EXISTS (SELECT 1 FROM [DemoRevocation] WITH (UPDLOCK, HOLDLOCK) WHERE [Key] = @k);",
-            [KeyParameter(key), TimeParameter("@u", until)],
-            ct);
-        return inserted == 1;
+        // ...otherwise the first caller inserts the row (the key is unique) and every later one fails to.
+        return await TryInsertAsync(key, until, ct);
+    }
+
+    private async Task<bool> TryInsertAsync(string key, DateTime until, CancellationToken ct)
+    {
+        try
+        {
+            db.DemoRevocations.Add(new DemoRevocation { Key = key, ExpiresAtUtc = until });
+            await db.SaveChangesAsync(ct);
+            return true;
+        }
+        catch (DbUpdateException exception) when (exception.InnerException is SqlException { Number: 2627 or 2601 })
+        {
+            return false;
+        }
+        finally
+        {
+            db.ChangeTracker.Clear(); // the row is not read back through this context
+        }
     }
 
     private async Task PurgeAsync(DateTime now, CancellationToken ct)
@@ -97,8 +116,4 @@ public sealed class DemoSessionDenylist(LifestreamDbContext db, TimeProvider tim
             await db.DemoRevocations.Where(r => expired.Contains(r.Key) && r.ExpiresAtUtc <= now).ExecuteDeleteAsync(ct);
         }
     }
-
-    private static SqlParameter KeyParameter(string key) => new("@k", SqlDbType.VarChar, 40) { Value = key };
-
-    private static SqlParameter TimeParameter(string name, DateTime value) => new(name, SqlDbType.DateTime2) { Scale = 3, Value = DateTime.SpecifyKind(value, DateTimeKind.Utc) };
 }

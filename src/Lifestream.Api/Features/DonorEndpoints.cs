@@ -4,6 +4,7 @@ using Lifestream.Api.Infrastructure;
 using Lifestream.Contracts;
 using Lifestream.Contracts.Donors;
 using Lifestream.Data;
+using Lifestream.Data.Queries;
 using Lifestream.Data.Entities;
 using Lifestream.Domain;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -37,9 +38,7 @@ public static class DonorEndpoints
 
         if (Lists.CleanSearch(search) is { } term)
         {
-            var like = Lists.PrefixPattern(term);
-            var id = int.TryParse(term, out var parsed) ? parsed : -1;
-            donors = donors.Where(d => EF.Functions.Like(d.Name, like, "\\") || EF.Functions.Like(d.Phone!, like, "\\") || d.Id == id);
+            donors = donors.Matching(SearchQueries.ParseTerm(term));
         }
 
         return donors;

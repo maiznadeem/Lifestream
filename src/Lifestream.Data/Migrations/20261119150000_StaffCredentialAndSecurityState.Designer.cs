@@ -752,6 +752,12 @@ partial class StaffCredentialAndSecurityState
 
                 SqlServerIndexBuilderExtensions.IncludeProperties(index, new[] { "DisplayName" });
 
+                b.HasIndex("IsProtected");
+
+                b.HasIndex("Role");
+
+                b.HasIndex("Salary");
+
                 b.HasIndex("Username")
                     .IsUnique();
 

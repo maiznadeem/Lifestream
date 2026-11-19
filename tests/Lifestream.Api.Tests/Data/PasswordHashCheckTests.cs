@@ -118,7 +118,7 @@ public sealed class PasswordHashCheckTests(SqlServerDatabaseFixture fixture) : I
             """
             INSERT INTO Staff (DisplayName, Username, Gender, DateOfBirth, Designation, Shift, Role, IsProtected, IsDemo, HasPhoto)
             VALUES (N'Raw', N'plain', 'Male', '1990-01-01', 'Doctor', 'Morning', 'Staff', 0, 0, 0);
-            INSERT INTO StaffCredential (StaffId, PasswordHash) VALUES (SCOPE_IDENTITY(), 'AQAAAAIthis-is-plain-text-not-a-hash-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx');
+            INSERT INTO StaffCredential (StaffId, PasswordHash, FailedCount) VALUES (SCOPE_IDENTITY(), 'AQAAAAIthis-is-plain-text-not-a-hash-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx', 0);
             """,
             Ct);
 
@@ -139,7 +139,7 @@ public sealed class PasswordHashCheckTests(SqlServerDatabaseFixture fixture) : I
             BEGIN TRAN;
             INSERT INTO Staff (DisplayName, Username, Gender, DateOfBirth, Designation, Shift, Role, IsProtected, IsDemo, HasPhoto)
             VALUES (N'Raw', @u, 'Male', '1990-01-01', 'Doctor', 'Morning', 'Staff', 0, 0, 0);
-            INSERT INTO StaffCredential (StaffId, PasswordHash) VALUES (SCOPE_IDENTITY(), @h);
+            INSERT INTO StaffCredential (StaffId, PasswordHash, FailedCount) VALUES (SCOPE_IDENTITY(), @h, 0);
             COMMIT;
             """,
             connection);
