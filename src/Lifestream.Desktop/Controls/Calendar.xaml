@@ -45,7 +45,7 @@
     <Setter Property="FontWeight" Value="SemiBold" />
     <Setter Property="Foreground" Value="{DynamicResource Brush.Ink}" />
     <Setter Property="Width" Value="NaN" />
-    <Setter Property="Padding" Value="10,0,10,0" />
+    <Setter Property="Padding" Value="{DynamicResource Inset.H10}" />
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="Button">
@@ -249,7 +249,7 @@
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="Calendar">
-          <Grid x:Name="PART_Root" Margin="12,6,12,20" SnapsToDevicePixels="True">
+          <Grid x:Name="PART_Root" Margin="{DynamicResource Inset.L12T6R12B20}" SnapsToDevicePixels="True">
             <Border Background="{DynamicResource Brush.Layer}" CornerRadius="{StaticResource Radius.Panel}" IsHitTestVisible="False">
               <Border.Effect>
                 <DropShadowEffect BlurRadius="{StaticResource Elevation.Flyout.Blur}" ShadowDepth="{StaticResource Elevation.Flyout.Offset}" Direction="270"
@@ -288,7 +288,7 @@
                 <VisualState x:Name="Watermarked">
                   <Storyboard>
                     <ObjectAnimationUsingKeyFrames Storyboard.TargetName="PART_Watermark" Storyboard.TargetProperty="Visibility">
-                      <DiscreteObjectKeyFrame KeyTime="0" Value="{x:Static Visibility.Visible}" />
+                      <DiscreteObjectKeyFrame KeyTime="{StaticResource Motion.Start}" Value="{x:Static Visibility.Visible}" />
                     </ObjectAnimationUsingKeyFrames>
                   </Storyboard>
                 </VisualState>
@@ -320,10 +320,10 @@
             <controls:CrispBorder x:Name="Box" Background="{DynamicResource Brush.Layer}" BorderBrush="{DynamicResource Brush.Stroke2}" BorderThickness="1"
                     CornerRadius="{StaticResource Radius.Control}" />
             <Border x:Name="HoverFill" Background="{DynamicResource Brush.Layer2}" CornerRadius="{StaticResource Radius.Control}" Margin="{StaticResource Pad.1}" Opacity="0" IsHitTestVisible="False" />
-            <Border x:Name="BottomEdge" Height="1" VerticalAlignment="Bottom" Margin="3,0,3,0" Background="{DynamicResource Brush.StrokeStrong}" IsHitTestVisible="False" />
-            <DatePickerTextBox x:Name="PART_TextBox" Style="{StaticResource DatePickerTextBox.Lifestream}" Margin="0,0,34,0" Focusable="{TemplateBinding Focusable}"
+            <Border x:Name="BottomEdge" Height="1" VerticalAlignment="Bottom" Margin="{DynamicResource Inset.H3}" Background="{DynamicResource Brush.StrokeStrong}" IsHitTestVisible="False" />
+            <DatePickerTextBox x:Name="PART_TextBox" Style="{StaticResource DatePickerTextBox.Lifestream}" Margin="{DynamicResource Inset.R34}" Focusable="{TemplateBinding Focusable}"
                                HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalContentAlignment="Center" />
-            <Button x:Name="PART_Button" Style="{StaticResource CalendarNavButton.Lifestream}" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,3,0"
+            <Button x:Name="PART_Button" Style="{StaticResource CalendarNavButton.Lifestream}" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="{DynamicResource Inset.R3}"
                     Foreground="{DynamicResource Brush.Ink3}" AutomationProperties.Name="Open calendar" ToolTip="Open calendar">
               <controls:Icon Kind="Cal" Size="16" />
             </Button>

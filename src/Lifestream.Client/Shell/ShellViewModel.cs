@@ -246,6 +246,14 @@ public sealed partial class ShellViewModel : ViewModelBase
 
     private string? _profileSubtitle;
 
+    /// <summary>The shell is running (StartAsync has opened the first screen): only then does it read counts in the background.</summary>
+    private bool _started;
+
+    private DateTimeOffset _lastCounts = DateTimeOffset.MinValue;
+
+    /// <summary>How often a navigation may refresh the sidebar counts.</summary>
+    public static readonly TimeSpan CountsInterval = TimeSpan.FromSeconds(30);
+
     public UpdateService Updates { get; }
 
     public IReadOnlyList<NavGroup> Groups { get; }
@@ -319,6 +327,7 @@ public sealed partial class ShellViewModel : ViewModelBase
         }
 
         await OpenAsync(_catalog[0]).ConfigureAwait(true);
+        _started = true;
         _ = RefreshCountsAsync();
         _ = LoadProfileLineAsync();
     }
@@ -363,10 +372,12 @@ public sealed partial class ShellViewModel : ViewModelBase
     /// </summary>
     public async Task RefreshCountsAsync(CancellationToken ct = default)
     {
-        if (_api is null)
+        if (_api is null || !_started)
         {
             return;
         }
+
+        _lastCounts = Clock.GetUtcNow();
 
         try
         {
@@ -412,7 +423,10 @@ public sealed partial class ShellViewModel : ViewModelBase
         }
     }
 
-    /// <summary>Opens a sidebar destination by its title ("Donors"), with an optional parameter for the screen; false when the role cannot see it.</summary>
+    /// <summary>
+    /// Opens a sidebar destination by its title ("Donors"), with an optional parameter for the screen. False when the role cannot see it or the
+    /// navigation did not happen (the person chose to keep unsaved changes).
+    /// </summary>
     public async Task<bool> OpenByTitleAsync(string title, object? parameter = null)
     {
         var destination = Items.Select(i => i.Destination).FirstOrDefault(d => d.Title == title);
@@ -424,13 +438,10 @@ public sealed partial class ShellViewModel : ViewModelBase
         if (parameter is null)
         {
             await OpenAsync(destination).ConfigureAwait(true);
-        }
-        else
-        {
-            await Navigation.NavigateTo(destination.ViewModelType, parameter).ConfigureAwait(true);
+            return Navigation.Current?.GetType() == destination.ViewModelType;
         }
 
-        return true;
+        return await Navigation.NavigateTo(destination.ViewModelType, parameter).ConfigureAwait(true);
     }
 
     private async Task BookAppointmentAsync()
@@ -446,8 +457,11 @@ public sealed partial class ShellViewModel : ViewModelBase
         var next = await FindNextAppointmentAsync().ConfigureAwait(true);
         if (next is null)
         {
-            await OpenByTitleAsync("Appointments", new Features.ListScreens.ListPrefilter(Status: "Pending")).ConfigureAwait(true);
-            Toasts.Show(ToastKind.Info, "Nobody is booked for the rest of today. Choose an appointment to record a donation.");
+            if (await OpenByTitleAsync("Appointments", new Features.ListScreens.ListPrefilter(Status: "Pending")).ConfigureAwait(true))
+            {
+                Toasts.Show(ToastKind.Info, "Nobody is booked for the rest of today. Choose an appointment to record a donation.");
+            }
+
             return;
         }
 
@@ -524,7 +538,10 @@ public sealed partial class ShellViewModel : ViewModelBase
         OnPropertyChanged(nameof(CurrentPage));
         OnPropertyChanged(nameof(PageTitle));
         OnPropertyChanged(nameof(WindowTitle));
-        _ = RefreshCountsAsync();
+        if (Clock.GetUtcNow() - _lastCounts >= CountsInterval)
+        {
+            _ = RefreshCountsAsync();
+        }
     }
 
     private void OnDemoReset(object? sender, EventArgs e)

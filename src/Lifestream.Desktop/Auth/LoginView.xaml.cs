@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using Lifestream.Client.Auth;
 using Lifestream.Desktop.Controls;
+using Lifestream.Desktop.Theme;
 
 namespace Lifestream.Desktop.Auth;
 
@@ -80,8 +81,8 @@ public partial class LoginView : UserControl
         Hero.Visibility = wide ? Visibility.Visible : Visibility.Collapsed;
         HeroColumn.Width = wide ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
         FormColumn.Width = wide ? new GridLength(560) : new GridLength(1, GridUnitType.Star);
-        FormSide.BorderThickness = wide ? new Thickness(0, 0, 1, 0) : new Thickness(0);
+        FormSide.BorderThickness = wide ? ThemeTokens.Inset("Inset.R1") : new Thickness(0);
         // The explanation keeps generous margins on a large screen and tightens them in a smaller window (it scales down inside a Viewbox).
-        Hero.Margin = e.NewSize.Width >= 1280 ? new Thickness(96, 72, 96, 72) : new Thickness(48, 56, 40, 56);
+        Hero.Margin = e.NewSize.Width >= 1280 ? ThemeTokens.Inset("Inset.H96V72") : ThemeTokens.Inset("Inset.L48T56R40B56");
     }
 }

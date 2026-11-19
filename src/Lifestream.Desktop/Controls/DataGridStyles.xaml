@@ -43,7 +43,7 @@
     <Setter Property="Foreground" Value="{DynamicResource Brush.Ink2}" />
     <Setter Property="Background" Value="{DynamicResource Brush.Layer2}" />
     <Setter Property="MinHeight" Value="{StaticResource Height.HeaderRow}" />
-    <Setter Property="Padding" Value="12,0,12,0" />
+    <Setter Property="Padding" Value="{DynamicResource Inset.H12}" />
     <Setter Property="FocusVisualStyle" Value="{x:Null}" />
     <Setter Property="Template">
       <Setter.Value>
@@ -56,10 +56,10 @@
                 <ColumnDefinition Width="Auto" />
               </Grid.ColumnDefinitions>
               <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" TextElement.Foreground="{TemplateBinding Foreground}" />
-              <controls:Icon x:Name="SortGlyph" Grid.Column="1" Kind="Chevd" Size="13" Foreground="{DynamicResource Brush.Ink}" VerticalAlignment="Center" Margin="6,0,0,0"
+              <controls:Icon x:Name="SortGlyph" Grid.Column="1" Kind="Chevd" Size="13" Foreground="{DynamicResource Brush.Ink}" VerticalAlignment="Center" Margin="{DynamicResource Inset.L6}"
                              RenderTransformOrigin="0.5,0.5" Visibility="Collapsed" />
             </Grid>
-            <controls:CrispBorder x:Name="FocusRing" Margin="2" CornerRadius="{StaticResource Radius.Small}" BorderThickness="{StaticResource Thickness.FocusRing}"
+            <controls:CrispBorder x:Name="FocusRing" Margin="{DynamicResource Pad.2}" CornerRadius="{StaticResource Radius.Small}" BorderThickness="{StaticResource Thickness.FocusRing}"
                                   BorderBrush="{DynamicResource Brush.Focus}" Visibility="Collapsed" IsHitTestVisible="False" />
           </Grid>
           <ControlTemplate.Triggers>
@@ -86,7 +86,7 @@
     </Setter>
     <Style.Triggers>
       <DataTrigger Binding="{Binding Column.DisplayIndex, RelativeSource={RelativeSource Self}}" Value="0">
-        <Setter Property="Padding" Value="16,0,12,0" />
+        <Setter Property="Padding" Value="{DynamicResource Inset.L16R12}" />
       </DataTrigger>
     </Style.Triggers>
   </Style>
@@ -94,7 +94,7 @@
   <Style x:Key="DataGridCell.Lifestream" TargetType="DataGridCell">
     <Setter Property="Foreground" Value="{DynamicResource Brush.Ink}" />
     <Setter Property="BorderThickness" Value="0" />
-    <Setter Property="Padding" Value="12,0,12,0" />
+    <Setter Property="Padding" Value="{DynamicResource Inset.H12}" />
     <Setter Property="FocusVisualStyle" Value="{x:Null}" />
     <!-- Inherited: every text block in a cell (a name link, a two-part caption, any future cell) shows its whole text in a tooltip when it is cut off, so no view can miss it (FEAT-14). -->
     <Setter Property="local:TruncationTooltip.IsEnabled" Value="True" />
@@ -106,7 +106,7 @@
               <ContentPresenter VerticalAlignment="Center" />
             </Border>
             <!-- Keyboard focus: an inset 2 px ring on the focused cell (the row is selected with it). -->
-            <controls:CrispBorder x:Name="FocusRing" Margin="2" CornerRadius="{StaticResource Radius.Small}" BorderThickness="{StaticResource Thickness.FocusRing}"
+            <controls:CrispBorder x:Name="FocusRing" Margin="{DynamicResource Pad.2}" CornerRadius="{StaticResource Radius.Small}" BorderThickness="{StaticResource Thickness.FocusRing}"
                                   BorderBrush="{DynamicResource Brush.Focus}" Visibility="Collapsed" IsHitTestVisible="False" />
           </Grid>
           <ControlTemplate.Triggers>
@@ -119,7 +119,7 @@
     </Setter>
     <Style.Triggers>
       <DataTrigger Binding="{Binding Column.DisplayIndex, RelativeSource={RelativeSource Self}}" Value="0">
-        <Setter Property="Padding" Value="16,0,12,0" />
+        <Setter Property="Padding" Value="{DynamicResource Inset.L16R12}" />
       </DataTrigger>
     </Style.Triggers>
   </Style>

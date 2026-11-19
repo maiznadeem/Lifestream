@@ -71,6 +71,9 @@ public partial class ShellView : UserControl
             _model.PropertyChanged += OnModelChanged;
         }
 
+        // The palette's own view model (the shell owns it); views never take a DataContext in XAML.
+        Palette.DataContext = _model?.Palette;
+
         Apply();
     }
 
@@ -90,10 +93,10 @@ public partial class ShellView : UserControl
         var compact = Responsive.GetBreakpoint(Root) == Breakpoint.Compact;
         IsRail = compact || _model?.IsNavCollapsed == true;
         NavColumn.Width = new GridLength(ThemeTokens.Space(IsRail ? "Width.Rail" : "Width.Sidebar"));
-        Nav.Margin = IsRail ? new Thickness(0, 6, 0, 12) : new Thickness(8, 6, 8, 12);
+        Nav.Margin = IsRail ? ThemeTokens.Inset("Inset.T6B12") : ThemeTokens.Inset("Inset.L8T6R8B12");
         AccountText.Visibility = IsRail ? Visibility.Collapsed : Visibility.Visible;
         AccountButton.HorizontalAlignment = IsRail ? HorizontalAlignment.Center : HorizontalAlignment.Stretch;
-        AccountButton.Padding = IsRail ? new Thickness(4) : new Thickness(12, 10, 12, 10);
+        AccountButton.Padding = IsRail ? ThemeTokens.Inset("Pad.4") : ThemeTokens.Inset("Inset.H12V10");
         Wordmark.Visibility = Visibility.Visible;
 
         var titleHeight = ThemeTokens.Space(compact ? "Height.TitleBarCompact" : "Height.TitleBar");
@@ -107,8 +110,8 @@ public partial class ShellView : UserControl
         CompactSearch.Visibility = compact ? Visibility.Visible : Visibility.Collapsed;
         NotificationsButton.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
         AvatarButton.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
-        PageHost.Margin = compact ? new Thickness(22, 18, 16, 16) : new Thickness(32, 20, 32, 24);
-        LegacyTitle.Margin = compact ? new Thickness(22, 18, 16, 0) : new Thickness(32, 24, 32, 0);
+        ApplyPageMargin();
+        LegacyTitle.Margin = compact ? ThemeTokens.Inset("Inset.L22T18R16") : ThemeTokens.Inset("Inset.L32T24R32");
 
         var low = _model?.LowStockGroups ?? 0;
         HasAttention = low > 0;
@@ -128,9 +131,13 @@ public partial class ShellView : UserControl
         if (LegacyTitle.Visibility != visibility)
         {
             LegacyTitle.Visibility = visibility;
-            PageHost.Margin = new Thickness(PageHost.Margin.Left, owns ? (Breakpoint == Breakpoint.Compact ? 18 : 24) : 20, PageHost.Margin.Right, PageHost.Margin.Bottom);
+            ApplyPageMargin();
         }
     }
+
+    /// <summary>The page's inset: 32 at the sides (22/16 compact); 24 from the top for a page with its own header, 20 under the shell's title.</summary>
+    private void ApplyPageMargin() =>
+        PageHost.Margin = ThemeTokens.Inset(Breakpoint == Breakpoint.Compact ? "Inset.L22T18R16B16" : LegacyTitle.Visibility == Visibility.Collapsed ? "Inset.L32T24R32B24" : "Inset.L32T20R32B24");
 
     private FrameworkElement? FindPage() =>
         VisualTreeHelper.GetChildrenCount(PageHost) > 0 && VisualTreeHelper.GetChild(PageHost, 0) is ContentPresenter presenter && VisualTreeHelper.GetChildrenCount(presenter) > 0

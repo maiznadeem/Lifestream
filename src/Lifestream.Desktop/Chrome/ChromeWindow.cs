@@ -148,7 +148,7 @@ public class ChromeWindow : Window
         var maximized = WindowState == WindowState.Maximized;
         _root.Padding = maximized ? MaximizedInset : new Thickness(0);
         // Windows 11 draws the frame's 1 px border and round corners itself; Windows 10 gets a 1 px stroke from us while restored.
-        _root.BorderThickness = maximized || Dwm.DrawsRoundCorners ? new Thickness(0) : new Thickness(1);
+        _root.BorderThickness = maximized || Dwm.DrawsRoundCorners ? new Thickness(0) : ThemeTokens.Inset("Pad.1");
     }
 
     /// <summary>How far a maximized window reaches past the screen on each side (the resize frame plus the padded border).</summary>
@@ -178,7 +178,7 @@ public class ChromeWindow : Window
             // Mica shows through wherever the window paints Brush.Mica: the window surface and this window's copy of the brush become transparent.
             IsMicaActive = true;
             source.CompositionTarget.BackgroundColor = Colors.Transparent;
-            _chrome.GlassFrameThickness = new Thickness(-1);
+            _chrome.GlassFrameThickness = ThemeTokens.Inset("Chrome.GlassFrameMica");
             Resources["Brush.Mica"] = Brushes.Transparent;
         }
     }

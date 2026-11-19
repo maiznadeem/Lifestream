@@ -100,7 +100,7 @@ public partial class DashboardView : UserControl
             RightTop.Width = new GridLength(0);
             Grid.SetRow(TodayPanel, 2);
             Grid.SetColumn(TodayPanel, 0);
-            AttentionPanel.Margin = new Thickness(0, 0, 0, 20);
+            AttentionPanel.Margin = ThemeTokens.Inset("Inset.B20");
             BottomGrid.ColumnDefinitions[1].Width = new GridLength(0);
             BottomGrid.ColumnDefinitions[2].Width = new GridLength(0);
             StockRow.Height = new GridLength(378);
@@ -119,7 +119,7 @@ public partial class DashboardView : UserControl
             RightTop.Width = new GridLength(372);
             Grid.SetRow(TodayPanel, 1);
             Grid.SetColumn(TodayPanel, 2);
-            AttentionPanel.Margin = new Thickness(0, 0, 20, 20);
+            AttentionPanel.Margin = ThemeTokens.Inset("Inset.R20B20");
             BottomGrid.ColumnDefinitions[1].Width = new GridLength(20);
             BottomGrid.ColumnDefinitions[2].Width = new GridLength(1, GridUnitType.Star);
             StockRow.Height = new GridLength(1, GridUnitType.Star);

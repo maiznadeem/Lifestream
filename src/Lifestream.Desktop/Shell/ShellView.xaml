@@ -5,7 +5,7 @@
              xmlns:services="clr-namespace:Lifestream.Desktop.Services"
              xmlns:shell="clr-namespace:Lifestream.Desktop.Shell"
              xmlns:common="clr-namespace:Lifestream.Client.Common;assembly=Lifestream.Client"
-             Focusable="False">
+             FontFamily="{DynamicResource Font.Family}" FontSize="{DynamicResource FontSize.Body}" Foreground="{DynamicResource Brush.Ink}" Focusable="False">
   <UserControl.Resources>
     <services:HasTextToVisibilityConverter x:Key="HasText" />
     <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
@@ -58,11 +58,11 @@
     </Grid.ColumnDefinitions>
 
     <!-- Title bar: the mark and name over the sidebar, then the search field (it opens the palette), notifications and the account. -->
-    <StackPanel x:Name="TitleMark" Grid.ColumnSpan="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0" TextOptions.TextRenderingMode="Grayscale">
-      <controls:LogoMark Width="20" Height="20" Margin="0,0,10,0" />
+    <StackPanel x:Name="TitleMark" Grid.ColumnSpan="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="{DynamicResource Inset.L16}" TextOptions.TextRenderingMode="Grayscale">
+      <controls:LogoMark Width="20" Height="20" Margin="{DynamicResource Inset.R10}" />
       <TextBlock x:Name="Wordmark" Text="Lifestream" FontSize="{DynamicResource FontSize.Body}" FontWeight="SemiBold" Foreground="{DynamicResource Brush.Ink}" VerticalAlignment="Center" />
     </StackPanel>
-    <Grid Grid.Column="1" Margin="14,0,0,0" TextOptions.TextRenderingMode="Grayscale">
+    <Grid Grid.Column="1" Margin="{DynamicResource Inset.L14}" TextOptions.TextRenderingMode="Grayscale">
       <Grid.ColumnDefinitions>
         <ColumnDefinition Width="*" />
         <ColumnDefinition Width="Auto" />
@@ -71,11 +71,11 @@
       <Button x:Name="SearchField" Style="{DynamicResource TitleSearch}" Content="Search donors, patients, requests and bags" HorizontalAlignment="Left"
               Width="{DynamicResource Width.TitleSearch}" MaxWidth="{DynamicResource Width.TitleSearch}" Command="{Binding OpenPaletteCommand}"
               AutomationProperties.Name="Search and commands" AutomationProperties.AcceleratorKey="Ctrl+K" ToolTip="Search and commands (Ctrl+K)" />
-      <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,8,0">
-        <Button x:Name="CompactSearch" Style="{DynamicResource TitleBarButton}" Command="{Binding OpenPaletteCommand}" Visibility="Collapsed" Margin="0,0,6,0"
+      <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="{DynamicResource Inset.R8}">
+        <Button x:Name="CompactSearch" Style="{DynamicResource TitleBarButton}" Command="{Binding OpenPaletteCommand}" Visibility="Collapsed" Margin="{DynamicResource Inset.R6}"
                 AutomationProperties.Name="Search and commands" ToolTip="Search and commands (Ctrl+K)">
           <StackPanel Orientation="Horizontal">
-            <controls:Icon Kind="Search" Size="16" VerticalAlignment="Center" Margin="0,0,8,0" />
+            <controls:Icon Kind="Search" Size="16" VerticalAlignment="Center" Margin="{DynamicResource Inset.R8}" />
             <Border Style="{DynamicResource Kbd}">
               <TextBlock Style="{DynamicResource Kbd.Text}" Text="Ctrl K" />
             </Border>
@@ -86,11 +86,11 @@
                 ToolTip="{Binding NotificationsName, RelativeSource={RelativeSource AncestorType=shell:ShellView}}">
           <Grid>
             <controls:Icon Kind="Bell" Size="16" />
-            <Ellipse x:Name="BellDot" Width="6" Height="6" Fill="{DynamicResource Brush.Critical}" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-1,-1,0"
+            <Ellipse x:Name="BellDot" Width="6" Height="6" Fill="{DynamicResource Brush.Critical}" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="{DynamicResource Inset.TN1RN1}"
                      Visibility="{Binding HasAttention, RelativeSource={RelativeSource AncestorType=shell:ShellView}, Converter={StaticResource BoolToVisibility}}" />
           </Grid>
         </Button>
-        <Button x:Name="AvatarButton" Style="{DynamicResource TitleBarButton}" Width="40" Padding="0" Margin="4,0,0,0" Click="OnAccountClick"
+        <Button x:Name="AvatarButton" Style="{DynamicResource TitleBarButton}" Width="40" Padding="0" Margin="{DynamicResource Inset.L4}" Click="OnAccountClick"
                 AutomationProperties.Name="Account menu" AutomationProperties.HelpText="{Binding DisplayName}" ToolTip="{Binding DisplayName}">
           <controls:Avatar Initials="{Binding Initials}" IsBlood="True" Size="26" />
         </Button>
@@ -98,12 +98,12 @@
     </Grid>
 
     <!-- Sidebar: the groups (scrolling only when the window is very short), then the account card at the foot. -->
-    <DockPanel x:Name="Nav" Grid.Row="1" Margin="8,6,8,12" KeyboardNavigation.TabNavigation="Local" AutomationProperties.Name="Navigation" TextOptions.TextRenderingMode="Grayscale">
+    <DockPanel x:Name="Nav" Grid.Row="1" Margin="{DynamicResource Inset.L8T6R8B12}" KeyboardNavigation.TabNavigation="Local" AutomationProperties.Name="Navigation" TextOptions.TextRenderingMode="Grayscale">
       <Button x:Name="AccountButton" DockPanel.Dock="Bottom" Style="{DynamicResource AccountButton}" Click="OnAccountClick" HorizontalAlignment="Stretch"
               AutomationProperties.Name="Account menu" AutomationProperties.HelpText="{Binding DisplayName}" ToolTip="Account menu">
         <StackPanel Orientation="Horizontal">
           <controls:Avatar Initials="{Binding Initials}" IsBlood="True" Size="32" />
-          <StackPanel x:Name="AccountText" Margin="10,0,0,0" VerticalAlignment="Center">
+          <StackPanel x:Name="AccountText" Margin="{DynamicResource Inset.L10}" VerticalAlignment="Center">
             <TextBlock Text="{Binding DisplayName}" FontSize="{DynamicResource FontSize.Label}" FontWeight="SemiBold" Foreground="{DynamicResource Brush.Ink}" TextTrimming="CharacterEllipsis" MaxWidth="150" />
             <TextBlock Text="{Binding UserSubtitle}" FontSize="{DynamicResource FontSize.Caption}" Foreground="{DynamicResource Brush.Ink3}" TextTrimming="CharacterEllipsis" MaxWidth="150" />
           </StackPanel>
@@ -115,7 +115,7 @@
             <DataTemplate>
               <StackPanel>
                 <TextBlock x:Name="GroupHeader" Style="{DynamicResource NavGroupHeader}" Text="{Binding Title}" TextWrapping="NoWrap" />
-                <Rectangle x:Name="RailSeparator" Height="1" Width="24" Fill="{DynamicResource Brush.Stroke2}" Margin="0,6,0,6" Visibility="Collapsed" />
+                <Rectangle x:Name="RailSeparator" Height="1" Width="24" Fill="{DynamicResource Brush.Stroke2}" Margin="{DynamicResource Inset.V6}" Visibility="Collapsed" />
                 <ItemsControl ItemsSource="{Binding Items}" Focusable="False">
                   <ItemsControl.ItemTemplate>
                     <DataTemplate>
@@ -167,7 +167,7 @@
         </Grid.RowDefinitions>
 
         <!-- Update prompt -->
-        <controls:CrispBorder Margin="32,16,32,0" Padding="16,8,12,8" Background="{DynamicResource Brush.InfoSoft}" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="1"
+        <controls:CrispBorder Margin="{DynamicResource Inset.L32T16R32}" Padding="{DynamicResource Inset.L16T8R12B8}" Background="{DynamicResource Brush.InfoSoft}" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="1"
                               CornerRadius="{DynamicResource Radius.Panel}" Visibility="{Binding UpdatePrompt, Converter={StaticResource HasText}}" AutomationProperties.LiveSetting="Polite">
           <Grid>
             <Grid.ColumnDefinitions>
@@ -175,7 +175,7 @@
               <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <StackPanel Orientation="Horizontal">
-              <controls:Icon Kind="Info" Size="18" Foreground="{DynamicResource Brush.Info}" VerticalAlignment="Center" Margin="0,0,12,0" />
+              <controls:Icon Kind="Info" Size="18" Foreground="{DynamicResource Brush.Info}" VerticalAlignment="Center" Margin="{DynamicResource Inset.R12}" />
               <TextBlock Style="{DynamicResource Text.Body}" Text="{Binding UpdatePrompt}" VerticalAlignment="Center" AutomationProperties.Name="Update ready" />
             </StackPanel>
             <Button Grid.Column="1" Style="{DynamicResource Button.Primary.Small}" Content="Restart and update" Command="{Binding ApplyUpdateCommand}"
@@ -184,21 +184,21 @@
         </controls:CrispBorder>
 
         <!-- The waking notice of a toast's action (Undo): the toast outlives the screen that showed it, so this notice belongs to the shell (SHELL-07). -->
-        <controls:WakingNotice x:Name="ToastActionWakingNotice" Grid.Row="1" Margin="32,16,32,0" HorizontalAlignment="Left" MaxWidth="560"
+        <controls:WakingNotice x:Name="ToastActionWakingNotice" Grid.Row="1" Margin="{DynamicResource Inset.L32T16R32}" HorizontalAlignment="Left" MaxWidth="560"
                                IsActive="{Binding IsToastActionWaking}" CancelCommand="{Binding CancelToastActionCommand}" />
 
         <!-- The title of a screen that has no page header of its own yet (screens not yet rebuilt to direction A). -->
-        <TextBlock x:Name="LegacyTitle" Grid.Row="2" Style="{DynamicResource Text.Title}" Text="{Binding PageTitle}" Margin="32,24,32,0" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+        <TextBlock x:Name="LegacyTitle" Grid.Row="2" Style="{DynamicResource Text.Title}" Text="{Binding PageTitle}" Margin="{DynamicResource Inset.L32T24R32}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
                    AutomationProperties.HeadingLevel="Level1" />
 
         <!-- The page: one view per visit, created from the view model by the locator and given that view model as its DataContext. -->
-        <ContentControl x:Name="PageHost" Grid.Row="3" Margin="32,20,32,24" Content="{Binding CurrentPage}" ContentTemplateSelector="{x:Static services:ViewLocator.Instance}" IsTabStop="False" Focusable="False"
+        <ContentControl x:Name="PageHost" Grid.Row="3" Margin="{DynamicResource Inset.L32T20R32B24}" Content="{Binding CurrentPage}" ContentTemplateSelector="{x:Static services:ViewLocator.Instance}" IsTabStop="False" Focusable="False"
                         HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" />
         <controls:ToastHost Grid.Row="3" DataContext="{Binding Toasts}" ItemsSource="{Binding Toasts}" />
       </Grid>
     </Border>
 
     <!-- The command palette (Ctrl+K): over everything, 640 DIP wide, just under the title bar. -->
-    <shell:CommandPaletteView x:Name="Palette" Grid.RowSpan="2" Grid.ColumnSpan="2" DataContext="{Binding Palette}" />
+    <shell:CommandPaletteView x:Name="Palette" Grid.RowSpan="2" Grid.ColumnSpan="2" />
   </Grid>
 </UserControl>

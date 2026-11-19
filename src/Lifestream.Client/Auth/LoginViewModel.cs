@@ -65,10 +65,6 @@ public sealed partial class LoginViewModel : ViewModelBase
         : base(LoadState.Ready)
     {
         _preferences = preferences;
-        if (preferences is { RememberUsername: true, Username: { Length: > 0 } remembered })
-        {
-            Username = remembered;
-        }
         _api = api;
         _session = session;
         _flow = flow;
@@ -98,6 +94,10 @@ public sealed partial class LoginViewModel : ViewModelBase
             RetryCommand.Cancel();
             return Task.CompletedTask;
         });
+        if (preferences is { RememberUsername: true, Username: { Length: > 0 } remembered })
+        {
+            Username = remembered;
+        }
     }
 
     public override string PageTitle => "Lifestream";

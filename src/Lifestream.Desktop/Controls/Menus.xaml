@@ -31,11 +31,11 @@
                 <ColumnDefinition Width="Auto" />
               </Grid.ColumnDefinitions>
               <!-- The optional icon column: the Icon property (an Icon element). It takes no room when there is none. -->
-              <ContentPresenter x:Name="IconHost" ContentSource="Icon" Margin="0,0,10,0" VerticalAlignment="Center" />
+              <ContentPresenter x:Name="IconHost" ContentSource="Icon" Margin="{DynamicResource Inset.R10}" VerticalAlignment="Center" />
               <ContentPresenter Grid.Column="1" ContentSource="Header" VerticalAlignment="Center" RecognizesAccessKey="True" />
               <TextBlock x:Name="Gesture" Grid.Column="2" Text="{TemplateBinding InputGestureText}" FontFamily="{DynamicResource Font.Family}"
-                         FontSize="{StaticResource FontSize.Caption}" Foreground="{DynamicResource Brush.Ink3}" VerticalAlignment="Center" Margin="24,0,0,0" />
-              <controls:Icon x:Name="Check" Grid.Column="3" Kind="Check" Size="15" Margin="12,0,0,0" VerticalAlignment="Center" Visibility="Collapsed" />
+                         FontSize="{StaticResource FontSize.Caption}" Foreground="{DynamicResource Brush.Ink3}" VerticalAlignment="Center" Margin="{DynamicResource Inset.L24}" />
+              <controls:Icon x:Name="Check" Grid.Column="3" Kind="Check" Size="15" Margin="{DynamicResource Inset.L12}" VerticalAlignment="Center" Visibility="Collapsed" />
             </Grid>
           </Border>
           <ControlTemplate.Triggers>
@@ -75,7 +75,7 @@
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="ContextMenu">
-          <Grid Margin="12,6,12,20" SnapsToDevicePixels="True">
+          <Grid Margin="{DynamicResource Inset.L12T6R12B20}" SnapsToDevicePixels="True">
             <Border Background="{DynamicResource Brush.Layer}" CornerRadius="{StaticResource Radius.Panel}" IsHitTestVisible="False">
               <Border.Effect>
                 <DropShadowEffect BlurRadius="{StaticResource Elevation.Flyout.Blur}" ShadowDepth="{StaticResource Elevation.Flyout.Offset}" Direction="270"

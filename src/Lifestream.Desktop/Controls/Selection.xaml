@@ -14,7 +14,7 @@
          Segmented / Segmented.Item ............................ style for a ListBox (and its items): the segmented well
          Segmented.Well + Segmented.Option ................... the same look from RadioButtons: <Border Style="Segmented.Well"><StackPanel Orientation="Horizontal"> RadioButtons with Style="Segmented.Option" and one GroupName
          Tabs / Tabs.Item ........................................ style for a TabControl (and its TabItems): underline tabs
-         Tab.Option + Tabs.Strip ................................... the same look from RadioButtons for a page header: <Border Style="Tabs.Strip"><StackPanel Orientation="Horizontal" Margin="0,0,0,-1"> RadioButtons
+         Tab.Option + Tabs.Strip ................................... the same look from RadioButtons for a page header: <Border Style="Tabs.Strip"><StackPanel Orientation="Horizontal" Margin="{DynamicResource Inset.BN1}"> RadioButtons
                                                                     with Style="Tab.Option" and one GroupName (the -1 lets the 2 px bar of the selected tab cover the strip's line) -->
 
   <!-- Radio button: an 18 px circle, a Stroke2 ring; selected: a Primary ring with an 8 px Primary dot. The label is 13 px Ink2 with an 8 px gap. -->
@@ -34,14 +34,14 @@
             </Grid.ColumnDefinitions>
             <Grid VerticalAlignment="Center">
               <controls:CrispBorder x:Name="Ring" Width="18" Height="18" BorderThickness="1" BorderBrush="{DynamicResource Brush.Stroke2}"
-                      Background="{DynamicResource Brush.Layer}" CornerRadius="9">
-                <Border x:Name="Dot" Width="8" Height="8" CornerRadius="4" Background="{DynamicResource Brush.Primary}"
+                      Background="{DynamicResource Brush.Layer}" CornerRadius="{DynamicResource Radius.9}">
+                <Border x:Name="Dot" Width="8" Height="8" CornerRadius="{DynamicResource Radius.4}" Background="{DynamicResource Brush.Primary}"
                         HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed" />
               </controls:CrispBorder>
-              <controls:CrispBorder x:Name="FocusRing" Margin="{DynamicResource Inset.Neg4}" CornerRadius="13" BorderThickness="{StaticResource Thickness.FocusRing}"
+              <controls:CrispBorder x:Name="FocusRing" Margin="{DynamicResource Inset.Neg4}" CornerRadius="{DynamicResource Radius.13}" BorderThickness="{StaticResource Thickness.FocusRing}"
                       BorderBrush="{DynamicResource Brush.Focus}" Visibility="Collapsed" IsHitTestVisible="False" />
             </Grid>
-            <ContentPresenter x:Name="Label" Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Center" RecognizesAccessKey="True" />
+            <ContentPresenter x:Name="Label" Grid.Column="1" Margin="{DynamicResource Inset.L8}" VerticalAlignment="Center" RecognizesAccessKey="True" />
           </Grid>
           <ControlTemplate.Triggers>
             <Trigger Property="HasContent" Value="False">
@@ -92,17 +92,17 @@
               <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
             <Grid Width="40" Height="20" VerticalAlignment="Center">
-              <controls:CrispBorder x:Name="Track" BorderThickness="1" BorderBrush="{DynamicResource Brush.StrokeStrong}" Background="{DynamicResource Brush.Layer}" CornerRadius="10" />
-              <Border x:Name="Knob" Width="12" Height="12" CornerRadius="6" Background="{DynamicResource Brush.Ink2}" HorizontalAlignment="Left" VerticalAlignment="Center"
-                      Margin="4,0,0,0" IsHitTestVisible="False">
+              <controls:CrispBorder x:Name="Track" BorderThickness="1" BorderBrush="{DynamicResource Brush.StrokeStrong}" Background="{DynamicResource Brush.Layer}" CornerRadius="{DynamicResource Radius.10}" />
+              <Border x:Name="Knob" Width="12" Height="12" CornerRadius="{DynamicResource Radius.6}" Background="{DynamicResource Brush.Ink2}" HorizontalAlignment="Left" VerticalAlignment="Center"
+                      Margin="{DynamicResource Inset.L4}" IsHitTestVisible="False">
                 <Border.RenderTransform>
                   <TranslateTransform X="0" />
                 </Border.RenderTransform>
               </Border>
-              <controls:CrispBorder x:Name="FocusRing" Margin="{DynamicResource Inset.Neg4}" CornerRadius="14" BorderThickness="{StaticResource Thickness.FocusRing}"
+              <controls:CrispBorder x:Name="FocusRing" Margin="{DynamicResource Inset.Neg4}" CornerRadius="{DynamicResource Radius.14}" BorderThickness="{StaticResource Thickness.FocusRing}"
                       BorderBrush="{DynamicResource Brush.Focus}" Visibility="Collapsed" IsHitTestVisible="False" />
             </Grid>
-            <ContentPresenter x:Name="Label" Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center" RecognizesAccessKey="True" />
+            <ContentPresenter x:Name="Label" Grid.Column="1" Margin="{DynamicResource Inset.L10}" VerticalAlignment="Center" RecognizesAccessKey="True" />
           </Grid>
           <ControlTemplate.Triggers>
             <Trigger Property="HasContent" Value="False">
@@ -168,8 +168,8 @@
     <Setter Property="FontFamily" Value="{DynamicResource Font.Family}" />
     <Setter Property="FontSize" Value="{StaticResource FontSize.Label}" />
     <Setter Property="Foreground" Value="{DynamicResource Brush.Ink2}" />
-    <Setter Property="Padding" Value="12,5,12,5" />
-    <Setter Property="Margin" Value="1,0,1,0" />
+    <Setter Property="Padding" Value="{DynamicResource Inset.H12V5}" />
+    <Setter Property="Margin" Value="{DynamicResource Inset.H1}" />
     <Setter Property="Cursor" Value="Hand" />
     <Setter Property="HorizontalContentAlignment" Value="Center" />
     <Setter Property="VerticalContentAlignment" Value="Center" />
@@ -232,7 +232,7 @@
     <Setter Property="FontSize" Value="{StaticResource FontSize.Label}" />
     <Setter Property="Foreground" Value="{DynamicResource Brush.Ink2}" />
     <Setter Property="BorderThickness" Value="0" />
-    <Setter Property="Padding" Value="2,3,2,3" />
+    <Setter Property="Padding" Value="{DynamicResource Inset.H2V3}" />
     <Setter Property="HorizontalAlignment" Value="Left" />
     <Setter Property="SelectionMode" Value="Single" />
     <Setter Property="ItemContainerStyle" Value="{StaticResource Segmented.Item}" />
@@ -262,7 +262,7 @@
   <Style x:Key="Segmented.Well" TargetType="Border">
     <Setter Property="Background" Value="{DynamicResource Brush.Well}" />
     <Setter Property="CornerRadius" Value="{StaticResource Radius.Panel}" />
-    <Setter Property="Padding" Value="2,3,2,3" />
+    <Setter Property="Padding" Value="{DynamicResource Inset.H2V3}" />
     <Setter Property="HorizontalAlignment" Value="Left" />
     <Setter Property="SnapsToDevicePixels" Value="True" />
   </Style>
@@ -271,8 +271,8 @@
     <Setter Property="FontFamily" Value="{DynamicResource Font.Family}" />
     <Setter Property="FontSize" Value="{StaticResource FontSize.Label}" />
     <Setter Property="Foreground" Value="{DynamicResource Brush.Ink2}" />
-    <Setter Property="Padding" Value="12,5,12,5" />
-    <Setter Property="Margin" Value="1,0,1,0" />
+    <Setter Property="Padding" Value="{DynamicResource Inset.H12V5}" />
+    <Setter Property="Margin" Value="{DynamicResource Inset.H1}" />
     <Setter Property="Cursor" Value="Hand" />
     <Setter Property="HorizontalContentAlignment" Value="Center" />
     <Setter Property="VerticalContentAlignment" Value="Center" />
@@ -336,8 +336,8 @@
     <Setter Property="FontFamily" Value="{DynamicResource Font.Family}" />
     <Setter Property="FontSize" Value="{StaticResource FontSize.Label}" />
     <Setter Property="Foreground" Value="{DynamicResource Brush.Ink2}" />
-    <Setter Property="Padding" Value="10,8,10,8" />
-    <Setter Property="Margin" Value="0,0,2,0" />
+    <Setter Property="Padding" Value="{DynamicResource Inset.H10V8}" />
+    <Setter Property="Margin" Value="{DynamicResource Inset.R2}" />
     <Setter Property="Cursor" Value="Hand" />
     <Setter Property="FocusVisualStyle" Value="{x:Null}" />
     <Setter Property="Template">
@@ -427,8 +427,8 @@
     <Setter Property="FontFamily" Value="{DynamicResource Font.Family}" />
     <Setter Property="FontSize" Value="{StaticResource FontSize.Label}" />
     <Setter Property="Foreground" Value="{DynamicResource Brush.Ink2}" />
-    <Setter Property="Padding" Value="10,8,10,8" />
-    <Setter Property="Margin" Value="0,0,2,0" />
+    <Setter Property="Padding" Value="{DynamicResource Inset.H10V8}" />
+    <Setter Property="Margin" Value="{DynamicResource Inset.R2}" />
     <Setter Property="Cursor" Value="Hand" />
     <Setter Property="FocusVisualStyle" Value="{x:Null}" />
     <Setter Property="Template">

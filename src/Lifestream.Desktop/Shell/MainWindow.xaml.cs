@@ -47,7 +47,7 @@ public partial class MainWindow : ChromeWindow
         var red = ThemeService.ColorOf("Color.CloseHover");
         var white = ThemeService.ColorOf("Color.OnCloseHover");
         var text = new FormattedText(count > 9 ? "9+" : count.ToString(CultureInfo.CurrentCulture), CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
-            new Typeface(new FontFamily("Segoe UI"), FontStyles.Normal, FontWeights.Bold, FontStretches.Normal), count > 9 ? 9 : 11, new SolidColorBrush(white), pixelsPerDip);
+            new Typeface((FontFamily)ThemeLoader.Resources["Font.Family"], FontStyles.Normal, FontWeights.Bold, FontStretches.Normal), count > 9 ? 9 : 11, new SolidColorBrush(white), pixelsPerDip);
         var group = new DrawingGroup();
         using (var dc = group.Open())
         {

@@ -6,7 +6,7 @@
              xmlns:services="clr-namespace:Lifestream.Desktop.Services"
              xmlns:dashboard="clr-namespace:Lifestream.Client.Features.Dashboard;assembly=Lifestream.Client"
              xmlns:lvc="clr-namespace:LiveChartsCore.SkiaSharpView.WPF;assembly=LiveChartsCore.SkiaSharpView.WPF"
-             controls:ShellPage.OwnsHeader="True" Focusable="False">
+             controls:ShellPage.OwnsHeader="True" FontFamily="{DynamicResource Font.Family}" FontSize="{DynamicResource FontSize.Body}" Foreground="{DynamicResource Brush.Ink}" Focusable="False">
   <UserControl.Resources>
     <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
     <services:ZeroToVisibleConverter x:Key="ZeroToVisible" />
@@ -19,14 +19,14 @@
           <ColumnDefinition Width="*" />
           <ColumnDefinition Width="Auto" />
         </Grid.ColumnDefinitions>
-        <Border x:Name="Tile" Width="34" Height="34" CornerRadius="{DynamicResource Radius.Control}" Background="{DynamicResource Brush.CriticalSoft}" Margin="0,0,14,0" VerticalAlignment="Center">
+        <Border x:Name="Tile" Width="34" Height="34" CornerRadius="{DynamicResource Radius.Control}" Background="{DynamicResource Brush.CriticalSoft}" Margin="{DynamicResource Inset.R14}" VerticalAlignment="Center">
           <controls:Icon x:Name="TileIcon" Kind="{Binding Icon}" Size="18" Foreground="{DynamicResource Brush.Critical}" HorizontalAlignment="Center" VerticalAlignment="Center" />
         </Border>
         <StackPanel Grid.Column="1" VerticalAlignment="Center">
           <TextBlock Style="{DynamicResource Text.BodyStrong}" Text="{Binding Title}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
           <TextBlock Style="{DynamicResource Text.Secondary}" Text="{Binding Detail}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" ToolTip="{Binding Detail}" />
         </StackPanel>
-        <Button Grid.Column="2" Style="{DynamicResource Button.Secondary.Small}" Content="{Binding ActionText}" Margin="14,0,0,0" VerticalAlignment="Center"
+        <Button Grid.Column="2" Style="{DynamicResource Button.Secondary.Small}" Content="{Binding ActionText}" Margin="{DynamicResource Inset.L14}" VerticalAlignment="Center"
                 Command="{Binding DataContext.RunAttentionCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}"
                 AutomationProperties.Name="{Binding ActionText}" AutomationProperties.HelpText="{Binding Title}" />
       </Grid>
@@ -44,7 +44,7 @@
 
     <!-- One row of today's appointments: time, a done tick or an open ring, the name, badges and the blood group. The next one is highlighted. -->
     <DataTemplate x:Key="TodayRow" DataType="{x:Type dashboard:TodayAppointment}">
-      <Border x:Name="Row" Height="34" Margin="-10,0,-10,0" Padding="10,0,10,0" CornerRadius="{DynamicResource Radius.Control}" Background="Transparent"
+      <Border x:Name="Row" Height="34" Margin="{DynamicResource Inset.HN10}" Padding="{DynamicResource Inset.H10}" CornerRadius="{DynamicResource Radius.Control}" Background="Transparent"
               AutomationProperties.Name="{Binding AutomationName}">
         <Grid>
           <Grid.ColumnDefinitions>
@@ -55,16 +55,16 @@
             <ColumnDefinition Width="Auto" />
           </Grid.ColumnDefinitions>
           <TextBlock x:Name="Time" Text="{Binding Time}" FontSize="{DynamicResource FontSize.Label}" VerticalAlignment="Center" Foreground="{DynamicResource Brush.Ink}" />
-          <Grid Grid.Column="1" Width="16" Height="16" Margin="12,0,12,0" VerticalAlignment="Center">
+          <Grid Grid.Column="1" Width="16" Height="16" Margin="{DynamicResource Inset.H12}" VerticalAlignment="Center">
             <Ellipse x:Name="Ring" Stroke="{DynamicResource Brush.Stroke2}" StrokeThickness="1.5" />
             <controls:Icon x:Name="Tick" Kind="Checkc" Size="16" Foreground="{DynamicResource Brush.Success}" Visibility="Collapsed" />
           </Grid>
           <TextBlock x:Name="Name" Grid.Column="2" Text="{Binding DonorName}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" Foreground="{DynamicResource Brush.Ink}" />
           <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
-            <controls:Badge x:Name="FirstTime" Text="First-time" Kind="Info" Margin="8,0,0,0" Visibility="{Binding IsFirstTime, Converter={StaticResource BoolToVisibility}}" />
-            <controls:Badge x:Name="Next" Text="Next" Kind="Neutral" Margin="8,0,0,0" Visibility="{Binding IsNext, Converter={StaticResource BoolToVisibility}}" />
+            <controls:Badge x:Name="FirstTime" Text="First-time" Kind="Info" Margin="{DynamicResource Inset.L8}" Visibility="{Binding IsFirstTime, Converter={StaticResource BoolToVisibility}}" />
+            <controls:Badge x:Name="Next" Text="Next" Kind="Neutral" Margin="{DynamicResource Inset.L8}" Visibility="{Binding IsNext, Converter={StaticResource BoolToVisibility}}" />
           </StackPanel>
-          <controls:BloodGroupTag Grid.Column="4" Text="{Binding Group}" Margin="12,0,0,0" VerticalAlignment="Center" />
+          <controls:BloodGroupTag Grid.Column="4" Text="{Binding Group}" Margin="{DynamicResource Inset.L12}" VerticalAlignment="Center" />
         </Grid>
       </Border>
       <DataTemplate.Triggers>
@@ -91,7 +91,7 @@
           <ColumnDefinition Width="*" />
           <ColumnDefinition Width="72" />
         </Grid.ColumnDefinitions>
-        <controls:BloodGroupTag Text="{Binding Group}" VerticalAlignment="Center" Margin="0,0,14,0" />
+        <controls:BloodGroupTag Text="{Binding Group}" VerticalAlignment="Center" Margin="{DynamicResource Inset.R14}" />
         <controls:MeterBar x:Name="Bar" Grid.Column="1" VerticalAlignment="Center" Value="{Binding FillFraction}" Hatched="{Binding ExpiringFraction}" Minimum="{Binding MinimumFraction}"
                            Track="{DynamicResource Brush.Layer2}" TrackStroke="{DynamicResource Brush.Stroke}" Fill="{DynamicResource Brush.Ink2}" Hatch="{DynamicResource Brush.WarningHatch}"
                            Tick="{DynamicResource Brush.Ink3}" />
@@ -126,20 +126,20 @@
           <ColumnDefinition x:Name="RightTop" Width="372" />
         </Grid.ColumnDefinitions>
 
-        <controls:PageHeader Grid.ColumnSpan="3" Overline="{Binding DateLine}" Title="{Binding Greeting}" Margin="0,0,0,20">
+        <controls:PageHeader Grid.ColumnSpan="3" Overline="{Binding DateLine}" Title="{Binding Greeting}" Margin="{DynamicResource Inset.B20}">
           <controls:PageHeader.Actions>
             <StackPanel Orientation="Horizontal">
-              <Button Style="{DynamicResource Button.Secondary}" Margin="0,0,8,0" AutomationProperties.Name="Book appointment"
+              <Button Style="{DynamicResource Button.Secondary}" Margin="{DynamicResource Inset.R8}" AutomationProperties.Name="Book appointment"
                       Command="{Binding DataContext.BookAppointmentCommand, RelativeSource={RelativeSource AncestorType=shell:ShellView}}">
                 <StackPanel Orientation="Horizontal">
-                  <controls:Icon Kind="Calplus" Size="16" Margin="0,0,8,0" />
+                  <controls:Icon Kind="Calplus" Size="16" Margin="{DynamicResource Inset.R8}" />
                   <TextBlock Text="Book appointment" />
                 </StackPanel>
               </Button>
               <Button Style="{DynamicResource Button.Primary}" AutomationProperties.Name="Record donation" AutomationProperties.AcceleratorKey="Ctrl+D" ToolTip="Record donation (Ctrl+D)"
                       Command="{Binding DataContext.RecordDonationCommand, RelativeSource={RelativeSource AncestorType=shell:ShellView}}">
                 <StackPanel Orientation="Horizontal">
-                  <controls:Icon Kind="Drop" Size="16" Margin="0,0,8,0" />
+                  <controls:Icon Kind="Drop" Size="16" Margin="{DynamicResource Inset.R8}" />
                   <TextBlock Text="Record donation" />
                 </StackPanel>
               </Button>
@@ -148,7 +148,7 @@
         </controls:PageHeader>
 
         <!-- Needs attention -->
-        <controls:Section x:Name="AttentionPanel" Grid.Row="1" Header="Needs attention" Subtitle="{Binding AttentionCountText}" Padding="0,0,0,8" Margin="0,0,20,20">
+        <controls:Section x:Name="AttentionPanel" Grid.Row="1" Header="Needs attention" Subtitle="{Binding AttentionCountText}" Padding="{DynamicResource Inset.B8}" Margin="{DynamicResource Inset.R20B20}">
           <Grid>
             <ItemsControl x:Name="AttentionList" ItemsSource="{Binding Attention}" Focusable="False" AutomationProperties.Name="Needs attention">
               <ItemsControl.ItemContainerStyle>
@@ -158,7 +158,7 @@
               </ItemsControl.ItemContainerStyle>
               <ItemsControl.ItemTemplate>
                 <DataTemplate>
-                  <Border x:Name="Divider" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="0,1,0,0" Padding="18,12,18,12">
+                  <Border x:Name="Divider" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="0,1,0,0" Padding="{DynamicResource Inset.H18V12}">
                     <ContentPresenter Content="{Binding}" ContentTemplate="{StaticResource AttentionRow}" />
                   </Border>
                   <DataTemplate.Triggers>
@@ -169,13 +169,13 @@
                 </DataTemplate>
               </ItemsControl.ItemTemplate>
             </ItemsControl>
-            <TextBlock Style="{DynamicResource Text.Secondary}" Margin="18,4,18,12" Text="Nothing needs attention right now: stock covers every open request and nothing expires this week."
+            <TextBlock Style="{DynamicResource Text.Secondary}" Margin="{DynamicResource Inset.L18T4R18B12}" Text="Nothing needs attention right now: stock covers every open request and nothing expires this week."
                        Visibility="{Binding Attention.Count, Converter={StaticResource ZeroToVisible}}" />
           </Grid>
         </controls:Section>
 
         <!-- Today's appointments -->
-        <controls:Section x:Name="TodayPanel" Grid.Row="1" Grid.Column="2" Header="Today&#x2019;s appointments" Padding="18,0,18,0" Margin="0,0,0,20">
+        <controls:Section x:Name="TodayPanel" Grid.Row="1" Grid.Column="2" Header="Today&#x2019;s appointments" Padding="{DynamicResource Inset.H18}" Margin="{DynamicResource Inset.B20}">
           <controls:Section.HeaderActions>
             <TextBlock Text="{Binding TodaySeenText}" FontSize="{DynamicResource FontSize.Label}" Foreground="{DynamicResource Brush.Ink3}" VerticalAlignment="Center" />
           </controls:Section.HeaderActions>
@@ -183,7 +183,7 @@
             <ScrollViewer VerticalScrollBarVisibility="Auto" Focusable="False">
               <ItemsControl x:Name="TodayList" ItemsSource="{Binding Today}" ItemTemplate="{StaticResource TodayRow}" Focusable="False" AutomationProperties.Name="Today's appointments" />
             </ScrollViewer>
-            <StackPanel Visibility="{Binding Today.Count, Converter={StaticResource ZeroToVisible}}" Margin="0,4,0,0">
+            <StackPanel Visibility="{Binding Today.Count, Converter={StaticResource ZeroToVisible}}" Margin="{DynamicResource Inset.T4}">
               <TextBlock Style="{DynamicResource Text.Secondary}" Text="Nobody is booked for today." />
             </StackPanel>
           </Grid>
@@ -202,24 +202,24 @@
             <RowDefinition x:Name="ChartRow" Height="0" />
           </Grid.RowDefinitions>
 
-          <controls:Section x:Name="StockPanel" Header="Stock by blood group" Subtitle="{Binding StockTotalText}" Padding="18,6,18,14">
+          <controls:Section x:Name="StockPanel" Header="Stock by blood group" Subtitle="{Binding StockTotalText}" Padding="{DynamicResource Inset.L18T6R18B14}">
             <controls:Section.HeaderActions>
               <StackPanel Orientation="Horizontal" VerticalAlignment="Center" TextElement.FontSize="{DynamicResource FontSize.Caption}" TextElement.Foreground="{DynamicResource Brush.Ink3}">
-                <Border Width="12" Height="8" CornerRadius="2" Background="{DynamicResource Brush.WarningHatch}" Margin="0,0,6,0" VerticalAlignment="Center" />
+                <Border Width="12" Height="8" CornerRadius="{DynamicResource Radius.2}" Background="{DynamicResource Brush.WarningHatch}" Margin="{DynamicResource Inset.R6}" VerticalAlignment="Center" />
                 <TextBlock Text="Expiring in 7 days" VerticalAlignment="Center" />
-                <Rectangle Width="1.5" Height="12" Fill="{DynamicResource Brush.Ink3}" Margin="10,0,6,0" VerticalAlignment="Center" />
+                <Rectangle Width="1.5" Height="12" Fill="{DynamicResource Brush.Ink3}" Margin="{DynamicResource Inset.L10R6}" VerticalAlignment="Center" />
                 <TextBlock Text="{Binding MinimumText}" VerticalAlignment="Center" />
               </StackPanel>
             </controls:Section.HeaderActions>
             <ItemsControl x:Name="StockList" ItemsSource="{Binding StockMeters}" ItemTemplate="{StaticResource MeterRow}" Focusable="False" AutomationProperties.Name="Stock by blood group" />
           </controls:Section>
 
-          <controls:ChartFrame x:Name="DonationsFrame" Grid.Column="2" Title="Donations and issues" Table="{Binding DonationsTable}" Padding="6,4,10,6">
+          <controls:ChartFrame x:Name="DonationsFrame" Grid.Column="2" Title="Donations and issues" Table="{Binding DonationsTable}" Padding="{DynamicResource Inset.L6T4R10B6}">
             <controls:ChartFrame.Legend>
               <StackPanel Orientation="Horizontal" VerticalAlignment="Center" TextElement.FontSize="{DynamicResource FontSize.Caption}" TextElement.Foreground="{DynamicResource Brush.Ink2}">
-                <Rectangle Width="14" Height="3" RadiusX="1.5" RadiusY="1.5" Fill="{DynamicResource Brush.Chart1}" Margin="0,0,6,0" VerticalAlignment="Center" />
-                <TextBlock Text="Donated" VerticalAlignment="Center" Margin="0,0,14,0" />
-                <Rectangle Width="14" Height="3" RadiusX="1.5" RadiusY="1.5" Fill="{DynamicResource Brush.Chart2}" Margin="0,0,6,0" VerticalAlignment="Center" />
+                <Rectangle Width="14" Height="3" RadiusX="1.5" RadiusY="1.5" Fill="{DynamicResource Brush.Chart1}" Margin="{DynamicResource Inset.R6}" VerticalAlignment="Center" />
+                <TextBlock Text="Donated" VerticalAlignment="Center" Margin="{DynamicResource Inset.R14}" />
+                <Rectangle Width="14" Height="3" RadiusX="1.5" RadiusY="1.5" Fill="{DynamicResource Brush.Chart2}" Margin="{DynamicResource Inset.R6}" VerticalAlignment="Center" />
                 <TextBlock Text="Issued" VerticalAlignment="Center" />
               </StackPanel>
             </controls:ChartFrame.Legend>

@@ -4,13 +4,13 @@
              xmlns:controls="clr-namespace:Lifestream.Desktop.Controls"
              xmlns:services="clr-namespace:Lifestream.Desktop.Services"
              xmlns:auth="clr-namespace:Lifestream.Client.Auth;assembly=Lifestream.Client"
-             Focusable="False" SizeChanged="OnSizeChanged" Loaded="OnLoaded">
+             FontFamily="{DynamicResource Font.Family}" FontSize="{DynamicResource FontSize.Body}" Foreground="{DynamicResource Brush.Ink}" Focusable="False" SizeChanged="OnSizeChanged" Loaded="OnLoaded">
   <UserControl.Resources>
     <services:HasTextToVisibilityConverter x:Key="HasText" />
     <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
     <!-- An inline status row under the fields (notice, problem, waking): a 16 DIP icon in the status colour and the words; no box. -->
     <Style x:Key="StatusRow" TargetType="Grid">
-      <Setter Property="Margin" Value="0,14,0,0" />
+      <Setter Property="Margin" Value="{DynamicResource Inset.T14}" />
     </Style>
   </UserControl.Resources>
 
@@ -25,7 +25,7 @@
     <!-- The form side -->
     <Border x:Name="FormSide" Background="{DynamicResource Brush.Layer}" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="0,0,1,0">
       <ScrollViewer x:Name="FormScroll" VerticalScrollBarVisibility="Auto" Focusable="False">
-        <Grid x:Name="Form" Margin="72,48,72,40" MinHeight="560" KeyboardNavigation.TabNavigation="Cycle">
+        <Grid x:Name="Form" Margin="{DynamicResource Inset.L72T48R72B40}" MinHeight="560" KeyboardNavigation.TabNavigation="Cycle">
           <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -36,50 +36,50 @@
 
           <StackPanel Orientation="Horizontal">
             <controls:LogoMark Width="34" Height="34" />
-            <TextBlock Text="Lifestream" FontSize="{DynamicResource FontSize.Section}" FontWeight="SemiBold" Foreground="{DynamicResource Brush.Ink}" VerticalAlignment="Center" Margin="12,0,0,0"
+            <TextBlock Text="Lifestream" FontSize="{DynamicResource FontSize.Section}" FontWeight="SemiBold" Foreground="{DynamicResource Brush.Ink}" VerticalAlignment="Center" Margin="{DynamicResource Inset.L12}"
                        TextOptions.TextFormattingMode="Ideal" />
           </StackPanel>
 
           <StackPanel Grid.Row="2" MaxWidth="416">
             <TextBlock Style="{DynamicResource Text.Display}" Text="Sign in" AutomationProperties.HeadingLevel="Level1" />
             <TextBlock Style="{DynamicResource Text.Body}" FontSize="15" Foreground="{DynamicResource Brush.Ink2}" Text="Use the staff account your administrator set up for you."
-                       Margin="0,8,0,32" />
+                       Margin="{DynamicResource Inset.T8B32}" />
 
             <!-- Update ready: the feed is checked when the app starts, so this shows before anyone signs in (SHELL-44). -->
-            <Grid x:Name="UpdateBanner" Style="{StaticResource StatusRow}" Margin="0,0,0,20" Visibility="{Binding UpdatePrompt, Converter={StaticResource HasText}}" AutomationProperties.LiveSetting="Polite">
+            <Grid x:Name="UpdateBanner" Style="{StaticResource StatusRow}" Margin="{DynamicResource Inset.B20}" Visibility="{Binding UpdatePrompt, Converter={StaticResource HasText}}" AutomationProperties.LiveSetting="Polite">
               <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
               </Grid.ColumnDefinitions>
-              <controls:Icon Kind="Info" Size="16" Foreground="{DynamicResource Brush.Info}" VerticalAlignment="Center" Margin="0,0,10,0" />
+              <controls:Icon Kind="Info" Size="16" Foreground="{DynamicResource Brush.Info}" VerticalAlignment="Center" Margin="{DynamicResource Inset.R10}" />
               <TextBlock Grid.Column="1" Style="{DynamicResource Text.Secondary}" Text="{Binding UpdatePrompt}" VerticalAlignment="Center" AutomationProperties.Name="Update ready" />
-              <Button Grid.Column="2" Style="{DynamicResource Button.Secondary.Small}" Content="Restart and update" Command="{Binding ApplyUpdateCommand}" Margin="12,0,0,0"
+              <Button Grid.Column="2" Style="{DynamicResource Button.Secondary.Small}" Content="Restart and update" Command="{Binding ApplyUpdateCommand}" Margin="{DynamicResource Inset.L12}"
                       controls:ButtonAssist.IsBusy="{Binding ApplyUpdateCommand.IsRunning}" controls:ButtonAssist.BusyText="Updating" />
             </Grid>
 
             <!-- Notice (for example "Your session expired") -->
-            <Grid Style="{StaticResource StatusRow}" Margin="0,0,0,20" Visibility="{Binding Notice, Converter={StaticResource HasText}}" AutomationProperties.LiveSetting="Polite">
+            <Grid Style="{StaticResource StatusRow}" Margin="{DynamicResource Inset.B20}" Visibility="{Binding Notice, Converter={StaticResource HasText}}" AutomationProperties.LiveSetting="Polite">
               <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
               </Grid.ColumnDefinitions>
-              <controls:Icon Kind="Info" Size="16" Foreground="{DynamicResource Brush.Info}" VerticalAlignment="Top" Margin="0,1,10,0" />
+              <controls:Icon Kind="Info" Size="16" Foreground="{DynamicResource Brush.Info}" VerticalAlignment="Top" Margin="{DynamicResource Inset.T1R10}" />
               <TextBlock Grid.Column="1" Style="{DynamicResource Text.Secondary}" Text="{Binding Notice}" />
             </Grid>
 
-            <TextBlock Style="{DynamicResource Text.Label}" Text="Username" Margin="0,0,0,6" />
+            <TextBlock Style="{DynamicResource Text.Label}" Text="Username" Margin="{DynamicResource Inset.B6}" />
             <TextBox x:Name="UsernameBox" Text="{Binding Username, UpdateSourceTrigger=PropertyChanged}" IsReadOnly="{Binding AreFieldsReadOnly}" MaxLength="64"
                      controls:InputAssist.Placeholder="Your username" AutomationProperties.Name="Username" />
-            <TextBlock Style="{DynamicResource Text.Label}" Text="Password" Margin="0,18,0,6" />
+            <TextBlock Style="{DynamicResource Text.Label}" Text="Password" Margin="{DynamicResource Inset.T18B6}" />
             <controls:PasswordField x:Name="PasswordBox" Password="{Binding Password, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsReadOnly="{Binding AreFieldsReadOnly}"
                                     AutomationProperties.Name="Password" PreviewKeyDown="OnPasswordKey" GotKeyboardFocus="OnPasswordFocus" LostKeyboardFocus="OnPasswordFocus" />
-            <StackPanel x:Name="CapsLockWarning" Orientation="Horizontal" Margin="0,6,0,0" Visibility="Collapsed" AutomationProperties.LiveSetting="Polite">
-              <controls:Icon Kind="Alert" Size="14" Foreground="{DynamicResource Brush.Warning}" VerticalAlignment="Center" Margin="0,0,6,0" />
+            <StackPanel x:Name="CapsLockWarning" Orientation="Horizontal" Margin="{DynamicResource Inset.T6}" Visibility="Collapsed" AutomationProperties.LiveSetting="Polite">
+              <controls:Icon Kind="Alert" Size="14" Foreground="{DynamicResource Brush.Warning}" VerticalAlignment="Center" Margin="{DynamicResource Inset.R6}" />
               <TextBlock Style="{DynamicResource Text.Caption}" Foreground="{DynamicResource Brush.Warning}" Text="Caps Lock is on." />
             </StackPanel>
 
-            <CheckBox x:Name="RememberBox" Content="Remember my username on this PC" IsChecked="{Binding RememberUsername}" Margin="0,16,0,0"
+            <CheckBox x:Name="RememberBox" Content="Remember my username on this PC" IsChecked="{Binding RememberUsername}" Margin="{DynamicResource Inset.T16}"
                       Visibility="{Binding CanRememberUsername, Converter={StaticResource BoolToVisibility}}" />
 
             <!-- The last attempt's problem: an icon and the words, assertive so a screen reader hears it at once; Retry where it helps. -->
@@ -90,9 +90,9 @@
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
               </Grid.ColumnDefinitions>
-              <controls:Icon Kind="Alert" Size="16" Foreground="{DynamicResource Brush.Critical}" VerticalAlignment="Top" Margin="0,1,10,0" />
+              <controls:Icon Kind="Alert" Size="16" Foreground="{DynamicResource Brush.Critical}" VerticalAlignment="Top" Margin="{DynamicResource Inset.T1R10}" />
               <TextBlock Grid.Column="1" Style="{DynamicResource Text.Secondary}" Foreground="{DynamicResource Brush.Critical}" Text="{Binding Message}" />
-              <Button Grid.Column="2" Style="{DynamicResource Button.Secondary.Small}" Content="Retry" Command="{Binding RetryCommand}" Margin="12,0,0,0" VerticalAlignment="Top"
+              <Button Grid.Column="2" Style="{DynamicResource Button.Secondary.Small}" Content="Retry" Command="{Binding RetryCommand}" Margin="{DynamicResource Inset.L12}" VerticalAlignment="Top"
                       Visibility="{Binding CanRetry, Converter={StaticResource BoolToVisibility}}" />
             </Grid>
 
@@ -104,32 +104,32 @@
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
               </Grid.ColumnDefinitions>
-              <controls:Icon Kind="Sync" Size="16" Foreground="{DynamicResource Brush.Info}" VerticalAlignment="Top" Margin="0,1,10,0" />
+              <controls:Icon Kind="Sync" Size="16" Foreground="{DynamicResource Brush.Info}" VerticalAlignment="Top" Margin="{DynamicResource Inset.T1R10}" />
               <TextBlock Grid.Column="1" Style="{DynamicResource Text.Secondary}" Text="{Binding WakingText}" />
-              <Button x:Name="CancelButton" Grid.Column="2" Style="{DynamicResource Button.Subtle.Small}" Content="Cancel" Command="{Binding CancelCommand}" Margin="12,0,0,0" VerticalAlignment="Top"
+              <Button x:Name="CancelButton" Grid.Column="2" Style="{DynamicResource Button.Subtle.Small}" Content="Cancel" Command="{Binding CancelCommand}" Margin="{DynamicResource Inset.L12}" VerticalAlignment="Top"
                       Visibility="{Binding CanCancel, Converter={StaticResource BoolToVisibility}}" AutomationProperties.Name="Cancel sign-in" />
             </Grid>
 
-            <Button x:Name="SignInButton" Style="{DynamicResource Button.Primary}" Content="Sign in" Command="{Binding SignInCommand}" IsDefault="True" Margin="0,24,0,0"
+            <Button x:Name="SignInButton" Style="{DynamicResource Button.Primary}" Content="Sign in" Command="{Binding SignInCommand}" IsDefault="True" Margin="{DynamicResource Inset.T24}"
                     Height="{DynamicResource Height.ControlLarge}" FontSize="15"
                     controls:ButtonAssist.IsBusy="{Binding SignInCommand.IsRunning}" controls:ButtonAssist.BusyText="Signing in" HorizontalAlignment="Stretch"
                     AutomationProperties.Name="Sign in" />
 
-            <Grid Margin="0,22,0,22">
+            <Grid Margin="{DynamicResource Inset.V22}">
               <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
               </Grid.ColumnDefinitions>
               <Rectangle Height="1" Fill="{DynamicResource Brush.Stroke}" VerticalAlignment="Center" SnapsToDevicePixels="True" />
-              <TextBlock Grid.Column="1" Style="{DynamicResource Text.Caption}" Text="or" Margin="12,0,12,0" />
+              <TextBlock Grid.Column="1" Style="{DynamicResource Text.Caption}" Text="or" Margin="{DynamicResource Inset.H12}" />
               <Rectangle Grid.Column="2" Height="1" Fill="{DynamicResource Brush.Stroke}" VerticalAlignment="Center" SnapsToDevicePixels="True" />
             </Grid>
 
             <Button x:Name="DemoButton" Style="{DynamicResource Button.Secondary}" Content="Try the demo" Command="{Binding DemoCommand}" Height="{DynamicResource Height.ControlLarge}" FontSize="15"
                     controls:ButtonAssist.IsBusy="{Binding DemoCommand.IsRunning}" controls:ButtonAssist.BusyText="Opening the demo" HorizontalAlignment="Stretch"
                     AutomationProperties.Name="Try the demo" />
-            <TextBlock Style="{DynamicResource Text.Caption}" Margin="0,10,0,0" TextAlignment="Center"
+            <TextBlock Style="{DynamicResource Text.Caption}" Margin="{DynamicResource Inset.T10}" TextAlignment="Center"
                        Text="No account needed. The demo clinic uses made-up people and resets every night." />
           </StackPanel>
 
@@ -143,26 +143,26 @@
     </Border>
 
     <!-- The Mica side: one line of context and the ABO/RhD compatibility matrix (donor rows, patient columns), drawn from the domain rule. -->
-    <Grid x:Name="Hero" Grid.Column="1" Margin="96,72,96,72" VerticalAlignment="Center" TextOptions.TextRenderingMode="Grayscale">
+    <Grid x:Name="Hero" Grid.Column="1" Margin="{DynamicResource Inset.H96V72}" VerticalAlignment="Center" TextOptions.TextRenderingMode="Grayscale">
       <!-- In a smaller window the whole explanation scales down as one piece instead of being cut off. -->
       <Viewbox Stretch="Uniform" StretchDirection="DownOnly" HorizontalAlignment="Left">
       <StackPanel HorizontalAlignment="Left">
         <TextBlock Text="Red cell compatibility" FontSize="{DynamicResource FontSize.Label}" FontWeight="SemiBold" Foreground="{DynamicResource Brush.Blood}" />
-        <TextBlock Style="{DynamicResource Text.Hero}" Text="Who can give to whom, at a glance." MaxWidth="330" HorizontalAlignment="Left" Margin="0,6,0,28" />
+        <TextBlock Style="{DynamicResource Text.Hero}" Text="Who can give to whom, at a glance." MaxWidth="330" HorizontalAlignment="Left" Margin="{DynamicResource Inset.T6B28}" />
         <Grid x:Name="Matrix" AutomationProperties.Name="Red cell compatibility: donor groups by patient groups">
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="Auto" />
           </Grid.ColumnDefinitions>
-          <TextBlock Text="Donor" FontSize="{DynamicResource FontSize.Caption}" Foreground="{DynamicResource Brush.Ink3}" VerticalAlignment="Top" Margin="0,70,18,0">
+          <TextBlock Text="Donor" FontSize="{DynamicResource FontSize.Caption}" Foreground="{DynamicResource Brush.Ink3}" VerticalAlignment="Top" Margin="{DynamicResource Inset.T70R18}">
             <TextBlock.LayoutTransform>
               <RotateTransform Angle="-90" />
             </TextBlock.LayoutTransform>
           </TextBlock>
           <StackPanel Grid.Column="1">
-            <TextBlock Text="Patient" FontSize="{DynamicResource FontSize.Caption}" Foreground="{DynamicResource Brush.Ink3}" Margin="62,0,0,10" />
+            <TextBlock Text="Patient" FontSize="{DynamicResource FontSize.Caption}" Foreground="{DynamicResource Brush.Ink3}" Margin="{DynamicResource Inset.L62B10}" />
             <!-- Patient group headings -->
-            <ItemsControl ItemsSource="{x:Static auth:LoginViewModel.PatientGroups}" Margin="62,0,0,0" Focusable="False">
+            <ItemsControl ItemsSource="{x:Static auth:LoginViewModel.PatientGroups}" Margin="{DynamicResource Inset.L62}" Focusable="False">
               <ItemsControl.ItemsPanel>
                 <ItemsPanelTemplate>
                   <StackPanel Orientation="Horizontal" />
@@ -170,17 +170,17 @@
               </ItemsControl.ItemsPanel>
               <ItemsControl.ItemTemplate>
                 <DataTemplate>
-                  <TextBlock Text="{Binding}" Width="54" TextAlignment="Center" FontSize="{DynamicResource FontSize.Caption}" FontWeight="SemiBold" Foreground="{DynamicResource Brush.Ink2}" Margin="0,0,0,6" />
+                  <TextBlock Text="{Binding}" Width="54" TextAlignment="Center" FontSize="{DynamicResource FontSize.Caption}" FontWeight="SemiBold" Foreground="{DynamicResource Brush.Ink2}" Margin="{DynamicResource Inset.B6}" />
                 </DataTemplate>
               </ItemsControl.ItemTemplate>
             </ItemsControl>
             <ItemsControl ItemsSource="{x:Static auth:LoginViewModel.Compatibility}" Focusable="False">
               <ItemsControl.ItemTemplate>
                 <DataTemplate>
-                  <StackPanel Orientation="Horizontal" Margin="0,3,0,3">
-                    <TextBlock Text="{Binding Label}" Width="56" Padding="0,0,8,0" TextAlignment="Right" VerticalAlignment="Center" FontSize="{DynamicResource FontSize.Caption}" FontWeight="SemiBold"
+                  <StackPanel Orientation="Horizontal" Margin="{DynamicResource Inset.V3}">
+                    <TextBlock Text="{Binding Label}" Width="56" Padding="{DynamicResource Inset.R8}" TextAlignment="Right" VerticalAlignment="Center" FontSize="{DynamicResource FontSize.Caption}" FontWeight="SemiBold"
                                Foreground="{DynamicResource Brush.Ink2}" />
-                    <ItemsControl ItemsSource="{Binding Cells}" Focusable="False" Margin="6,0,0,0">
+                    <ItemsControl ItemsSource="{Binding Cells}" Focusable="False" Margin="{DynamicResource Inset.L6}">
                       <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
                           <StackPanel Orientation="Horizontal" />
@@ -188,7 +188,7 @@
                       </ItemsControl.ItemsPanel>
                       <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                          <Grid Width="40" Height="40" Margin="7,0,7,0" AutomationProperties.Name="{Binding AutomationName}">
+                          <Grid Width="40" Height="40" Margin="{DynamicResource Inset.H7}" AutomationProperties.Name="{Binding AutomationName}">
                             <Ellipse x:Name="Dot" Fill="{DynamicResource Brush.Blood}" Opacity="0.78" Visibility="Collapsed" />
                             <Ellipse x:Name="Ring" Stroke="{DynamicResource Brush.Stroke2}" StrokeThickness="1.5" />
                           </Grid>
@@ -210,7 +210,7 @@
             </ItemsControl>
           </StackPanel>
         </Grid>
-        <TextBlock Style="{DynamicResource Text.Body}" Foreground="{DynamicResource Brush.Ink2}" MaxWidth="440" HorizontalAlignment="Left" Margin="0,28,0,0"
+        <TextBlock Style="{DynamicResource Text.Body}" Foreground="{DynamicResource Brush.Ink2}" MaxWidth="440" HorizontalAlignment="Left" Margin="{DynamicResource Inset.T28}"
                    Text="O&#x2212; can give to all eight groups and AB+ can receive from all eight. Lifestream checks this for you every time you fulfil a request." />
       </StackPanel>
       </Viewbox>

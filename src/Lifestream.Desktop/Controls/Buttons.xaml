@@ -54,7 +54,7 @@
       <Border x:Name="PressedLayer" Opacity="0" Background="{TemplateBinding assist:ButtonAssist.PressedBackground}"
               CornerRadius="{StaticResource Radius.Control}" IsHitTestVisible="False" />
       <!-- The primary variant's 1 px bottom shade (inset 0 -1px): a line inside the template, no effect. Other variants set no Sheen brush. -->
-      <Border x:Name="Sheen" Height="1" VerticalAlignment="Bottom" Margin="4,0,4,1" Background="{TemplateBinding assist:ButtonAssist.Sheen}"
+      <Border x:Name="Sheen" Height="1" VerticalAlignment="Bottom" Margin="{DynamicResource Inset.L4R4B1}" Background="{TemplateBinding assist:ButtonAssist.Sheen}"
               IsHitTestVisible="False" SnapsToDevicePixels="True" />
 
       <!-- The label layer and the busy layer share one cell and are both measured (Hidden, not Collapsed), so the button

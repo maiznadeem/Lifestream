@@ -4,7 +4,7 @@
              xmlns:controls="clr-namespace:Lifestream.Desktop.Controls"
              xmlns:services="clr-namespace:Lifestream.Desktop.Services"
              xmlns:shell="clr-namespace:Lifestream.Desktop.Shell"
-             Visibility="Collapsed" Focusable="False">
+             Visibility="Collapsed" FontFamily="{DynamicResource Font.Family}" FontSize="{DynamicResource FontSize.Body}" Foreground="{DynamicResource Brush.Ink}" Focusable="False">
   <UserControl.Resources>
     <CollectionViewSource x:Key="Grouped" Source="{Binding Items}">
       <CollectionViewSource.GroupDescriptions>
@@ -18,21 +18,21 @@
   <!-- A transparent layer over the window: a click outside the palette closes it. -->
   <Grid x:Name="Layer" Background="Transparent" MouseDown="OnLayerMouseDown">
     <controls:ElevatedSurface x:Name="Surface" Level="Dialog" CornerRadius="{DynamicResource Radius.Panel}" Width="{DynamicResource Width.Palette}" Padding="0"
-                              HorizontalAlignment="Center" VerticalAlignment="Top" Margin="16,52,16,16" MouseDown="OnSurfaceMouseDown"
+                              HorizontalAlignment="Center" VerticalAlignment="Top" Margin="{DynamicResource Inset.L16T52R16B16}" MouseDown="OnSurfaceMouseDown"
                               KeyboardNavigation.TabNavigation="Cycle" AutomationProperties.Name="Command palette">
       <controls:ElevatedSurface.RenderTransform>
         <ScaleTransform x:Name="OpenScale" ScaleX="1" ScaleY="1" />
       </controls:ElevatedSurface.RenderTransform>
       <DockPanel>
         <!-- The query row: 46 DIP, the search icon, the field, Esc. -->
-        <Border DockPanel.Dock="Top" Height="46" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="0,0,0,1" Padding="14,0,14,0">
+        <Border DockPanel.Dock="Top" Height="46" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="0,0,0,1" Padding="{DynamicResource Inset.H14}">
           <Grid>
             <Grid.ColumnDefinitions>
               <ColumnDefinition Width="Auto" />
               <ColumnDefinition Width="*" />
               <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <controls:Icon Kind="Search" Size="18" Foreground="{DynamicResource Brush.Ink3}" VerticalAlignment="Center" Margin="0,0,10,0" />
+            <controls:Icon Kind="Search" Size="18" Foreground="{DynamicResource Brush.Ink3}" VerticalAlignment="Center" Margin="{DynamicResource Inset.R10}" />
             <Grid Grid.Column="1">
               <TextBlock x:Name="Hint" Text="Search donors, patients and requests, or type a command" FontSize="15" Foreground="{DynamicResource Brush.Ink3}" VerticalAlignment="Center"
                          IsHitTestVisible="False" TextTrimming="CharacterEllipsis" />
@@ -42,16 +42,16 @@
                        AutomationProperties.Name="Search and commands" AutomationProperties.HelpText="Type to search. Up and Down choose, Enter runs, Escape closes." />
             </Grid>
             <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-              <controls:Icon Kind="Sync" Size="14" Foreground="{DynamicResource Brush.Ink3}" Margin="0,0,10,0" Visibility="{Binding IsSearching, Converter={StaticResource BoolToVisibility}}" />
+              <controls:Icon Kind="Sync" Size="14" Foreground="{DynamicResource Brush.Ink3}" Margin="{DynamicResource Inset.R10}" Visibility="{Binding IsSearching, Converter={StaticResource BoolToVisibility}}" />
               <Border Style="{DynamicResource Kbd}">
                 <TextBlock Style="{DynamicResource Kbd.Text}" Text="Esc" />
               </Border>
             </StackPanel>
           </Grid>
         </Border>
-        <TextBlock x:Name="Empty" DockPanel.Dock="Top" Text="{Binding EmptyText}" Style="{DynamicResource Text.Secondary}" Margin="16,14,16,16"
+        <TextBlock x:Name="Empty" DockPanel.Dock="Top" Text="{Binding EmptyText}" Style="{DynamicResource Text.Secondary}" Margin="{DynamicResource Inset.L16T14R16B16}"
                    Visibility="{Binding EmptyText, Converter={StaticResource HasTextConverter}}" AutomationProperties.LiveSetting="Polite" />
-        <ListBox x:Name="Results" ItemsSource="{Binding Source={StaticResource Grouped}}" SelectedIndex="{Binding SelectedIndex}" MaxHeight="420" Padding="6"
+        <ListBox x:Name="Results" ItemsSource="{Binding Source={StaticResource Grouped}}" SelectedIndex="{Binding SelectedIndex}" MaxHeight="420" Padding="{DynamicResource Pad.6}"
                  Background="Transparent" BorderThickness="0" ItemContainerStyle="{DynamicResource PaletteItem}" Focusable="False" KeyboardNavigation.TabNavigation="None"
                  ScrollViewer.HorizontalScrollBarVisibility="Disabled" MouseLeftButtonUp="OnResultClick" AutomationProperties.Name="Results">
           <ListBox.Template>
@@ -65,7 +65,7 @@
             <GroupStyle>
               <GroupStyle.HeaderTemplate>
                 <DataTemplate>
-                  <TextBlock Text="{Binding Name}" FontSize="{DynamicResource FontSize.Caption}" Foreground="{DynamicResource Brush.Ink3}" Margin="10,8,10,4" />
+                  <TextBlock Text="{Binding Name}" FontSize="{DynamicResource FontSize.Caption}" Foreground="{DynamicResource Brush.Ink3}" Margin="{DynamicResource Inset.L10T8R10B4}" />
                 </DataTemplate>
               </GroupStyle.HeaderTemplate>
             </GroupStyle>
@@ -79,11 +79,11 @@
                   <ColumnDefinition Width="*" />
                   <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <controls:Icon Kind="{Binding Icon}" Size="16" Foreground="{DynamicResource Brush.Ink2}" VerticalAlignment="Center" Margin="0,0,10,0" />
+                <controls:Icon Kind="{Binding Icon}" Size="16" Foreground="{DynamicResource Brush.Ink2}" VerticalAlignment="Center" Margin="{DynamicResource Inset.R10}" />
                 <TextBlock Grid.Column="1" Text="{Binding Title}" FontWeight="Medium" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="320" />
                 <TextBlock Grid.Column="2" Text="{Binding Subtitle}" FontSize="{DynamicResource FontSize.Caption}" Foreground="{DynamicResource Brush.Ink3}" VerticalAlignment="Center"
-                           HorizontalAlignment="Right" TextTrimming="CharacterEllipsis" Margin="12,0,0,0" />
-                <ItemsControl Grid.Column="3" ItemsSource="{Binding Shortcut, Converter={StaticResource KeysConverter}}" Focusable="False" VerticalAlignment="Center" Margin="12,0,0,0">
+                           HorizontalAlignment="Right" TextTrimming="CharacterEllipsis" Margin="{DynamicResource Inset.L12}" />
+                <ItemsControl Grid.Column="3" ItemsSource="{Binding Shortcut, Converter={StaticResource KeysConverter}}" Focusable="False" VerticalAlignment="Center" Margin="{DynamicResource Inset.L12}">
                   <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
                       <StackPanel Orientation="Horizontal" />
@@ -91,7 +91,7 @@
                   </ItemsControl.ItemsPanel>
                   <ItemsControl.ItemTemplate>
                     <DataTemplate>
-                      <Border Style="{DynamicResource Kbd}" Margin="4,0,0,0">
+                      <Border Style="{DynamicResource Kbd}" Margin="{DynamicResource Inset.L4}">
                         <TextBlock Style="{DynamicResource Kbd.Text}" Text="{Binding}" />
                       </Border>
                     </DataTemplate>

@@ -9,7 +9,7 @@
   </ResourceDictionary.MergedDictionaries>
 
   <!-- Caption buttons (direction A): 46 DIP wide, as tall as the title bar. Rest: Ink glyph on nothing; hover: ink at 9 %; pressed: ink at 5 %
-       with the glyph at 70 %; close hover: #C42B1C with a white glyph. The highlight is the whole button, and that same rectangle is the hit-test region. -->
+       with the glyph at 70 %; close hover: the Windows close red (Brush.CloseHover) with a white glyph. The highlight is the whole button, and that same rectangle is the hit-test region. -->
   <Style x:Key="CaptionButton" TargetType="Button">
     <Setter Property="Width" Value="{StaticResource Width.CaptionButton}" />
     <Setter Property="Height" Value="{Binding TitleBarHeight, RelativeSource={RelativeSource TemplatedParent}}" />
@@ -108,8 +108,8 @@
                 <ContentPresenter />
               </AdornerDecorator>
               <!-- The default caption: the mark and the window title (dialogs). Hidden when the content draws its own title bar. -->
-              <StackPanel x:Name="DefaultCaption" Orientation="Horizontal" Margin="16,0,0,0" VerticalAlignment="Center">
-                <controls:LogoMark x:Name="CaptionMark" Width="18" Height="18" Margin="0,0,10,0" VerticalAlignment="Center" />
+              <StackPanel x:Name="DefaultCaption" Orientation="Horizontal" Margin="{DynamicResource Inset.L16}" VerticalAlignment="Center">
+                <controls:LogoMark x:Name="CaptionMark" Width="18" Height="18" Margin="{DynamicResource Inset.R10}" VerticalAlignment="Center" />
                 <TextBlock Style="{StaticResource Text.Label}" Text="{TemplateBinding Title}" FontWeight="SemiBold" Foreground="{DynamicResource Brush.Ink}"
                            VerticalAlignment="Center" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" AutomationProperties.Name="Window title" />
               </StackPanel>

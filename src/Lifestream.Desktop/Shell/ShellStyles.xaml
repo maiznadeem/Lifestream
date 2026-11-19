@@ -19,7 +19,7 @@
     <Setter Property="FontSize" Value="{StaticResource FontSize.Body}" />
     <Setter Property="Foreground" Value="{DynamicResource Brush.Ink}" />
     <Setter Property="Height" Value="{StaticResource Height.NavItem}" />
-    <Setter Property="Margin" Value="0,0,0,2" />
+    <Setter Property="Margin" Value="{DynamicResource Inset.B2}" />
     <Setter Property="FocusVisualStyle" Value="{x:Null}" />
     <Setter Property="Cursor" Value="Hand" />
     <Setter Property="Template">
@@ -48,14 +48,14 @@
             </VisualStateManager.VisualStateGroups>
             <Border x:Name="HoverLayer" Opacity="0" CornerRadius="{StaticResource Radius.Control}" Background="{DynamicResource Brush.CaptionPressed}" />
             <assist:CrispBorder x:Name="Selected" Opacity="0" CornerRadius="{StaticResource Radius.Control}" Background="{DynamicResource Brush.NavActive}" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="1" />
-            <Border x:Name="Bar" Width="3" HorizontalAlignment="Left" Margin="0,10,0,10" CornerRadius="2" Background="Transparent" />
-            <Grid Margin="12,0,12,0">
+            <Border x:Name="Bar" Width="3" HorizontalAlignment="Left" Margin="{DynamicResource Inset.V10}" CornerRadius="{DynamicResource Radius.2}" Background="Transparent" />
+            <Grid Margin="{DynamicResource Inset.H12}">
               <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
               </Grid.ColumnDefinitions>
-              <controls:Icon x:Name="Glyph" Kind="{Binding Icon}" Size="18" VerticalAlignment="Center" Margin="0,0,12,0" />
+              <controls:Icon x:Name="Glyph" Kind="{Binding Icon}" Size="18" VerticalAlignment="Center" Margin="{DynamicResource Inset.R12}" />
               <ContentPresenter x:Name="Label" Grid.Column="1" VerticalAlignment="Center" RecognizesAccessKey="False" TextElement.FontWeight="Normal" />
               <TextBlock x:Name="Count" Grid.Column="2" Text="{Binding Badge}" FontSize="{StaticResource FontSize.Caption}" Foreground="{DynamicResource Brush.Ink3}"
                          VerticalAlignment="Center" Typography.NumeralAlignment="Tabular" />
@@ -94,9 +94,9 @@
           <Grid Background="Transparent">
             <Border x:Name="HoverLayer" Opacity="0" CornerRadius="{StaticResource Radius.Control}" Background="{DynamicResource Brush.CaptionPressed}" />
             <assist:CrispBorder x:Name="Selected" Opacity="0" CornerRadius="{StaticResource Radius.Control}" Background="{DynamicResource Brush.NavActive}" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="1" />
-            <Border x:Name="Bar" Width="3" HorizontalAlignment="Left" Margin="0,10,0,10" CornerRadius="2" Background="Transparent" />
+            <Border x:Name="Bar" Width="3" HorizontalAlignment="Left" Margin="{DynamicResource Inset.V10}" CornerRadius="{DynamicResource Radius.2}" Background="Transparent" />
             <controls:Icon x:Name="Glyph" Kind="{Binding Icon}" Size="18" HorizontalAlignment="Center" VerticalAlignment="Center" />
-            <Ellipse x:Name="Dot" Width="6" Height="6" Fill="{DynamicResource Brush.Critical}" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,7,7,0" Visibility="Collapsed" />
+            <Ellipse x:Name="Dot" Width="6" Height="6" Fill="{DynamicResource Brush.Critical}" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="{DynamicResource Inset.T7R7}" Visibility="Collapsed" />
             <assist:CrispBorder x:Name="FocusRing" BorderThickness="{StaticResource Thickness.FocusRing}" BorderBrush="{DynamicResource Brush.Focus}" CornerRadius="{StaticResource Radius.Control}" Visibility="Collapsed"
                                 IsHitTestVisible="False" />
           </Grid>
@@ -123,14 +123,14 @@
 
   <!-- A sidebar group heading: 12 DIP Medium in Ink3. Dashboard sits on its own without one. -->
   <Style x:Key="NavGroupHeader" TargetType="TextBlock" BasedOn="{StaticResource Text.Caption}">
-    <Setter Property="Margin" Value="12,14,12,4" />
+    <Setter Property="Margin" Value="{DynamicResource Inset.L12T14R12B4}" />
     <Setter Property="FontWeight" Value="Medium" />
     <Setter Property="AutomationProperties.HeadingLevel" Value="Level2" />
   </Style>
 
   <!-- The account control at the foot of the sidebar and the avatar in the title bar: a quiet subtle button that opens the account menu. -->
   <Style x:Key="AccountButton" TargetType="Button" BasedOn="{StaticResource Button.Subtle}">
-    <Setter Property="Padding" Value="12,10,12,10" />
+    <Setter Property="Padding" Value="{DynamicResource Inset.H12V10}" />
     <Setter Property="MinHeight" Value="40" />
     <Setter Property="MinWidth" Value="40" />
     <Setter Property="Height" Value="Auto" />
@@ -143,7 +143,7 @@
   <Style x:Key="TitleBarButton" TargetType="Button" BasedOn="{StaticResource Button.Subtle}">
     <Setter Property="Height" Value="32" />
     <Setter Property="MinWidth" Value="32" />
-    <Setter Property="Padding" Value="8,0,8,0" />
+    <Setter Property="Padding" Value="{DynamicResource Inset.H8}" />
     <Setter Property="WindowChrome.IsHitTestVisibleInChrome" Value="True" />
     <Setter Property="Foreground" Value="{DynamicResource Brush.Ink2}" />
     <Setter Property="assist:ButtonAssist.HoverBackground" Value="{DynamicResource Brush.CaptionHover}" />
@@ -163,17 +163,17 @@
         <ControlTemplate TargetType="Button">
           <Grid>
             <assist:CrispBorder x:Name="Bd" Background="{DynamicResource Brush.LayerOnMica}" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="1" CornerRadius="{StaticResource Radius.Control}"
-                                Padding="10,0,6,0">
+                                Padding="{DynamicResource Inset.L10R6}">
               <Grid>
                 <Grid.ColumnDefinitions>
                   <ColumnDefinition Width="Auto" />
                   <ColumnDefinition Width="*" />
                   <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <controls:Icon Kind="Search" Size="15" VerticalAlignment="Center" Margin="0,0,8,0" />
+                <controls:Icon Kind="Search" Size="15" VerticalAlignment="Center" Margin="{DynamicResource Inset.R8}" />
                 <TextBlock Grid.Column="1" Text="{TemplateBinding Content}" FontSize="{StaticResource FontSize.Label}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                  <Border Style="{StaticResource Kbd}" Margin="0,0,4,0">
+                  <Border Style="{StaticResource Kbd}" Margin="{DynamicResource Inset.R4}">
                     <TextBlock Style="{StaticResource Kbd.Text}" Text="Ctrl" />
                   </Border>
                   <Border Style="{StaticResource Kbd}">
@@ -208,7 +208,7 @@
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="ListBoxItem">
-          <Border x:Name="Bd" CornerRadius="5" Background="Transparent" Padding="10,0,10,0">
+          <Border x:Name="Bd" CornerRadius="{DynamicResource Radius.5}" Background="Transparent" Padding="{DynamicResource Inset.H10}">
             <ContentPresenter VerticalAlignment="Center" />
           </Border>
           <ControlTemplate.Triggers>

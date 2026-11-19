@@ -53,7 +53,14 @@ public sealed partial class CommandPaletteViewModel : ObservableObject
 
     /// <summary>True while the server search for the current query runs.</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsLoading), nameof(IsBusy))]
     public partial bool IsSearching { get; set; }
+
+    /// <summary>The search is loading records (bindable like every screen's IsLoading).</summary>
+    public bool IsLoading => IsSearching;
+
+    /// <summary>The search is running (bindable like every screen's IsBusy).</summary>
+    public bool IsBusy => IsSearching;
 
     /// <summary>"No results for "xyz"" when nothing matched; null otherwise.</summary>
     [ObservableProperty]
