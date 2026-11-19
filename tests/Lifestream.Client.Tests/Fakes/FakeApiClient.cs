@@ -126,6 +126,8 @@ public sealed class FakeApiClient : ILifestreamApiClient
 
     public Task<ApiResult> DeleteDonorAsync(int id, CancellationToken ct = default) => RunVoid(nameof(DeleteDonorAsync), ct);
 
+    public Task<ApiResult<DonorDetail>> RestoreDonorAsync(int id, CancellationToken ct = default) => Run<DonorDetail>(nameof(RestoreDonorAsync), ct);
+
     public Task<ApiResult<DonorEligibility>> GetDonorEligibilityAsync(int id, CancellationToken ct = default) => Run<DonorEligibility>(nameof(GetDonorEligibilityAsync), ct);
 
     public Task<ApiResult<PagedResult<PatientListItem>>> GetPatientsAsync(PatientQuery query, CancellationToken ct = default) => Run<PagedResult<PatientListItem>>(nameof(GetPatientsAsync), ct);
@@ -137,6 +139,8 @@ public sealed class FakeApiClient : ILifestreamApiClient
     public Task<ApiResult<PatientDetail>> UpdatePatientAsync(int id, UpdatePatientRequest request, CancellationToken ct = default) => Run<PatientDetail>(nameof(UpdatePatientAsync), ct);
 
     public Task<ApiResult> DeletePatientAsync(int id, CancellationToken ct = default) => RunVoid(nameof(DeletePatientAsync), ct);
+
+    public Task<ApiResult<PatientDetail>> RestorePatientAsync(int id, CancellationToken ct = default) => Run<PatientDetail>(nameof(RestorePatientAsync), ct);
 
     public Task<ApiResult<PagedResult<AppointmentListItem>>> GetAppointmentsAsync(AppointmentQuery query, CancellationToken ct = default) => Run<PagedResult<AppointmentListItem>>(nameof(GetAppointmentsAsync), ct);
 
@@ -170,9 +174,9 @@ public sealed class FakeApiClient : ILifestreamApiClient
 
     public Task<ApiResult<IReadOnlyList<StockItem>>> GetStockAsync(CancellationToken ct = default) => Run<IReadOnlyList<StockItem>>(nameof(GetStockAsync), ct);
 
-    public Task<ApiResult<DashboardResponse>> GetDashboardAsync(DateOnly rangeStart, DateOnly rangeEnd, CancellationToken ct = default) => Run<DashboardResponse>(nameof(GetDashboardAsync), ct);
+    public Task<ApiResult<DashboardResponse>> GetDashboardAsync(DateOnly rangeStart, DateOnly rangeEnd, int? utcOffsetMinutes = null, CancellationToken ct = default) => Run<DashboardResponse>(nameof(GetDashboardAsync), ct);
 
-    public Task<ApiResult<PagedResult<StaffListItem>>> GetStaffAsync(string? search = null, int page = 1, int pageSize = Paging.DefaultPageSize, CancellationToken ct = default) => Run<PagedResult<StaffListItem>>(nameof(GetStaffAsync), ct);
+    public Task<ApiResult<PagedResult<StaffListItem>>> GetStaffAsync(string? search = null, int page = 1, int pageSize = Paging.DefaultPageSize, string? sort = null, int? minSalary = null, int? maxSalary = null, CancellationToken ct = default) => Run<PagedResult<StaffListItem>>(nameof(GetStaffAsync), ct);
 
     public Task<ApiResult<StaffDetail>> GetStaffMemberAsync(int id, CancellationToken ct = default) => Run<StaffDetail>(nameof(GetStaffMemberAsync), ct);
 

@@ -106,6 +106,9 @@ public sealed class LifestreamApiClient(HttpClient http, ISessionService session
     public Task<ApiResult> DeleteDonorAsync(int id, CancellationToken ct = default) =>
         SendAsync(HttpMethod.Delete, ApiRoutes.Path(ApiRoutes.DonorById, id), null, ct);
 
+    public Task<ApiResult<DonorDetail>> RestoreDonorAsync(int id, CancellationToken ct = default) =>
+        SendAsync<DonorDetail>(HttpMethod.Post, ApiRoutes.Path(ApiRoutes.DonorRestore, id), null, ct: ct);
+
     public Task<ApiResult<DonorEligibility>> GetDonorEligibilityAsync(int id, CancellationToken ct = default) =>
         SendAsync<DonorEligibility>(HttpMethod.Get, ApiRoutes.Path(ApiRoutes.DonorEligibility, id), ct: ct);
 
@@ -124,6 +127,9 @@ public sealed class LifestreamApiClient(HttpClient http, ISessionService session
 
     public Task<ApiResult> DeletePatientAsync(int id, CancellationToken ct = default) =>
         SendAsync(HttpMethod.Delete, ApiRoutes.Path(ApiRoutes.PatientById, id), null, ct);
+
+    public Task<ApiResult<PatientDetail>> RestorePatientAsync(int id, CancellationToken ct = default) =>
+        SendAsync<PatientDetail>(HttpMethod.Post, ApiRoutes.Path(ApiRoutes.PatientRestore, id), null, ct: ct);
 
     // Appointments
     public Task<ApiResult<PagedResult<AppointmentListItem>>> GetAppointmentsAsync(AppointmentQuery query, CancellationToken ct = default) =>
@@ -177,13 +183,13 @@ public sealed class LifestreamApiClient(HttpClient http, ISessionService session
     public Task<ApiResult<IReadOnlyList<StockItem>>> GetStockAsync(CancellationToken ct = default) =>
         SendAsync<IReadOnlyList<StockItem>>(HttpMethod.Get, ApiRoutes.Path(ApiRoutes.Stock), ct: ct);
 
-    public Task<ApiResult<DashboardResponse>> GetDashboardAsync(DateOnly rangeStart, DateOnly rangeEnd, CancellationToken ct = default) =>
-        SendAsync<DashboardResponse>(HttpMethod.Get, Url(ApiRoutes.Dashboard, ("from", rangeStart), ("to", rangeEnd)), ct: ct);
+    public Task<ApiResult<DashboardResponse>> GetDashboardAsync(DateOnly rangeStart, DateOnly rangeEnd, int? utcOffsetMinutes = null, CancellationToken ct = default) =>
+        SendAsync<DashboardResponse>(HttpMethod.Get, Url(ApiRoutes.Dashboard, ("from", rangeStart), ("to", rangeEnd), ("utcOffsetMinutes", utcOffsetMinutes)), ct: ct);
 
     // Staff
-    public async Task<ApiResult<PagedResult<StaffListItem>>> GetStaffAsync(string? search = null, int page = 1, int pageSize = Paging.DefaultPageSize, CancellationToken ct = default)
+    public async Task<ApiResult<PagedResult<StaffListItem>>> GetStaffAsync(string? search = null, int page = 1, int pageSize = Paging.DefaultPageSize, string? sort = null, int? minSalary = null, int? maxSalary = null, CancellationToken ct = default)
     {
-        var raw = await SendAsync<JsonElement>(HttpMethod.Get, Url(ApiRoutes.Staff, ("search", search), ("page", page), ("pageSize", pageSize)), ct: ct).ConfigureAwait(false);
+        var raw = await SendAsync<JsonElement>(HttpMethod.Get, Url(ApiRoutes.Staff, ("search", search), ("page", page), ("pageSize", pageSize), ("sort", sort), ("minSalary", minSalary), ("maxSalary", maxSalary)), ct: ct).ConfigureAwait(false);
         if (!raw.IsOk)
         {
             return ApiResult<PagedResult<StaffListItem>>.Fail(raw.Problem!);

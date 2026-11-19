@@ -164,7 +164,9 @@ public sealed partial class DashboardViewModel : ViewModelBase
     {
         var today = DateOnly.FromDateTime(Clock.GetLocalNow().DateTime);
         var (start, end) = RangeFor(SelectedPeriod.Months, today);
-        _fetched = (await _api.GetDashboardAsync(start, end, ct).ConfigureAwait(false)).Unwrap();
+        // The dashboard's months and days are the user's local calendar: say how far it is from UTC so a record at 23:30 local lands on the right day.
+        var offsetMinutes = (int)Clock.GetLocalNow().Offset.TotalMinutes;
+        _fetched = (await _api.GetDashboardAsync(start, end, offsetMinutes, ct).ConfigureAwait(false)).Unwrap();
     }
 
     protected override void Apply()
