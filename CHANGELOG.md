@@ -2,6 +2,16 @@
 
 All notable changes to Lifestream are listed here. The section of a version is also the text of its release on the GitHub Releases page.
 
+## [2.0.2] - 2026-11-19
+
+Lifestream 2.0.2 makes the new look sharper.
+
+### Look and feel
+
+- Borders and rounded corners are crisp at every display scale (100 % to 175 %): edges no longer look soft or doubled.
+- Text is sharper, especially at small sizes: the app now ships a version of its font that is tuned to line up with the screen's pixels, and large headings use a display cut of the same font.
+- Buttons and fields have slightly rounder corners, and pressed buttons no longer shift by a fraction of a pixel.
+
 ## [2.0.1] - 2026-11-19
 
 Lifestream 2.0.1 is a polish release: the same features, with a new identity and a more refined look.

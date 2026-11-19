@@ -73,7 +73,7 @@ public sealed class App : Application
     private static void Configure(IConfiguration configuration, IServiceCollection services)
     {
         var address = configuration["Api:BaseAddress"] ?? throw new InvalidOperationException("Api:BaseAddress is not configured.");
-        var version = Assembly.GetEntryAssembly()?.GetName().Version ?? new Version(2, 0, 1);
+        var version = Assembly.GetEntryAssembly()?.GetName().Version ?? new Version(2, 0, 2);
         services.AddLifestreamClient(new Uri(address), version);
         services.AddSingleton<IUiDispatcher>(_ => new WpfUiDispatcher(Current.Dispatcher));
         services.AddSingleton<IWindowHost, WpfWindowHost>();
