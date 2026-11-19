@@ -80,10 +80,52 @@ public partial class DateField : UserControl
         return true;
     }
 
+    /// <summary>
+    /// Limits the calendar itself, not just the typed text (SHELL-36). A date outside <see cref="MinDate"/> and <see cref="MaxDate"/> is blacked out and
+    /// cannot be clicked. The date that is already chosen stays selectable even when it is outside the limits (a reschedule of an appointment whose
+    /// day has passed keeps showing its own day), and the calendar never lets that one date widen the limits: the display range is coerced to include
+    /// the chosen date, so the days around it are blacked out explicitly.
+    /// </summary>
     private void ApplyLimits()
     {
+        Picker.BlackoutDates.Clear();
         Picker.DisplayDateStart = MinDate is { } min ? min.ToDateTime(TimeOnly.MinValue) : null;
         Picker.DisplayDateEnd = MaxDate is { } max ? max.ToDateTime(TimeOnly.MinValue) : null;
+        var keep = Picker.SelectedDate?.Date;
+        if (MinDate is { } earliest)
+        {
+            Block(DateTime.MinValue.Date, earliest.ToDateTime(TimeOnly.MinValue).AddDays(-1), keep);
+        }
+
+        if (MaxDate is { } latest)
+        {
+            Block(latest.ToDateTime(TimeOnly.MinValue).AddDays(1), DateTime.MaxValue.Date, keep);
+        }
+    }
+
+    private void Block(DateTime from, DateTime to, DateTime? keep)
+    {
+        if (to < from)
+        {
+            return;
+        }
+
+        if (keep is { } chosen && chosen >= from && chosen <= to)
+        {
+            if (chosen > from)
+            {
+                Picker.BlackoutDates.Add(new CalendarDateRange(from, chosen.AddDays(-1)));
+            }
+
+            if (chosen < to)
+            {
+                Picker.BlackoutDates.Add(new CalendarDateRange(chosen.AddDays(1), to));
+            }
+
+            return;
+        }
+
+        Picker.BlackoutDates.Add(new CalendarDateRange(from, to));
     }
 
     private static void OnSelectedDateChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -101,7 +143,9 @@ public partial class DateField : UserControl
         try
         {
             Box.Text = Formatting.Date(SelectedDate);
+            Picker.BlackoutDates.Clear(); // a chosen date may not be inside a blackout range, so the ranges are rebuilt around it
             Picker.SelectedDate = SelectedDate?.ToDateTime(TimeOnly.MinValue);
+            ApplyLimits();
         }
         finally
         {
@@ -128,8 +172,15 @@ public partial class DateField : UserControl
             return;
         }
 
+        var date = DateOnly.FromDateTime(chosen);
+        if ((MinDate is { } min && date < min) || (MaxDate is { } max && date > max))
+        {
+            ShowDate(); // outside the limits (the calendar already blacks these out): the previous date stays
+            return;
+        }
+
         ParseError = null;
-        SelectedDate = DateOnly.FromDateTime(chosen);
+        SelectedDate = date;
         ShowDate();
         CalendarPopup.IsOpen = false;
     }

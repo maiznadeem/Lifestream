@@ -10,7 +10,7 @@ namespace Lifestream.Client.Tests;
 /// <summary>SHELL-24: leaving a form with unsaved changes by signing out or closing the window asks "Discard changes?".</summary>
 public sealed class DiscardChangesTests
 {
-    public sealed class DirtyFormViewModel : ViewModelBase, IDirtyTracking
+    public sealed class DirtyFormViewModel : ViewModelBase, IHasUnsavedChanges
     {
         public override string PageTitle => "Form";
 

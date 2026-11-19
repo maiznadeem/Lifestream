@@ -16,6 +16,7 @@ using Lifestream.Desktop.Theme;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 
 namespace Lifestream.Desktop;
 
@@ -38,9 +39,9 @@ public sealed class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
-        Resources.MergedDictionaries.Add(ThemeLoader.Resources);
-        _ = Features.Dashboard.ChartWarmUp.Start(Dispatcher); // the first dashboard's one-time cost is paid while the sign-in window is idle, before the dashboard is shown (FEAT-27)
 
+        // Order matters. The host (configuration, logging, DI) comes first, then the global exception handlers, and only then the theme and the
+        // fonts: anything that goes wrong while loading them is logged and shown as a friendly dialog instead of ending the process unseen (SHELL-01).
         _host = Host.CreateDefaultBuilder(e.Args).ConfigureServices((context, services) => Configure(context.Configuration, services)).Build();
         var provider = _host.Services;
 
@@ -51,7 +52,12 @@ public sealed class App : Application
         _exceptions = new GlobalExceptionHandler(provider.GetRequiredService<IErrorReporter>(), Dispatcher);
         _exceptions.Install();
 
-        RecordPicker.ViewModelFactory = kind => new RecordPickerViewModel(provider.GetRequiredService<ILifestreamApiClient>(), kind);
+        var startupLog = provider.GetRequiredService<ILoggerFactory>().CreateLogger("Lifestream.Startup");
+        FontSetup.Warn = message => StartupLog.Warning(startupLog, message);
+        Resources.MergedDictionaries.Add(ThemeLoader.Resources);
+        _ = Features.Dashboard.ChartWarmUp.Start(Dispatcher); // the first dashboard's one-time cost is paid while the sign-in window is idle, before the dashboard is shown (FEAT-27)
+
+        RecordPicker.ViewModelFactory = kind => new RecordPickerViewModel(provider.GetRequiredService<ILifestreamApiClient>(), kind, serverStatus: provider.GetRequiredService<IServerStatus>());
         provider.GetRequiredService<ISessionExpiredWatcher>().Start();
         provider.GetRequiredService<IAppFlow>().Start();
     }

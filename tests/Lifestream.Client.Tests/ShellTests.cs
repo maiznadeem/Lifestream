@@ -13,7 +13,7 @@ namespace Lifestream.Client.Tests;
 
 public sealed class ShellTests
 {
-    private sealed class CountingViewModel : ViewModelBase, INavigationParameterReceiver, IDirtyTracking
+    private sealed class CountingViewModel : ViewModelBase, INavigationParameterReceiver, IHasUnsavedChanges
     {
         public static int Created;
         public static int Loads;

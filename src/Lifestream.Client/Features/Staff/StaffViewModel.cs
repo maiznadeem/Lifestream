@@ -32,8 +32,8 @@ public sealed partial class StaffViewModel : SortedRecordListViewModel<StaffRow,
         _api = api;
         _forms = forms;
         _session = session;
-        ResetPasswordCommand = new AsyncRelayCommand(_ => ResetPasswordAsync(), () => Detail is not null && !IsEditing && CanManageStaff);
-        LoadPhotoCommand = new AsyncRelayCommand((parameter, _) => parameter is StaffRow row ? LoadPhotoAsync(row) : Task.CompletedTask);
+        ResetPasswordCommand = Command(_ => ResetPasswordAsync(), () => Detail is not null && !IsEditing && CanManageStaff);
+        LoadPhotoCommand = Command((parameter, _) => parameter is StaffRow row ? LoadPhotoAsync(row) : Task.CompletedTask);
         PropertyChanged += (_, e) =>
         {
             if (e.PropertyName is nameof(Detail) or nameof(Editor))
@@ -50,6 +50,8 @@ public sealed partial class StaffViewModel : SortedRecordListViewModel<StaffRow,
     protected override string PluralName => "staff members";
 
     protected override string RecordType => "staff member";
+
+    protected override bool RecordIsPerson => true;
 
     public AsyncRelayCommand ResetPasswordCommand { get; }
 
@@ -184,7 +186,7 @@ public sealed partial class StaffViewModel : SortedRecordListViewModel<StaffRow,
             await _photoGate.WaitAsync(_photoCts.Token).ConfigureAwait(true);
             try
             {
-                var result = await Task.Run(() => _api.GetStaffPhotoAsync(row.Id, _photoCts.Token)).ConfigureAwait(true);
+                var result = await RunOperationAsync(ct => _api.GetStaffPhotoAsync(row.Id, ct), _photoCts.Token).ConfigureAwait(true);
                 if (result.IsOk)
                 {
                     row.Photo = result.Value;
@@ -211,17 +213,28 @@ public sealed partial class StaffViewModel : SortedRecordListViewModel<StaffRow,
 
     protected override Task<ApiResult<StaffDetail>> GetDetailAsync(int id, CancellationToken ct) => _api.GetStaffMemberAsync(id, ct);
 
-    protected override IReadOnlyList<DetailFact> FactsOf(StaffDetail s) =>
-    [
-        new("Username", s.Username),
-        new("Role", s.Role.ToString()),
-        new("Designation", s.Designation.ToString()),
-        new("Shift", StaffText.Shift(s.Shift)),
-        new("Gender", s.Gender.ToString()),
-        new("Date of birth", Formatting.Date(s.DateOfBirth)),
-        new("Phone", string.IsNullOrEmpty(s.Phone) ? "Not given" : s.Phone),
-        new("Salary", s.Salary is null ? "Not given" : StaffText.Salary(s.Salary)),
-    ];
+    /// <summary>
+    /// The detail pane's lines. Phone and salary come from the detail endpoint (the list never carries them) and are shown to an administrator only.
+    /// </summary>
+    protected override IReadOnlyList<DetailFact> FactsOf(StaffDetail s)
+    {
+        List<DetailFact> facts =
+        [
+            new("Username", s.Username),
+            new("Role", s.Role.ToString()),
+            new("Designation", s.Designation.ToString()),
+            new("Shift", StaffText.Shift(s.Shift)),
+            new("Gender", s.Gender.ToString()),
+            new("Date of birth", Formatting.Date(s.DateOfBirth)),
+        ];
+        if (_session.IsInRole(Lifestream.Domain.Role.Admin))
+        {
+            facts.Add(new("Phone", string.IsNullOrEmpty(s.Phone) ? "Not given" : s.Phone));
+            facts.Add(new("Salary", s.Salary is null ? "Not given" : StaffText.Salary(s.Salary)));
+        }
+
+        return facts;
+    }
 
     protected override Task<ApiResult> DeleteRecordAsync(int id, CancellationToken ct) => _api.DeleteStaffAsync(id, ct);
 

@@ -24,6 +24,7 @@ public abstract class SortedRecordListViewModel<TItem, TDetail> : RecordListView
     public abstract IReadOnlyList<string> SortKeys { get; }
 
     /// <summary>Calls the list endpoint with the screen's own filters; <see cref="ListRequest.Sort"/> is null or a supported key.</summary>
+    [RunsInOperation("FetchPageAsync calls it, and LoadAsync runs FetchAsync inside Operations.RunAsync.")]
     protected abstract Task<ApiResult<PagedResult<TItem>>> FetchSortedAsync(ListRequest request, CancellationToken ct);
 
     protected sealed override async Task<ApiResult<PagedResult<TItem>>> FetchPageAsync(ListRequest request, CancellationToken ct)

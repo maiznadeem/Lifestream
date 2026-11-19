@@ -20,7 +20,9 @@ public static class ThemeLoader
         // Touching Application runs its static constructor, which registers the pack: scheme even when no Application exists yet (unit tests).
         _ = Application.Current;
         FocusAssist.Register();
-        ChartFont.Apply();
-        return new ResourceDictionary { Source = new Uri("/Lifestream;component/Theme/Theme.xaml", UriKind.Relative) };
+        FontSetup.ApplyChartFont();
+        var theme = new ResourceDictionary { Source = new Uri("/Lifestream;component/Theme/Theme.xaml", UriKind.Relative) };
+        FontSetup.ApplyAppFont(theme);
+        return theme;
     }
 }

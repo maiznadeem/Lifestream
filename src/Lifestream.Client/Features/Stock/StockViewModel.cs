@@ -122,14 +122,14 @@ public sealed partial class StockViewModel(ILifestreamApiClient api, IListViewSt
     }
 
     /// <summary>Back to every blood type and all stock.</summary>
-    public AsyncRelayCommand ClearFiltersCommand => field ??= new AsyncRelayCommand(_ =>
+    public AsyncRelayCommand ClearFiltersCommand => field ??= Command(_ =>
     {
         BloodTypeFilter = BloodTypeOptions[0];
         ViewFilter = ViewOptions[0];
         return Task.CompletedTask;
     });
 
-    public AsyncRelayCommand RetryCommand => field ??= new AsyncRelayCommand(ct => LoadAsync(ct));
+    public AsyncRelayCommand RetryCommand => field ??= Command(ct => LoadAsync(ct));
 
     protected override async Task FetchAsync(CancellationToken ct)
     {

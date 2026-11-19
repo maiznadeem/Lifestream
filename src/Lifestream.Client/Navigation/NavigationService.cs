@@ -70,7 +70,7 @@ public sealed class NavigationService(IServiceProvider services, IDialogService 
         return true;
     }
 
-    public bool HasUnsavedChanges => _current is IDirtyTracking { HasUnsavedChanges: true };
+    public bool HasUnsavedChanges => _current is IHasUnsavedChanges { HasUnsavedChanges: true };
 
     public async Task<bool> ConfirmDiscardAsync() =>
         !HasUnsavedChanges

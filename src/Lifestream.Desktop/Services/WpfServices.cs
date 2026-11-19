@@ -75,8 +75,25 @@ public sealed class WpfWindowHost : IWindowHost
     private MainWindow? _main;
     private bool _switching;
 
-    /// <summary>The window to use as the owner of dialogs.</summary>
-    public Window? ActiveWindow => (Window?)_main ?? _login;
+    /// <summary>The window to use as the owner of dialogs: the topmost window owned down from the main (or sign-in) window, so a "Discard changes?" question appears over the form dialog that asked it.</summary>
+    public Window? ActiveWindow
+    {
+        get
+        {
+            var top = (Window?)_main ?? _login;
+            if (top is null || Application.Current is null)
+            {
+                return top;
+            }
+
+            while (Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsVisible && ReferenceEquals(w.Owner, top)) is { } child)
+            {
+                top = child;
+            }
+
+            return top;
+        }
+    }
 
     public void ShowLogin(LoginViewModel viewModel)
     {

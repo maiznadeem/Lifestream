@@ -18,20 +18,25 @@ public sealed class AsyncRelayCommand : ICommand, System.ComponentModel.INotifyP
     private readonly List<CancellationTokenSource> _active = [];
     private Exception? _lastException;
 
-    public AsyncRelayCommand(Func<CancellationToken, Task> execute, Func<bool>? canExecute = null)
-        : this((_, ct) => execute(ct), canExecute is null ? null : _ => canExecute())
+    public AsyncRelayCommand(Func<CancellationToken, Task> execute, Func<bool>? canExecute = null, OperationRunner? runner = null)
+        : this((_, ct) => execute(ct), canExecute is null ? null : _ => canExecute(), runner: runner)
     {
     }
 
     /// <param name="execute">The work.</param>
     /// <param name="canExecute">Extra condition for <see cref="CanExecute"/>.</param>
     /// <param name="allowConcurrent">True for a command that may be started again while it runs (sidebar navigation: the newer run supersedes the older, which the work cancels itself).</param>
-    public AsyncRelayCommand(Func<object?, CancellationToken, Task> execute, Func<object?, bool>? canExecute = null, bool allowConcurrent = false)
+    /// <param name="runner">The runner of the owning view model: the whole run is inside one of its operations, so every API call it makes can be cancelled and shows the waking state (SHELL-07). Null only for a command that makes no API call.</param>
+    public AsyncRelayCommand(Func<object?, CancellationToken, Task> execute, Func<object?, bool>? canExecute = null, bool allowConcurrent = false, OperationRunner? runner = null)
     {
+        Runner = runner;
         _execute = execute ?? throw new ArgumentNullException(nameof(execute));
         _canExecute = canExecute;
         _allowConcurrent = allowConcurrent;
     }
+
+    /// <summary>The operation runner this command runs through, or null for a command that makes no API call (see <see cref="NoOperationRunnerAttribute"/>).</summary>
+    public OperationRunner? Runner { get; }
 
     /// <summary>Receives every captured exception. The composition root points it at the error reporter.</summary>
     public static Action<Exception> DefaultErrorHandler { get; set; } = static _ => { };
@@ -90,7 +95,14 @@ public sealed class AsyncRelayCommand : ICommand, System.ComponentModel.INotifyP
 
         try
         {
-            await _execute(parameter, token).ConfigureAwait(true);
+            if (Runner is { } runner)
+            {
+                await runner.ScopeAsync(scoped => _execute(parameter, scoped), token).ConfigureAwait(true);
+            }
+            else
+            {
+                await _execute(parameter, token).ConfigureAwait(true);
+            }
         }
         catch (OperationCanceledException)
         {

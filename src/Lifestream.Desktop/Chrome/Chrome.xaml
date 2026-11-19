@@ -58,7 +58,7 @@
   <Style TargetType="chrome:ChromeWindow">
     <Setter Property="Background" Value="{DynamicResource Brush.SurfaceCanvas}" />
     <Setter Property="Foreground" Value="{DynamicResource Brush.TextPrimary}" />
-    <Setter Property="FontFamily" Value="{StaticResource Font.Family}" />
+    <Setter Property="FontFamily" Value="{DynamicResource Font.Family}" />
     <Setter Property="FontSize" Value="{StaticResource FontSize.Body}" />
     <Setter Property="UseLayoutRounding" Value="True" />
     <Setter Property="Template">

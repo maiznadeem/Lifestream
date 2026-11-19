@@ -21,7 +21,7 @@ public sealed class PatientsViewModel : SortedRecordListViewModel<PatientListIte
     {
         this.api = api;
         this.navigation = navigation;
-        NewRequestCommand = new AsyncRelayCommand(
+        NewRequestCommand = Command(
             _ => Detail is { } patient ? this.navigation.NavigateTo<RequestsViewModel>(new RelatedRecord(RecordKind.Patient, patient.Id, patient.Name)) : Task.CompletedTask,
             () => Detail is not null && !IsEditing);
         PropertyChanged += (_, e) =>
@@ -41,6 +41,8 @@ public sealed class PatientsViewModel : SortedRecordListViewModel<PatientListIte
     protected override string PluralName => "patients";
 
     protected override string RecordType => "patient";
+
+    protected override bool RecordIsPerson => true;
 
     /// <summary>The columns that sort, as the API's validator names them (defined once in the contracts).</summary>
     public override IReadOnlyList<string> SortKeys { get; } = ContractSortKeys.Patients;

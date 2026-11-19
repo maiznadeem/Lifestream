@@ -25,7 +25,7 @@ public class RecordingApi : DispatchProxy
     {
         var proxy = Create<ILifestreamApiClient, RecordingApi>();
         var recorder = (RecordingApi)(object)proxy;
-        recorder._inner = inner;
+        recorder._inner = ScopedApiClient.Wrap(inner, strict: true); // strict: a call made outside an operation runner fails the test (SHELL-07)
         return (proxy, recorder);
     }
 

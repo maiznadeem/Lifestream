@@ -10,7 +10,7 @@ namespace Lifestream.Desktop.Tests;
 [Collection("Wpf")]
 public sealed class MainWindowCloseTests
 {
-    public sealed class DirtyFormViewModel : ViewModelBase, IDirtyTracking
+    public sealed class DirtyFormViewModel : ViewModelBase, IHasUnsavedChanges
     {
         public override string PageTitle => "Form";
 

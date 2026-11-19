@@ -14,7 +14,8 @@ public static class StaffText
 }
 
 /// <summary>
-/// One row of the staff list. The list response carries no photo bytes (only <see cref="HasPhoto"/>); the thumbnail is fetched when the row is first
+/// One row of the staff list. The list response carries no salary or phone either (it keeps the payload small), so the row has no such members and the grid
+/// no such columns; they are read from the detail endpoint and shown in the detail pane (admin only). The list response carries no photo bytes (only <see cref="HasPhoto"/>); the thumbnail is fetched when the row is first
 /// shown, which is why <see cref="Photo"/> raises change notification: the cell shows the shared default avatar until the bytes arrive (FEAT-20).
 /// A row without a photo never makes a request.
 /// </summary>
@@ -41,10 +42,6 @@ public sealed partial class StaffRow : ObservableObject
     public string ShiftText => StaffText.Shift(Item.Shift);
 
     public string RoleText => Item.Role.ToString();
-
-    public string SalaryText => StaffText.Salary(Item.Salary);
-
-    public string PhoneText => Item.Phone ?? string.Empty;
 
     public bool HasPhoto => Item.HasPhoto;
 

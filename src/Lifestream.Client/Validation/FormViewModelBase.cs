@@ -9,7 +9,7 @@ namespace Lifestream.Client.Validation;
 /// under the field on blur and on submit, announces it, and moves focus to the first invalid field when
 /// <see cref="FocusRequested"/> fires. <see cref="HasUnsavedChanges"/> drives the "Discard changes?" prompt.
 /// </summary>
-public abstract class FormViewModelBase : ViewModelBase, INotifyDataErrorInfo, IDirtyTracking
+public abstract class FormViewModelBase : ViewModelBase, INotifyDataErrorInfo, IHasUnsavedChanges
 {
     private readonly Dictionary<string, string> _errors = [];
     private readonly List<string> _fieldOrder = [];
@@ -24,7 +24,8 @@ public abstract class FormViewModelBase : ViewModelBase, INotifyDataErrorInfo, I
     /// <summary>One line such as "2 fields need attention" for the summary above the form.</summary>
     public string? ErrorSummary => _errors.Count == 0 ? null : _errors.Count == 1 ? "1 field needs attention." : $"{_errors.Count} fields need attention.";
 
-    public virtual bool HasUnsavedChanges => false;
+    /// <summary>True while the form holds input that was not saved (the contract of <see cref="IHasUnsavedChanges"/>). Every form says so itself; a form with no inputs says false.</summary>
+    public abstract bool HasUnsavedChanges { get; }
 
     /// <summary>The field names in visual (tab) order, so focus goes to the first invalid one.</summary>
     protected void DeclareFields(params string[] fieldsInVisualOrder)

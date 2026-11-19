@@ -27,6 +27,7 @@ public sealed class ReceiptViewerService(ILifestreamApiClient api, IReceiptPrint
 /// The printable receipt (FEAT-18): the receipt's lines with Print and Save as PDF actions. Print and Save as PDF can be used any number of times,
 /// so a duplicate receipt can always be produced; failures and "no printer" are said in words, and a cancelled print dialog is not an error.
 /// </summary>
+[NoUserInput("A viewer of a receipt with Print and Save as PDF; there is no field to type in.")]
 public sealed partial class ReceiptViewerViewModel : DialogViewModel
 {
     private readonly ILifestreamApiClient _api;
@@ -42,9 +43,9 @@ public sealed partial class ReceiptViewerViewModel : DialogViewModel
         _isDuplicate = isDuplicate;
         ReceiptId = receiptId;
         State = LoadState.Loading;
-        PrintCommand = new AsyncRelayCommand(_ => SendAsync(save: false), () => Document is not null && !IsBusy);
-        SavePdfCommand = new AsyncRelayCommand(_ => SendAsync(save: true), () => Document is not null && !IsBusy);
-        RetryCommand = new AsyncRelayCommand(ct => LoadAsync(ct));
+        PrintCommand = Command(_ => SendAsync(save: false), () => Document is not null && !IsBusy);
+        SavePdfCommand = Command(_ => SendAsync(save: true), () => Document is not null && !IsBusy);
+        RetryCommand = Command(ct => LoadAsync(ct));
     }
 
     public int ReceiptId { get; }
@@ -58,6 +59,9 @@ public sealed partial class ReceiptViewerViewModel : DialogViewModel
     public AsyncRelayCommand RetryCommand { get; }
 
     protected override string RecordType => "receipt";
+
+    /// <summary>A viewer: it has no inputs, so closing it never loses anything.</summary>
+    public override bool HasUnsavedChanges => false;
 
     [ObservableProperty]
     public partial ReceiptDocument? Document { get; set; }

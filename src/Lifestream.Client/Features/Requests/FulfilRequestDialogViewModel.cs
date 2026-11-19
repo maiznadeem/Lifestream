@@ -14,6 +14,7 @@ namespace Lifestream.Client.Features.Requests;
 /// oldest unexpired bags are issued by the API in one step. When the stock is not enough the API changes nothing, and the dialog says so in plain
 /// words and stays open. A successful call issues the receipt, available as <see cref="Receipt"/>.
 /// </summary>
+[NoUserInput("It shows what will be issued and asks to confirm; there is no field to type in.")]
 public sealed partial class FulfilRequestDialogViewModel : DialogViewModel
 {
     private readonly ILifestreamApiClient _api;
@@ -51,9 +52,12 @@ public sealed partial class FulfilRequestDialogViewModel : DialogViewModel
 
     protected override string RecordType => "request";
 
+    /// <summary>The dialog has no inputs (it shows what will be issued and asks to confirm), so there is nothing to lose by closing it.</summary>
+    public override bool HasUnsavedChanges => false;
+
     private async Task LoadStockAsync()
     {
-        var result = await Task.Run(() => _api.GetStockAsync()).ConfigureAwait(true);
+        var result = await RunOperationAsync(ct => _api.GetStockAsync(ct)).ConfigureAwait(true);
         if (!result.IsOk)
         {
             StockText = "Stock couldn't be checked. The server checks it when you fulfil.";

@@ -8,7 +8,7 @@
 
   <!-- 14 DIP text, 40 DIP rows, separators only, selection that keeps 4.5:1 (primary text on the selected surface). -->
   <Style x:Key="DataGrid.TextCell" TargetType="TextBlock">
-    <Setter Property="FontFamily" Value="{StaticResource Font.Family}" />
+    <Setter Property="FontFamily" Value="{DynamicResource Font.Family}" />
     <Setter Property="FontSize" Value="{StaticResource FontSize.Body}" />
     <Setter Property="Foreground" Value="{DynamicResource Brush.TextPrimary}" />
     <Setter Property="VerticalAlignment" Value="Center" />
@@ -19,7 +19,7 @@
   </Style>
 
   <Style x:Key="DataGridColumnHeader.Lifestream" TargetType="DataGridColumnHeader">
-    <Setter Property="FontFamily" Value="{StaticResource Font.Family}" />
+    <Setter Property="FontFamily" Value="{DynamicResource Font.Family}" />
     <Setter Property="FontSize" Value="{StaticResource FontSize.Label}" />
     <Setter Property="FontWeight" Value="Medium" />
     <Setter Property="Foreground" Value="{DynamicResource Brush.TextSecondary}" />

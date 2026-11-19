@@ -1,10 +1,10 @@
 using System.Globalization;
-using System.Text.RegularExpressions;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Lifestream.Client.Api;
 using Lifestream.Client.Common;
 using Lifestream.Client.Features.ListScreens;
 using Lifestream.Contracts;
+using Lifestream.Client.Validation;
 using Lifestream.Contracts.Staff;
 using Lifestream.Domain;
 
@@ -27,7 +27,6 @@ public sealed partial class StaffEditorViewModel : RecordEditorViewModel
     public const int MaxSalary = 10_000_000;
     public const int MinimumAgeYears = 16;
 
-    private static readonly Regex PhonePattern = new(@"^\+?[0-9][0-9 ()\-]*$", RegexOptions.CultureInvariant | RegexOptions.NonBacktracking);
 
     private readonly ILifestreamApiClient _api;
     private readonly int? _id;
@@ -290,12 +289,7 @@ public sealed partial class StaffEditorViewModel : RecordEditorViewModel
             return null;
         }
 
-        if (phone.Length > PersonEditorViewModel.MaxPhone)
-        {
-            return $"The phone number can be at most {PersonEditorViewModel.MaxPhone} characters.";
-        }
-
-        return PhonePattern.IsMatch(phone) ? null : "Use digits only (a leading + and spaces, dashes or brackets are allowed).";
+        return PhoneRule.Validate(phone);
     }
 
     private string? ValidatePassword()

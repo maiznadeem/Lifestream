@@ -51,7 +51,7 @@
         <ColumnDefinition Width="*" MinWidth="150" />
       </Grid.ColumnDefinitions>
       <controls:FormField Label="Phone" Hint="Digits only; a leading + is allowed" controls:FormFocus.FieldName="Phone" Error="{Binding [Phone]}">
-        <TextBox x:Name="PhoneBox" Text="{Binding Phone, UpdateSourceTrigger=PropertyChanged}" MaxLength="20" AutomationProperties.Name="Phone" />
+        <TextBox x:Name="PhoneBox" Text="{Binding Phone, UpdateSourceTrigger=PropertyChanged}" MaxLength="21" AutomationProperties.Name="Phone" />
       </controls:FormField>
       <controls:FormField Grid.Column="2" Label="Address" controls:FormFocus.FieldName="Address" Error="{Binding [Address]}">
         <TextBox x:Name="AddressBox" Text="{Binding Address, UpdateSourceTrigger=PropertyChanged}" MaxLength="200" AutomationProperties.Name="Address" />

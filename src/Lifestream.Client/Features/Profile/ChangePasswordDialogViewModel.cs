@@ -69,6 +69,8 @@ public sealed partial class ChangePasswordDialogViewModel : DialogViewModel
 
     protected override string RecordType => "password";
 
+    public override bool HasUnsavedChanges => CurrentPassword.Length > 0 || NewPassword.Length > 0 || ConfirmPassword.Length > 0;
+
     protected override string? ValidateField(string field)
     {
         switch (field)

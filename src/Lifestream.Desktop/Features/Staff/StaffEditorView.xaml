@@ -68,7 +68,7 @@
           </controls:FormField>
         </Grid>
         <controls:FormField Label="Phone" Hint="Digits only; a leading + is allowed" controls:FormFocus.FieldName="Phone" Error="{Binding [Phone]}">
-          <TextBox Text="{Binding Phone, UpdateSourceTrigger=PropertyChanged}" MaxLength="20" AutomationProperties.Name="Phone" />
+          <TextBox Text="{Binding Phone, UpdateSourceTrigger=PropertyChanged}" MaxLength="21" AutomationProperties.Name="Phone" />
         </controls:FormField>
 
         <StackPanel Visibility="{Binding ShowPasswordFields, Converter={StaticResource BoolToVisibility}}">

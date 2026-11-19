@@ -361,6 +361,7 @@ public sealed class Part2AppointmentTests
         var rig = RigWithSlots();
         var form = rig.RescheduleForm(Samples2.Appointment());
         await form.PendingSlots;
+        await form.PendingDonor; // the donor check also gates Save; waiting for it removes a race with the thread pool
         EditorClosedEventArgs? closed = null;
         form.Closed += (_, e) => closed = e;
 
