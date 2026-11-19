@@ -16,7 +16,7 @@ partial class LifestreamDbContextModelSnapshot : ModelSnapshot
     // If you encounter a merge conflict in the line below, it means you need to
     // discard one of the migration branches and recreate its migrations on top of
     // the other branch. See https://aka.ms/efcore-docs-migrations-conflicts for more info.
-    public override string LastMigrationId => "20261119004026_DeletedRecordTombstones";
+    public override string LastMigrationId => "20261119004902_TombstonesAndStaffCreatedAt";
 
     protected override void BuildModel(ModelBuilder modelBuilder)
     {
@@ -654,6 +654,11 @@ partial class LifestreamDbContextModelSnapshot : ModelSnapshot
                     .HasColumnType("int");
 
                 SqlServerPropertyBuilderExtensions.UseIdentityColumn(id);
+
+                b.Property<DateTime>("CreatedAtUtc")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("datetime2(3)")
+                    .HasDefaultValueSql("SYSUTCDATETIME()");
 
                 b.Property<DateOnly>("DateOfBirth")
                     .HasColumnType("date");

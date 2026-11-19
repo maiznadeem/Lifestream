@@ -72,6 +72,9 @@ public sealed class Staff : IEntity
     /// <summary>Set when an administrator resets the password: the person must choose their own before anything else is allowed.</summary>
     public bool MustChangePassword { get; set; }
 
+    /// <summary>When the account was created (server time, default <c>SYSUTCDATETIME()</c>); the profile shows it as "Member since" (FEAT-24).</summary>
+    public DateTime CreatedAtUtc { get; set; }
+
     public byte[] RowVersion { get; set; } = [];
 }
 

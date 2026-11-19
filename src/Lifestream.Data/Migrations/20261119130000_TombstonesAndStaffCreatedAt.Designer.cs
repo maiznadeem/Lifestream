@@ -12,8 +12,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Lifestream.Data.Migrations;
 
 [DbContext(typeof(LifestreamDbContext))]
-[Migration("20261119130000_DeletedRecordTombstones")]
-partial class DeletedRecordTombstones
+[Migration("20261119130000_TombstonesAndStaffCreatedAt")]
+partial class TombstonesAndStaffCreatedAt
 {
     /// <inheritdoc />
     protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -652,6 +652,11 @@ partial class DeletedRecordTombstones
                     .HasColumnType("int");
 
                 SqlServerPropertyBuilderExtensions.UseIdentityColumn(id);
+
+                b.Property<DateTime>("CreatedAtUtc")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("datetime2(3)")
+                    .HasDefaultValueSql("SYSUTCDATETIME()");
 
                 b.Property<DateOnly>("DateOfBirth")
                     .HasColumnType("date");

@@ -10,7 +10,14 @@ public sealed record ProfileResponse(
     Shift Shift,
     string? Phone,
     bool HasPhoto,
-    string RowVersion);
+    string RowVersion)
+{
+    /// <summary>The person's date of birth (read-only on the profile).</summary>
+    public DateOnly DateOfBirth { get; init; }
+
+    /// <summary>When the account was created, UTC (the profile shows "Member since").</summary>
+    public DateTime MemberSince { get; init; }
+}
 
 public sealed record UpdateProfileRequest(
     string RowVersion,

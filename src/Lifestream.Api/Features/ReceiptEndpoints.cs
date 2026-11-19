@@ -12,8 +12,8 @@ namespace Lifestream.Api.Features;
 
 public static class ReceiptEndpoints
 {
-    private static readonly SortMap<Receipt> Sorts = new SortMap<Receipt>(r => r.Id, "date", defaultDescending: true)
-        .Add("date", r => r.CreatedAtUtc);
+    private static readonly SortMap<Receipt> Sorts = new SortMap<Receipt>(r => r.Id, SortKeys.Date, defaultDescending: true)
+        .Add(SortKeys.Date, r => r.CreatedAtUtc);
 
     public static void Map(RouteGroupBuilder api)
     {
@@ -21,8 +21,8 @@ public static class ReceiptEndpoints
         api.MapGet(ApiRoutes.ReceiptById, async (int id, LifestreamDbContext db, CancellationToken ct) => await LoadDetailAsync(db, id, ct));
     }
 
-    private static readonly SortMap<ReceiptHit> HitSorts = new SortMap<ReceiptHit>(h => h.Id, "date", defaultDescending: true)
-        .Add("date", h => h.CreatedAtUtc);
+    private static readonly SortMap<ReceiptHit> HitSorts = new SortMap<ReceiptHit>(h => h.Id, SortKeys.Date, defaultDescending: true)
+        .Add(SortKeys.Date, h => h.CreatedAtUtc);
 
     private static async Task<PagedResult<ReceiptListItem>> ListAsync([AsParameters] ReceiptQuery q, LifestreamDbContext db, CancellationToken ct)
     {

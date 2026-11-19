@@ -28,9 +28,9 @@ public static class ProfileEndpoints
     private static async Task<ProfileResponse> LoadAsync(LifestreamDbContext db, int id, CancellationToken ct)
     {
         var s = await db.Staff.AsNoTracking().Where(x => x.Id == id)
-            .Select(x => new { x.Id, x.DisplayName, x.Username, x.Designation, x.Shift, x.Phone, HasPhoto = db.StaffPhotos.Any(p => p.StaffId == x.Id), x.RowVersion })
+            .Select(x => new { x.Id, x.DisplayName, x.Username, x.Designation, x.Shift, x.Phone, HasPhoto = db.StaffPhotos.Any(p => p.StaffId == x.Id), x.RowVersion, x.DateOfBirth, x.CreatedAtUtc })
             .FirstOrDefaultAsync(ct) ?? throw ApiException.NotFound("The profile");
-        return new ProfileResponse(s.Id, s.DisplayName, s.Username, s.Designation, s.Shift, s.Phone, s.HasPhoto, RowVersions.ToText(s.RowVersion));
+        return new ProfileResponse(s.Id, s.DisplayName, s.Username, s.Designation, s.Shift, s.Phone, s.HasPhoto, RowVersions.ToText(s.RowVersion)) { DateOfBirth = s.DateOfBirth, MemberSince = s.CreatedAtUtc };
     }
 
     private static async Task<ProfileResponse> GetAsync(LifestreamDbContext db, CurrentUser user, CancellationToken ct) =>

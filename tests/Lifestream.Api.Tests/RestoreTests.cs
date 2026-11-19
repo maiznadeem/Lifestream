@@ -92,4 +92,36 @@ public sealed class RestoreTests(ApiFixture fx) : IClassFixture<ApiFixture>
         using var still = await staff.Client.GetApi(ApiRoutes.DonorById, donor.Id);
         Assert.Equal(HttpStatusCode.OK, still.StatusCode);
     }
+
+    [Fact]
+    public async Task ExpiredCopies_AreDroppedByTheNextDeleteAndTheNextRestore_NoTimerNeeded()
+    {
+        var staff = await fx.AddStaffAsync(Role.Staff);
+        var first = await Seed.DonorAsync(fx);
+        var second = await Seed.DonorAsync(fx);
+        var third = await Seed.DonorAsync(fx);
+        (await staff.Client.DeleteApi(ApiRoutes.DonorById, first.Id)).Dispose();
+        await fx.Db.ExecuteAsync($"UPDATE DeletedRecord SET DeletedAtUtc = DATEADD(MINUTE, -10, SYSUTCDATETIME()) WHERE EntityId = {first.Id}", Ct);
+
+        (await staff.Client.DeleteApi(ApiRoutes.DonorById, second.Id)).Dispose(); // the delete drops the expired copy
+        Assert.Equal(0, await fx.Db.ScalarAsync<int>($"SELECT COUNT(*) FROM DeletedRecord WHERE EntityId = {first.Id}", Ct));
+
+        (await staff.Client.DeleteApi(ApiRoutes.DonorById, third.Id)).Dispose();
+        await fx.Db.ExecuteAsync($"UPDATE DeletedRecord SET DeletedAtUtc = DATEADD(MINUTE, -10, SYSUTCDATETIME()) WHERE EntityId = {third.Id}", Ct);
+        (await staff.Client.PostApi(ApiRoutes.DonorRestore, null, second.Id)).Dispose(); // the restore drops the other expired copy
+        Assert.Equal(0, await fx.Db.ScalarAsync<int>($"SELECT COUNT(*) FROM DeletedRecord WHERE EntityId = {third.Id}", Ct));
+    }
+
+    [Fact]
+    public async Task TheKeptCopy_HoldsNoRowVersion()
+    {
+        var staff = await fx.AddStaffAsync(Role.Staff);
+        var donor = await Seed.DonorAsync(fx, lastDonated: DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-30)));
+        (await staff.Client.DeleteApi(ApiRoutes.DonorById, donor.Id)).Dispose();
+
+        var json = await fx.Db.ScalarAsync<string>($"SELECT Json FROM DeletedRecord WHERE Entity = 'Donor' AND EntityId = {donor.Id}", Ct);
+
+        Assert.DoesNotContain("rowVersion", json, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("lastDonated", json, StringComparison.OrdinalIgnoreCase);
+    }
 }

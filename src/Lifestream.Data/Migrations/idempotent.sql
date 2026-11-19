@@ -1248,7 +1248,15 @@ GO
 BEGIN TRANSACTION;
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261119130000_DeletedRecordTombstones'
+    WHERE [MigrationId] = N'20261119130000_TombstonesAndStaffCreatedAt'
+)
+BEGIN
+    ALTER TABLE [Staff] ADD [CreatedAtUtc] datetime2(3) NOT NULL DEFAULT (SYSUTCDATETIME());
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261119130000_TombstonesAndStaffCreatedAt'
 )
 BEGIN
     CREATE TABLE [DeletedRecord] (
@@ -1263,7 +1271,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261119130000_DeletedRecordTombstones'
+    WHERE [MigrationId] = N'20261119130000_TombstonesAndStaffCreatedAt'
 )
 BEGIN
     CREATE INDEX [IX_DeletedRecord_DeletedAtUtc] ON [DeletedRecord] ([DeletedAtUtc]);
@@ -1271,7 +1279,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261119130000_DeletedRecordTombstones'
+    WHERE [MigrationId] = N'20261119130000_TombstonesAndStaffCreatedAt'
 )
 BEGIN
     CREATE INDEX [IX_DeletedRecord_Entity_EntityId] ON [DeletedRecord] ([Entity], [EntityId]);
@@ -1279,11 +1287,11 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261119130000_DeletedRecordTombstones'
+    WHERE [MigrationId] = N'20261119130000_TombstonesAndStaffCreatedAt'
 )
 BEGIN
     INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
-    VALUES (N'20261119130000_DeletedRecordTombstones', N'11.0.0');
+    VALUES (N'20261119130000_TombstonesAndStaffCreatedAt', N'11.0.0');
 END;
 
 COMMIT;

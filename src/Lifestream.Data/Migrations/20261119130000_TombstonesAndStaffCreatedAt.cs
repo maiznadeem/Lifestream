@@ -6,11 +6,18 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace Lifestream.Data.Migrations;
 
 /// <inheritdoc />
-public partial class DeletedRecordTombstones : Migration
+public partial class TombstonesAndStaffCreatedAt : Migration
 {
     /// <inheritdoc />
     protected override void Up(MigrationBuilder migrationBuilder)
     {
+        migrationBuilder.AddColumn<DateTime>(
+            name: "CreatedAtUtc",
+            table: "Staff",
+            type: "datetime2(3)",
+            nullable: false,
+            defaultValueSql: "SYSUTCDATETIME()");
+
         migrationBuilder.CreateTable(
             name: "DeletedRecord",
             columns: table => new
@@ -43,5 +50,9 @@ public partial class DeletedRecordTombstones : Migration
     {
         migrationBuilder.DropTable(
             name: "DeletedRecord");
+
+        migrationBuilder.DropColumn(
+            name: "CreatedAtUtc",
+            table: "Staff");
     }
 }

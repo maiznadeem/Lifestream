@@ -16,8 +16,8 @@ namespace Lifestream.Api.Features;
 
 public static class AppointmentEndpoints
 {
-    private static readonly SortMap<Appointment> Sorts = new SortMap<Appointment>(a => a.Id, "slot", defaultDescending: true)
-        .Add("slot", a => a.SlotStartUtc).Add("placed", a => a.PlacedAtUtc);
+    private static readonly SortMap<Appointment> Sorts = new SortMap<Appointment>(a => a.Id, SortKeys.Slot, defaultDescending: true)
+        .Add(SortKeys.Slot, a => a.SlotStartUtc).Add(SortKeys.Placed, a => a.PlacedAtUtc);
 
     public static void Map(RouteGroupBuilder api)
     {

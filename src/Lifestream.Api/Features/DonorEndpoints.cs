@@ -14,8 +14,8 @@ namespace Lifestream.Api.Features;
 
 public static class DonorEndpoints
 {
-    private static readonly SortMap<Donor> Sorts = new SortMap<Donor>(d => d.Id, "name")
-        .Add("name", d => d.Name).Add("lastDonated", d => d.LastDonated!);
+    private static readonly SortMap<Donor> Sorts = new SortMap<Donor>(d => d.Id, SortKeys.Name)
+        .Add(SortKeys.Name, d => d.Name).Add(SortKeys.LastDonated, d => d.LastDonated!);
 
     public static void Map(RouteGroupBuilder api)
     {
@@ -204,8 +204,8 @@ public static class DonorEndpoints
     }
 
     /// <summary>The Undo of a delete: the donor comes back with the same id and every value, as long as the delete was a moment ago.</summary>
-    private static async Task<DonorDetail> RestoreAsync(int id, LifestreamDbContext db, TimeProvider time, CancellationToken ct) =>
-        ToDetail(await Tombstones.RestoreAsync(db, db.Donors, "Donor", id, "donor", time, ct));
+    private static async Task<DonorDetail> RestoreAsync(int id, LifestreamDbContext db, TimeProvider time, CurrentUser user, IOptions<DemoSettings> demo, CancellationToken ct) =>
+        ToDetail(await Tombstones.RestoreAsync(db, db.Donors, "Donor", id, "donor", time, token => DemoLimits.EnsureRoomAsync(db, user, demo, DemoTable.Donors, token), ct));
 
     internal static string? Blank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
