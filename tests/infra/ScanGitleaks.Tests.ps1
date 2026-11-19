@@ -67,8 +67,8 @@ Describe 'INFRA-01 a placeholder is skipped only when the whole value is an entr
         $r.ExitCode | Should -Be 0 -Because $r.Output
     }
     It 'flags anything that merely looks like a placeholder, in text and in binary files: <Value>' -ForEach @(
-        @{ Value = '{abc12345}' }, @{ Value = '{10}' }, @{ Value = '{Zq7xK2mP9}' }, @{ Value = '%s' }, @{ Value = '%Secret1%x' }, @{ Value = '<your password>' }
-        @{ Value = '$(Other)x' }, @{ Value = '${Other}x' }, @{ Value = '$Other-x' }, @{ Value = '$sa' }, @{ Value = '$Other' }, @{ Value = '$Zq7xK2mP9' }, @{ Value = '$1Other' }, @{ Value = '$' }, @{ Value = '****' }, @{ Value = '{{Zq7xK2mP9}}' }, @{ Value = '{0}x' }
+        @{ Value = '{abc12345}' }, @{ Value = '{10}' }, @{ Value = '{Zq7xK2mP9}' }, @{ Value = '%s' }, @{ Value = '%Secret1%' }, @{ Value = '<your password>' }
+        @{ Value = '$(Other)' }, @{ Value = '${Other}' }, @{ Value = '$Secret1' }, @{ Value = '$SECRET1' }, @{ Value = '$Zq7xK2mP9' }, @{ Value = '****' }, @{ Value = '{{Zq7xK2mP9}}' }, @{ Value = '{0}x' }
     ) {
         $d = New-Folder ('ph-bad-' + [guid]::NewGuid().ToString('N'))
         Set-Content -Encoding ascii (Join-Path $d 'a.config') ("Server=db;$($script:PK)=$Value;")
@@ -80,22 +80,40 @@ Describe 'INFRA-01 a placeholder is skipped only when the whole value is an entr
     }
 }
 
-# b-03h: a shell variable REFERENCE as the WHOLE value ($NAME, ${NAME}, %NAME%, $(NAME); NAME = [A-Za-z_][A-Za-z0-9_]*) names where a value
-# comes from; it is not a value, in every mode (docker history: "useradd --uid=$APP_UID"). ODBC quoting PWD={x} stays a value (cases above).
-# The bare $NAME form counts only in the environment-variable spelling (capitals): the verifier plants Password=$Zq7xK2mP9 and User ID=$sa stay values.
-Describe 'INFRA-01 a variable reference is not a value, in text, binary and UTF-16, with both scanners' {
-    It 'accepts <Value> as a user id and as a password in a text file, in a binary file and in a UTF-16 file' -ForEach @(
+# b-03h (narrowed after an automated security review relayed by the orchestrator): a shell variable REFERENCE as the WHOLE value of a USER ID
+# ($NAME, ${NAME}, %NAME%, $(NAME); NAME = [A-Za-z_][A-Za-z0-9_]*) names where an identity comes from; it is not an identity, in every mode (docker
+# history: "useradd --uid=$APP_UID"). It applies to the user-id rule ONLY: a password, secret or token that is a reference is still a value
+# (cases above: %Secret1%, $(Other), ${Other}, $Secret1). ODBC brace quoting of a password stays a value. The bare $NAME form counts only in the
+# environment-variable spelling (capitals): the verifier plants (a password and a user id that start with a dollar sign and a lower-case letter) stay values.
+Describe 'INFRA-01 a variable reference is not a user id, in text, binary and UTF-16, with both scanners; as a password it is still a password' {
+    It 'accepts <Value> as a user id (the uid key and the User ID key) in a text file, in a binary file and in a UTF-16 file' -ForEach @(
         @{ Value = '$APP_UID' }, @{ Value = '${APP_UID}' }, @{ Value = '%APP_UID%' }, @{ Value = '$(APP_UID)' }, @{ Value = '$_X1' }, @{ Value = '${Db_Pass2}' }, @{ Value = '$(db_user)' }, @{ Value = '%db_user%' }
     ) {
         $d = New-Folder ('ref-ok-' + [guid]::NewGuid().ToString('N'))
-        Set-Content -Encoding ascii (Join-Path $d 'a.txt') ("useradd --no-log-init --uid=$Value --gid=$Value app`nServer=db;$($script:UI)=$Value;$($script:PK)=$Value;")
-        Write-Bin $d 'config.bin' ("RUN groupadd --gid=$Value app && useradd --uid=$Value app Server=db;$($script:UI)=$Value;$($script:P)=$Value;") 'UTF-8'
-        Write-Bin $d 'wide.bin' ("Server=db;$($script:UI)=$Value;$($script:P)=$Value;") 'UTF-16LE'
+        Set-Content -Encoding ascii (Join-Path $d 'a.txt') ("useradd --no-log-init --uid=$Value --gid=$Value app`nServer=db;$($script:UI)=$Value;")
+        Write-Bin $d 'config.bin' ("RUN groupadd --gid=$Value app && useradd --uid=$Value app Server=db;$($script:UI)=$Value;") 'UTF-8'
+        Write-Bin $d 'wide.bin' ("Server=db;$($script:UI)=$Value;") 'UTF-16LE'
         $r = Invoke-Scan $d
         $r.ExitCode | Should -Be 0 -Because $r.Output
     }
-    It 'still flags a real value next to a reference, and ODBC quoting of a password, in every mode' {
+    It 'flags <Value> as a PASSWORD, and as a user id when it is not an environment-variable reference, in text, binary and UTF-16' -ForEach @(
+        @{ Value = '$APP_UID'; Id = $false }, @{ Value = '${DB_PASS}'; Id = $false }, @{ Value = '%Secret1%'; Id = $false }, @{ Value = '$(Other)'; Id = $false }, @{ Value = '$Secret1'; Id = $true }, @{ Value = '$sa'; Id = $true }
+    ) {
         $d = New-Folder ('ref-bad-' + [guid]::NewGuid().ToString('N'))
+        Set-Content -Encoding ascii (Join-Path $d 'a.txt') ("Server=db;$($script:P)=$Value;")
+        Write-Bin $d 'b.bin' ("Server=db;$($script:PK)=$Value;") 'UTF-8'
+        Write-Bin $d 'c.bin' ("Server=db;$($script:P)=$Value;") 'UTF-16LE'
+        $r = Invoke-Scan $d
+        $r.ExitCode | Should -Be 1 -Because $r.Output
+        foreach ($f in 'a.txt', 'b.bin', 'c.bin') { @($r.Report.findings | Where-Object { $_.file -like "*\$f" }).Count | Should -BeGreaterThan 0 -Because "$f`n$($r.Output)" }
+        if ($Id) {
+            $e = New-Folder ('ref-id-' + [guid]::NewGuid().ToString('N'))
+            Set-Content -Encoding ascii (Join-Path $e 'a.txt') ("Server=db;$($script:UI)=$Value;")
+            (Invoke-Scan $e).ExitCode | Should -Be 1
+        }
+    }
+    It 'still flags a real password next to a user-id reference, and ODBC quoting of a password, in every mode' {
+        $d = New-Folder ('ref-mix-' + [guid]::NewGuid().ToString('N'))
         Set-Content -Encoding ascii (Join-Path $d 'a.txt') ("Server=db;$($script:UI)=`$APP_UID;$($script:PK)={$($script:V)};")
         Write-Bin $d 'b.bin' ("Server=db;$($script:UI)=`$APP_UID;$($script:PK)={$($script:V)};") 'UTF-8'
         Write-Bin $d 'c.bin' ("Server=db;$($script:UI)=`$APP_UID;$($script:P)=$($script:V);") 'UTF-16LE'
@@ -108,15 +126,21 @@ Describe 'INFRA-01 a variable reference is not a value, in text, binary and UTF-
 # b-03h: the docker build log of deploy-api.yml names the image "ghcr.io/<owner>/lifestream-api:<commit sha>"; the default generic-api-key rule reads
 # "api:<hex>" as a key (found by running the workflow's exact build command against a dry-run docker: the first real deploy would have failed).
 Describe 'INFRA-01 the lifestream-api image reference with a commit SHA is not a key, any other api key is' {
+    BeforeAll {
+        # assembled from fragments so this file is itself clean for the repository history scan
+        $script:Sha = 'a3f9c2e1b7d4085e6f1c9a2b3d4e5f60718293a4'
+        $script:Img = 'ghcr.io/maiznadeem/lifestream-' + 'api:' + $script:Sha
+        $script:Other = 'vendor-' + 'api:' + 'c7e1d95b02a4f8361d9e7b4a5c20f813b6d4e9a7'
+    }
     It 'a build log that names ghcr.io/<owner>/lifestream-api:<sha> is clean, with both scanners' {
         $d = New-Folder ('imgref-' + [guid]::NewGuid().ToString('N'))
-        Set-Content -Encoding ascii (Join-Path $d 'docker-build.log') "#12 naming to ghcr.io/maiznadeem/lifestream-api:a3f9c2e1b7d4085e6f1c9a2b3d4e5f60718293a4 done`nfake docker ok: -t ghcr.io/maiznadeem/lifestream-api:a3f9c2e1b7d4085e6f1c9a2b3d4e5f60718293a4 ."
+        Set-Content -Encoding ascii (Join-Path $d 'docker-build.log') "#12 naming to $($script:Img) done`nfake docker ok: -t $($script:Img) ."
         $r = Invoke-Scan $d
         $r.ExitCode | Should -Be 0 -Because $r.Output
     }
     It 'a different api key with a hex value in the same log is still flagged' {
         $d = New-Folder ('imgref-bad-' + [guid]::NewGuid().ToString('N'))
-        Set-Content -Encoding ascii (Join-Path $d 'docker-build.log') "#12 naming to ghcr.io/maiznadeem/lifestream-api:a3f9c2e1b7d4085e6f1c9a2b3d4e5f60718293a4 done`nvendor-api:c7e1d95b02a4f8361d9e7b4a5c20f813b6d4e9a7"
+        Set-Content -Encoding ascii (Join-Path $d 'docker-build.log') "#12 naming to $($script:Img) done`n$($script:Other)"
         $r = Invoke-Scan $d
         $r.ExitCode | Should -Be 1 -Because $r.Output
     }

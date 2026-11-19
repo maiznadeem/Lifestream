@@ -193,12 +193,13 @@ jobs:
           $env:DOTNET_HOST_PATH = (Get-Command dotnet).Source
           $fail = 0
           foreach ($project in '${{ matrix.projects }}' -split ' ') {
-            $dir = (Get-ChildItem "tests/Lifestream.$project.Tests/bin/Release" -Directory -Filter 'net11.0*' | Select-Object -First 1).FullName
-            $exe = Join-Path $dir "Lifestream.$project.Tests"
-            if (Test-Path "$exe.exe") { $exe = "$exe.exe" }
+            $testDir = (Get-ChildItem "tests/Lifestream.$project.Tests/bin/Release" -Directory -Filter 'net11.0*' | Select-Object -First 1).FullName
+            $testExe = Join-Path $testDir "Lifestream.$project.Tests"
+            if (Test-Path "$testExe.exe") { $testExe = "$testExe.exe" }
             foreach ($seed in $env:SEEDS -split ' ') {
               Write-Host "::group::$project, seed $seed"
-              ./tools/run-logged.ps1 -Log "$env:RUNNER_TEMP/test-logs/order-$project-$seed.log" -Command "Push-Location '$dir'; & '$exe' ':$seed' -noLogo -notrait 'Category=Perf'; Pop-Location"
+              # The command is single-quoted: $testDir, $testExe and $seed are read by the wrapper's scriptblock from this script's variables.
+              ./tools/run-logged.ps1 -Log "$env:RUNNER_TEMP/test-logs/order-$project-$seed.log" -Command 'Push-Location "$testDir"; & "$testExe" ":$seed" -noLogo -notrait "Category=Perf"; Pop-Location'
               $status = $LASTEXITCODE
               Write-Host '::endgroup::'
               if ($status -ne 0) {

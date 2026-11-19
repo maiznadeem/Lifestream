@@ -350,7 +350,7 @@ BeforeDiscovery {
     Import-Module $yamlModule -Force
     $wfDir = (Resolve-Path (Join-Path $PSScriptRoot '..' '..' '.github' 'workflows')).Path
     # one command of a workflow that produces build output (a log line that must be scanned before it is printed)
-    $buildCommand = '(?<![\w.$:/\\-])(?:dotnet\s+(?:build|test|publish|pack|msbuild|run)\b|docker\s+(?:buildx\s+build|build)\b|vpk(?![\w.-]))|&\s*''\$exe'''
+    $buildCommand = '(?<![\w.$:/\\-])(?:dotnet\s+(?:build|test|publish|pack|msbuild|run)\b|docker\s+(?:buildx\s+build|build)\b|vpk(?![\w.-]))|&\s*"\$testExe"'
     $toolCommand = 'dotnet\s+(build|test|publish)|docker\s+buildx\s+build|(?<![\w.$:/\\-])vpk(?![\w.-])'
     $toolCases = [Collections.Generic.List[object]]::new()
     $stepCases = [Collections.Generic.List[object]]::new()
