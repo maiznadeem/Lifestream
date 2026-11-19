@@ -6,7 +6,7 @@
   <ItemGroup>
     <!-- Desktop UI (referenced by the spike) -->
     <PackageVersion Include="WPF-UI" Version="4.3.0" />
-    <PackageVersion Include="LiveChartsCore.SkiaSharpView.WPF" Version="2.0.5" />
+    <PackageVersion Include="LiveChartsCore.SkiaSharpView.WPF" Version="2.2.0" />
     <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageVersion Include="Velopack" Version="1.2.161" />
     <!-- Versions pinned here for the modules built next, so no builder has to edit this file. Not referenced yet. -->
