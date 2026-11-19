@@ -17,7 +17,7 @@ concurrency:
 env:
   DOTNET_NOLOGO: true
   DOTNET_CLI_TELEMETRY_OPTOUT: true
-  REPO_URL: https://github.com/MaizNadeem/Lifestream-WPF
+  REPO_URL: https://github.com/maiznadeem/lifestream
   VPK_VERSION: 1.2.161
 
 jobs:
@@ -139,7 +139,7 @@ jobs:
 
       - name: Attach the checksum file
         shell: pwsh
-        run: gh release upload "${{ steps.version.outputs.tag }}" "$env:RUNNER_TEMP/Releases/SHA256SUMS.txt" --clobber --repo MaizNadeem/Lifestream-WPF
+        run: gh release upload "${{ steps.version.outputs.tag }}" "$env:RUNNER_TEMP/Releases/SHA256SUMS.txt" --clobber --repo maiznadeem/lifestream
 
       # ---- Microsoft Store package: an extra workflow artifact, never a release asset (see packaging/store/README.md)
       - name: Build the Store MSIX
