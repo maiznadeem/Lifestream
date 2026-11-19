@@ -128,12 +128,15 @@ Describe 'deploy-api.yml order: scan before push, migrate before app update' {
     }
 }
 
-Describe 'INFRA-04 firewall sync is wired in, after the app update, from the deploy and a weekly workflow' {
-    It 'deploy-api.yml runs infra/sync-sql-firewall.ps1 after the container app update, with the explicit subscription' {
+Describe 'INFRA-04 firewall sync is wired in, before the migration job, from the deploy and a weekly workflow' {
+    It 'deploy-api.yml runs infra/sync-sql-firewall.ps1 BEFORE the migration job (an outbound-address change must not block it), with the explicit subscription' {
         $steps = @($script:Deploy.Yaml.jobs.deploy.steps)
+        $migrate = StepIndex $script:Deploy.Yaml.jobs.deploy { param($s) (Run $s) -match 'az containerapp job start' }
         $update = StepIndex $script:Deploy.Yaml.jobs.deploy { param($s) (Run $s) -match 'az containerapp update' }
         $sync = StepIndex $script:Deploy.Yaml.jobs.deploy { param($s) (Run $s) -match 'infra/sync-sql-firewall\.ps1' }
-        $sync | Should -BeGreaterThan $update
+        $sync | Should -BeGreaterThan -1
+        $sync | Should -BeLessThan $migrate
+        $sync | Should -BeLessThan $update
         $run = Run $steps[$sync]
         $run | Should -Match '-SubscriptionId \$env:AZURE_SUBSCRIPTION_ID'
         $run | Should -Match '-Environment \$env:CONTAINER_ENVIRONMENT'

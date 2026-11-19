@@ -11,8 +11,9 @@ param entraAdminLogin = readEnvironmentVariable('LIFESTREAM_ENTRA_ADMIN_LOGIN')
 param entraAdminObjectId = readEnvironmentVariable('LIFESTREAM_ENTRA_ADMIN_OBJECT_ID')
 param ownerEmail = readEnvironmentVariable('LIFESTREAM_OWNER_EMAIL')
 
-// Flipped to 'true' last, after the contained users and the API are proven (SQL logins then stop working).
-param entraOnlyAuthentication = toLower(readEnvironmentVariable('LIFESTREAM_ENTRA_ONLY', 'false')) == 'true'
+// Defaults to 'true' so that re-applying the template never re-enables SQL logins (INFRA-05). Only the one-time bootstrap
+// (infra/README.md step 3) sets LIFESTREAM_ENTRA_ONLY=false, until the contained users and the API are proven.
+param entraOnlyAuthentication = toLower(readEnvironmentVariable('LIFESTREAM_ENTRA_ONLY', 'true')) == 'true'
 
 // 'false' only for a run that must delete something under the locked server.
 param enableLocks = toLower(readEnvironmentVariable('LIFESTREAM_ENABLE_LOCKS', 'true')) == 'true'

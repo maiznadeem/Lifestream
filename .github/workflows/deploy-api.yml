@@ -2,8 +2,8 @@ name: Deploy API
 
 # Separate from the PR build (ci.yml). Runs on a push to master that touches the API, its libraries or the
 # infrastructure, after its own build-and-test gate. Signs in to Azure with GitHub OIDC (no stored cloud secret; the
-# only secret used is the built-in GITHUB_TOKEN). Order: gate, image (built, scanned, then pushed), migrate job, app
-# update, SQL firewall sync (only the environment's outbound addresses), health check, prune old image versions. The decisions
+# only secret used is the built-in GITHUB_TOKEN). Order: gate, image (built, scanned, then pushed), SQL firewall sync (only the
+# environment's outbound addresses), migrate job, app update, health check, prune old image versions. The decisions
 # (firewall set, which image versions to delete or keep, the count and manifest checks) live in scripts under infra/ and tools/ with
 # Pester tests (tests/infra), not in this file.
 on:
@@ -141,6 +141,16 @@ jobs:
       - name: Install the Container Apps CLI extension
         run: az extension add --name containerapp --upgrade --only-show-errors
 
+      # Runs BEFORE the migration job: the job connects from the same outbound addresses, so if Azure changed them since the last
+      # deploy the migration would otherwise be refused by the firewall before this step could fix it. Entra-only authentication is
+      # checked by the script itself (it refuses to open the firewall while SQL logins are still on). When a CanNotDelete lock on the
+      # server blocks deleting a stale rule, the script removes the lock, deletes, and puts it back (see infra/sync-sql-firewall.ps1).
+      # The API reaches Azure SQL from the environment's outbound addresses, which Azure may change. The script makes the firewall
+      # exactly that set (aca-outbound-<n>) and deletes every other rule; it fails, deleting nothing, if no address is returned.
+      - name: Sync the SQL firewall to the environment's outbound addresses
+        shell: pwsh
+        run: ./infra/sync-sql-firewall.ps1 -SubscriptionId $env:AZURE_SUBSCRIPTION_ID -ResourceGroup $env:AZURE_RESOURCE_GROUP -Server $env:SQL_SERVER -Environment $env:CONTAINER_ENVIRONMENT
+
       - name: Run the migration job
         run: |
           set -euo pipefail
@@ -175,12 +185,6 @@ jobs:
         run: |
           az containerapp update --name "$CONTAINER_APP" --resource-group "$AZURE_RESOURCE_GROUP" --subscription "$AZURE_SUBSCRIPTION_ID" \
             --image "$IMAGE:$GITHUB_SHA" --only-show-errors --output none
-
-      # The API reaches Azure SQL from the environment's outbound addresses, which Azure may change. The script makes the firewall
-      # exactly that set (aca-outbound-<n>) and deletes every other rule; it fails, deleting nothing, if no address is returned.
-      - name: Sync the SQL firewall to the environment's outbound addresses
-        shell: pwsh
-        run: ./infra/sync-sql-firewall.ps1 -SubscriptionId $env:AZURE_SUBSCRIPTION_ID -ResourceGroup $env:AZURE_RESOURCE_GROUP -Server $env:SQL_SERVER -Environment $env:CONTAINER_ENVIRONMENT
 
       - name: Wait for /healthz to return 200 (up to 5 minutes)
         run: |

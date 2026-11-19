@@ -34,8 +34,8 @@ param entraAdminObjectId string
 @description('Tenant of the Entra administrator.')
 param entraTenantId string = tenant().tenantId
 
-@description('Turns SQL authentication off entirely (the old admin login stops working). Left false until the Entra administrator, the contained database users and the API have been proven; the orchestrator flips it last.')
-param entraOnlyAuthentication bool = false
+@description('Turns SQL authentication off entirely (the old admin login stops working). Defaults to TRUE so that re-applying this template can never switch SQL logins back on. Only the one-time bootstrap (infra/README.md step 3) passes false explicitly, until the Entra administrator, the contained database users and the API have been proven.')
+param entraOnlyAuthentication bool = true
 
 @description('CanNotDelete locks on the SQL server and database. Locks apply to child resources too, so delete the two legacy firewall rules first (infra/README.md step 4) and set this to false for any run that must delete something.')
 param enableLocks bool = true
