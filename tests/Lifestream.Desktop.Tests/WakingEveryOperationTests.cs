@@ -602,72 +602,202 @@ public sealed class WakingEveryOperationTests
         Assert.True(problem is null, problem);
     }
 
+    /// <summary>The walk's result for some of the screen/state groups (what one walker process reports to the test).</summary>
+    internal sealed record WalkResult(List<string> Problems, Dictionary<ScreenState, int> Exercised, Dictionary<ScreenState, int> WithCalls);
+
+    /// <summary>How many screen/state groups the walk has.</summary>
+    internal static int WalkGroupCount => WalkGroups().Count;
+
+    /// <summary>Walks every <paramref name="count"/>-th group from <paramref name="index"/> (one walker's share).</summary>
+    internal static WalkResult WalkShare(int index, int count, string capturesDirectory) => Walk(WalkGroups().Where((_, i) => i % count == index), capturesDirectory);
+
+    private static List<(Screen Screen, ScreenState State)> WalkGroups() =>
+        [.. from screen in Screens from state in Enum.GetValues<ScreenState>().Where(s => s != ScreenState.NavigatedAway) select (screen, state)];
+
+    /// <summary>Walks the given screen/state groups on one STA thread, exactly as the whole walk used to run in one go.</summary>
+    private static WalkResult Walk(IEnumerable<(Screen Screen, ScreenState State)> groups, string capturesDirectory) => StaHost.Run(() =>
+    {
+        var found = new List<string>();
+        var exercised = Enum.GetValues<ScreenState>().ToDictionary(s => s, _ => 0);
+        var withCalls = Enum.GetValues<ScreenState>().ToDictionary(s => s, _ => 0);
+        foreach (var (screen, state) in groups)
+        {
+            // All commands of a screen in one state are started together, each on its own screen instance and silent server, so the real 3.6 s of waiting are shared.
+            var operations = new List<Operation>();
+            try
+            {
+                var runnable = state == ScreenState.RecordSelected ? null : Runnable(screen, state); // with a record selected every command is walked, so a disabled one needs a reviewed entry
+                foreach (var command in CommandsOf(screen.ViewModel).Where(p => !p.IsDefined(typeof(NoOperationRunnerAttribute), false) || IsNoCall(screen.Name, p.Name)))
+                {
+                    if (runnable is null || runnable.Contains(command.Name))
+                    {
+                        operations.Add(Start(screen, command.Name, state, realTime: true));
+                    }
+                }
+
+                // Every operation has now been waking for at least 3.6 s: wait out what is left for the one that went last.
+                var lastWaking = operations.Where(o => !o.Finished).Select(o => o.WakingSince).DefaultIfEmpty(System.Diagnostics.Stopwatch.GetTimestamp()).Max();
+                var left = 3600 - (int)System.Diagnostics.Stopwatch.GetElapsedTime(lastWaking).TotalMilliseconds;
+                if (left > 0 && operations.Any(o => !o.Finished))
+                {
+                    Hosted.RunDispatcherFor(left);
+                }
+
+                foreach (var op in operations)
+                {
+                    if (op.NotApplicable)
+                    {
+                        continue; // no such state on this screen, or the command is disabled or makes no call in it
+                    }
+
+                    exercised[state]++;
+                    if (!IsNoCall(screen.Name, op.CommandName))
+                    {
+                        withCalls[state]++;
+                    }
+
+                    var problem = op.Finished ? op.Problem : Inspect(op, Path.Combine(capturesDirectory, "waking", $"{screen.Name}_{state}_{op.CommandName}.png"));
+                    if (problem is not null)
+                    {
+                        found.Add($"[{state}] {problem}");
+                    }
+                }
+            }
+            finally
+            {
+                operations.ForEach(o => o.Dispose());
+            }
+        }
+
+        return new WalkResult(found, exercised, withCalls);
+    });
+}
+
+/// <summary>
+/// SHELL-07, the behavioural inventory of <see cref="WakingEveryOperationTests"/> over every command of every screen in every screen state. The screens are
+/// walked in walker processes (several at once: WPF cannot build views on several threads of one process, its resource package is not thread-safe), so
+/// this test does no WPF work of its own and runs beside the other WPF tests rather than in their one-at-a-time collection.
+/// </summary>
+public sealed class WakingEveryOperationWalkTests
+{
+    /// <summary>Set in a walker process: "index/count|result file|parent process id". The walker walks every count-th group from index and writes its result there; it ends itself if the test process that started it is gone.</summary>
+    private const string WalkerVariable = "LIFESTREAM_WAKING_WALKER";
+
+    /// <summary>How many walker processes share the groups (the default: one per two processors, at least one).</summary>
+    private static int Walkers => Environment.GetEnvironmentVariable("LIFESTREAM_WAKING_WALKERS") is { Length: > 0 } set && int.TryParse(set, System.Globalization.CultureInfo.InvariantCulture, out var n) && n > 0
+        ? n
+        : Math.Max(1, Environment.ProcessorCount / 2);
+
+    /// <summary>
+    /// Runs the walk in <paramref name="count"/> processes of this test assembly at once, each running only this test for its share of the groups
+    /// (WPF cannot build views on several threads of one process: its resource package is not thread-safe). A walker that fails, hangs or reports
+    /// nothing fails the test with its output.
+    /// </summary>
+    private static List<WakingEveryOperationTests.WalkResult> WalkInProcesses(int count)
+    {
+        var exe = Path.Combine(AppContext.BaseDirectory, "Lifestream.Desktop.Tests.exe");
+        var method = $"{typeof(WakingEveryOperationWalkTests).FullName}.{nameof(EveryCommandOfEveryScreen_InEveryScreenState_OnAServerThatNeverAnswers_ShowsWakingAndACancelThatStopsTheRequest_FakeApi)}";
+        var walkers = Enumerable.Range(0, count).Select(index =>
+        {
+            var output = Path.Combine(Path.GetTempPath(), $"lifestream-walk-{Guid.NewGuid():N}.json");
+            var start = new System.Diagnostics.ProcessStartInfo(exe)
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            };
+            foreach (var argument in new[] { "-method", method, "-noLogo", "-noColor" })
+            {
+                start.ArgumentList.Add(argument);
+            }
+
+            start.Environment[WalkerVariable] = $"{index}/{count}|{output}|{Environment.ProcessId}";
+            var process = System.Diagnostics.Process.Start(start)!;
+            var log = new System.Text.StringBuilder();
+            process.OutputDataReceived += (_, e) => { lock (log) { log.AppendLine(e.Data); } };
+            process.ErrorDataReceived += (_, e) => { lock (log) { log.AppendLine(e.Data); } };
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+            return (Process: process, Output: output, Log: log, Index: index);
+        }).ToList();
+
+        var results = new List<WakingEveryOperationTests.WalkResult>();
+        var failures = new List<string>();
+        foreach (var walker in walkers)
+        {
+            using var process = walker.Process;
+            if (!process.WaitForExit(TimeSpan.FromMinutes(30)))
+            {
+                process.Kill(entireProcessTree: true);
+                failures.Add($"walker {walker.Index} did not finish in 30 minutes");
+            }
+
+            process.WaitForExit();
+            if (process.ExitCode != 0 || !File.Exists(walker.Output))
+            {
+                lock (walker.Log)
+                {
+                    failures.Add($"walker {walker.Index} exited with {process.ExitCode} and reported {(File.Exists(walker.Output) ? "a result" : "nothing")}:{Environment.NewLine}{walker.Log}");
+                }
+            }
+            else
+            {
+                results.Add(System.Text.Json.JsonSerializer.Deserialize<WakingEveryOperationTests.WalkResult>(File.ReadAllText(walker.Output))!);
+            }
+
+            File.Delete(walker.Output);
+        }
+
+        Assert.True(failures.Count == 0, string.Join(Environment.NewLine, failures));
+        return results;
+    }
+
+    /// <summary>A walker never outlives the test process that started it (if that process is killed, its walkers end within a second).</summary>
+    private static void ExitWhenGone(int parentId) =>
+        new Thread(() =>
+        {
+            while (true)
+            {
+                Thread.Sleep(1000);
+                try
+                {
+                    using var parent = System.Diagnostics.Process.GetProcessById(parentId);
+                    if (parent.HasExited)
+                    {
+                        Environment.Exit(3);
+                    }
+                }
+                catch (ArgumentException)
+                {
+                    Environment.Exit(3); // no such process any more
+                }
+            }
+        })
+        { IsBackground = true, Name = "walker parent watch" }.Start();
+
     [Fact]
     public void EveryCommandOfEveryScreen_InEveryScreenState_OnAServerThatNeverAnswers_ShowsWakingAndACancelThatStopsTheRequest_FakeApi()
     {
         var capturesDirectory = Environment.GetEnvironmentVariable("LIFESTREAM_CAPTURE_DIR") is { Length: > 0 } dir ? dir : Path.Combine(AppContext.BaseDirectory, "captures");
-        var (problems, exercised, withCalls) = StaHost.Run(() =>
+        if (Environment.GetEnvironmentVariable(WalkerVariable) is { Length: > 0 } walker)
         {
-            var found = new List<string>();
-            var exercised = Enum.GetValues<ScreenState>().ToDictionary(s => s, _ => 0);
-            var withCalls = Enum.GetValues<ScreenState>().ToDictionary(s => s, _ => 0);
-            foreach (var screen in Screens)
-            {
-                foreach (var state in Enum.GetValues<ScreenState>().Where(s => s != ScreenState.NavigatedAway))
-                {
-                    // All commands of a screen in one state are started together, each on its own screen instance and silent server, so the real 3.6 s of waiting are shared.
-                    var operations = new List<Operation>();
-                    try
-                    {
-                        var runnable = state == ScreenState.RecordSelected ? null : Runnable(screen, state); // with a record selected every command is walked, so a disabled one needs a reviewed entry
-                        foreach (var command in CommandsOf(screen.ViewModel).Where(p => !p.IsDefined(typeof(NoOperationRunnerAttribute), false) || IsNoCall(screen.Name, p.Name)))
-                        {
-                            if (runnable is null || runnable.Contains(command.Name))
-                            {
-                                operations.Add(Start(screen, command.Name, state, realTime: true));
-                            }
-                        }
+            // This process is one of the walkers: walk its share of the groups and report; the test that started it asserts on the whole walk.
+            var fields = walker.Split('|');
+            var share = fields[0].Split('/').Select(n => int.Parse(n, System.Globalization.CultureInfo.InvariantCulture)).ToArray();
+            ExitWhenGone(int.Parse(fields[2], System.Globalization.CultureInfo.InvariantCulture));
+            var mine = WakingEveryOperationTests.WalkShare(share[0], share[1], capturesDirectory);
+            File.WriteAllText(fields[1], System.Text.Json.JsonSerializer.Serialize(mine));
+            return;
+        }
 
-                        // Every operation has now been waking for at least 3.6 s: wait out what is left for the one that went last.
-                        var lastWaking = operations.Where(o => !o.Finished).Select(o => o.WakingSince).DefaultIfEmpty(System.Diagnostics.Stopwatch.GetTimestamp()).Max();
-                        var left = 3600 - (int)System.Diagnostics.Stopwatch.GetElapsedTime(lastWaking).TotalMilliseconds;
-                        if (left > 0 && operations.Any(o => !o.Finished))
-                        {
-                            Hosted.RunDispatcherFor(left);
-                        }
+        var parts = WalkInProcesses(Math.Min(Walkers, WakingEveryOperationTests.WalkGroupCount));
+        var problems = parts.SelectMany(p => p.Problems).ToList();
+        var exercised = Enum.GetValues<WakingEveryOperationTests.ScreenState>().ToDictionary(s => s, s => parts.Sum(p => p.Exercised[s]));
+        var withCalls = Enum.GetValues<WakingEveryOperationTests.ScreenState>().ToDictionary(s => s, s => parts.Sum(p => p.WithCalls[s]));
 
-                        foreach (var op in operations)
-                        {
-                            if (op.NotApplicable)
-                            {
-                                continue; // no such state on this screen, or the command is disabled or makes no call in it
-                            }
-
-                            exercised[state]++;
-                            if (!IsNoCall(screen.Name, op.CommandName))
-                            {
-                                withCalls[state]++;
-                            }
-
-                            var problem = op.Finished ? op.Problem : Inspect(op, Path.Combine(capturesDirectory, "waking", $"{screen.Name}_{state}_{op.CommandName}.png"));
-                            if (problem is not null)
-                            {
-                                found.Add($"[{state}] {problem}");
-                            }
-                        }
-                    }
-                    finally
-                    {
-                        operations.ForEach(o => o.Dispose());
-                    }
-                }
-            }
-
-            return (found, exercised, withCalls);
-        });
-
-        Assert.True(exercised[ScreenState.RecordSelected] > 40 && withCalls[ScreenState.RecordSelected] > 15, $"only {exercised[ScreenState.RecordSelected]} commands ({withCalls[ScreenState.RecordSelected]} calling the API) were exercised with a record selected: the inventory is not walking the screens");
-        foreach (var state in new[] { ScreenState.NoSelection, ScreenState.NewEditor, ScreenState.EditEditor, ScreenState.DialogOpen })
+        Assert.True(exercised[WakingEveryOperationTests.ScreenState.RecordSelected] > 40 && withCalls[WakingEveryOperationTests.ScreenState.RecordSelected] > 15, $"only {exercised[WakingEveryOperationTests.ScreenState.RecordSelected]} commands ({withCalls[WakingEveryOperationTests.ScreenState.RecordSelected]} calling the API) were exercised with a record selected: the inventory is not walking the screens");
+        foreach (var state in new[] { WakingEveryOperationTests.ScreenState.NoSelection, WakingEveryOperationTests.ScreenState.NewEditor, WakingEveryOperationTests.ScreenState.EditEditor, WakingEveryOperationTests.ScreenState.DialogOpen })
         {
             Assert.True(withCalls[state] >= 3, $"only {withCalls[state]} commands calling the API were exercised in the {state} state: the inventory is not walking that state");
         }
