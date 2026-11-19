@@ -224,7 +224,7 @@ public sealed class SharedListsAndSourceTests(ApiFixture fx) : IClassFixture<Api
         // No contract record exposes a password-like member except the request-side ones.
         foreach (var type in typeof(ApiRoutes).Assembly.GetTypes().Where(t => t.Namespace?.StartsWith("Lifestream.Contracts", StringComparison.Ordinal) == true && t.Name.EndsWith("Response", StringComparison.Ordinal) || t.Name.EndsWith("Item", StringComparison.Ordinal) || t.Name.EndsWith("Detail", StringComparison.Ordinal)))
         {
-            Assert.DoesNotContain(type.GetProperties(), p => p.Name.Contains("Hash", StringComparison.OrdinalIgnoreCase) || (p.Name.Contains("Password", StringComparison.OrdinalIgnoreCase) && type.Name != "ResetPasswordResponse"));
+            Assert.DoesNotContain(type.GetProperties(), p => p.Name.Contains("Hash", StringComparison.OrdinalIgnoreCase) || p.Name.Contains("Password", StringComparison.OrdinalIgnoreCase) || p.Name.Contains("Temporary", StringComparison.OrdinalIgnoreCase));
         }
 
     }

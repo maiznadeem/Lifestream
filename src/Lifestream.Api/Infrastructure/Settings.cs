@@ -97,4 +97,5 @@ public static class ExtraProblemCodes
     public const string PayloadTooLarge = "payload_too_large";
     public const string ServerError = "server_error";
     public const string MethodNotAllowed = "method_not_allowed";
+    public const string PasswordChangeRequired = "password_change_required";
 }

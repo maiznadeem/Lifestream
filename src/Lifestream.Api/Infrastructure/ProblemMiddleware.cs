@@ -11,7 +11,7 @@ namespace Lifestream.Api.Infrastructure;
 /// <summary>Writes every error as RFC 7807 problem details with a stable "code" and the correlation id. Never exception, SQL or schema text.</summary>
 public static class ProblemWriter
 {
-    public static async Task WriteAsync(HttpContext context, int status, string code, string title, IReadOnlyDictionary<string, string[]>? errors = null, TimeSpan? retryAfter = null)
+    public static async Task WriteAsync(HttpContext context, int status, string code, string title, IReadOnlyDictionary<string, string[]>? errors = null, TimeSpan? retryAfter = null, IReadOnlyDictionary<string, object?>? extensions = null)
     {
         if (context.Response.HasStarted)
         {
@@ -38,10 +38,34 @@ public static class ProblemWriter
             body["errors"] = errors;
         }
 
+        // RFC 7807 extension members (for example the readiness state), added after the standard ones so they can never replace them.
+        foreach (var (name, value) in extensions ?? new Dictionary<string, object?>())
+        {
+            body.TryAdd(name, value);
+        }
+
         context.Response.ContentType = "application/problem+json";
         var options = context.RequestServices.GetRequiredService<IOptions<JsonOptions>>().Value.SerializerOptions;
         await JsonSerializer.SerializeAsync(context.Response.Body, body, options, context.RequestAborted);
     }
+}
+
+/// <summary>A problem response returned from an endpoint instead of thrown (used where the status is the answer, such as the readiness probe).</summary>
+public sealed class ProblemResult(int status, string code, string title, TimeSpan? retryAfter = null, IReadOnlyDictionary<string, object?>? extensions = null) : IResult
+{
+    public Task ExecuteAsync(HttpContext httpContext) =>
+        ProblemWriter.WriteAsync(httpContext, status, code, title, retryAfter: retryAfter, extensions: extensions);
+}
+
+public static class DatabaseProblems
+{
+    /// <summary>How long until the monthly free allowance renews (the first of next month, UTC): the Retry-After of a resting database.</summary>
+    public static TimeSpan RestingRetryAfter() =>
+        new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1, 0, 0, 0, DateTimeKind.Utc).AddMonths(1) - DateTime.UtcNow;
+
+    public const string RestingTitle = "The demo is resting until the 1st of next month.";
+    public const string WakingTitle = "The database is waking up. Try again in a moment.";
+    public static readonly TimeSpan WakingRetryAfter = TimeSpan.FromSeconds(15);
 }
 
 public sealed class ProblemMiddleware(RequestDelegate next, ILogger<ProblemMiddleware> logger)
@@ -101,14 +125,13 @@ public sealed class ProblemMiddleware(RequestDelegate next, ILogger<ProblemMiddl
 
         if (DatabaseErrors.IsResting(exception))
         {
-            var untilFirst = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1, 0, 0, 0, DateTimeKind.Utc).AddMonths(1) - DateTime.UtcNow;
-            await ProblemWriter.WriteAsync(context, 503, ProblemCodes.DatabaseResting, "The demo is resting until the 1st of next month.", retryAfter: untilFirst);
+            await ProblemWriter.WriteAsync(context, 503, ProblemCodes.DatabaseResting, DatabaseProblems.RestingTitle, retryAfter: DatabaseProblems.RestingRetryAfter());
             return;
         }
 
         if (DatabaseErrors.IsWaking(exception))
         {
-            await ProblemWriter.WriteAsync(context, 503, ProblemCodes.DatabaseWaking, "The database is waking up. Try again in a moment.", retryAfter: TimeSpan.FromSeconds(15));
+            await ProblemWriter.WriteAsync(context, 503, ProblemCodes.DatabaseWaking, DatabaseProblems.WakingTitle, retryAfter: DatabaseProblems.WakingRetryAfter);
             return;
         }
 

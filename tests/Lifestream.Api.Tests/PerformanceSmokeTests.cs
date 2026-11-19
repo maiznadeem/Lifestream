@@ -8,7 +8,8 @@ namespace Lifestream.Api.Tests;
 
 /// <summary>
 /// The timings, shared by the 100x and the 1x runs (DB-06): the same requests, the same budget, two dataset sizes. Warm API, real local
-/// SQL Server. Set LIFESTREAM_PERF_RESULTS to a file path to write the results table.
+/// SQL Server. Tagged Category=Perf and left out of the default test run (see Lifestream.Api.Tests.csproj); run them alone with
+/// <c>dotnet test --filter Category=Perf</c>. Each shape is measured once. Set LIFESTREAM_PERF_RESULTS to a file path to write the results table.
 /// </summary>
 internal static class PerfShapes
 {
@@ -43,28 +44,6 @@ internal static class PerfShapes
 
         times.Sort();
         return new Timing(name, times[times.Count / 2], times[(int)Math.Ceiling(times.Count * 0.95) - 1], times[^1], bytes);
-    }
-
-    /// <summary>
-    /// The budget applies to the quiet-machine p95, but the gate runs the whole suite (1,300 tests, other builders' too) at the same time.
-    /// A shape that misses is measured again, up to <see cref="Rounds"/> times in all, and its best round counts: a plan that scans or a
-    /// query that is really slow misses in every round, a burst of load from elsewhere does not. The threshold is unchanged.
-    /// </summary>
-    private const int Rounds = 3;
-
-    private static async Task<Timing> MeasureWithRetriesAsync(HttpClient client, string name, string template, string query)
-    {
-        var best = await MeasureAsync(client, name, template, query);
-        for (var round = 2; round <= Rounds && best.P95 >= Budget.TotalMilliseconds; round++)
-        {
-            var again = await MeasureAsync(client, name, template, query);
-            if (again.P95 < best.P95)
-            {
-                best = again;
-            }
-        }
-
-        return best;
     }
 
     public static void Report(IReadOnlyList<Timing> timings, string title, ApiFixture fx)
@@ -134,7 +113,7 @@ internal static class PerfShapes
         var timings = new List<Timing>();
         foreach (var (name, route, query) in cases)
         {
-            timings.Add(await MeasureWithRetriesAsync(admin.Client, name, route, query));
+            timings.Add(await MeasureAsync(admin.Client, name, route, query));
         }
 
         Report(timings, $"List endpoints at {label} (warm, local SQL Server)", fx);
@@ -147,7 +126,7 @@ internal static class PerfShapes
         var admin = await fx.AddStaffAsync(Role.Admin);
         var timings = new List<Timing>
         {
-            await MeasureWithRetriesAsync(admin.Client, "GET dashboard (default 12 months, uncached)", ApiRoutes.Dashboard, ""),
+            await MeasureAsync(admin.Client, "GET dashboard (default 12 months, uncached)", ApiRoutes.Dashboard, ""),
             await MeasureAsync(admin.Client, "GET dashboard (36 months, uncached)", ApiRoutes.Dashboard, "?from=2023-12-01"),
         };
         Report(timings, $"Dashboard at {label} (warm, no cache)", fx);

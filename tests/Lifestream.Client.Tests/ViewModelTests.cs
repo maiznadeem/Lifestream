@@ -302,6 +302,15 @@ public sealed class ViewModelTests
                 var raised = false;
                 void Handler(object? s, System.ComponentModel.PropertyChangedEventArgs e) => raised |= e.PropertyName == property.Name;
                 instance.PropertyChanged += Handler;
+
+                // A screen may still be finishing its first load on another thread and change the property between the sample and the set;
+                // re-read right before setting and sample again, so the set is always a real change of value.
+                var latest = property.GetValue(instance);
+                if (Equals(value, latest))
+                {
+                    value = Sample(property.PropertyType, latest);
+                }
+
                 property.SetValue(instance, value);
                 instance.PropertyChanged -= Handler;
                 if (!raised)

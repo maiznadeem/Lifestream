@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using Lifestream.Api.Auth;
 using Lifestream.Api.Common;
 using Lifestream.Api.Infrastructure;
@@ -39,9 +38,6 @@ public sealed class StaffService(LifestreamDbContext db, TimeProvider time)
         }
     }
 
-    /// <summary>A random temporary password (no look-alike characters). Only ever returned once, to the admin who asked for the reset.</summary>
-    public static string NewTemporaryPassword() => new(RandomNumberGenerator.GetItems<char>("ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789".AsSpan(), 16));
-
     public async Task SavePhotoAsync(int staffId, ProcessedPhoto photo, CancellationToken ct)
     {
         await db.RunAsync(async token =>
@@ -62,13 +58,8 @@ public sealed class StaffService(LifestreamDbContext db, TimeProvider time)
                 await db.SaveChangesAsync(token);
             }
 
-            var staff = await db.Staff.FirstAsync(s => s.Id == staffId, token);
-            if (!staff.HasPhoto)
-            {
-                staff.HasPhoto = true;
-                await db.SaveChangesAsync(token);
-            }
-
+            // The Staff row is not touched: a photo lives in StaffPhoto, and any write to the row would change its row version and make
+            // the next save from a client that already holds the record fail with 409. HasPhoto is read from the existence of the StaffPhoto row; the Staff.HasPhoto column is no longer written.
             return true;
         }, ct);
     }
@@ -104,6 +95,12 @@ public sealed class StaffService(LifestreamDbContext db, TimeProvider time)
 
 public static class StaffEndpoints
 {
+    /// <summary>
+    /// Held (for the rest of the transaction) by every change that can remove an administrator: delete, and a role change. Without
+    /// it two admins deleting or demoting each other at the same moment each see "another admin exists" and both succeed.
+    /// </summary>
+    private const string AdminsLock = "staff-admins";
+
     private static readonly SortMap<Staff> Sorts = new SortMap<Staff>(s => s.Id, "name")
         .Add("name", s => s.DisplayName).Add("username", s => s.Username);
 
@@ -136,18 +133,16 @@ public static class StaffEndpoints
 
         var sorted = Sorts.Apply(filtered, q.Sort).Skip((page - 1) * size).Take(size);
 
-        // Salary and phone are read, and sent, for an Admin only. Never the password hash, never the photo bytes.
-        var rows = user.IsAdmin
-            ? await sorted.Select(s => new ListRow<StaffListItem>(
-                new StaffListItem(s.Id, s.DisplayName, s.Username, s.Designation, s.Shift, s.Role, s.HasPhoto, s.Salary, s.Phone), filtered.Count())).ToListAsync(ct)
-            : await sorted.Select(s => new ListRow<StaffListItem>(
-                new StaffListItem(s.Id, s.DisplayName, s.Username, s.Designation, s.Shift, s.Role, s.HasPhoto, null, null), filtered.Count())).ToListAsync(ct);
+        // The list carries only what a row of the grid shows: no salary and no phone (the detail has them, for an Admin only), so 110
+        // staff stay under 20 KB whatever their names. Never the password hash, never the photo bytes.
+        var rows = await sorted.Select(s => new ListRow<StaffListItem>(
+            new StaffListItem(s.Id, s.DisplayName, s.Username, s.Designation, s.Shift, s.Role, db.StaffPhotos.Any(p => p.StaffId == s.Id), null, null), filtered.Count())).ToListAsync(ct);
         return await Lists.BuildAsync(rows, page, size, () => filtered.CountAsync(ct));
     }
 
     private static async Task<StaffDetail> GetAsync(int id, LifestreamDbContext db, CurrentUser user, CancellationToken ct) =>
         ToDetail(
-            await Visible(db, user).Where(s => s.Id == id).Select(s => new StaffRow(s.Id, s.DisplayName, s.Username, s.Gender, s.DateOfBirth, s.Designation, s.Shift, s.Role, s.HasPhoto, s.Salary, s.Phone, s.IsProtected, s.RowVersion)).FirstOrDefaultAsync(ct)
+            await Visible(db, user).Where(s => s.Id == id).Select(s => new StaffRow(s.Id, s.DisplayName, s.Username, s.Gender, s.DateOfBirth, s.Designation, s.Shift, s.Role, db.StaffPhotos.Any(p => p.StaffId == s.Id), s.Salary, s.Phone, s.IsProtected, s.RowVersion)).FirstOrDefaultAsync(ct)
                 ?? throw ApiException.NotFound("The staff member"),
             user.IsAdmin);
 
@@ -156,8 +151,8 @@ public static class StaffEndpoints
     private static StaffDetail ToDetail(StaffRow s, bool includePrivate) =>
         new(s.Id, s.DisplayName, s.Username, s.Gender, s.DateOfBirth, s.Designation, s.Shift, s.Role, s.HasPhoto, includePrivate ? s.Salary : null, includePrivate ? s.Phone : null, s.IsProtected, RowVersions.ToText(s.RowVersion));
 
-    private static StaffDetail ToDetail(Staff s) =>
-        ToDetail(new StaffRow(s.Id, s.DisplayName, s.Username, s.Gender, s.DateOfBirth, s.Designation, s.Shift, s.Role, s.HasPhoto, s.Salary, s.Phone, s.IsProtected, s.RowVersion), true);
+    private static StaffDetail ToDetail(Staff s, bool hasPhoto) =>
+        ToDetail(new StaffRow(s.Id, s.DisplayName, s.Username, s.Gender, s.DateOfBirth, s.Designation, s.Shift, s.Role, hasPhoto, s.Salary, s.Phone, s.IsProtected, s.RowVersion), true);
 
     private static async Task<IResult> PhotoAsync(int id, CurrentUser user, StaffService staff, LifestreamDbContext db, CancellationToken ct)
     {
@@ -176,7 +171,8 @@ public static class StaffEndpoints
         return await staff.PhotoAsync(id, ct);
     }
 
-    private static async Task<NoContent> UploadPhotoAsync(int id, HttpRequest http, PhotoProcessor photos, StaffService staff, LifestreamDbContext db, CurrentUser user, CancellationToken ct)
+    /// <summary>Returns the person (with their current row version, which the upload did not change), so the caller needs no reload.</summary>
+    private static async Task<StaffDetail> UploadPhotoAsync(int id, HttpRequest http, PhotoProcessor photos, StaffService staff, LifestreamDbContext db, CurrentUser user, CancellationToken ct)
     {
         // Same gate as edit and reset: the owner's own record can be changed only by the owner.
         if (id != user.TokenStaffId && await db.Staff.AnyAsync(s => s.Id == id && s.IsProtected, ct))
@@ -185,7 +181,7 @@ public static class StaffEndpoints
         }
 
         await staff.SavePhotoAsync(id, await photos.ReadAsync(http, ct), ct);
-        return TypedResults.NoContent();
+        return await GetAsync(id, db, user, ct);
     }
 
     private static async Task<Created<StaffDetail>> CreateAsync(HttpRequest http, LifestreamDbContext db, TimeProvider time, CancellationToken ct)
@@ -237,7 +233,7 @@ public static class StaffEndpoints
             await db.SaveChangesAsync(token);
             return entity;
         }, ct);
-        return TypedResults.Created($"{ApiRoutes.Prefix}/staff/{staff.Id}", ToDetail(staff));
+        return TypedResults.Created($"{ApiRoutes.Prefix}/staff/{staff.Id}", ToDetail(staff, hasPhoto: false));
     }
 
     private static async Task<StaffDetail> UpdateAsync(int id, HttpRequest http, LifestreamDbContext db, CurrentUser user, TimeProvider time, IMemoryCache cache, CancellationToken ct)
@@ -289,6 +285,12 @@ public static class StaffEndpoints
 
         var staff = await db.RunAsync(async token =>
         {
+            if (r.Role.HasValue)
+            {
+                // A role change can remove an administrator: serialise it with every other change that can (see AdminsLock).
+                await db.LockAsync(AdminsLock, token);
+            }
+
             var entity = await db.Staff.FirstOrDefaultAsync(s => s.Id == id && !s.IsDemo, token) ?? throw ApiException.NotFound("The staff member");
             if (entity.IsProtected && entity.Id != user.TokenStaffId)
             {
@@ -350,13 +352,14 @@ public static class StaffEndpoints
 
         // The role in the database is authoritative on every request; forget what was cached so a demotion applies at once.
         RevocationCache.Clear(cache);
-        return ToDetail(staff);
+        return ToDetail(staff, await db.StaffPhotos.AnyAsync(p => p.StaffId == staff.Id, ct));
     }
 
     private static async Task<NoContent> DeleteAsync(int id, LifestreamDbContext db, CurrentUser user, IMemoryCache cache, CancellationToken ct)
     {
         await db.RunAsync(async token =>
         {
+            await db.LockAsync(AdminsLock, token);
             var entity = await db.Staff.FirstOrDefaultAsync(s => s.Id == id && !s.IsDemo, token) ?? throw ApiException.NotFound("The staff member");
             if (entity.Id == user.TokenStaffId)
             {
@@ -381,11 +384,17 @@ public static class StaffEndpoints
         return TypedResults.NoContent();
     }
 
-    /// <summary>Sets a new random temporary password, ends the person's sessions, clears any lock. The stored value is a hash; the temporary text is returned once.</summary>
-    private static async Task<ResetPasswordResponse> ResetPasswordAsync(int id, LifestreamDbContext db, CurrentUser user, AuthService auth, CancellationToken ct)
+    /// <summary>
+    /// Sets the temporary password the administrator typed (at least 12 characters), stores only its hash, marks the account as
+    /// having to change it, ends the person's sessions and clears any lock. No password is ever returned: 204.
+    /// </summary>
+    private static async Task<NoContent> ResetPasswordAsync(int id, HttpRequest http, LifestreamDbContext db, CurrentUser user, AuthService auth, CancellationToken ct)
     {
-        var temporary = StaffService.NewTemporaryPassword();
-        var hash = PasswordHashing.Hash(temporary);
+        var request = await http.ReadBodyAsync<ResetPasswordRequest>(ct);
+        var check = new Check();
+        StaffService.CheckNewPassword(check, "temporaryPassword", request.TemporaryPassword);
+        check.ThrowIfInvalid();
+        var hash = PasswordHashing.Hash(request.TemporaryPassword);
         await db.RunAsync(async token =>
         {
             var entity = await db.Staff.FirstOrDefaultAsync(s => s.Id == id && !s.IsDemo, token) ?? throw ApiException.NotFound("The staff member");
@@ -395,12 +404,13 @@ public static class StaffEndpoints
             }
 
             entity.PasswordHash = hash;
+            entity.MustChangePassword = true;
             entity.FailedLoginCount = 0;
             entity.LockoutEndUtc = null;
             await db.SaveChangesAsync(token);
             return true;
         }, ct);
         await auth.RevokeAllForAsync(id, null, ct);
-        return new ResetPasswordResponse(temporary);
+        return TypedResults.NoContent();
     }
 }

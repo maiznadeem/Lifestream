@@ -68,6 +68,10 @@ public sealed class Staff : IEntity
 
     public int FailedLoginCount { get; set; }
     public DateTime? LockoutEndUtc { get; set; }
+
+    /// <summary>Set when an administrator resets the password: the person must choose their own before anything else is allowed.</summary>
+    public bool MustChangePassword { get; set; }
+
     public byte[] RowVersion { get; set; } = [];
 }
 

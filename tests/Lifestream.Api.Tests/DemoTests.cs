@@ -24,7 +24,7 @@ public sealed class DemoOffApiFixture : ApiFixture
 }
 
 /// <summary>The public demo: daily reset without a timer, manual reset, write caps (API-39, 40, 05, 04; OWN-06).</summary>
-public sealed class DemoResetTests(ApiFixture fx) : IClassFixture<ApiFixture>
+public sealed class DemoResetTests(DemoResetApiFixture fx) : IClassFixture<DemoResetApiFixture>
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 

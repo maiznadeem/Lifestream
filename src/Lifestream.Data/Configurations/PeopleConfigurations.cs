@@ -87,6 +87,7 @@ internal sealed class StaffConfiguration : IEntityTypeConfiguration<Staff>
         b.Property(x => x.Username).HasMaxLength(50).UseCollation(UsernameCollation);
         b.Property(x => x.PasswordHash).HasMaxLength(256).IsUnicode(false);
         b.Property(x => x.Phone).HasMaxLength(20).IsUnicode(false);
+        b.Property(x => x.MustChangePassword).HasDefaultValue(false);
         b.Property(x => x.RowVersion).IsRowVersion();
         b.HasIndex(x => x.Username).IsUnique();
         b.HasIndex(x => x.DisplayName);

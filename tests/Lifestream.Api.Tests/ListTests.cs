@@ -120,18 +120,20 @@ public sealed class ListTests(Scale10ApiFixture fx) : IClassFixture<Scale10ApiFi
     {
         var admin = await fx.AddStaffAsync(Role.Admin);
 
-        // Give some staff a photo so a leak of image bytes would show up.
+        // Give five of the staff ON THIS PAGE a photo (other tests of this class add staff, so the page is not always the first rows), so a leak of
+        // image bytes would show up and HasPhoto has something to say.
+        var firstPage = await (await admin.Client.GetApi(ApiRoutes.Staff, "?pageSize=110")).Read<PagedResult<StaffListItem>>();
+        var withPhoto = firstPage.Items.Where(s => s.Id != admin.Id).Take(5).Select(s => s.Id).ToList();
+        Assert.Equal(5, withPhoto.Count);
         await using (var db = fx.Db.NewContext())
         {
-            var ids = db.Staff.Where(s => !s.IsDemo).Select(s => s.Id).Take(5).ToList();
-            foreach (var id in ids)
+            foreach (var id in withPhoto)
             {
                 db.StaffPhotos.Add(new Lifestream.Data.Entities.StaffPhoto { StaffId = id, Content = new byte[20_000], Width = 256, Height = 256 });
             }
 
             await db.SaveChangesAsync(Ct);
         }
-        await fx.Db.ExecuteAsync("UPDATE Staff SET HasPhoto = 1 WHERE Id IN (SELECT StaffId FROM StaffPhoto)", Ct);
 
         using var response = await admin.Client.GetApi(ApiRoutes.Staff, "?pageSize=110");
         var body = await response.Content.ReadAsByteArrayAsync(Ct);
@@ -142,7 +144,7 @@ public sealed class ListTests(Scale10ApiFixture fx) : IClassFixture<Scale10ApiFi
         Assert.DoesNotContain("content\"", text, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("base64", text, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("password", text, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains(page.Items, s => s.HasPhoto);
+        Assert.Equal(withPhoto.Order(), page.Items.Where(s => s.HasPhoto).Select(s => s.Id).Order());
     }
 
     [Fact]
@@ -151,7 +153,16 @@ public sealed class ListTests(Scale10ApiFixture fx) : IClassFixture<Scale10ApiFi
         var admin = await fx.AddStaffAsync(Role.Admin);
         var demo = await fx.AddDemoAsync();
         var adminView = await (await admin.Client.GetApi(ApiRoutes.Staff, "?pageSize=200")).Read<PagedResult<StaffListItem>>();
-        Assert.Contains(adminView.Items, s => s.Salary is not null && s.Phone is not null);
+
+        // The list never carries them (the payload budget); the detail gives them to an administrator.
+        Assert.All(adminView.Items, s =>
+        {
+            Assert.Null(s.Salary);
+            Assert.Null(s.Phone);
+        });
+        var adminDetail = await (await admin.Client.GetApi(ApiRoutes.StaffById, admin.Id)).Read<StaffDetail>();
+        Assert.NotNull(adminDetail.Salary);
+        Assert.NotNull(adminDetail.Phone);
         var demoView = await (await demo.Client.GetApi(ApiRoutes.Staff, "?pageSize=200")).Read<PagedResult<StaffListItem>>();
         Assert.All(demoView.Items, s =>
         {
