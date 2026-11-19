@@ -399,9 +399,15 @@ public sealed class RecordScreenTests
         Assert.Equal([true, false], busy);
 
         var donors = rig.Donors();
-        rig.DonorsReturn(_ => Samples.DonorPage(1));
+        var loadGate = new TaskCompletionSource(); // the load is held until the test has looked at it: an instant answer could finish before the assertion runs
+        rig.Fake.On("GetDonorsAsync", async _ =>
+        {
+            await loadGate.Task;
+            return ApiResult<PagedResult<DonorListItem>>.Ok(Samples.DonorPage(1));
+        });
         var load = donors.LoadAsync();
         Assert.True(donors.IsLoading);
+        loadGate.SetResult();
         await load;
         Assert.False(donors.IsLoading);
     }

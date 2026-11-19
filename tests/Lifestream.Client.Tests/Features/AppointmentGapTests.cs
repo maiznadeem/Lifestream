@@ -109,6 +109,7 @@ public sealed class AppointmentGapTests
         rig.Fake.On("GetDonorAsync", ApiResult<DonorDetail>.Ok(Samples2.RestedDonor(42)));
         rig.Fake.On("RescheduleAppointmentAsync", ApiResult<AppointmentDetail>.Ok(Samples2.Appointment()));
         var form = rig.RescheduleForm(Samples2.Appointment()); // 10 Mar 2027 10:30
+        await form.PendingDonor; // the donor check also gates Save (the banner is "Checking" until it answers): wait for its real completion
         await form.PendingSlots;
 
         form.Date = Day.AddDays(3); // only the date changes
@@ -132,6 +133,7 @@ public sealed class AppointmentGapTests
         var twoDaysAgo = rig.Clock.GetUtcNow().UtcDateTime.Date.AddDays(-2).AddHours(10).AddMinutes(30);
         var past = Samples2.Appointment() with { SlotStartUtc = DateTime.SpecifyKind(twoDaysAgo, DateTimeKind.Utc) };
         var form = rig.RescheduleForm(past);
+        await form.PendingDonor; // the donor check also gates Save
         await form.PendingSlots; // the old day's 10:30 is a past slot
 
         Assert.Equal(new TimeOnly(10, 30), form.SelectedTime); // the appointment's own time is kept, not cleared as "past"
