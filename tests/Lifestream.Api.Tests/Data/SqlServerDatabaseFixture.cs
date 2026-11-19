@@ -28,6 +28,7 @@ public class SqlServerDatabaseFixture : IAsyncLifetime
     public async ValueTask InitializeAsync()
     {
         var ct = TestContext.Current.CancellationToken;
+        await SweepLeftoverDatabasesOnceAsync(ct);
         await CreateDatabaseAsync(ct);
         if (ApplyMigrations)
         {
@@ -37,6 +38,59 @@ public class SqlServerDatabaseFixture : IAsyncLifetime
 
         ServerVersion = await ScalarAsync<string>("SELECT @@VERSION", ct);
         await OnMigratedAsync(ct);
+    }
+
+    private static readonly SemaphoreSlim SweepGate = new(1, 1);
+    private static bool _swept;
+
+    /// <summary>
+    /// A test run that is killed never reaches <see cref="DisposeAsync"/>, so its databases stay on the server. Once per process, before the first
+    /// database is created, drop every <c>Lifestream_Test_*</c> database that is more than two hours old and has no session (a database of a run
+    /// that is still going is younger, or has sessions, and is left alone). Cleaning up is best effort: a server that will not list or drop one
+    /// must not fail the tests, so a SQL error here is ignored.
+    /// </summary>
+    private async Task SweepLeftoverDatabasesOnceAsync(CancellationToken ct)
+    {
+        await SweepGate.WaitAsync(ct);
+        try
+        {
+            if (_swept)
+            {
+                return;
+            }
+
+            _swept = true;
+            try
+            {
+                var stale = new List<string>();
+                await using (var connection = new SqlConnection(MasterConnection))
+                {
+                    await connection.OpenAsync(ct);
+                    await using var list = new SqlCommand(
+                        "SELECT d.name FROM sys.databases d WHERE d.name LIKE N'Lifestream[_]Test[_]%' AND d.create_date < DATEADD(HOUR, -2, GETDATE()) " +
+                        "AND NOT EXISTS (SELECT 1 FROM sys.dm_exec_sessions s WHERE s.database_id = d.database_id)",
+                        connection);
+                    await using var reader = await list.ExecuteReaderAsync(ct);
+                    while (await reader.ReadAsync(ct))
+                    {
+                        stale.Add(reader.GetString(0));
+                    }
+                }
+
+                foreach (var name in stale)
+                {
+                    await ExecuteOnMasterAsync($"IF DB_ID(N'{name}') IS NOT NULL BEGIN ALTER DATABASE [{name}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [{name}]; END", ct);
+                }
+            }
+            catch (SqlException)
+            {
+                // best effort, see above
+            }
+        }
+        finally
+        {
+            SweepGate.Release();
+        }
     }
 
     /// <summary>
