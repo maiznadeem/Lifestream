@@ -101,12 +101,28 @@ public sealed partial class ShellViewModel : ViewModelBase
             }
         });
 
+        CancelToastActionCommand = new AsyncRelayCommand(_ =>
+        {
+            Toasts.Actions.Cancel();
+            return Task.CompletedTask;
+        });
+        Toasts.Actions.Changed += OnToastActionsChanged;
         navigation.CurrentChanged += OnCurrentChanged;
         serverStatus.DemoResetObserved += OnDemoReset;
         updates.PropertyChanged += (_, _) => OnPropertyChanged(nameof(UpdatePrompt));
     }
 
     public INavigationService Navigation { get; }
+
+    /// <summary>
+    /// True while the action of a toast (Undo, View, Reload) waits on a waking server for more than 3 s. The toast outlives the screen that showed it, so
+    /// this notice lives in the shell and shows on whatever screen is open (SHELL-07).
+    /// </summary>
+    public bool IsToastActionWaking => Toasts.Actions.IsWaking;
+
+    /// <summary>The "Cancel" of the shell-level waking notice: stops the toast action's HTTP request.</summary>
+    [NoOperationRunner("It only cancels the toast actions' runner; it makes no API call.")]
+    public AsyncRelayCommand CancelToastActionCommand { get; }
 
     public IToastService Toasts { get; }
 
@@ -200,6 +216,8 @@ public sealed partial class ShellViewModel : ViewModelBase
 
     private async Task NavigateToTypeAsync(Type type, object parameter) => await Navigation.NavigateTo(type, parameter).ConfigureAwait(true);
 
+    private void OnToastActionsChanged(object? sender, EventArgs e) => Post(() => OnPropertyChanged(nameof(IsToastActionWaking)));
+
     private void OnCurrentChanged(object? sender, EventArgs e)
     {
         // The highlight follows the page on screen, whoever opened it: a sidebar click, a dashboard card or the account menu.
@@ -254,6 +272,7 @@ public sealed partial class ShellViewModel : ViewModelBase
         if (disposing)
         {
             Navigation.CurrentChanged -= OnCurrentChanged;
+            Toasts.Actions.Changed -= OnToastActionsChanged;
             _serverStatus.DemoResetObserved -= OnDemoReset;
             Navigation.Reset();
         }

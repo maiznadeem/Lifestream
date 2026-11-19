@@ -31,7 +31,7 @@ public sealed class OperationRunner : IDisposable
     /// <summary>How long a call waits, while the server is waking, before the waking state shows (SHELL-07).</summary>
     public static TimeSpan DefaultWakingAfter { get; } = TimeSpan.FromSeconds(3);
 
-    /// <summary>Raised (on any thread) when <see cref="IsWaking"/> or <see cref="IsRunning"/> may have changed.</summary>
+    /// <summary>Raised (on any thread) when <see cref="IsWaking"/> or <see cref="IsRunning"/> may have changed (an operation started or ended, or the waking state flipped).</summary>
     public event EventHandler? Changed;
 
     /// <summary>True while an operation of this runner is running.</summary>
@@ -194,6 +194,7 @@ public sealed class OperationRunner : IDisposable
 
             cts.Dispose();
             Recompute();
+            Changed?.Invoke(this, EventArgs.Empty); // IsRunning changed too
         }
     }
 

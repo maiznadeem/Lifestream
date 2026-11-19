@@ -93,7 +93,7 @@ public sealed class ReceiptsViewModel : SortedRecordListViewModel<ReceiptRow, Re
                 _ => Detail?.Id,
             };
             return id is { } receiptId ? _viewer.ShowAsync(receiptId, isDuplicate: true) : Task.CompletedTask;
-        });
+        }, opensModal: true);
         OpenPartyCommand = Command((parameter, _) => parameter is ReceiptRow row ? OpenPartyAsync(row) : Task.CompletedTask);
         OpenSourceCommand = Command(async (parameter, _) =>
         {

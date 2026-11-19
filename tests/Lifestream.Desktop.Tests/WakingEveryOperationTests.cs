@@ -48,6 +48,12 @@ public sealed class WakingEveryOperationTests
         NewEditor,
         EditEditor,
         DialogOpen,
+
+        /// <summary>
+        /// Only for the action of a toast (Undo): the toast outlives the screen that showed it, so the user may have gone to another screen
+        /// (whose view model is a different one, and the first is disposed) when they press it. Not a state commands are walked in.
+        /// </summary>
+        NavigatedAway,
     }
 
     private sealed record Screen(string Name, Type ViewModel, Func<ViewModelBase, UserControl> View, bool SelectFirst = true, Action<ViewModelBase>? Prepare = null, int SelectIndex = 0)
@@ -86,7 +92,7 @@ public sealed class WakingEveryOperationTests
         ["Receipts.EditCommand"] = "receipts cannot be edited (the command is disabled or opens nothing)",
         ["Stock.ClearFiltersCommand"] = "no filter is set on a fresh screen, so there is nothing to reload",
         ["EditRequestCommand"] = "opens the editor",
-        ["ResetPasswordCommand"] = "opens the reset-password dialog",
+        [nameof(StaffViewModel.ResetPasswordCommand)] = "opens the reset-password dialog",
         ["BookAppointmentCommand"] = "navigates to Appointments with the donor (the next screen loads itself; the navigation is a fake here)",
         ["NewRequestCommand"] = "navigates to Requests with the patient (a fake navigation here)",
         ["NewCommand"] = "the same action as AddCommand",
@@ -103,7 +109,7 @@ public sealed class WakingEveryOperationTests
         ["CancelLoadCommand"] = "only cancels",
         ["DiscardCommand"] = "resets the form to what was loaded",
         ["PickPhotoCommand"] = "opens the file picker",
-        ["ChangePasswordCommand"] = "opens the password dialog",
+        [nameof(ProfileViewModel.ChangePasswordCommand)] = "opens the password dialog",
     };
 
     /// <summary>Commands that are disabled on a freshly loaded screen with the first record selected, each with the reason; they make no call of their own.</summary>
@@ -181,7 +187,7 @@ public sealed class WakingEveryOperationTests
     }
 
     /// <summary>The visible "Waking up the server" texts and the visible Cancel button that sits with one of them (within three levels of containers).</summary>
-    private static (List<TextBlock> Texts, Button? Cancel) WakingSurface(Hosted host)
+    private static (List<TextBlock> Texts, Button? Cancel, List<Button> Cancels) WakingSurface(Hosted host)
     {
         var texts = host.All<TextBlock>().Where(t => t.IsVisible && (t.Text ?? string.Empty).Contains("Waking up the server", StringComparison.Ordinal)).ToList();
         var clipped = texts.FirstOrDefault(t => Clipped(t, host.Element));
@@ -190,6 +196,8 @@ public sealed class WakingEveryOperationTests
             texts = []; // text that runs past the edge of what holds it is not something the user can read: it counts as not shown
         }
 
+        // Every waking notice on the surface has its own Cancel (the shell's notice for a toast's action, the screen's for its own operations).
+        List<Button> cancels = [];
         foreach (var text in texts)
         {
             DependencyObject? level = text;
@@ -199,12 +207,17 @@ public sealed class WakingEveryOperationTests
                 var cancel = level is null ? null : Hosted.Descendants(level).OfType<Button>().FirstOrDefault(b => b.IsVisible && b.Content as string == "Cancel");
                 if (cancel is not null)
                 {
-                    return (texts, cancel);
+                    if (!cancels.Contains(cancel))
+                    {
+                        cancels.Add(cancel);
+                    }
+
+                    break;
                 }
             }
         }
 
-        return (texts, null);
+        return (texts, cancels.FirstOrDefault(), cancels);
     }
 
     /// <summary>The screen from the client's DI, with navigation and the receipt viewer faked so no other screen or window can start.</summary>
@@ -443,9 +456,9 @@ public sealed class WakingEveryOperationTests
             return $"{screen.Name}.{commandName}: the waking text is shown but with no visible Cancel";
         }
 
-        foreach (var (_, cancel) in shown.Where(w => w.Cancel is not null))
+        foreach (var cancel in shown.SelectMany(w => w.Cancels))
         {
-            cancel!.Command?.Execute(null);
+            cancel.Command?.Execute(null);
         }
 
         op.Host.Settle(250);
@@ -477,21 +490,26 @@ public sealed class WakingEveryOperationTests
     [InlineData("Staff", ScreenState.NewEditor)]
     [InlineData("Staff", ScreenState.EditEditor)]
     [InlineData("Staff", ScreenState.DialogOpen)]
+    [InlineData("Donors", ScreenState.NavigatedAway)]
+    [InlineData("Patients", ScreenState.NavigatedAway)]
+    [InlineData("Staff", ScreenState.NavigatedAway)]
     public void UndoOfADelete_OnAServerThatNeverAnswers_ShowsWakingAndACancelThatStopsTheRequest_FakeApi(string screenName, ScreenState state)
     {
         var screen = Screens.Single(s => s.Name == screenName);
         var capturesDirectory = Environment.GetEnvironmentVariable("LIFESTREAM_CAPTURE_DIR") is { Length: > 0 } dir ? dir : Path.Combine(AppContext.BaseDirectory, "captures");
         var problem = StaHost.Run(() =>
         {
+            // The real shell, as the user has it: the toast and its waking notice live in the shell, the screen is the page it shows.
             using var op = new Operation(screen, "Undo", state);
             var rig = op.Rig = Part2Harness.NewRig();
             rig.Get<DialogService>().Presenter = new Yes();
             rig.Get<FormDialogService>().Presenter = op.Dialogs;
-            var vm = op.Vm = (ViewModelBase)Create(rig, screen.ViewModel);
-            vm.Attach(rig.Get<ServerStatus>(), TimeProvider.System);
-            var host = op.Host = Hosted.Create(screen.View(vm), Width, Height);
-            Hosted.Await(() => vm.LoadAsync());
-            host.Settle(100);
+            var shell = rig.Get<Lifestream.Client.Shell.ShellViewModel>();
+            var nav = rig.Get<Lifestream.Client.Navigation.INavigationService>();
+            var host = op.Host = Hosted.Create(new Lifestream.Desktop.Shell.ShellView { DataContext = shell }, Width, Height);
+            Hosted.Await(() => nav.NavigateTo(screen.ViewModel));
+            host.Settle(150);
+            var vm = op.Vm = nav.Current!;
             SelectRow(vm, screen.SelectIndex);
             host.Settle(100);
             var toasts = rig.Get<ToastService>();
@@ -502,6 +520,16 @@ public sealed class WakingEveryOperationTests
                 return Task.CompletedTask;
             });
             Assert.True(Hosted.PumpUntil(() => toasts.Toasts.Any(t => t.HasAction), 5000), $"the delete did not finish with an Undo toast: toasts=[{string.Join(" | ", toasts.Toasts.Select(t => t.Message))}] calls=[{string.Join(",", rig.Api.Calls)}]");
+
+            if (state == ScreenState.NavigatedAway)
+            {
+                // The user leaves for another screen (the first one is disposed) and presses Undo there.
+                var other = screen.ViewModel == typeof(PatientsViewModel) ? typeof(DonorsViewModel) : typeof(PatientsViewModel);
+                Hosted.Await(() => nav.NavigateTo(other));
+                host.Settle(250);
+                Assert.IsType(other, nav.Current);
+                Assert.NotSame(vm, nav.Current);
+            }
 
             // The user moves on while the Undo toast is still up: an editor or a dialog opens (the detail pane that used to hold the notice is collapsed or covered).
             if (state == ScreenState.DialogOpen)
@@ -530,12 +558,9 @@ public sealed class WakingEveryOperationTests
             }
 
             op.Server.Install(rig.Api);
-            var undo = toasts.Toasts.First(t => t.HasAction).ActionCommand;
-            Hosted.Await(() =>
-            {
-                undo.Execute(null);
-                return Task.CompletedTask;
-            });
+            var undoButton = host.All<Button>().FirstOrDefault(b => b.IsVisible && b.Content as string == "Undo");
+            Assert.True(undoButton is not null, "the Undo button of the toast is not on screen");
+            ((System.Windows.Automation.Provider.IInvokeProvider)System.Windows.Automation.Peers.UIElementAutomationPeer.CreatePeerForElement(undoButton)!).Invoke();
             host.Settle(150);
             Assert.True(op.Server.Count > 0, "Undo made no API call");
             rig.Get<ServerStatus>().Enter();
@@ -575,7 +600,7 @@ public sealed class WakingEveryOperationTests
             var withCalls = Enum.GetValues<ScreenState>().ToDictionary(s => s, _ => 0);
             foreach (var screen in Screens)
             {
-                foreach (var state in Enum.GetValues<ScreenState>())
+                foreach (var state in Enum.GetValues<ScreenState>().Where(s => s != ScreenState.NavigatedAway))
                 {
                     // All commands of a screen in one state are started together, each on its own screen instance and silent server, so the real 3.6 s of waiting are shared.
                     var operations = new List<Operation>();

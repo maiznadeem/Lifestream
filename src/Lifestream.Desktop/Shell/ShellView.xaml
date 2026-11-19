@@ -55,6 +55,7 @@
       <Grid.RowDefinitions>
         <RowDefinition Height="64" />
         <RowDefinition Height="Auto" />
+        <RowDefinition Height="Auto" />
         <RowDefinition Height="*" />
       </Grid.RowDefinitions>
 
@@ -105,12 +106,16 @@
         </Grid>
       </Border>
 
+      <!-- The waking notice of a toast's action (Undo): the toast outlives the screen that showed it, so this notice belongs to the shell and shows on every screen (SHELL-07). -->
+      <controls:WakingNotice x:Name="ToastActionWakingNotice" Grid.Row="2" Margin="{DynamicResource Inset.L24R24B8}" HorizontalAlignment="Left" MaxWidth="560"
+                             IsActive="{Binding IsToastActionWaking}" CancelCommand="{Binding CancelToastActionCommand}" />
+
       <!-- The page: one view per visit, created from the view model by the locator and given that view model as its DataContext. -->
-      <Grid Grid.Row="2" Margin="{DynamicResource Inset.L24R24B24}">
+      <Grid Grid.Row="3" Margin="{DynamicResource Inset.L24R24B24}">
         <ContentControl x:Name="PageHost" Content="{Binding CurrentPage}" ContentTemplateSelector="{x:Static services:ViewLocator.Instance}" IsTabStop="False" Focusable="False"
                         HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" />
       </Grid>
-      <controls:ToastHost Grid.Row="2" DataContext="{Binding Toasts}" ItemsSource="{Binding Toasts}" />
+      <controls:ToastHost Grid.Row="3" DataContext="{Binding Toasts}" ItemsSource="{Binding Toasts}" />
     </Grid>
   </Grid>
 </UserControl>

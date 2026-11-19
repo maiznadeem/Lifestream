@@ -18,13 +18,20 @@
   Nothing is re-measured: each budget has one stated statistic over a stated sample, and the figures of the one run are what is reported.
 
   Run it on a QUIET machine: nothing else may be running. With -AssertBudgets the script refuses to start when the CPU is busy or another registered process is
-  live, and exits 1 when any budget is missed, 2 when the machine was not quiet or something was broken (no signal), 0 when every budget is met.
+  live (the process that launched the script is never "another", whatever it is called). It exits 0 only when every expected measurement is present and met:
+
+    1  a budget was missed (with -AssertBudgets), an expected measurement is missing ("MISSED <budget> <screen>"), or any test run failed
+    2  the machine was not quiet, something was broken, or nothing was measured (no phase, an unknown phase, no record at all): no signal
+    0  every budget is met
+
+  A measurement that could not be taken is a MISSED row of its own, never an infinite or empty value. The judging lives in perf-report.ps1 (tests in tests/infra/PerfHarness.Tests.ps1).
 
 .PARAMETER AssertBudgets  Exit non-zero on any miss, and refuse to measure on a busy machine.
 .PARAMETER ResultsFile    Where the report goes (default docs/perf/results.md).
 .PARAMETER Phases         Which parts to run: launch, timing, 1x, 10x, 100x (default all). "timing" runs the fake-API tests that assert a wall-clock budget.
 .PARAMETER ColdRuns       Fresh processes for the cold dashboard (default 7, the statistic is their median).
 .PARAMETER RunDir         The orchestrated run folder; when it and its launcher exist the API is started through the launcher.
+.PARAMETER FromResults    Replay: judge an existing measurements.jsonl instead of measuring (same verdict code, same exit codes; used by the harness self-tests).
 #>
 [CmdletBinding()]
 param(
@@ -37,17 +44,22 @@ param(
     [string]$Launcher = 'G:/Claude/config/plugins/cache/PersonalizedClaudeToolkit/coding-prefs/0.4.0/skills/orchestrated-run/scripts',
     [string]$WorkDir,
     [switch]$SkipQuietCheck,   # only for the planted-failure demonstrations: the failure they show does not depend on a quiet machine
-    [string]$TestFilter   # development only: run this test filter instead of the phase's own
+    [string]$TestFilter,   # development only: run this test filter instead of the phase's own
+    [string]$FromResults
 )
 
 $ErrorActionPreference = 'Stop'
-$Phases = @($Phases | ForEach-Object { $_ -split ',' } | Where-Object { $_ })
+. (Join-Path $PSScriptRoot 'perf-report.ps1')
+try { $Phases = Get-PerfPhases $Phases }
+catch { Write-Host "ERROR: $($_.Exception.Message)"; Write-Host 'RESULT: NO SIGNAL or broken (exit 2)'; exit 2 }
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..' '..')).Path
-if (-not $ResultsFile) { $ResultsFile = Join-Path $root 'docs' 'perf' 'results.md' }
+$replay = [bool]$FromResults
+if ($replay -and -not (Test-Path $FromResults)) { Write-Host "ERROR: -FromResults file not found: $FromResults"; exit 2 }
+if (-not $ResultsFile -and -not $replay) { $ResultsFile = Join-Path $root 'docs' 'perf' 'results.md' }   # a replay never overwrites the committed report unless asked to
 if (-not $WorkDir) { $WorkDir = Join-Path ([IO.Path]::GetTempPath()) ('lifestream-perf-' + [guid]::NewGuid().ToString('N').Substring(0, 8)) }
 New-Item -ItemType Directory -Force -Path $WorkDir | Out-Null
-$jsonl = Join-Path $WorkDir 'measurements.jsonl'
-New-Item -ItemType File -Force -Path $jsonl | Out-Null
+$jsonl = if ($replay) { (Resolve-Path $FromResults).Path } else { Join-Path $WorkDir 'measurements.jsonl' }
+if (-not $replay) { New-Item -ItemType File -Force -Path $jsonl | Out-Null }
 $useLauncher = (Test-Path (Join-Path $Launcher 'runproc.py')) -and (Test-Path $RunDir)
 $tag = (Get-Date -Format 'HHmmss')
 
@@ -59,16 +71,19 @@ function Add-Record($budget, $name, $dataset, $stat, $n, $value, $unit, $limit, 
 }
 
 # ---- machine and quiet check ----
-$cpu = Get-CimInstance Win32_Processor | Select-Object -First 1
-$os = Get-CimInstance Win32_OperatingSystem
-$machine = [ordered]@{
-    cpu = "$($cpu.Name.Trim()) ($($cpu.NumberOfCores) cores, $($cpu.NumberOfLogicalProcessors) threads)"
-    ram = "$([math]::Round($os.TotalVisibleMemorySize / 1MB, 1)) GB"
-    os = "$($os.Caption) $($os.Version)"
-    dotnet = (& dotnet --version)
-    power = ((powercfg /getactivescheme) -join ' ') -replace '^.*\((.*)\).*$', '$1'
+if ($replay) { $machine = [ordered]@{ cpu = 'replayed results, not measured'; ram = 'n/a'; os = 'n/a'; dotnet = 'n/a'; power = 'n/a' } }
+else {
+    $cpu = Get-CimInstance Win32_Processor | Select-Object -First 1
+    $os = Get-CimInstance Win32_OperatingSystem
+    $machine = [ordered]@{
+        cpu = "$($cpu.Name.Trim()) ($($cpu.NumberOfCores) cores, $($cpu.NumberOfLogicalProcessors) threads)"
+        ram = "$([math]::Round($os.TotalVisibleMemorySize / 1MB, 1)) GB"
+        os = "$($os.Caption) $($os.Version)"
+        dotnet = (& dotnet --version)
+        power = ((powercfg /getactivescheme) -join ' ') -replace '^.*\((.*)\).*$', '$1'
+    }
+    if ($machine.dotnet -notmatch '^11\.') { Write-Host "ERROR: dotnet $($machine.dotnet) found; the .NET 11 SDK must be first on PATH."; exit 2 }
 }
-if ($machine.dotnet -notmatch '^11\.') { Write-Host "ERROR: dotnet $($machine.dotnet) found; the .NET 11 SDK must be first on PATH."; exit 2 }
 
 function Test-Quiet {
     $busy = @()
@@ -76,8 +91,9 @@ function Test-Quiet {
     $avg = ($samples | Measure-Object -Average).Average
     if ($avg -gt 25) { $busy += "CPU is $([math]::Round($avg))% busy (limit 25%)" }
     if ($useLauncher) {
-        $others = (& python (Join-Path $Launcher 'killproc.py') --run $RunDir --list) | Where-Object { $_ -match 'live=yes' -and $_ -notmatch '^monitor ' -and $_ -notmatch '^b-10-perf' }
-        foreach ($o in $others) { $busy += "another registered process is live: $(($o -split ' ')[0])" }
+        # Whatever launched this script (through the run launcher, under any name) is registered and live by definition: it is this run, not another one.
+        $others = Get-BusyRegisteredProcesses -ListLines @(& python (Join-Path $Launcher 'killproc.py') --run $RunDir --list) -AncestorPids (Get-AncestorPids)
+        foreach ($o in $others) { $busy += "another registered process is live: $o" }
     }
     return $busy
 }
@@ -85,12 +101,15 @@ function Test-Quiet {
 $cleanup = New-Object System.Collections.Generic.List[scriptblock]
 $exitCode = 0
 $seedDll = $null
+$script:testFailures = @()
 try {
-    if ($AssertBudgets -and -not $SkipQuietCheck) {
+    if ($replay) { Write-Host "== replaying $jsonl (nothing is measured) ==" }
+    elseif ($AssertBudgets -and -not $SkipQuietCheck) {
         $busy = Test-Quiet
         if ($busy) { Fail ("the machine is not quiet: " + ($busy -join '; ') + ". Run this on a quiet machine (nothing else running).") 2 }
     }
 
+    if (-not $replay) {
     # ---- build ----
     Write-Host '== build =='
     foreach ($project in @('src/Lifestream.Api', 'tests/perf/Lifestream.Perf.Seed', 'tests/Lifestream.Desktop.Tests')) {
@@ -100,12 +119,20 @@ try {
     $seedDll = Join-Path $root 'tests/perf/Lifestream.Perf.Seed/bin/Release/net11.0/Lifestream.Perf.Seed.dll'
     $apiDll = Join-Path $root 'src/Lifestream.Api/bin/Release/net11.0/Lifestream.Api.dll'
 
-    $script:testFailures = @()
     Write-Host '== publish the perf tests (self-contained, ReadyToRun) =='
     $testPublish = Join-Path $root 'tests/Lifestream.Desktop.Tests/bin/perf-r2r'
     & dotnet publish (Join-Path $root 'tests/Lifestream.Desktop.Tests') -c Release -r win-x64 --self-contained -p:PublishReadyToRun=true -o $testPublish --nologo -v quiet | Out-Host
     if ($LASTEXITCODE -ne 0) { Fail 'publish of the perf tests failed' }
     $script:testExe = Join-Path $testPublish 'Lifestream.Desktop.Tests.exe'
+    function Invoke-TestExe([string]$trait, [int]$tail = 12) {
+        # Runs the published test exe for one trait. Returns its exit code, or 3 when it ran no test at all: a trait that matches nothing is a run that proved nothing.
+        $output = @(& $script:testExe -trait $trait -noColor 2>&1 | ForEach-Object { "$_" })
+        $code = $LASTEXITCODE
+        $output | Select-Object -Last $tail | Out-Host
+        $total = $output | ForEach-Object { if ($_ -match 'Total:\s*(\d+)') { [int]$Matches[1] } } | Select-Object -Last 1
+        if ($code -eq 0 -and (-not $total)) { Write-Host "   NO SIGNAL: no test ran for -trait $trait"; return 3 }
+        return $code
+    }
 
     # ---- 1. launch ----
     if ($Phases -contains 'launch') {
@@ -118,9 +145,9 @@ try {
 
         # The app must find its appsettings.json whatever folder it is started from.
         $env:LIFESTREAM_PUBLISHED_EXE = $exe
-        & $script:testExe -trait 'PerfPhase=launch-cwd' -noColor 2>&1 | Select-Object -Last 6 | Out-Host
-        if ($LASTEXITCODE -ne 0) { $script:testFailures += 'launch-cwd' }
-        Add-Record 'launch-cwd' 'Published exe started from the temp folder reaches the login window' 'n/a' 'one run' 1 ([int]($LASTEXITCODE -ne 0)) 'failures' '== 0' ($LASTEXITCODE -eq 0) ''
+        $cwdCode = Invoke-TestExe 'PerfPhase=launch-cwd' 6
+        if ($cwdCode -ne 0) { $script:testFailures += 'launch-cwd' }
+        Add-Record 'launch-cwd' 'Published exe started from the temp folder reaches the login window' 'n/a' 'one run' 1 ([int]($cwdCode -ne 0)) 'failures' '== 0' ($cwdCode -eq 0) ''
 
         function Measure-Launch {
             $pipeName = 'lifestream-perf-' + [guid]::NewGuid().ToString('N')
@@ -156,10 +183,12 @@ try {
     # ---- 1b. wall-clock budgets of the fake-API tests (Category=Perf, left out of the default run because a loaded machine fails them) ----
     if ($Phases -contains 'timing') {
         Write-Host '== fake-API timing tests (Desktop PerfPhase=timing, Client Category=Perf) =='
-        & $script:testExe -trait 'PerfPhase=timing' -noColor 2>&1 | Select-Object -Last 12 | Out-Host
-        if ($LASTEXITCODE -ne 0) { $script:testFailures += 'timing (Desktop)' }
-        & dotnet test (Join-Path $root 'tests/Lifestream.Client.Tests') -c Release --filter 'Category=Perf' 2>&1 | Select-Object -Last 12 | Out-Host
-        if ($LASTEXITCODE -ne 0) { $script:testFailures += 'timing (Client)' }
+        if ((Invoke-TestExe 'PerfPhase=timing') -ne 0) { $script:testFailures += 'timing (Desktop)' }
+        $clientOutput = @(& dotnet test (Join-Path $root 'tests/Lifestream.Client.Tests') -c Release --filter 'Category=Perf' 2>&1 | ForEach-Object { "$_" })
+        $clientCode = $LASTEXITCODE
+        $clientOutput | Select-Object -Last 12 | Out-Host
+        $clientTotal = $clientOutput | ForEach-Object { if ($_ -match 'Total(?: tests)?:\s*(\d+)') { [int]$Matches[1] } } | Select-Object -Last 1
+        if ($clientCode -ne 0 -or -not $clientTotal) { if ($clientCode -eq 0) { Write-Host '   NO SIGNAL: no Client Category=Perf test ran' }; $script:testFailures += 'timing (Client)' }
     }
 
     # ---- fixture databases, API, measurements ----
@@ -213,8 +242,7 @@ try {
             $env:LIFESTREAM_PERF_RESULTS = $jsonl
             function Invoke-Perf([string]$phase) {
                 # The tests run from the self-contained ReadyToRun publish, as the shipped app does: the JIT cost of a Debug-like test host is not what a user pays.
-                & $testExe -trait "PerfPhase=$phase" -noColor | Select-Object -Last 45 | Out-Host
-                return $LASTEXITCODE
+                return (Invoke-TestExe "PerfPhase=$phase" 45)
             }
             $phaseNames = @($filters | ForEach-Object { $_ -replace '^.*PerfPhase=', '' })
             if ($TestFilter) { $phaseNames = @($TestFilter -replace '^.*PerfPhase=', ''); $coldRuns = 0 }
@@ -243,6 +271,7 @@ try {
     if ($Phases -contains '1x') { Invoke-Phase '1x' 1 @('Category=Perf&PerfPhase=lists') }
     if ($Phases -contains '10x') { Invoke-Phase '10x' 10 @('Category=Perf&PerfPhase=staff') }
     if ($Phases -contains '100x') { Invoke-Phase '100x' 100 @('Category=Perf&PerfPhase=lists', 'Category=Perf&PerfPhase=screens') $ColdRuns }
+    }   # not a replay
 }
 catch [System.OperationCanceledException] { }
 catch { Write-Host "ERROR: $($_.Exception.Message)"; $exitCode = 2 }
@@ -254,24 +283,12 @@ finally {
 }
 if ($script:exitCode) { $exitCode = $script:exitCode }
 
-# ---- report ----
-$records = @(Get-Content $jsonl -ErrorAction SilentlyContinue | Where-Object { $_ } | ForEach-Object { $_ | ConvertFrom-Json })
-# The cold dashboard is judged on the median of its fresh-process runs, not on any one run.
-$cold = @($records | Where-Object { $_.budget -eq 'cold-dashboard' })
-if ($cold.Count) {
-    $values = @($cold.value | Sort-Object)
-    $med = if ($values.Count % 2) { $values[[int][math]::Floor($values.Count / 2)] } else { ($values[$values.Count / 2 - 1] + $values[$values.Count / 2]) / 2 }
-    $records = @($records | Where-Object { $_.budget -ne 'cold-dashboard' })
-    $records += [pscustomobject]@{ budget = 'cold-dashboard'; name = 'Dashboard first chart render after the data arrives, fresh process'; dataset = '100x'; stat = "median of $($cold.Count) fresh processes"; n = $cold.Count; value = [math]::Round($med, 1); unit = 'ms'; limit = '< 300'; pass = ($med -lt 300 -and $cold.Count -ge $ColdRuns); detail = "runs (ms): $(($cold | ForEach-Object { $_.value }) -join ', '); max $(($values | Select-Object -Last 1)) ms" }
-}
-$expected = @()
-if ($Phases -contains 'launch') { $expected += 'launch', 'launch-cwd' }
-if ($Phases -contains '1x' -or $Phases -contains '100x') { $expected += 'lists', 'dashboard' }
-if ($Phases -contains '10x') { $expected += 'staff-payload' }
-if ($Phases -contains '100x') { $expected += 'skeleton', 'api-calls', 'ui-gap', 'grid', 'cold-dashboard' }
-$missing = @($expected | Select-Object -Unique | Where-Object { $b = $_; -not ($records | Where-Object { $_.budget -eq $b }) })
-foreach ($m in $missing) { Write-Host "NO SIGNAL: no measurement was recorded for '$m'"; $exitCode = 2 }
-$misses = @($records | Where-Object { -not $_.pass })
+# ---- verdict and report ----
+$lines = @(Get-Content $jsonl -ErrorAction SilentlyContinue | Where-Object { $_ } | ForEach-Object { $_ | ConvertFrom-Json })
+$verdict = Get-PerfVerdict -Lines $lines -Phases $Phases -TestFailures @($script:testFailures) -AssertBudgets:$AssertBudgets -ColdRuns $ColdRuns
+$records = @($verdict.Records)
+$misses = @($verdict.Misses)
+$missing = @($verdict.Missing)
 
 $labels = @{
     'launch-cwd' = 'Published app started from another folder (temp) reaches the login window'
@@ -303,7 +320,7 @@ $server = ($records | Where-Object { $_.budget -eq 'fixture' } | Select-Object -
 Line "| SQL Server | $server |"
 Line "| Quiet check | $(if ($SkipQuietCheck) { 'SKIPPED (planted-failure demonstration)' } elseif ($AssertBudgets) { 'CPU under 25% and no other registered process live before the run' } else { 'not asserted (run without -AssertBudgets)' }) |"
 Line
-Line "**Verdict: $(if ($misses.Count -eq 0 -and $missing.Count -eq 0 -and -not $script:testFailures) { 'every budget met' } else { "$($misses.Count) measurement(s) missed" })**"
+Line "**Verdict: $(if ($misses.Count -eq 0 -and $missing.Count -eq 0 -and -not $script:testFailures -and $verdict.ExitCode -eq 0) { 'every budget met' } else { "$($misses.Count) measurement(s) missed, $($missing.Count) expected measurement(s) missing, $(@($script:testFailures).Count) test run(s) failed" })**"
 Line
 Line '## Summary'
 Line
@@ -311,7 +328,10 @@ Line '| Budget | Limit | Measured | Statistic | Verdict |'
 Line '|---|---|---|---|---|'
 foreach ($b in 'launch', 'launch-cwd', 'skeleton', 'lists', 'dashboard', 'api-calls', 'ui-gap', 'staff-payload', 'grid', 'cold-dashboard') {
     $rows = @($records | Where-Object { $_.budget -eq $b })
-    if (-not $rows.Count) { continue }
+    if (-not $rows.Count) {
+        if (@($missing | Where-Object { $_ -like "$b*" }).Count) { Line "| $($labels[$b]) | $($limits[$b]) | no measurement | n/a | **MISSING** |" }
+        continue
+    }
     $bad = @($rows | Where-Object { -not $_.pass }).Count
     $values = @($rows | ForEach-Object { $_.value })
     $unit = $rows[0].unit
@@ -339,18 +359,16 @@ Line '- **API timings** are round trips over loopback HTTP from request sent to 
 Line '- **Screen measurements** use the real client (real HTTP client, wake-aware handler, session, navigation, view models, views) hosted off-screen over a real socket to that API. The skeleton time runs from the navigation command until the dispatcher has finished the layout pass that puts the skeleton on screen (the final present to the screen adds at most one frame). The UI-thread gap is the longest an input-priority message posted from another thread waited for the UI thread while a screen loaded over a 250 ms-per-request link, first visits included. The API-call count includes retries and lazy requests that land within 400 ms of the load.'
 Line '- **Cold dashboard**: a fresh process each time (`PerfPhase=cold`): warm-up as at app start, sign-in, then the dashboard is loaded; the clock starts when the response body is fully in memory and stops when a rendered bitmap of the page shows both chart series (each look renders the page, which is part of the time).'
 Line '- Nothing is shown on the desktop and no focus is taken: every view is hosted in a window whose parent is a message-only window, and the launch window is off-screen and not activated.'
-$null = New-Item -ItemType Directory -Force -Path (Split-Path $ResultsFile)
-Set-Content -Path $ResultsFile -Value $md.ToString() -Encoding utf8
+if ($ResultsFile) {
+    $null = New-Item -ItemType Directory -Force -Path (Split-Path $ResultsFile)
+    Set-Content -Path $ResultsFile -Value $md.ToString() -Encoding utf8
+}
 
 Write-Host
-foreach ($r in $misses) { Write-Host "MISSED: [$($r.budget)] $($r.name) ($($r.dataset)): $($r.value) $($r.unit), limit $($r.limit) - $($r.detail)" }
-if ($script:testFailures) { Write-Host "test runs with failures: $($script:testFailures -join '; ')" }
-Write-Host "report: $ResultsFile"
-if ($exitCode -eq 2) { Write-Host 'RESULT: NO SIGNAL or broken (exit 2)'; exit 2 }
-if ($misses.Count -or $missing.Count) {
-    Write-Host "RESULT: $($misses.Count) budget measurement(s) MISSED"
-    if ($AssertBudgets) { exit 1 }
-    exit 0
-}
-Write-Host 'RESULT: every budget met'
-exit 0
+foreach ($m in $verdict.Messages) { Write-Host $m }
+if ($ResultsFile) { Write-Host "report: $ResultsFile" }
+# A run that was broken (the script's own failure) or measured nothing is no signal, whatever else was recorded.
+$final = if ($exitCode -eq 2) { 2 } else { $verdict.ExitCode }
+if ($final -eq 2) { Write-Host 'RESULT: NO SIGNAL or broken (exit 2)'; exit 2 }
+Write-Host $verdict.Result
+exit $final

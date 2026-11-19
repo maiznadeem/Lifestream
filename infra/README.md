@@ -13,7 +13,7 @@ environment variables read by `main.bicepparam`.
 | Container Apps job `lifestream-migrate` | Manual trigger only. Identity `lifestream-migrator` (user-assigned, no password). Secret `owner-admin-password`. |
 | SQL server `lifestream-server` and database `BloodBank` | Declared so the settings are code: free offer (`useFreeLimit`, `AutoPause`), auto-pause 60 min, Entra administrator, Entra-only switch, auditing, locks, backup policy. No firewall rule is declared: `sync-sql-firewall.ps1` owns them (see below). |
 | `lifestream-audit` Log Analytics workspace | Receives SQL sign-in and schema-change audit events. 31-day retention, daily cap 0.1 GB, so it stays inside the free 5 GB a month. |
-| `lifestream-deployer` identity | GitHub Actions signs in as this identity through an OIDC federated credential for `MaizNadeem/Lifestream-WPF` branch `master`. Contributor on the resource group only. No secret. |
+| `lifestream-deployer` identity | GitHub Actions signs in as this identity through an OIDC federated credential for `maiznadeem/lifestream` branch `master`. Contributor on the resource group only. No secret. |
 | Budget `lifestream-monthly` | 1 per month, email alerts at 50% and 100% actual. An alert does not stop spending; the design relies on scale-to-zero and the free offer for that. |
 
 ### Why nothing here bills while there is no traffic (OWN-02)

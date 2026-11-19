@@ -61,8 +61,8 @@ public sealed class AppointmentsViewModel : SortedRecordListViewModel<Appointmen
         }
 
         RescheduleCommand = Command(_ => EditCommand.ExecuteAsync(), () => IsPending && EditCommand.CanExecute(null));
-        RecordDonationCommand = Command(_ => RecordDonationAsync(), () => IsPending && !IsEditing);
-        CancelAppointmentCommand = Command(_ => CancelSelectedAsync(), () => IsPending && !IsEditing);
+        RecordDonationCommand = Command(_ => RecordDonationAsync(), () => IsPending && !IsEditing, opensModal: true);
+        CancelAppointmentCommand = Command(_ => CancelSelectedAsync(), () => IsPending && !IsEditing, opensModal: true);
         FilterByDonorCommand = Command((parameter, _) =>
         {
             if (parameter is AppointmentListItem item)
@@ -80,7 +80,7 @@ public sealed class AppointmentsViewModel : SortedRecordListViewModel<Appointmen
                 await _navigation.NavigateTo<DonorsViewModel>(new ListPrefilter(RecordId: item.DonorId)).ConfigureAwait(true);
             }
         });
-        ViewReceiptCommand = Command(_ => Detail?.ReceiptId is { } id ? _receipts.ShowAsync(id, isDuplicate: true) : Task.CompletedTask, () => Detail?.ReceiptId is not null);
+        ViewReceiptCommand = Command(_ => Detail?.ReceiptId is { } id ? _receipts.ShowAsync(id, isDuplicate: true) : Task.CompletedTask, () => Detail?.ReceiptId is not null, opensModal: true);
         PropertyChanged += (_, e) =>
         {
             if (e.PropertyName is nameof(Detail) or nameof(Editor))

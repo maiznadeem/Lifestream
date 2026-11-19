@@ -79,3 +79,52 @@ Describe 'INFRA-19 generate-screenshots.ps1' {
         $r.ExitCode | Should -Be 2
     }
 }
+
+Describe 'INFRA-19 the screenshots come from the real demo dataset, never from the fake-data tests' {
+    BeforeAll {
+        $script:Repo = (Resolve-Path (Join-Path $PSScriptRoot '..' '..')).Path
+        $script:Shots = Get-Content (Join-Path $script:Repo 'tools' 'generate-screenshots.ps1') -Raw
+        $script:Tests = Join-Path $script:Repo 'tests' 'Lifestream.Desktop.Tests'
+    }
+
+    It 'the real run seeds a fresh database with the demo generator, starts the real API, runs only the real-client capture test and drops the database in a finally block' {
+        $script:Shots | Should -Match 'Lifestream\.Perf\.Seed'
+        $script:Shots | Should -Match '--factor 1'
+        $script:Shots | Should -Match 'LIFESTREAM_SHOTS_API'
+        $script:Shots | Should -Match "--filter 'Category=Screenshots'"
+        $script:Shots | Should -Match '(?s)finally \{.*Stop-Quietly.*drop --name'
+    }
+
+    It 'exactly one test is tagged Category=Screenshots, and it uses the real API and the real demo generator, not the fake API or DemoData.cs' {
+        $tagged = @(Get-ChildItem $script:Tests -Filter '*.cs' -Recurse | Where-Object { $_.FullName -notmatch '[\/](bin|obj)[\/]' } | Where-Object { (Get-Content $_.FullName -Raw) -match 'Trait\("Category", "Screenshots"\)' })
+        $tagged.Count | Should -Be 1
+        $tagged[0].Name | Should -Be 'DemoScreenshotTests.cs'
+        $body = Get-Content $tagged[0].FullName -Raw
+        $body | Should -Match 'RealRig\.CreateSignedOut'
+        $body | Should -Match 'DemoCommand\.ExecuteAsync'
+        $body | Should -Match 'DemoDataGenerator'
+        $body | Should -Not -Match 'DemoData\.Configure|FeatureHarness|Part2Harness|new Rig\('
+    }
+
+    It 'no screenshot test that uses the fake API is tagged Category=Screenshots any more' {
+        foreach ($f in 'ShellScreenTests.cs', 'Part2ShellScreenTests.cs') {
+            (Get-Content (Join-Path $script:Tests 'Features' $f) -Raw) | Should -Not -Match 'Category", "Screenshots'
+        }
+    }
+
+    It 'the manifest of a real run records what the dashboard showed (fake capture that writes dataset.json)' {
+        $fake = Join-Path $TestDrive 'withdata.ps1'
+        @"
+Add-Type -AssemblyName System.Drawing
+`$bmp = New-Object System.Drawing.Bitmap 1366, 768
+`$bmp.Save((Join-Path `$env:LIFESTREAM_CAPTURE_DIR 'login.png'), [System.Drawing.Imaging.ImageFormat]::Png); `$bmp.Dispose()
+'{"dataset":"demo","generator":"DemoDataGenerator","today":"2026-11-19","dashboard":{"Donors":40,"Patients":35}}' | Set-Content (Join-Path `$env:LIFESTREAM_CAPTURE_DIR 'dataset.json')
+"@ | Set-Content $fake
+        $out = Join-Path $TestDrive 'oD'; $store = Join-Path $TestDrive 'sD'
+        $r = Invoke-Shots $fake @('login') '' $out $store
+        $r.ExitCode | Should -Be 0 -Because $r.Output
+        $m = Get-Content (Join-Path $out 'screenshots.json') -Raw | ConvertFrom-Json
+        $m.dashboard.Donors | Should -Be 40
+        $m.source | Should -Match 'Try the demo'
+    }
+}
