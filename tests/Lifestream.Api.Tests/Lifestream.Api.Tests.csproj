@@ -4,6 +4,8 @@
     <VSTestTestCaseFilter>Category!=Perf</VSTestTestCaseFilter>
   </PropertyGroup>
   <ItemGroup>
+    <!-- Most test time is spent waiting on SQL Server: the aggressive algorithm starts another test while one awaits, still with at most one running test per processor. -->
+    <Content Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
     <ProjectReference Include="..\..\src\Lifestream.Api\Lifestream.Api.csproj" />
   </ItemGroup>
