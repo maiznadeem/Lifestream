@@ -260,6 +260,8 @@ public sealed class Phase2bRenderTests
     [InlineData("receipts-list-max", "light")]
     [InlineData("staff-salary", "light")]
     [InlineData("staff-salary", "dark")]
+    [InlineData("staff-editor", "light")]
+    [InlineData("staff-editor", "dark")]
     [InlineData("profile-changed", "light")]
     [InlineData("profile-changed", "dark")]
     [InlineData("profile-changed-max", "light")]
@@ -285,6 +287,10 @@ public sealed class Phase2bRenderTests
                         break;
                     case ReceiptsViewModel receipts:
                         Hosted.Await(() => receipts.LoadAsync());
+                        break;
+                    case StaffViewModel staff when state == "staff-editor":
+                        Hosted.Await(() => staff.LoadAsync());
+                        Hosted.Await(() => staff.AddCommand.ExecuteAsync());
                         break;
                     case StaffViewModel staff:
                         Hosted.Await(() => staff.LoadAsync());
@@ -341,6 +347,9 @@ public sealed class Phase2bRenderTests
                 break;
             case "staff-salary":
                 Assert.Contains("Salary: 2,000–3,500", facts.Texts);
+                break;
+            case "staff-editor":
+                Assert.Contains("New staff member", facts.Texts);
                 break;
             default:
                 Assert.Contains("You have unsaved changes.", facts.Texts);

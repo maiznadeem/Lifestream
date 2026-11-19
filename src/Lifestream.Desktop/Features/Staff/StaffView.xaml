@@ -213,7 +213,7 @@
     </Grid>
 
     <!-- The selected person, or the add / edit form. -->
-    <controls:SidePanel x:Name="Panel" Grid.Column="1" IsOpen="{Binding IsPanelOpen}" Overline="{Binding PanelOverline}" CloseCommand="{Binding ClosePanelCommand}"
+    <controls:SidePanel x:Name="Panel" Grid.Column="1" IsOpen="{Binding IsPanelOpen}" Overline="{Binding PanelOverline}" CloseCommand="{Binding ClosePanelCommand}" lists:DetailPaneFrame.IsInPanel="True"
                         AutomationProperties.Name="Staff member details">
       <Grid>
         <Grid Visibility="{Binding Editor, Converter={StaticResource NullToVisible}}">

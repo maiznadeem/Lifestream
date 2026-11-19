@@ -9,7 +9,7 @@ namespace Lifestream.Api.Tests;
 /// <summary>GET receipts/counts: the Receipts tabs' counts agree with the list's totals for the same filters, come from one query, and need a signed-in user.</summary>
 public sealed class ReceiptCountTests(ApiFixture fx) : IClassFixture<ApiFixture>
 {
-    private async Task<int> ListTotalAsync(TestUser user, string query)
+    private static async Task<int> ListTotalAsync(TestUser user, string query)
     {
         var page = await (await user.Client.GetApi(ApiRoutes.Receipts, query)).Read<PagedResult<ReceiptListItem>>();
         return page.Total;
