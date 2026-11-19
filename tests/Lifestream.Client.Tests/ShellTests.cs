@@ -244,6 +244,46 @@ public sealed class ShellTests
     }
 
     [Fact]
+    public async Task Shell_OnDemoReset_WithUnsavedInput_KeepsTheInputAndOffersReload()
+    {
+        var asked = new List<string>();
+        var answer = false;
+        var (rig, shell) = CreateShell(Role.Admin);
+        using (rig)
+        {
+            rig.Get<DialogService>().Presenter = new StubPresenter((title, _) =>
+            {
+                asked.Add(title);
+                return answer;
+            });
+            CountingViewModel.Loads = 0;
+            var navigation = rig.Get<INavigationService>();
+            await navigation.NavigateTo<CountingViewModel>();
+            var form = (CountingViewModel)navigation.Current!;
+            form.HasUnsavedChanges = true;
+            var toasts = rig.Get<IToastService>();
+
+            rig.Get<ServerStatus>().NotifyDemoReset();
+            await Task.Delay(50);
+
+            Assert.Equal(1, CountingViewModel.Loads); // the screen was NOT reloaded under the typed input
+            Assert.Same(form, navigation.Current);
+            var toast = Assert.Single(toasts.Toasts);
+            Assert.Contains("Demo data was reset", toast.Message);
+            Assert.Equal("Reload", toast.ActionLabel);
+            Assert.NotNull(shell);
+
+            await toast.ActionCommand.ExecuteAsync(); // the user presses Reload, is asked, and stays
+            Assert.Equal(1, CountingViewModel.Loads);
+            Assert.Equal(["Discard changes?"], asked);
+
+            answer = true;
+            await toast.ActionCommand.ExecuteAsync(); // asked again, discards: now it reloads
+            Assert.Equal(2, CountingViewModel.Loads);
+        }
+    }
+
+    [Fact]
     public async Task Navigation_LeavingADirtyForm_AsksDiscardChanges_AndStaysWhenRefused()
     {
         var asked = new List<(string Title, string Verb)>();
