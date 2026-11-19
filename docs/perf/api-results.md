@@ -12,6 +12,10 @@ runners are too noisy); locally the tests assert the budget for every list shape
 36-month dashboard is measured for information, not asserted). Both runs use the same requests, including the common filter
 values (status `Fulfilled`/`Completed`, blood type `OPos`), one-letter searches and deep pages.
 
+The gate runs the whole suite at the same time, so a shape that misses the budget is measured again (up to 3 rounds in all, best round
+counts; threshold unchanged): a scan or a slow query misses every round, a burst of load from elsewhere does not. The tables below
+were produced on a quiet machine and every shape met the budget in its first round.
+
 Every list answers with one SQL command (items and total count together); name searches are prefix matches on indexed columns.
 The execution plans of the same queries are checked separately by `ApiPlanMatrixTests` (see `docs/database.md`).
 
