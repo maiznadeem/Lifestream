@@ -61,6 +61,12 @@
     <Setter Property="FontFamily" Value="{DynamicResource Font.Family}" />
     <Setter Property="FontSize" Value="{StaticResource FontSize.Body}" />
     <Setter Property="UseLayoutRounding" Value="True" />
+    <!-- Small text is laid out on whole pixels (GDI-compatible metrics) so 12 to 14 DIP text is crisp with ClearType; the large text styles opt back
+         into Ideal, where sub-pixel positioning looks better (Theme/Typography.xaml). -->
+    <Setter Property="TextOptions.TextFormattingMode" Value="Display" />
+    <Setter Property="TextOptions.TextRenderingMode" Value="ClearType" />
+    <!-- The app icon in the title bar, the taskbar and Alt+Tab (the same .ico as the executable's). -->
+    <Setter Property="Icon" Value="pack://application:,,,/Lifestream;component/Assets/Lifestream.ico" />
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="chrome:ChromeWindow">
@@ -75,8 +81,12 @@
                   <ColumnDefinition Width="*" />
                   <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <TextBlock Style="{StaticResource Text.Label}" Text="{TemplateBinding Title}" Foreground="{DynamicResource Brush.TextSecondary}" Margin="{DynamicResource Inset.L12}"
-                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" AutomationProperties.Name="Window title" />
+                <StackPanel Orientation="Horizontal" Margin="{DynamicResource Inset.L12}" VerticalAlignment="Center">
+                  <Image x:Name="CaptionMark" Source="{DynamicResource Image.LogoSmall}" Width="16" Height="16" Margin="{DynamicResource Inset.R8}" VerticalAlignment="Center"
+                         RenderOptions.BitmapScalingMode="HighQuality" />
+                  <TextBlock Style="{StaticResource Text.Label}" Text="{TemplateBinding Title}" Foreground="{DynamicResource Brush.TextSecondary}"
+                             VerticalAlignment="Center" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" AutomationProperties.Name="Window title" />
+                </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
                   <Button x:Name="PART_Minimize" Style="{StaticResource CaptionButton}" Command="{x:Static SystemCommands.MinimizeWindowCommand}"
                           AutomationProperties.Name="Minimize" ToolTip="Minimize">

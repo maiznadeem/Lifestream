@@ -14,7 +14,7 @@
     <Style x:Key="Card.Button" TargetType="Button">
       <Setter Property="Background" Value="{DynamicResource Brush.SurfaceRaised}" />
       <Setter Property="Foreground" Value="{DynamicResource Brush.TextPrimary}" />
-      <Setter Property="BorderBrush" Value="{DynamicResource Brush.BorderSubtle}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Brush.BorderCard}" />
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="Padding" Value="{DynamicResource Pad.12}" />
       <Setter Property="HorizontalContentAlignment" Value="Stretch" />
@@ -24,10 +24,10 @@
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="Button">
-            <Border x:Name="Bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
+            <controls:Card x:Name="Bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
                     CornerRadius="{DynamicResource Radius.Card}" Padding="{TemplateBinding Padding}">
               <ContentPresenter />
-            </Border>
+            </controls:Card>
             <ControlTemplate.Triggers>
               <Trigger Property="IsMouseOver" Value="True">
                 <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.SurfaceHover}" />
@@ -155,7 +155,7 @@
         </controls:ChartFrame>
 
         <!-- Totals for the chosen period: numbers right-aligned under right-aligned headers, rows separated by lines only. -->
-        <Border feat:Edge.Right="{DynamicResource Space.16}" feat:Edge.Bottom="{DynamicResource Space.16}" Padding="{DynamicResource Pad.16}" Background="{DynamicResource Brush.SurfaceRaised}" CornerRadius="{DynamicResource Radius.Card}">
+        <controls:Card feat:Edge.Right="{DynamicResource Space.16}" feat:Edge.Bottom="{DynamicResource Space.16}" Padding="{DynamicResource Pad.16}" Background="{DynamicResource Brush.SurfaceRaised}" CornerRadius="{DynamicResource Radius.Card}" BorderBrush="{DynamicResource Brush.BorderCard}" BorderThickness="1">
           <StackPanel>
             <TextBlock Style="{DynamicResource Text.Heading}" Text="Totals for the period" feat:Edge.Bottom="{DynamicResource Space.12}" AutomationProperties.HeadingLevel="Level2" />
             <controls:LifestreamDataGrid x:Name="TotalsGrid" ItemsSource="{Binding Totals}" SelectionMode="Single" Background="{DynamicResource Brush.SurfaceRaised}"
@@ -191,7 +191,7 @@
               </DataGrid.Columns>
             </controls:LifestreamDataGrid>
           </StackPanel>
-        </Border>
+        </controls:Card>
       </StackPanel>
     </ScrollViewer>
   </controls:LoadSurface>

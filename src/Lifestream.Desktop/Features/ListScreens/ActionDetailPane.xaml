@@ -9,7 +9,7 @@
     <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
     <feat:NullToVisibleConverter x:Key="NullToVisible" />
   </UserControl.Resources>
-  <Border Background="{DynamicResource Brush.SurfaceRaised}" CornerRadius="{DynamicResource Radius.Card}" Padding="{DynamicResource Pad.16}" AutomationProperties.Name="Details">
+  <controls:Card Background="{DynamicResource Brush.SurfaceRaised}" CornerRadius="{DynamicResource Radius.Card}" Padding="{DynamicResource Pad.16}" AutomationProperties.Name="Details" BorderBrush="{DynamicResource Brush.BorderCard}" BorderThickness="1">
     <DockPanel LastChildFill="True">
     <Grid>
       <TextBlock x:Name="NoSelection" Style="{DynamicResource Text.Body}" Foreground="{DynamicResource Brush.TextSecondary}" Text="{Binding NoSelectionText}" TextWrapping="Wrap"
@@ -40,5 +40,5 @@
       </Grid>
     </Grid>
     </DockPanel>
-  </Border>
+  </controls:Card>
 </UserControl>

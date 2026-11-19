@@ -12,8 +12,8 @@
   </UserControl.Resources>
   <controls:LoadSurface State="{Binding State}" SkeletonKind="Profile" ErrorMessage="{Binding ErrorMessage}" ErrorDetail="{Binding ErrorDetail}" RetryCommand="{Binding RetryCommand}">
     <ScrollViewer VerticalScrollBarVisibility="Auto" Focusable="False">
-      <Border HorizontalAlignment="Left" VerticalAlignment="Top" MaxWidth="640" MinWidth="360" Background="{DynamicResource Brush.SurfaceRaised}" CornerRadius="{DynamicResource Radius.Card}" Padding="{DynamicResource Pad.24}"
-              AutomationProperties.Name="Your profile">
+      <controls:Card HorizontalAlignment="Left" VerticalAlignment="Top" MaxWidth="640" MinWidth="360" Background="{DynamicResource Brush.SurfaceRaised}" CornerRadius="{DynamicResource Radius.Card}" Padding="{DynamicResource Pad.24}"
+              AutomationProperties.Name="Your profile" BorderBrush="{DynamicResource Brush.BorderCard}" BorderThickness="1">
         <StackPanel KeyboardNavigation.TabNavigation="Local">
           <controls:WakingNotice x:Name="Waking" IsActive="{Binding IsOperationWaking}" CancelCommand="{Binding CancelOperationCommand}" feat:Edge.Bottom="{DynamicResource Space.16}" />
           <StackPanel Orientation="Horizontal" feat:Edge.Bottom="{DynamicResource Space.24}">
@@ -109,7 +109,7 @@
             </Button>
           </StackPanel>
         </StackPanel>
-      </Border>
+      </controls:Card>
     </ScrollViewer>
   </controls:LoadSurface>
 </UserControl>

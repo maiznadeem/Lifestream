@@ -9,6 +9,23 @@
   <Color x:Key="Color.SurfaceHover">#2E2530</Color>
   <Color x:Key="Color.SurfacePressed">#3A303D</Color>
   <Color x:Key="Color.SurfaceSelected">#4A1F2B</Color>
+  <!-- Input fills: a touch lighter under the pointer, a touch darker while typing (the Windows 11 field behaviour) -->
+  <Color x:Key="Color.SurfaceInputHover">#2A222D</Color>
+  <Color x:Key="Color.SurfaceInputFocus">#1B151D</Color>
+  <!-- Tinted surfaces: the tonal "Try the demo" button and the info and error bars -->
+  <Color x:Key="Color.SurfaceAccent">#3A1520</Color>
+  <Color x:Key="Color.SurfaceAccentHover">#4A1B29</Color>
+  <Color x:Key="Color.SurfaceAccentPressed">#2E1019</Color>
+  <Color x:Key="Color.SurfaceInfo">#162436</Color>
+  <Color x:Key="Color.SurfaceDanger">#3A1A22</Color>
+  <!-- Card and popup edges: a hairline lighter than the card so it reads against the canvas -->
+  <Color x:Key="Color.BorderCard">#342A37</Color>
+  <!-- The sign-in hero: brand crimson fading into the canvas -->
+  <Color x:Key="Color.LogoTop">#F0475C</Color>
+  <Color x:Key="Color.LogoBottom">#B3122E</Color>
+  <Color x:Key="Color.HeroTop">#B0102B</Color>
+  <Color x:Key="Color.HeroMid">#5A0C1F</Color>
+  <Color x:Key="Color.HeroBottom">#1E1220</Color>
   <Color x:Key="Color.Scrim">#B3000000</Color>
   <Color x:Key="Color.Shadow">#000000</Color>
 
@@ -21,7 +38,7 @@
 
   <!-- Brand and interaction -->
   <Color x:Key="Color.Primary">#C8102E</Color>
-  <Color x:Key="Color.PrimaryHover">#A80D27</Color>
+  <Color x:Key="Color.PrimaryHover">#D21C38</Color>
   <Color x:Key="Color.PrimaryPressed">#870A1F</Color>
   <Color x:Key="Color.FocusRing">#FFB4BF</Color>
   <Color x:Key="Color.BorderInput">#8C7F85</Color>
@@ -52,6 +69,26 @@
   <SolidColorBrush x:Key="Brush.SurfaceHover" Color="{StaticResource Color.SurfaceHover}" />
   <SolidColorBrush x:Key="Brush.SurfacePressed" Color="{StaticResource Color.SurfacePressed}" />
   <SolidColorBrush x:Key="Brush.SurfaceSelected" Color="{StaticResource Color.SurfaceSelected}" />
+  <SolidColorBrush x:Key="Brush.SurfaceInputHover" Color="{StaticResource Color.SurfaceInputHover}" />
+  <SolidColorBrush x:Key="Brush.SurfaceInputFocus" Color="{StaticResource Color.SurfaceInputFocus}" />
+  <SolidColorBrush x:Key="Brush.SurfaceAccent" Color="{StaticResource Color.SurfaceAccent}" />
+  <SolidColorBrush x:Key="Brush.SurfaceAccentHover" Color="{StaticResource Color.SurfaceAccentHover}" />
+  <SolidColorBrush x:Key="Brush.SurfaceAccentPressed" Color="{StaticResource Color.SurfaceAccentPressed}" />
+  <SolidColorBrush x:Key="Brush.SurfaceInfo" Color="{StaticResource Color.SurfaceInfo}" />
+  <SolidColorBrush x:Key="Brush.SurfaceDanger" Color="{StaticResource Color.SurfaceDanger}" />
+  <SolidColorBrush x:Key="Brush.BorderCard" Color="{StaticResource Color.BorderCard}" />
+  <LinearGradientBrush x:Key="Brush.Hero" StartPoint="0,0" EndPoint="0.6,1">
+    <GradientStop Color="{StaticResource Color.HeroTop}" Offset="0" />
+    <GradientStop Color="{StaticResource Color.HeroMid}" Offset="0.55" />
+    <GradientStop Color="{StaticResource Color.HeroBottom}" Offset="1" />
+  </LinearGradientBrush>
+  <!-- The 1 px sheen along the top edge of a primary button -->
+  <LinearGradientBrush x:Key="Brush.PrimarySheen" StartPoint="0,0" EndPoint="0,1">
+    <GradientStop Color="#40FFFFFF" Offset="0" />
+    <GradientStop Color="#00FFFFFF" Offset="0.12" />
+    <GradientStop Color="#00000000" Offset="0.85" />
+    <GradientStop Color="#40000000" Offset="1" />
+  </LinearGradientBrush>
   <SolidColorBrush x:Key="Brush.Scrim" Color="{StaticResource Color.Scrim}" />
   <SolidColorBrush x:Key="Brush.TextPrimary" Color="{StaticResource Color.TextPrimary}" />
   <SolidColorBrush x:Key="Brush.TextSecondary" Color="{StaticResource Color.TextSecondary}" />
@@ -100,6 +137,9 @@
   <Thickness x:Key="Pad.16">16</Thickness>
   <Thickness x:Key="Pad.24">24</Thickness>
   <Thickness x:Key="Pad.32">32</Thickness>
+  <Thickness x:Key="Pad.48">48</Thickness>
+  <Thickness x:Key="Inset.T4B24">0,4,0,24</Thickness>
+  <Thickness x:Key="Inset.V24">0,24,0,24</Thickness>
   <Thickness x:Key="Pad.Page">24</Thickness>
   <Thickness x:Key="Gap.Field">0,0,0,16</Thickness>
 
@@ -118,6 +158,11 @@
   <Thickness x:Key="Inset.B4">0,0,0,4</Thickness>
   <Thickness x:Key="Inset.L24">24,0,0,0</Thickness>
   <Thickness x:Key="Inset.V4">0,4,0,4</Thickness>
+  <Thickness x:Key="Inset.H1">1,0,1,0</Thickness>
+  <Thickness x:Key="Inset.L2">2,0,0,0</Thickness>
+  <Thickness x:Key="Pad.1">1</Thickness>
+  <!-- A popup's offset from its field plus room for its shadow -->
+  <Thickness x:Key="Inset.Popup">8,4,8,16</Thickness>
   <Thickness x:Key="Inset.H12">12,0,12,0</Thickness>
   <Thickness x:Key="Inset.H12V16">12,16,12,16</Thickness>
   <Thickness x:Key="Inset.H12V4">12,4,12,4</Thickness>
@@ -165,7 +210,7 @@
   <CornerRadius x:Key="Radius.14">14</CornerRadius>
   <CornerRadius x:Key="Radius.2">2</CornerRadius>
   <CornerRadius x:Key="Radius.6">6</CornerRadius>
-  <CornerRadius x:Key="Radius.Left8">8,0,0,8</CornerRadius>
+  <CornerRadius x:Key="Radius.Left8">12,0,0,12</CornerRadius>
 
   <!-- Motion, in milliseconds: 100 to 150 for hover and press, 150 to 200 for drawers and dialogs, a 1.2 s skeleton shimmer and a 0.9 s
        spinner turn. Theme/Motion.xaml turns them into the Duration resources the templates use (all zero when Windows "Animation effects" is off). -->
@@ -191,7 +236,11 @@
   <Thickness x:Key="Thickness.FocusRing">2</Thickness>
 
   <!-- Radii -->
-  <CornerRadius x:Key="Radius.Control">4</CornerRadius>
-  <CornerRadius x:Key="Radius.Card">8</CornerRadius>
+  <CornerRadius x:Key="Radius.Control">6</CornerRadius>
+  <CornerRadius x:Key="Radius.Card">12</CornerRadius>
+  <!-- The keyboard focus ring sits 4 DIP outside a control, so its radius is the control's plus 4 -->
+  <CornerRadius x:Key="Radius.FocusRing">10</CornerRadius>
+  <!-- The bottom accent line of a focused input follows the field's rounded bottom corners -->
+  <CornerRadius x:Key="Radius.Underline">0,0,6,6</CornerRadius>
   <CornerRadius x:Key="Radius.Pill">12</CornerRadius>
 </ResourceDictionary>

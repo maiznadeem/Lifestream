@@ -50,7 +50,7 @@
             </ItemsControl.ItemsPanel>
             <ItemsControl.ItemTemplate>
               <DataTemplate DataType="{x:Type stock:StockTile}">
-                <Border Width="208" feat:Edge.Right="{DynamicResource Space.16}" feat:Edge.Bottom="{DynamicResource Space.16}" Padding="{DynamicResource Pad.16}" Background="{DynamicResource Brush.SurfaceRaised}" BorderBrush="{DynamicResource Brush.BorderSubtle}"
+                <controls:Card Width="208" feat:Edge.Right="{DynamicResource Space.16}" feat:Edge.Bottom="{DynamicResource Space.16}" Padding="{DynamicResource Pad.16}" Background="{DynamicResource Brush.SurfaceRaised}" BorderBrush="{DynamicResource Brush.BorderCard}"
                         BorderThickness="1" CornerRadius="{DynamicResource Radius.Card}" AutomationProperties.Name="{Binding AutomationName}">
                   <StackPanel>
                     <TextBlock Style="{DynamicResource Text.Display}" Text="{Binding BloodTypeText}" />
@@ -64,7 +64,7 @@
                     </StackPanel>
                     <TextBlock Style="{DynamicResource Text.Caption}" Foreground="{DynamicResource Brush.TextMuted}" Text="{Binding ThresholdText}" feat:Edge.Top="{DynamicResource Space.8}" />
                   </StackPanel>
-                </Border>
+                </controls:Card>
                 <DataTemplate.Triggers>
                   <DataTrigger Binding="{Binding Severity}" Value="LowStock">
                     <Setter TargetName="Flag" Property="Visibility" Value="Visible" />

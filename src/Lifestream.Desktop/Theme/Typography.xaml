@@ -2,7 +2,8 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:sys="clr-namespace:System;assembly=System.Runtime">
   <!-- One family, Inter (SIL Open Font License), bundled in the executable from Fonts/InterVariable.ttf, and a 6-step type scale.
-       Nothing below 12 DIP; body and data text are 14 DIP. Icons use the system icon font, which is not text. -->
+       Nothing below 12 DIP; body and data text are 14 DIP. Windows draw text with
+       TextFormattingMode=Display (whole-pixel layout, crisp at small sizes, Chrome/Chrome.xaml); Display and Title switch back to Ideal. Icons use the system icon font, which is not text. -->
   <FontFamily x:Key="Font.Family">pack://application:,,,/Lifestream;component/Fonts/#Inter Variable Text</FontFamily>
   <FontFamily x:Key="Font.Icons">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
 
@@ -27,12 +28,14 @@
     <Setter Property="TextWrapping" Value="Wrap" />
   </Style>
   <Style x:Key="Text.Display" TargetType="TextBlock" BasedOn="{StaticResource Text.Base}">
+    <Setter Property="TextOptions.TextFormattingMode" Value="Ideal" />
     <Setter Property="FontSize" Value="{StaticResource FontSize.Display}" />
     <Setter Property="LineHeight" Value="{StaticResource LineHeight.Display}" />
     <Setter Property="FontWeight" Value="SemiBold" />
     <Setter Property="Typography.NumeralAlignment" Value="Tabular" />
   </Style>
   <Style x:Key="Text.Title" TargetType="TextBlock" BasedOn="{StaticResource Text.Base}">
+    <Setter Property="TextOptions.TextFormattingMode" Value="Ideal" />
     <Setter Property="FontSize" Value="{StaticResource FontSize.Title}" />
     <Setter Property="LineHeight" Value="{StaticResource LineHeight.Title}" />
     <Setter Property="FontWeight" Value="SemiBold" />

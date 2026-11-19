@@ -171,7 +171,7 @@
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="local:ChartFrame">
-          <Border Background="{DynamicResource Brush.SurfaceRaised}" CornerRadius="{StaticResource Radius.Card}" Padding="{DynamicResource Pad.16}">
+          <controls:Card Background="{DynamicResource Brush.SurfaceRaised}" BorderBrush="{DynamicResource Brush.BorderCard}" BorderThickness="1" CornerRadius="{StaticResource Radius.Card}" Padding="{DynamicResource Pad.16}">
             <Grid>
               <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
@@ -212,7 +212,7 @@
               <ContentPresenter x:Name="ChartHost" Grid.Row="1" />
               <local:LifestreamDataGrid x:Name="PART_Table" Grid.Row="1" Visibility="Collapsed" AutomationProperties.Name="Chart data table" />
             </Grid>
-          </Border>
+          </controls:Card>
           <ControlTemplate.Triggers>
             <Trigger Property="IsTableShown" Value="True">
               <Setter TargetName="ChartHost" Property="Visibility" Value="Hidden" />

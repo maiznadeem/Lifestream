@@ -8,7 +8,7 @@
   <UserControl.Resources>
     <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
   </UserControl.Resources>
-  <Border Background="{DynamicResource Brush.SurfaceRaised}" CornerRadius="{DynamicResource Radius.Card}" Padding="{DynamicResource Pad.16}" AutomationProperties.Name="Record form">
+  <controls:Card Background="{DynamicResource Brush.SurfaceRaised}" CornerRadius="{DynamicResource Radius.Card}" Padding="{DynamicResource Pad.16}" AutomationProperties.Name="Record form" BorderBrush="{DynamicResource Brush.BorderCard}" BorderThickness="1">
     <Grid>
       <Grid.RowDefinitions>
         <RowDefinition Height="Auto" />
@@ -51,5 +51,5 @@
                 controls:ButtonAssist.IsBusy="{Binding SaveCommand.IsRunning}" controls:ButtonAssist.BusyText="{Binding SaveBusyText}" AutomationProperties.Name="{Binding SaveText}" />
       </StackPanel>
     </Grid>
-  </Border>
+  </controls:Card>
 </UserControl>
