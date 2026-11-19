@@ -355,6 +355,34 @@ public sealed class ListScreenRenderTests
         Assert.DoesNotContain("Urgency", facts.ClosedColumns);
     }
 
+    /// <summary>The error state of a list (design-qa 21): the cause and the fix in plain words, Retry, and no count in the header while nothing is loaded.</summary>
+    [Theory]
+    [InlineData("light")]
+    [InlineData("dark")]
+    public void Donors_ErrorState_NamesTheCauseAndTheFix_AndHidesTheCount(string theme)
+    {
+        var facts = StaHost.Run(() =>
+        {
+            ThemeService.Apply(theme == "dark" ? ThemeMode.Dark : ThemeMode.Light);
+            using var rig = new Rig(dispatcher: WpfTestUi.Dispatcher());
+            rig.Api.On("GetDonorsAsync", Client.Api.ApiResult<Contracts.PagedResult<Contracts.Donors.DonorListItem>>.Fail(new Client.Api.ApiProblem(0, Client.Api.ClientProblemCodes.Unreachable, "No route to host", "corr-3")));
+            var vm = ActivatorUtilities.CreateInstance<DonorsViewModel>(rig.Provider);
+            vm.Attach(null, new ListScreensClock());
+            var view = new DonorsView { DataContext = vm };
+            using var host = Hosted.Create(PageArea(view, 1440, 900, out var area), area.Width, area.Height);
+            Hosted.Await(() => vm.LoadAsync());
+            host.Settle(400);
+            Save(host, $"donors-error-1440-{theme}.png");
+            var header = host.Find<PageHeader>("Header");
+            return (Texts: host.All<TextBlock>().Where(t => t.IsVisible).Select(t => t.Text).ToList(), vm.HeaderCount, HeaderCount: header.Count, Error: vm.HasError);
+        });
+
+        Assert.True(facts.Error);
+        Assert.Contains("Can't reach the server. Check your internet connection, then retry.", facts.Texts);
+        Assert.Null(facts.HeaderCount); // no "0" while the list could not be loaded
+        Assert.Null(facts.Item3);
+    }
+
     public static TheoryData<string, string, int, int> EditorSizes => new()
     {
         { "light", "1440", 1440, 900 },
