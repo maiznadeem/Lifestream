@@ -42,6 +42,7 @@ public sealed class ChartFontTests
             host.Settle(600);
             var chart = view.DonationChart;
             var shipped = host.Pixels();
+            _ = host.Capture("Dashboard_ChartText_Inter.png");
 
             Restyle(chart, ChartFont.Inter);
             host.Settle(600);
@@ -50,6 +51,7 @@ public sealed class ChartFontTests
             Restyle(chart, SKTypeface.FromFamilyName("Segoe UI"));
             host.Settle(600);
             var segoe = host.Pixels();
+            _ = host.Capture("Dashboard_ChartText_SegoeUi_control.png");
             ChartFont.Apply();
             return (shipped, inter, segoe, SKTypeface.Default.FamilyName, ChartFont.Inter.FamilyName);
         });
