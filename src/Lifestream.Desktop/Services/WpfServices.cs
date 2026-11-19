@@ -105,6 +105,13 @@ public sealed class WpfWindowHost : IWindowHost
                 Application.Current.Shutdown();
             }
         };
+        if (LaunchProbe.Enabled)
+        {
+            LaunchProbe.Prepare(_login); // the launch measurement: off the desktop, never activated
+            _login.Show();
+            return;
+        }
+
         _login.Show();
         _login.Activate();
     }

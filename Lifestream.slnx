@@ -12,5 +12,6 @@
     <Project Path="tests/Lifestream.Client.Tests/Lifestream.Client.Tests.csproj" />
     <Project Path="tests/Lifestream.Desktop.Tests/Lifestream.Desktop.Tests.csproj" />
     <Project Path="tests/Lifestream.Domain.Tests/Lifestream.Domain.Tests.csproj" />
+    <Project Path="tests/perf/Lifestream.Perf.Seed/Lifestream.Perf.Seed.csproj" />
   </Folder>
 </Solution>
