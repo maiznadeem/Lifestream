@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
@@ -17,7 +17,6 @@ using Lifestream.Desktop.Features;
 using Lifestream.Desktop.Features.Profile;
 using Lifestream.Desktop.Features.Receipts;
 using Lifestream.Desktop.Features.Staff;
-using Lifestream.Desktop.Services;
 using Lifestream.Desktop.Theme;
 using Lifestream.Domain;
 
@@ -182,7 +181,7 @@ public sealed class Part2ReceiptStaffProfileViewTests
     // ---- Staff ------------------------------------------------------------------------------------------------------
 
     [Fact]
-    public void StaffView_Loaded_NoPasswordColumn_ThumbnailsLoadLazily_DefaultAvatarIsShared_FakeApi()
+    public void StaffView_Loaded_NoPasswordColumn_ThumbnailsLoadLazily_RowsWithoutAPhotoShowInitials_FakeApi()
     {
         var facts = StaHost.Run(() =>
         {
@@ -194,8 +193,8 @@ public sealed class Part2ReceiptStaffProfileViewTests
             Part2Harness.Save(host, "StaffView_Loaded.png");
 
             var grid = host.Find<LifestreamDataGrid>("Grid");
-            var avatars = host.All<System.Windows.Shapes.Ellipse>().Where(e => e.IsVisible && e.DataContext is StaffRow).ToList();
-            var withoutPhoto = avatars.Where(a => !((StaffRow)a.DataContext).HasPhoto).Select(a => ((ImageBrush)a.Fill).ImageSource).ToList();
+            var avatars = host.All<Avatar>().Where(a => a.IsVisible && a.DataContext is StaffRow).ToList();
+            var withoutPhoto = avatars.Where(a => !((StaffRow)a.DataContext).HasPhoto).ToList();
             var withPhoto = avatars.Where(a => ((StaffRow)a.DataContext).HasPhoto).ToList();
             return (
                 Headers: grid.Columns.Select(c => c.Header?.ToString()).ToList(),
@@ -205,7 +204,8 @@ public sealed class Part2ReceiptStaffProfileViewTests
                 RowsWithPhotoTotal: vm.Items.Count(i => i.HasPhoto),
                 PhotoCalls: rig.Api.CountOf("GetStaffPhotoAsync"),
                 ListCalls: rig.Api.CountOf("GetStaffAsync"),
-                DefaultIsShared: withoutPhoto.Count > 0 && withoutPhoto.All(s => ReferenceEquals(s, DefaultAvatar.Image)),
+                // A person without a photo gets their initials, never a drawn or per-user picture.
+                InitialsWithoutPhoto: withoutPhoto.Count > 0 && withoutPhoto.All(a => a.Source is null && a.Initials == ((StaffRow)a.DataContext).Initials && a.Initials.Length is 1 or 2),
                 LoadedPhotos: vm.Items.Count(i => i.Photo is not null),
                 VisibleWithPhoto: withPhoto.Count,
                 Count: host.All<TextBlock>().Where(t => t.IsVisible).Select(t => t.Text).First(t => t.StartsWith("Showing", StringComparison.Ordinal)));
@@ -220,7 +220,7 @@ public sealed class Part2ReceiptStaffProfileViewTests
         Assert.True(facts.PhotoCalls > 0);
         Assert.True(facts.PhotoCalls < facts.RowsWithPhotoTotal, $"photo requests {facts.PhotoCalls} must be fewer than the {facts.RowsWithPhotoTotal} rows that have one: only shown rows ask"); // lazy
         Assert.Equal(facts.PhotoCalls, facts.LoadedPhotos);
-        Assert.True(facts.DefaultIsShared); // one frozen default avatar for every row without a photo
+        Assert.True(facts.InitialsWithoutPhoto); // initials (no image) for every row without a photo
     }
 
     [Fact]
@@ -443,13 +443,13 @@ public sealed class Part2ReceiptStaffProfileViewTests
             Hosted.Await(() => load);
             host.Settle(400);
             Part2Harness.Save(host, "ProfileView_NoPhoto.png");
-            var avatar = host.All<System.Windows.Shapes.Ellipse>().Where(e => e.IsVisible && e.Width == 96).Select(e => ((ImageBrush)e.Fill).ImageSource).Single();
-            return (skeleton, PhotoCalls: rig.Api.CountOf("GetMyPhotoAsync"), DefaultAvatarShown: ReferenceEquals(avatar, DefaultAvatar.Image));
+            var avatar = host.All<Avatar>().Single(a => a.IsVisible && a.Name == "ProfileAvatar");
+            return (skeleton, PhotoCalls: rig.Api.CountOf("GetMyPhotoAsync"), InitialsShown: avatar.Source is null && avatar.Initials == vm.Initials && avatar.Initials.Length is 1 or 2);
         });
 
         Assert.True(facts.skeleton);
         Assert.Equal(0, facts.PhotoCalls);
-        Assert.True(facts.DefaultAvatarShown); // the shared default avatar, never a per-user drawing
+        Assert.True(facts.InitialsShown); // the person's initials until they add a photo, never a made-up picture
     }
 
     [Fact]
