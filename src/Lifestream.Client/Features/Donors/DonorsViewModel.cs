@@ -61,8 +61,8 @@ public sealed class DonorsViewModel(ILifestreamApiClient api, IListViewStateStor
 
     protected override Task<ApiResult> DeleteRecordAsync(int id, CancellationToken ct) => api.DeleteDonorAsync(id, ct);
 
-    protected override Task<ApiResult<DonorDetail>> RestoreAsync(DonorDetail d, CancellationToken ct) =>
-        api.CreateDonorAsync(new CreateDonorRequest(d.Name, d.DateOfBirth, d.Gender, d.BloodType, d.Phone, d.Address, d.Frequency), ct);
+    // The API keeps the deleted donor for a few seconds and puts it back as it was (same id, last-donation date, medical hold), so Undo restores rather than re-creates.
+    protected override Task<ApiResult<DonorDetail>> RestoreAsync(DonorDetail d, CancellationToken ct) => api.RestoreDonorAsync(d.Id, ct);
 
     protected override RecordEditorViewModel CreateEditor(DonorDetail? existing) =>
         existing is null

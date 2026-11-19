@@ -192,7 +192,7 @@ public sealed class RecordScreenTests
     }
 
     [Fact]
-    public async Task DonorDelete_Success_OffersUndo_AndUndoRecreatesTheRecord_FakeApi()
+    public async Task DonorDelete_Success_OffersATenSecondUndo_AndUndoRestoresTheSameRecord_FakeApi()
     {
         var (rig, vm) = await LoadedDonorsAsync();
         await SelectAsync(vm, 0);
@@ -200,19 +200,25 @@ public sealed class RecordScreenTests
         await vm.DeleteCommand.ExecuteAsync();
         var toast = Assert.Single(rig.Toasts.Toasts);
         Assert.Equal("Undo", toast.ActionLabel);
+        rig.Clock.Advance(TimeSpan.FromSeconds(9.9));
+        Assert.False(toast.IsDismissed); // Undo stays 10 seconds (FEAT-06)
 
-        var restored = Samples.Donor(99, "Donor 001");
-        rig.Fake.On("CreateDonorAsync", ApiResult<DonorDetail>.Ok(restored));
+        var restored = Samples.Donor(1, "Donor 001") with { LastDonated = new DateOnly(2026, 10, 20), MedicalHold = true };
+        rig.Fake.On("RestoreDonorAsync", ApiResult<DonorDetail>.Ok(restored));
         rig.DonorsReturn(_ => Samples.DonorPage(3));
         rig.Fake.On("GetDonorAsync", ApiResult<DonorDetail>.Ok(restored));
         await toast.ActionCommand.ExecuteAsync();
 
-        var created = rig.Recorder.LastArg<CreateDonorRequest>("CreateDonorAsync");
-        Assert.Equal("Donor 001", created.Name); // the deleted record's values go back
-        Assert.Equal(BloodType.OPos, created.BloodType);
-        Assert.Equal("+1-555-0101", created.Phone);
+        Assert.Equal(1, rig.Recorder.LastArg<int>("RestoreDonorAsync")); // the same id goes back, not a re-created record
+        Assert.Equal(0, rig.Recorder.CountOf("CreateDonorAsync"));
         Assert.Contains(rig.Toasts.Toasts, t => t.Message == "Donor 'Donor 001' restored.");
         Assert.Equal(3, vm.Items.Count);
+        await vm.PendingDetail;
+        Assert.Equal(1, vm.Detail!.Id);
+        Assert.Equal(new DateOnly(2026, 10, 20), vm.Detail.LastDonated); // what the old re-create lost
+        Assert.Contains(vm.DetailFacts, f => f.Label == "Last donated" && f.Value.Contains("2026", StringComparison.Ordinal));
+        rig.Clock.Advance(TimeSpan.FromSeconds(0.3));
+        Assert.True(toast.IsDismissed);
     }
 
     [Fact]
@@ -222,7 +228,7 @@ public sealed class RecordScreenTests
         await SelectAsync(vm, 0);
         await vm.DeleteCommand.ExecuteAsync();
         var toast = Assert.Single(rig.Toasts.Toasts);
-        rig.Fake.On("CreateDonorAsync", ApiResult<DonorDetail>.Fail(FeatureRig.Problem(400, ProblemCodes.Validation)));
+        rig.Fake.On("RestoreDonorAsync", ApiResult<DonorDetail>.Fail(FeatureRig.Problem(404, ProblemCodes.NotFound)));
 
         await toast.ActionCommand.ExecuteAsync();
 
@@ -251,6 +257,12 @@ public sealed class RecordScreenTests
         await vm.DeleteCommand.ExecuteAsync();
         Assert.Single(vm.Items);
         Assert.Contains(rig.Toasts.Toasts, t => t.Message == "Patient 'Patient 001' deleted." && t.ActionLabel == "Undo");
+
+        rig.Fake.On("RestorePatientAsync", ApiResult<PatientDetail>.Ok(Samples.Patient(1, "Patient 001")));
+        rig.PatientsReturn(_ => Samples.PatientPage(2));
+        await rig.Toasts.Toasts.Single(t => t.ActionLabel == "Undo").ActionCommand.ExecuteAsync();
+        Assert.Equal(1, rig.Recorder.LastArg<int>("RestorePatientAsync")); // the same patient comes back
+        Assert.Equal(0, rig.Recorder.CountOf("CreatePatientAsync"));
     }
 
     [Fact]

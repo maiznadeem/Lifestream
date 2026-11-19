@@ -2,6 +2,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using Lifestream.Client.Api;
 using Lifestream.Client.Common;
 using Lifestream.Client.Features.ListScreens;
+using Lifestream.Contracts;
 using Lifestream.Contracts.Appointments;
 using Lifestream.Contracts.Receipts;
 using Lifestream.Domain;
@@ -34,6 +35,13 @@ public sealed partial class RecordDonationDialogViewModel : DialogViewModel
         _zone = zone ?? TimeZoneInfo.Local;
         UnitChoices = [.. Enumerable.Range(1, MaxUnits).Select(n => new Choice<int>(RecordFormatting.Units(n), n))];
         DeclareFields(nameof(Units), nameof(OverrideReason), nameof(Notes));
+        Banner.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(EligibilityBannerViewModel.State))
+            {
+                RaisePrimaryChanged();
+            }
+        };
         PendingCheck = CheckEligibilityAsync();
     }
 
@@ -63,6 +71,9 @@ public sealed partial class RecordDonationDialogViewModel : DialogViewModel
     public partial string OverrideReason { get; set; } = string.Empty;
 
     protected override string RecordType => "donation";
+
+    /// <summary>Recording waits for the eligibility check: pressing it earlier would record an ineligible donor with no reason. A check that failed does not block it (the API judges the donor again and refuses without a reason).</summary>
+    protected override bool CanRunPrimary => Banner.State is not (BannerState.Checking or BannerState.Hidden);
 
     private DateOnly LocalToday => DateOnly.FromDateTime(_time.GetLocalNow().DateTime);
 
@@ -130,9 +141,22 @@ public sealed partial class RecordDonationDialogViewModel : DialogViewModel
 
     partial void OnOverrideReasonChanged(string value) => FieldEdited(nameof(OverrideReason));
 
+    /// <summary>The API refused an ineligible donor (the check had failed or was out of date): show why, and ask for the reason.</summary>
+    protected override void ShowProblem(ApiProblem problem)
+    {
+        if (problem.Code == ProblemCodes.Ineligible)
+        {
+            Banner.ShowRefused(problem.Errors is { } errors && errors.TryGetValue("reasons", out var reasons) ? reasons : []);
+            FormError = "This donor isn't eligible. Enter the reason for recording the donation anyway, then record it again.";
+            return;
+        }
+
+        base.ShowProblem(problem);
+    }
+
     protected override Func<CancellationToken, Task<ApiProblem?>> PrepareSubmit()
     {
-        var request = new RecordDonationRequest(Units, ComposeNotes());
+        var request = new RecordDonationRequest(Units, ComposeNotes()) { OverrideReason = Banner.RequiresReason ? OverrideReason.Trim() : null };
         var id = _appointment.Id;
         return async ct =>
         {

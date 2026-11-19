@@ -175,13 +175,13 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
 
     protected abstract Task<ApiResult> DeleteRecordAsync(int id, CancellationToken ct);
 
-    /// <summary>Creates the record again with the values of a deleted one (Undo). The id changes, because the API has no restore route.</summary>
+    /// <summary>Puts a deleted record back (Undo). The API restores it with the same id and every value, so nothing the list does not show (a last-donation date) is lost.</summary>
     protected abstract Task<ApiResult<TDetail>> RestoreAsync(TDetail deleted, CancellationToken ct);
 
     /// <summary>Whether the selected record may be deleted at all (the signed-in admin's own staff record may not).</summary>
     protected virtual bool CanDelete(TDetail detail) => true;
 
-    /// <summary>Whether a deleted record can be offered back with Undo; false for records that can't be rebuilt from what the list holds (staff).</summary>
+    /// <summary>Whether a deleted record can be offered back with Undo; false for records the API cannot restore (staff).</summary>
     protected virtual bool SupportsUndo => true;
 
     protected abstract RecordEditorViewModel CreateEditor(TDetail? existing);

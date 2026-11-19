@@ -46,7 +46,7 @@ public sealed class PatientsViewModel(ILifestreamApiClient api, IListViewStateSt
     protected override Task<ApiResult> DeleteRecordAsync(int id, CancellationToken ct) => api.DeletePatientAsync(id, ct);
 
     protected override Task<ApiResult<PatientDetail>> RestoreAsync(PatientDetail d, CancellationToken ct) =>
-        api.CreatePatientAsync(new CreatePatientRequest(d.Name, d.DateOfBirth, d.Gender, d.BloodType, d.Phone, d.Address), ct);
+        api.RestorePatientAsync(d.Id, ct);
 
     protected override RecordEditorViewModel CreateEditor(PatientDetail? existing) =>
         existing is null
