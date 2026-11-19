@@ -295,10 +295,10 @@ public sealed class Part2AppointmentRequestViewTests
         });
 
         Assert.Equal("Showing 1–40 of 40", facts.Count);
-        Assert.Equal(["Patient", "Group", "Units", "Needed by", "Urgency", "Cover", "Status"], facts.Headers);
+        Assert.Equal(["Patient", "Group", "Units", "Needed by", "Urgency", "Cover", "Status", "Placed"], facts.Headers);
         Assert.DoesNotContain("Status", facts.OpenColumns); // the Open tab: every row is pending, so no Status column repeating "Pending"
         Assert.Contains("Cover", facts.OpenColumns);
-        Assert.Equal(["requiredBy"], facts.Sortable);
+        Assert.Equal(["requiredBy", "placed"], facts.Sortable);
         Assert.All(facts.Sortable, key => Assert.Contains(key, facts.Keys));
         Assert.True(facts.Patient);
         Assert.True(facts.Ids > 3);

@@ -227,7 +227,7 @@
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="Status" Width="*" MinWidth="218" CanUserSort="False">
+                <DataGridTemplateColumn Header="Status" Width="*" MinWidth="218" MaxWidth="300" CanUserSort="False">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
                       <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
@@ -239,7 +239,7 @@
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
                 <!-- Today's agenda only: "Next" with Check in on the first appointment still to come, Record donation on the later ones -->
-                <DataGridTemplateColumn x:Name="AgendaColumn" Header="Next step" Width="*" MinWidth="170" CanUserSort="False" lists:ListColumns.HideBelow="700"
+                <DataGridTemplateColumn x:Name="AgendaColumn" Header="Next step" Width="*" MinWidth="170" MaxWidth="280" CanUserSort="False" lists:ListColumns.HideBelow="700"
                                         lists:ListColumns.IsShown="{Binding Data.IsAgenda, Source={StaticResource Model}}">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
@@ -278,7 +278,7 @@
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="Booked on" Width="*" MinWidth="120" CanUserSort="False" lists:ListColumns.HideBelow="760">
+                <DataGridTemplateColumn Header="Booked on" Width="*" MinWidth="120" MaxWidth="200" CanUserSort="False" lists:ListColumns.HideBelow="760">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
                       <TextBlock Style="{DynamicResource DataGrid.TextCell}" Foreground="{DynamicResource Brush.Ink2}">

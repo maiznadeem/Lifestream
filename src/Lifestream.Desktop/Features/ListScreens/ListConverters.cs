@@ -110,6 +110,15 @@ public sealed class HasContentToVisibleConverter : IValueConverter
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => throw new NotSupportedException();
 }
 
+/// <summary>A UTC instant as its local date, "16 Nov 2026" (the user's own zone).</summary>
+public sealed class UtcDateConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
+        value is DateTime utc ? Lifestream.Client.Common.Formatting.Date(Lifestream.Client.Features.ListScreens.RecordFormatting.LocalDate(utc)) : string.Empty;
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => throw new NotSupportedException();
+}
+
 /// <summary>Visible when the bound value is false, collapsed when it is true.</summary>
 public sealed class FalseToVisibleConverter : IValueConverter
 {

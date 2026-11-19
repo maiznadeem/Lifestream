@@ -9,9 +9,9 @@
     <lists:RecordEditorChrome.Fields>
       <lists:PersonFormFields>
         <lists:PersonFormFields.Extra>
-          <controls:FormField Label="Donates (required)" IsRequired="True" controls:FormFocus.FieldName="Frequency" Error="{Binding [Frequency]}">
+          <controls:FormField Label="Donor type" IsRequired="True" controls:FormFocus.FieldName="Frequency" Error="{Binding [Frequency]}">
             <ComboBox ItemsSource="{Binding FrequencyChoices}" DisplayMemberPath="Display" SelectedValuePath="Value" SelectedValue="{Binding Frequency, Mode=TwoWay}"
-                      AutomationProperties.Name="How often the donor donates" />
+                      AutomationProperties.Name="Donor type: how often the donor gives blood" />
           </controls:FormField>
         </lists:PersonFormFields.Extra>
       </lists:PersonFormFields>

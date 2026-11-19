@@ -28,6 +28,7 @@ namespace Lifestream.Desktop.Tests.RedesignA;
 /// facts a broken layout would lose: nothing clipped, the panel's width for the breakpoint, the columns that fold away.
 /// </summary>
 [Trait("Category", "RenderA")]
+[Collection("Wpf")] // the renders switch the app's theme: never at the same time as another WPF test
 public sealed class ListScreenRenderTests
 {
     /// <summary>Where the renders go: LIFESTREAM_CAPTURE_DIR, else the run's fix-round captures folder, else the test output.</summary>

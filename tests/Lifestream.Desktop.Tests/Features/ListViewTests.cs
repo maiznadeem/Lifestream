@@ -266,8 +266,8 @@ public sealed class ListViewTests
                 var name = Field("Full name");
                 var dob = Field("Date of birth");
                 var gender = Field("Gender");
-                var blood = Field("Blood type");
-                var frequency = Field("Donates");
+                var blood = Field("Blood group");
+                var frequency = Field("Donor type");
                 var phone = Field("Phone");
                 var address = Field("Address");
                 var b = (Func<FrameworkElement, Rect>)(e => FeatureHarness.BoundsIn(e, editor));
@@ -276,9 +276,10 @@ public sealed class ListViewTests
 
                 return (
                     Required: fields.Where(f => f.IsRequired).Select(f => f.Label).ToList(),
-                    OptionalMarked: new[] { phone, address }.Any(f => f.Label.Contains("required", StringComparison.Ordinal)),
-                    ColumnOneLeft: new[] { b(name).Left, b(dob).Left, b(blood).Left, b(phone).Left }.Max() - new[] { b(name).Left, b(dob).Left, b(blood).Left, b(phone).Left }.Min(),
-                    ColumnTwoLeft: new[] { b(gender).Left, b(frequency).Left, b(address).Left }.Max() - new[] { b(gender).Left, b(frequency).Left, b(address).Left }.Min(),
+                    Optional: new[] { phone, address }.Select(f => f.Label).ToList(),
+                    AddressFullWidth: b(address).Left <= b(name).Left + 1 && b(address).Right >= b(gender).Right - 1,
+                    ColumnOneLeft: new[] { b(name).Left, b(dob).Left, b(blood).Left, b(phone).Left, b(address).Left }.Max() - new[] { b(name).Left, b(dob).Left, b(blood).Left, b(phone).Left, b(address).Left }.Min(),
+                    ColumnTwoLeft: new[] { b(gender).Left, b(frequency).Left }.Max() - new[] { b(gender).Left, b(frequency).Left }.Min(),
                     SecondColumnRightOfFirst: b(gender).Left > b(dob).Right,
                     Grouped: b(dob).Top > b(name).Top && b(phone).Top > b(blood).Top,
                     SaveRightOfCancel: b(save).Left > b(cancel).Right,
@@ -289,9 +290,10 @@ public sealed class ListViewTests
             }
         });
 
-        Assert.Equal(5, facts.Required.Count);
-        Assert.All(facts.Required, label => Assert.Contains("(required)", label, StringComparison.Ordinal)); // the word is on screen, not only a colour
-        Assert.False(facts.OptionalMarked);
+        Assert.Equal(5, facts.Required.Count); // flagged for assistive technology (FEAT-07)
+        Assert.All(facts.Required, label => Assert.DoesNotContain("(", label, StringComparison.Ordinal)); // design system 7.9: required fields are not marked one by one...
+        Assert.All(facts.Optional, label => Assert.EndsWith("(optional)", label, StringComparison.Ordinal)); // ...the optional ones say so in words, not only a colour
+        Assert.True(facts.AddressFullWidth); // the address has the form's whole width, so it is not cut
         Assert.True(facts.ColumnOneLeft < 1, $"left edges of column one differ by {facts.ColumnOneLeft}");
         Assert.True(facts.ColumnTwoLeft < 1, $"left edges of column two differ by {facts.ColumnTwoLeft}");
         Assert.True(facts.SecondColumnRightOfFirst);

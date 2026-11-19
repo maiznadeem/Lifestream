@@ -98,7 +98,7 @@
                                          lists:ListColumns.IsResponsive="True" lists:ListKeys.Panel="{Binding ElementName=Panel}"
                                          AutomationProperties.Name="Donors">
               <DataGrid.Columns>
-                <DataGridTemplateColumn Header="Name" SortMemberPath="name" Width="1.6*" MinWidth="190" MaxWidth="320">
+                <DataGridTemplateColumn Header="Name" SortMemberPath="name" Width="1.6*" MinWidth="184" MaxWidth="320">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
                       <Grid VerticalAlignment="Center">
@@ -115,14 +115,14 @@
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="Group" Width="80" CanUserSort="False">
+                <DataGridTemplateColumn Header="Group" Width="72" CanUserSort="False">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
                       <controls:BloodGroupTag Text="{Binding BloodType, Converter={StaticResource BloodGroup}}" HorizontalAlignment="Left" VerticalAlignment="Center" />
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="Eligibility" Width="*" MinWidth="136" CanUserSort="False">
+                <DataGridTemplateColumn Header="Eligibility" Width="*" MinWidth="136" MaxWidth="240" CanUserSort="False">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
                       <controls:Badge HorizontalAlignment="Left" VerticalAlignment="Center">
@@ -154,7 +154,7 @@
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="Last donated" SortMemberPath="lastDonated" Width="*" MinWidth="114" lists:ListColumns.HideBelow="560">
+                <DataGridTemplateColumn Header="Last donated" SortMemberPath="lastDonated" Width="*" MinWidth="114" MaxWidth="220" lists:ListColumns.HideBelow="560">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
                       <TextBlock x:Name="LastText" Style="{DynamicResource DataGrid.TextCell}" Text="{Binding LastDonated, Converter={StaticResource DateText}, ConverterParameter=Never}" />
@@ -174,7 +174,7 @@
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="Phone" Width="*" MinWidth="118" CanUserSort="False" lists:ListColumns.HideBelow="720">
+                <DataGridTemplateColumn Header="Phone" Width="*" MinWidth="118" MaxWidth="220" CanUserSort="False" lists:ListColumns.HideBelow="720">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
                       <TextBlock Style="{DynamicResource DataGrid.TextCell}" Text="{Binding Phone}" />
