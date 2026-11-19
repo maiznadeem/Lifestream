@@ -26,11 +26,19 @@ public sealed record AppointmentDetail(
 public sealed record BookAppointmentRequest(int DonorId, DateTime SlotStartUtc, string? OverrideReason);
 
 /// <summary>PATCH body: moves the appointment to a new slot (the client keeps the time of day when only the date changes).</summary>
-public sealed record RescheduleAppointmentRequest(string RowVersion, DateTime SlotStartUtc);
+public sealed record RescheduleAppointmentRequest(string RowVersion, DateTime SlotStartUtc)
+{
+    /// <summary>Why the donor is booked on the new day although ineligible on it; required by the API only in that case (stored on the appointment).</summary>
+    public string? OverrideReason { get; init; }
+}
 
 public sealed record SlotInfo(DateTime StartUtc, bool IsTaken);
 
-public sealed record RecordDonationRequest(int Units, string? Notes);
+public sealed record RecordDonationRequest(int Units, string? Notes)
+{
+    /// <summary>Why a donor who is ineligible today may donate anyway; required by the API only in that case (stored on the appointment).</summary>
+    public string? OverrideReason { get; init; }
+}
 
 public sealed record AppointmentQuery(
     string? Search = null,
