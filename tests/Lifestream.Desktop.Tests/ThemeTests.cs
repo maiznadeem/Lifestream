@@ -235,67 +235,145 @@ public sealed partial class ThemeTests
         return (0.2126 * Lin(c.R)) + (0.7152 * Lin(c.G)) + (0.0722 * Lin(c.B));
     }
 
-    public static double Contrast(string theme, string foreground, string background)
+    /// <summary>A colour as it is seen on a background: a translucent one is laid over the background first.</summary>
+    private static (double R, double G, double B, double A) Over((double R, double G, double B, double A) top, (double R, double G, double B, double A) under) =>
+        ((top.R * top.A) + (under.R * (1 - top.A)), (top.G * top.A) + (under.G * (1 - top.A)), (top.B * top.A) + (under.B * (1 - top.A)), 1);
+
+    /// <summary>The contrast of a token on a surface token; <paramref name="under"/> is what lies behind a translucent surface (a Mica stop under the active sidebar item).</summary>
+    public static double Contrast(string theme, string foreground, string background, string? under = null)
     {
         var colours = Colours(theme);
-        var l1 = Luminance(colours[foreground]);
-        var l2 = Luminance(colours[background]);
+        var surface = under is null ? colours[background] : Over(colours[background], colours[under]);
+        var l1 = Luminance(Over(colours[foreground], surface));
+        var l2 = Luminance(surface);
         return (Math.Max(l1, l2) + 0.05) / (Math.Min(l1, l2) + 0.05);
     }
 
-    /// <summary>The four status colours: the tokens that have a "...Soft" background partner, minus Blood (the brand mark, never used as text).</summary>
+    private static readonly string[] InkTokens = ["Ink", "Ink2", "Ink3"];
+
+    /// <summary>The opaque surfaces text sits on: the page, panels, table headers and field fills, hovered rows, selected rows.</summary>
+    private static readonly string[] TextSurfaces = ["Canvas", "Layer", "Layer2", "Hover", "Selected"];
+
+    /// <summary>The stops of the Mica fallback gradient: the sidebar's and the title bar's text sits straight on it.</summary>
+    private static readonly string[] MicaStops = ["MicaStart", "MicaMid", "MicaEnd"];
+
+    /// <summary>The status colours, found by name in the colour file: every token that has a "...Soft" background partner (Blood, Critical, Success, Warning, Info).</summary>
     private static List<string> StatusTokens(string theme)
     {
         var keys = Colours(theme).Keys.ToHashSet();
-        return [.. keys.Where(k => k != "Blood" && keys.Contains(k + "Soft"))];
+        return [.. keys.Where(k => keys.Contains(k + "Soft"))];
     }
 
-    private static readonly string[] InkTokens = ["Ink", "Ink2", "Ink3"];
-    private static readonly string[] TextSurfaces = ["Layer", "Layer2"];
+    /// <summary>The 2.0 names the colour files keep for screens not rebuilt yet. Each must be its token's colour, so it needs no pairs of its own.</summary>
+    private static readonly Dictionary<string, string> Aliases = new()
+    {
+        ["SurfaceCanvas"] = "Canvas",
+        ["SurfaceRaised"] = "Layer",
+        ["SurfaceHover"] = "Hover",
+        ["SurfacePressed"] = "Selected",
+        ["SurfaceSelected"] = "Selected",
+        ["SurfaceInputHover"] = "Layer2",
+        ["SurfaceInputFocus"] = "Layer",
+        ["TextPrimary"] = "Ink",
+        ["TextSecondary"] = "Ink2",
+        ["TextMuted"] = "Ink3",
+        ["TextDisabled"] = "Ink3",
+        ["TextOnPrimary"] = "OnPrimary",
+        ["BorderSubtle"] = "Stroke",
+        ["SkeletonBase"] = "Skeleton1",
+        ["SkeletonHighlight"] = "Skeleton2",
+    };
+
+    /// <summary>Tokens that are neither text nor the only sign of anything, each with the reason it is not held to a ratio.</summary>
+    private static readonly Dictionary<string, string> ExemptFromContrast = new()
+    {
+        ["Stroke"] = "hairline panel edges and row separators",
+        ["Stroke2"] = "the resting edge of a control (1.4 to 1.9:1): a field also has its StrokeStrong bottom edge, a button its label",
+        ["CriticalStroke"] = "the danger button's edge, around its Critical label",
+        ["SuccessStroke"] = "an edge around Success text",
+        ["Skeleton1"] = "a loading placeholder",
+        ["Skeleton2"] = "the shimmer on a loading placeholder",
+        ["Scrim"] = "the veil behind a dialog",
+        ["Shadow"] = "the colour of shadows",
+        ["ChartGrid"] = "the chart's dashed grid lines, behind labelled values",
+        ["CaptionHover"] = "ink at 9 %: a hover tint under ink text and icons",
+        ["CaptionPressed"] = "ink at 5 %: a pressed tint under ink text and icons",
+        ["Well"] = "ink at 6 %: a track or hover tint under ink text and icons",
+    };
 
     /// <summary>
-    /// Every text-on-surface pair (4.5:1), the focus ring (3:1) and the one decorative edge that is documented, in BOTH colour files, computed
-    /// from the token files: Ink, Ink2 and Ink3 on Layer and Layer2; OnPrimary on Primary, PrimaryHover and PrimaryPressed; each status colour
-    /// on Layer and on its own Soft background; Focus on Layer; Stroke2 on Layer (1.3:1, the card edge: a hairline, not text and not the only
-    /// cue, so it is documented here and not held to 3:1).
+    /// Every pair that must meet a ratio, in BOTH colour files, computed from the files rather than listed by hand (the 2.0 rule: every text colour
+    /// on every surface it can sit on). Text at 4.5:1: the three inks on every text surface and on the Mica stops; every status colour on every text
+    /// surface and on its own Soft fill; Critical on the pressed danger fill; the text on the filled buttons; the chart's axis text. Non-text at 3:1:
+    /// the focus ring on every surface, the field's strong bottom edge, the selected row's bar, the chart series, the wave on the logo. The translucent
+    /// surfaces (the active sidebar item, the title-bar search field) are checked over each Mica stop.
     /// </summary>
-    public static TheoryData<string, string, string, double> Pairs()
+    public static TheoryData<string, string, string, string?, double> Pairs()
     {
-        var data = new TheoryData<string, string, string, double>();
-        foreach (var (theme, foreground, background, minimum) in ComputePairs())
+        var data = new TheoryData<string, string, string, string?, double>();
+        foreach (var (theme, foreground, background, under, minimum) in ComputePairs())
         {
-            data.Add(theme, foreground, background, minimum);
+            data.Add(theme, foreground, background, under, minimum);
         }
 
         return data;
     }
 
-    private static List<(string Theme, string Foreground, string Background, double Minimum)> ComputePairs()
+    private static List<(string Theme, string Foreground, string Background, string? Under, double Minimum)> ComputePairs()
     {
-        var data = new List<(string, string, string, double)>();
+        var data = new List<(string, string, string, string?, double)>();
         foreach (var theme in Themes)
         {
             foreach (var ink in InkTokens)
             {
-                foreach (var surface in TextSurfaces)
+                foreach (var surface in TextSurfaces.Concat(MicaStops))
                 {
-                    data.Add((theme, ink, surface, 4.5));
+                    data.Add((theme, ink, surface, null, 4.5));
                 }
-            }
-
-            foreach (var fill in new[] { "Primary", "PrimaryHover", "PrimaryPressed" })
-            {
-                data.Add((theme, "OnPrimary", fill, 4.5));
             }
 
             foreach (var status in StatusTokens(theme))
             {
-                data.Add((theme, status, "Layer", 4.5));
-                data.Add((theme, status, status + "Soft", 4.5));
+                foreach (var surface in TextSurfaces)
+                {
+                    data.Add((theme, status, surface, null, 4.5));
+                }
+
+                data.Add((theme, status, status + "Soft", null, 4.5));
             }
 
-            data.Add((theme, "Focus", "Layer", 3.0));
-            data.Add((theme, "Stroke2", "Layer", 1.3));
+            data.Add((theme, "Critical", "CriticalPressed", null, 4.5));
+            foreach (var fill in new[] { "Primary", "PrimaryHover", "PrimaryPressed" })
+            {
+                data.Add((theme, "OnPrimary", fill, null, 4.5));
+            }
+
+            data.Add((theme, "OnPrimaryPressed", "PrimaryPressed", null, 4.5));
+            data.Add((theme, "OnCloseHover", "CloseHover", null, 4.5));
+            data.Add((theme, "ChartText", "Layer", null, 4.5));
+
+            foreach (var surface in TextSurfaces.Concat(MicaStops))
+            {
+                data.Add((theme, "Focus", surface, null, 3.0));
+            }
+
+            data.Add((theme, "StrokeStrong", "Layer", null, 3.0));
+            data.Add((theme, "StrokeStrong", "Layer2", null, 3.0));
+            data.Add((theme, "SelectedBar", "Selected", null, 3.0));
+            data.Add((theme, "OnBlood", "Blood", null, 3.0));
+            foreach (var chart in Colours(theme).Keys.Where(k => k.StartsWith("Chart", StringComparison.Ordinal) && k is not ("ChartGrid" or "ChartText")))
+            {
+                data.Add((theme, chart, "Layer", null, 3.0));
+                data.Add((theme, chart, "Canvas", null, 3.0));
+            }
+
+            foreach (var stop in MicaStops)
+            {
+                data.Add((theme, "Ink", "NavActive", stop, 4.5));
+                data.Add((theme, "Ink2", "NavActive", stop, 4.5));
+                data.Add((theme, "Ink", "LayerOnMica", stop, 4.5));
+                data.Add((theme, "Ink3", "LayerOnMica", stop, 4.5));
+            }
         }
 
         return data;
@@ -303,11 +381,11 @@ public sealed partial class ThemeTests
 
     [Theory]
     [MemberData(nameof(Pairs))]
-    public void Tokens_TextPairsMeetContrast(string theme, string foreground, string background, double minimum)
+    public void Tokens_TextPairsMeetContrast(string theme, string foreground, string background, string? under, double minimum)
     {
-        var ratio = Contrast(theme, foreground, background);
+        var ratio = Contrast(theme, foreground, background, under);
 
-        Assert.True(ratio >= minimum, $"{theme}: {foreground} on {background} is {ratio:0.00}:1, needs {minimum}:1");
+        Assert.True(ratio >= minimum, $"{theme}: {foreground} on {background}{(under is null ? string.Empty : " over " + under)} is {ratio:0.00}:1, needs {minimum}:1");
     }
 
     [Fact]
@@ -316,47 +394,57 @@ public sealed partial class ThemeTests
         // Both colour files define exactly the same keys (ThemeService swaps one for the other).
         Assert.Equal(Colours("Light").Keys.Order(StringComparer.Ordinal), Colours("Dark").Keys.Order(StringComparer.Ordinal));
 
-        var covered = ComputePairs().Select(p => (p.Theme, p.Foreground, p.Background)).ToHashSet();
+        var pairs = ComputePairs();
+        var covered = pairs.Select(p => (p.Theme, p.Foreground, p.Background)).ToHashSet();
         foreach (var theme in Themes)
         {
             // Discovered by name: a status colour added to the files (with its Soft partner) joins the pairs without touching this test.
             var statuses = StatusTokens(theme);
-            Assert.Equal(["Critical", "Info", "Success", "Warning"], statuses.Order(StringComparer.Ordinal));
-            foreach (var ink in InkTokens)
+            Assert.Equal(["Blood", "Critical", "Info", "Success", "Warning"], statuses.Order(StringComparer.Ordinal));
+            foreach (var text in InkTokens.Concat(statuses))
             {
                 foreach (var surface in TextSurfaces)
                 {
-                    Assert.Contains((theme, ink, surface), covered);
+                    Assert.Contains((theme, text, surface), covered);
                 }
             }
 
-            foreach (var status in statuses)
+            // Every colour of the file is in a checked pair, is a 2.0 alias of a token that is, or is exempt for a stated reason: a new colour
+            // cannot slip through unnoticed.
+            var inPairs = pairs.Where(p => p.Theme == theme).SelectMany(p => new[] { p.Foreground, p.Background, p.Under }).Where(k => k is not null).ToHashSet();
+            var unclassified = Colours(theme).Keys.Where(k => !inPairs.Contains(k) && !Aliases.ContainsKey(k) && !ExemptFromContrast.ContainsKey(k)).ToList();
+            Assert.True(unclassified.Count == 0, $"{theme}: colour tokens neither checked, nor an alias, nor exempt: {string.Join(", ", unclassified)}");
+            Assert.All(ExemptFromContrast.Keys, key => Assert.DoesNotContain(key, inPairs)); // nothing is both checked and excused
+        }
+    }
+
+    [Fact]
+    public void Tokens_The20Names_AreTheColoursOfTheirTokens_InBothThemes()
+    {
+        foreach (var theme in Themes)
+        {
+            var colours = Colours(theme);
+            foreach (var (alias, token) in Aliases)
             {
-                Assert.Contains((theme, status, "Layer"), covered);
-                Assert.Contains((theme, status, status + "Soft"), covered);
+                Assert.True(colours[alias] == colours[token], $"{theme}: Color.{alias} is not Color.{token}");
             }
         }
     }
 
     [Fact]
-    public void Tokens_Text_OnTheSelectedHoverAndCanvasSurfaces_MeetsTheBar_Regression()
+    public void Tokens_MutedTextOnTheSelectedHoverAndCanvasSurfaces_MeetsTheBar_Regression()
     {
-        // The 2.0 verifier found muted text on the pressed surface at 4.05:1. In A, Ink and Ink2 sit on Selected, Hover and Canvas (rows, panels,
-        // page) and must meet 4.5:1 there. Ink3 (captions, placeholders) is 4.2 to 4.4:1 on those three in the LIGHT theme, below the 4.5:1
-        // that docs/design-system.md 2.1 states for Canvas: a token finding, reported to the lead. Until Ink3 is darkened (#5F6B7A gives 4.7+)
-        // this asserts the floor it has today (4.0:1) so it cannot get worse.
+        // The 2.0 verifier found muted text on the pressed surface at 4.05:1. In A the muted ink (captions, counts, placeholders) sat at 4.2 to 4.4:1
+        // on Selected, Hover and Canvas in the light theme; the token was darkened (#677382 to #616D7C) so it meets 4.5:1 there too.
         foreach (var theme in Themes)
         {
             foreach (var surface in new[] { "Selected", "Hover", "Canvas" })
             {
-                foreach (var ink in new[] { "Ink", "Ink2" })
+                foreach (var ink in InkTokens)
                 {
                     var ratio = Contrast(theme, ink, surface);
                     Assert.True(ratio >= 4.5, $"{theme}: {ink} on {surface} is {ratio:0.00}:1, needs 4.5:1");
                 }
-
-                var ink3 = Contrast(theme, "Ink3", surface);
-                Assert.True(ink3 >= 4.0, $"{theme}: Ink3 on {surface} is {ink3:0.00}:1, floor 4.0:1");
             }
         }
     }
@@ -370,6 +458,11 @@ public sealed partial class ThemeTests
         Assert.InRange(Contrast("Light", "Ink", "Layer"), 17.7, 18.0);       // #121820 on white: 17.84
         Assert.InRange(Contrast("Light", "OnPrimary", "Primary"), 15.3, 15.6); // white on #1B2533: 15.45
         Assert.Equal(1.0, Contrast("Light", "Layer", "Layer"), 6);
+
+        // A translucent colour is laid over what is behind it: ink at 9 % on white is a faint grey, nowhere near the ink itself.
+        Assert.InRange(Contrast("Light", "CaptionHover", "Layer"), 1.05, 1.35);
+        // And a translucent surface over a Mica stop is lighter than the stop in the light theme (white at 80 % over it).
+        Assert.True(Contrast("Light", "Ink", "NavActive", "MicaStart") > Contrast("Light", "Ink", "MicaStart"));
     }
 
     [Fact]

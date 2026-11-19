@@ -66,9 +66,9 @@ Every row is a pair `Color.<name>` and `Brush.<name>` unless the "Brush" column 
 | `StrokeStrong` | #767D86 | #8B9199 | The bottom edge of a text field, the off toggle border |
 | `Ink` | #121820 | #EDF0F4 | Primary text |
 | `Ink2` | #47515F | #AEB7C3 | Secondary text, labels, icons in lists |
-| `Ink3` | #677382 | #8A95A3 | Muted text: hints, counts, placeholders, disabled text |
+| `Ink3` | #616D7C | #8A95A3 | Muted text: hints, counts, placeholders, disabled text |
 | `Hover` | #F2F4F7 | #1E232A | Row, menu item and button hover |
-| `Selected` | #EAF0F7 | #232B35 | Selected row, pressed fill, selected menu item |
+| `Selected` | #EAF0F7 | #202832 | Selected row, pressed fill, selected menu item |
 | `SelectedBar` | #1B2533 | #E8ECF1 | The 3 px bar inside the left edge of a selected row |
 | `Primary` | #1B2533 | #E8ECF1 | The one filled button, selection text background, checked controls |
 | `PrimaryHover` | #2B3749 | #FFFFFF | Primary hover |
@@ -81,7 +81,7 @@ Every row is a pair `Color.<name>` and `Brush.<name>` unless the "Brush" column 
 | `Critical` | #B4162E | #F2596E | Errors, low stock, danger button text, bell dot |
 | `CriticalSoft` | #FBE8EB | #3A1A21 | Critical badge fill, danger hover |
 | `CriticalStroke` | #BF7C8C | #8D4D5C | Danger button edge |
-| `CriticalPressed` | #F2D5D9 | #402830 | Danger button pressed fill |
+| `CriticalPressed` | #F2D5D9 | #33131A | Danger button pressed fill |
 | `Success` | #0F6E45 | #52C58E | Done, eligible, completed |
 | `SuccessSoft` | #E2F3EA | #14302A | Success badge fill |
 | `SuccessStroke` | #A2C1B9 | #264A3E | Success edge |
@@ -109,7 +109,7 @@ Colours that exist only as `Color.*` (read them in code with `ThemeService.Color
 |---|---|---|---|
 | `Color.Shadow` | #0F1720 | #000000 | Colour of every shadow |
 | `Color.ChartGrid` | #E1E5EB | #2A3038 | Chart grid lines |
-| `Color.ChartText` | #677382 | #8A95A3 | Chart axis text |
+| `Color.ChartText` | #616D7C | #8A95A3 | Chart axis text |
 | `Color.MicaStart`, `MicaMid`, `MicaEnd` | #EEF1F6, #F3F1F3, #EFF2F5 | #13171C, #17141A, #12161B | Stops of the Mica fallback gradient |
 
 Brushes that are not plain colours: `Brush.Mica` (a gradient of the three Mica stops; transparent in a window where real Mica is active),

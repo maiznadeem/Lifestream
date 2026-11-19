@@ -17,7 +17,7 @@
   <Color x:Key="Color.StrokeStrong">#767D86</Color>
   <Color x:Key="Color.Ink">#121820</Color>
   <Color x:Key="Color.Ink2">#47515F</Color>
-  <Color x:Key="Color.Ink3">#677382</Color>
+  <Color x:Key="Color.Ink3">#616D7C</Color>
   <Color x:Key="Color.Hover">#F2F4F7</Color>
   <Color x:Key="Color.Selected">#EAF0F7</Color>
   <Color x:Key="Color.SelectedBar">#1B2533</Color>
@@ -122,7 +122,7 @@
   <Color x:Key="Color.Chart1">#B4162E</Color>
   <Color x:Key="Color.Chart2">#1D5BB8</Color>
   <Color x:Key="Color.ChartGrid">#E1E5EB</Color>
-  <Color x:Key="Color.ChartText">#677382</Color>
+  <Color x:Key="Color.ChartText">#616D7C</Color>
   <SolidColorBrush x:Key="Brush.Chart1" Color="{StaticResource Color.Chart1}" />
   <SolidColorBrush x:Key="Brush.Chart2" Color="{StaticResource Color.Chart2}" />
 
@@ -155,8 +155,8 @@
   <Color x:Key="Color.SurfaceInputFocus">#FFFFFF</Color>
   <Color x:Key="Color.TextPrimary">#121820</Color>
   <Color x:Key="Color.TextSecondary">#47515F</Color>
-  <Color x:Key="Color.TextMuted">#677382</Color>
-  <Color x:Key="Color.TextDisabled">#677382</Color>
+  <Color x:Key="Color.TextMuted">#616D7C</Color>
+  <Color x:Key="Color.TextDisabled">#616D7C</Color>
   <Color x:Key="Color.TextOnPrimary">#FFFFFF</Color>
   <Color x:Key="Color.BorderSubtle">#E1E5EB</Color>
   <Color x:Key="Color.SkeletonBase">#ECEFF3</Color>

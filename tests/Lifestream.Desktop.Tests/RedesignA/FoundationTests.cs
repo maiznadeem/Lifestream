@@ -76,7 +76,7 @@ public sealed class FoundationTests
         Assert.Equal(("#FFC8CFD9", "#FF3B434E"), colours["Stroke2"]);
         Assert.Equal(("#FF121820", "#FFEDF0F4"), colours["Ink"]);
         Assert.Equal(("#FF47515F", "#FFAEB7C3"), colours["Ink2"]);
-        Assert.Equal(("#FF677382", "#FF8A95A3"), colours["Ink3"]);
+        Assert.Equal(("#FF616D7C", "#FF8A95A3"), colours["Ink3"]); // light: the mock-up's #677382, darkened to reach 4.5:1 on the canvas, hovered and selected rows
         Assert.Equal(("#FF1B2533", "#FFE8ECF1"), colours["Primary"]);
         Assert.Equal(("#FFB4162E", "#FFF2596E"), colours["Blood"]);
         Assert.Equal(("#FFFBE8EB", "#FF3A1A21"), colours["BloodSoft"]);
@@ -84,7 +84,7 @@ public sealed class FoundationTests
         Assert.Equal(("#FF8F5200", "#FFEBAA4C"), colours["Warning"]);
         Assert.Equal(("#FF1D5BB8", "#FF82B2F5"), colours["Info"]);
         Assert.Equal(("#FFF2F4F7", "#FF1E232A"), colours["Hover"]);
-        Assert.Equal(("#FFEAF0F7", "#FF232B35"), colours["Selected"]);
+        Assert.Equal(("#FFEAF0F7", "#FF202832"), colours["Selected"]); // dark: the mock-up's #232B35, a shade deeper so Critical and Blood text reach 4.5:1 on a selected row
         Assert.Equal(("#FFC42B1C", "#FFC42B1C"), colours["CloseHover"]);
     }
 

@@ -19,7 +19,7 @@
   <Color x:Key="Color.Ink2">#AEB7C3</Color>
   <Color x:Key="Color.Ink3">#8A95A3</Color>
   <Color x:Key="Color.Hover">#1E232A</Color>
-  <Color x:Key="Color.Selected">#232B35</Color>
+  <Color x:Key="Color.Selected">#202832</Color>
   <Color x:Key="Color.SelectedBar">#E8ECF1</Color>
   <Color x:Key="Color.Primary">#E8ECF1</Color>
   <Color x:Key="Color.PrimaryHover">#FFFFFF</Color>
@@ -33,7 +33,7 @@
   <Color x:Key="Color.CriticalSoft">#3A1A21</Color>
   <!-- Danger button edge: critical at 45 % over Stroke2; pressed fill: critical at 18 % over Layer -->
   <Color x:Key="Color.CriticalStroke">#8D4D5C</Color>
-  <Color x:Key="Color.CriticalPressed">#402830</Color>
+  <Color x:Key="Color.CriticalPressed">#33131A</Color>
   <Color x:Key="Color.Success">#52C58E</Color>
   <Color x:Key="Color.SuccessSoft">#14302A</Color>
   <Color x:Key="Color.SuccessStroke">#264A3E</Color>
@@ -149,8 +149,8 @@
   <Color x:Key="Color.SurfaceCanvas">#111418</Color>
   <Color x:Key="Color.SurfaceRaised">#191D23</Color>
   <Color x:Key="Color.SurfaceHover">#1E232A</Color>
-  <Color x:Key="Color.SurfacePressed">#232B35</Color>
-  <Color x:Key="Color.SurfaceSelected">#232B35</Color>
+  <Color x:Key="Color.SurfacePressed">#202832</Color>
+  <Color x:Key="Color.SurfaceSelected">#202832</Color>
   <Color x:Key="Color.SurfaceInputHover">#1F242B</Color>
   <Color x:Key="Color.SurfaceInputFocus">#191D23</Color>
   <Color x:Key="Color.TextPrimary">#EDF0F4</Color>
