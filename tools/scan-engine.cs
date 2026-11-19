@@ -43,6 +43,8 @@ namespace LifestreamScan
     {
         public int MaxArchiveDepth = 6;
         public int MaxFindingsPerFile = 20;
+        // Local opt-in only (scan-artifacts.ps1 -ShowMatchHashes, refused in CI): put matchSha256 / lineSha256 into the findings.
+        public bool ShowHashes;
         public long MaxEntryBytes = 512L * 1024 * 1024;
         // "path|rule|lineSha256", path relative to the repository root (source files only).
         public readonly HashSet<string> SourceAllow = new HashSet<string>(StringComparer.Ordinal);
@@ -355,7 +357,10 @@ namespace LifestreamScan
             }
             ctx.Count++;
             if (ctx.Count > MaxFindingsPerFile) { FindingsOverCap++; return; }
-            Findings.Add(new Finding { File = ctx.Label, Rule = rule, Encoding = view.Enc, Offset = offset, MatchSha256 = sha, Line = line, LineSha256 = lineSha });
+            // The hashes are only used above, to match the allow-lists. A hash of a matched value (or of the line holding it) is never
+            // part of a finding unless the caller opted in locally (ShowHashes): for a short or guessable value it is as good as the value.
+            Findings.Add(new Finding { File = ctx.Label, Rule = rule, Encoding = view.Enc, Offset = offset, Line = line,
+                                       MatchSha256 = ShowHashes ? sha : null, LineSha256 = ShowHashes ? lineSha : null });
         }
 
         // ------------------------------------------------------------------ rules over a view

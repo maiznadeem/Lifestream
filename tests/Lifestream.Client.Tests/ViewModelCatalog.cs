@@ -68,8 +68,8 @@ public sealed class ViewModelCatalog : IDisposable
             (typeof(StaffEditorViewModel), () => Own(StaffEditorViewModel.ForNew(api, toasts, dialogs, clock)), f => ((StaffEditorViewModel)f).Username = "typed"),
             (typeof(ProfileViewModel), LoadedProfile, f => ((ProfileViewModel)f).DisplayName = "Typed"),
             (typeof(RecordDonationDialogViewModel), () => Own(new RecordDonationDialogViewModel(api, Samples2.Appointment(), clock, TimeZoneInfo.Utc)), f => ((RecordDonationDialogViewModel)f).Notes = "Typed"),
-            (typeof(ChangePasswordDialogViewModel), () => Own(new ChangePasswordDialogViewModel(api)), f => ((ChangePasswordDialogViewModel)f).NewPassword = "typed"),
-            (typeof(ResetPasswordDialogViewModel), () => Own(new ResetPasswordDialogViewModel(api, 5, "Staff 005")), f => ((ResetPasswordDialogViewModel)f).TemporaryPassword = "typed"),
+            (typeof(ChangePasswordDialogViewModel), () => Own(new ChangePasswordDialogViewModel(api)), f => ((ChangePasswordDialogViewModel)f).NewPassword = TestSecrets.Typed),
+            (typeof(ResetPasswordDialogViewModel), () => Own(new ResetPasswordDialogViewModel(api, 5, "Staff 005")), f => ((ResetPasswordDialogViewModel)f).TemporaryPassword = TestSecrets.Typed),
         };
         Forms = [.. forms];
 

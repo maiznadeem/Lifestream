@@ -119,7 +119,7 @@ Describe 'INFRA-01 binaries: credential literals in real compiled net11.0 DLLs' 
         @{ Kind = 'resx string resource (UTF-8 in .resources)'; Dll = 'sweep-resx' }
     ) {
         $report = Join-Path $TestDrive "report-$Dll.json"
-        $r = Invoke-Scan $script:Dlls[$Dll] @('-ReportPath', $report, '-MaxFindingsPerFile', '5000')
+        $r = Invoke-Scan $script:Dlls[$Dll] @('-ReportPath', $report, '-MaxFindingsPerFile', '5000', '-ShowMatchHashes')
         $r.ExitCode | Should -Be 1 -Because $r.Output
         $found = @((Get-Content -Raw $report | ConvertFrom-Json).findings | ForEach-Object matchSha256)
         $missing = @(for ($i = 0; $i -lt 200; $i++) { if ($found -notcontains (Get-Sha $script:SweepLiterals[$i])) { $i + 1 } })

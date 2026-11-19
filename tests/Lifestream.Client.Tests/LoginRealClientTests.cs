@@ -25,7 +25,7 @@ public sealed class LoginRealClientTests
         var handler = new ScriptedHandler((_, _) => ScriptedHandler.Json(HttpStatusCode.InternalServerError, body));
         using var http = new HttpClient(new WakeAwareHandler(new WakePolicy(), new ServerStatus(), handler)) { BaseAddress = new Uri("https://api.test/") };
         using var api = new LifestreamApiClient(http, rig.Session);
-        var vm = new LoginViewModel(api, rig.Session, rig.Get<IAppFlow>()) { Username = "u", Password = "p" };
+        var vm = new LoginViewModel(api, rig.Session, rig.Get<IAppFlow>()) { Username = "u", Password = TestSecrets.P };
         var captured = new List<Exception>();
         var previous = AsyncRelayCommand.DefaultErrorHandler;
         AsyncRelayCommand.DefaultErrorHandler = captured.Add;
@@ -55,7 +55,7 @@ public sealed class LoginRealClientTests
         var clock = new ManualTimeProvider();
         using var http = new HttpClient(new WakeAwareHandler(new WakePolicy { Budget = TimeSpan.Zero, Clock = clock }, new ServerStatus(), handler)) { BaseAddress = new Uri("https://api.test/") };
         using var api = new LifestreamApiClient(http, rig.Session);
-        var vm = new LoginViewModel(api, rig.Session, rig.Get<IAppFlow>()) { Username = "u", Password = "p" };
+        var vm = new LoginViewModel(api, rig.Session, rig.Get<IAppFlow>()) { Username = "u", Password = TestSecrets.P };
         var captured = new List<Exception>();
         var previous = AsyncRelayCommand.DefaultErrorHandler;
         AsyncRelayCommand.DefaultErrorHandler = captured.Add;
@@ -99,7 +99,7 @@ public sealed class LoginColdStartTests
         var server = new SilentServer();
         using var http = new HttpClient(new WakeAwareHandler(new WakePolicy { Clock = clock }, status, server)) { BaseAddress = new Uri("https://api.test/"), Timeout = Timeout.InfiniteTimeSpan };
         using var api = new LifestreamApiClient(http, rig.Session);
-        var vm = new LoginViewModel(api, rig.Session, rig.Get<IAppFlow>(), status) { Username = "u", Password = "p" };
+        var vm = new LoginViewModel(api, rig.Session, rig.Get<IAppFlow>(), status) { Username = "u", Password = TestSecrets.P };
 
         var signIn = vm.SignInCommand.ExecuteAsync();
         await Task.Delay(50);

@@ -31,7 +31,7 @@ public sealed class StaffProfileTests(ApiFixture fx) : IClassFixture<ApiFixture>
             ["role"] = "Staff",
             ["salary"] = 51000,
             ["phone"] = "+1-555-0150",
-            ["initialPassword"] = "a-long-initial-password",
+            ["initialPassword"] = TestSecrets.Initial,
         };
         change?.Invoke(body);
         return body;
@@ -49,7 +49,7 @@ public sealed class StaffProfileTests(ApiFixture fx) : IClassFixture<ApiFixture>
         using var response = await admin.Client.PostRaw(ApiRoutes.Staff, Json(NewStaff(username)));
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         var text = await response.Content.ReadAsStringAsync(Ct);
-        Assert.DoesNotContain("a-long-initial-password", text, StringComparison.Ordinal);
+        Assert.DoesNotContain(TestSecrets.Initial, text, StringComparison.Ordinal);
         Assert.DoesNotContain("assword", text, StringComparison.Ordinal);
         var detail = JsonSerializer.Deserialize<StaffDetail>(text, ApiFixture.Json)!;
         Assert.Equal(username, detail.Username);
@@ -57,10 +57,10 @@ public sealed class StaffProfileTests(ApiFixture fx) : IClassFixture<ApiFixture>
 
         var hash = await fx.Db.ScalarAsync<string>($"SELECT PasswordHash FROM StaffCredential WHERE StaffId = {detail.Id}", Ct);
         Assert.True(PasswordHashing.IsValidHash(hash));
-        Assert.NotEqual("a-long-initial-password", hash);
+        Assert.NotEqual(TestSecrets.Initial, hash);
 
         using var anonymous = fx.NewClient();
-        using var login = await anonymous.PostApi(ApiRoutes.AuthLogin, new LoginRequest(username, "a-long-initial-password"));
+        using var login = await anonymous.PostApi(ApiRoutes.AuthLogin, new LoginRequest(username, TestSecrets.Initial));
         Assert.Equal(HttpStatusCode.OK, login.StatusCode);
     }
 
@@ -240,7 +240,7 @@ public sealed class StaffProfileTests(ApiFixture fx) : IClassFixture<ApiFixture>
     public async Task ChangePassword_RequiresCurrent_Min12_StoresHash_EndsOtherSessions()
     {
         var user = await fx.AddStaffAsync(Role.Staff);
-        const string newPassword = "a-brand-new-password-1";
+        const string newPassword = TestSecrets.BrandNew;
 
         using var wrongCurrent = await user.Client.PutApi(ApiRoutes.MePassword, new ChangePasswordRequest("not-the-password", newPassword));
         using var p1 = await wrongCurrent.Problem(400, ProblemCodes.Validation);

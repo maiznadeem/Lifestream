@@ -204,7 +204,7 @@ public sealed class EnumValidationTests(ApiFixture fx) : IClassFixture<ApiFixtur
             case nameof(CreatePatientRequest):
                 return (HttpMethod.Post, "/api/v1/patients", JsonNode.Parse("""{"name":"Fuzz Patient","dateOfBirth":"1990-01-01","gender":"Male","bloodType":"APos"}""")!.AsObject(), () => fx.Db.ScalarAsync<string>("SELECT CONCAT(COUNT(*), ':', COALESCE(SUM(CASE WHEN Gender IN ('Male','Female','Other') THEN 0 ELSE 1 END), 0)) FROM Patient", Ct));
             case nameof(CreateStaffRequest):
-                return (HttpMethod.Post, "/api/v1/staff", JsonNode.Parse("""{"displayName":"Fuzz Staff","username":"fuzzstaff","gender":"Male","dateOfBirth":"1990-01-01","designation":"Doctor","shift":"Morning","role":"Staff","salary":1000,"phone":null,"initialPassword":"a-long-initial-password"}""")!.AsObject(), () => fx.Db.ScalarAsync<string>("SELECT CONCAT(COUNT(*), ':', COALESCE(SUM(CASE WHEN Role IN ('Admin','Staff') THEN 0 ELSE 1 END), 0)) FROM Staff", Ct));
+                return (HttpMethod.Post, "/api/v1/staff", JsonNode.Parse($$"""{"displayName":"Fuzz Staff","username":"fuzzstaff","gender":"Male","dateOfBirth":"1990-01-01","designation":"Doctor","shift":"Morning","role":"Staff","salary":1000,"phone":null,"initialPassword":"{{TestSecrets.Initial}}"}""")!.AsObject(), () => fx.Db.ScalarAsync<string>("SELECT CONCAT(COUNT(*), ':', COALESCE(SUM(CASE WHEN Role IN ('Admin','Staff') THEN 0 ELSE 1 END), 0)) FROM Staff", Ct));
             case nameof(UpdateDonorRequest):
             {
                 var donor = await Seed.DonorAsync(fx, "Fuzz Update Donor");

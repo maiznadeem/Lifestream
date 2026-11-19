@@ -189,14 +189,19 @@ the script compiles with PowerShell's own .NET runtime (no SDK needed on the run
   never walked, while every tracked file is scanned and a tracked file under `bin`, `obj` or `TestResults` fails the scan. In C# an
   assignment from an identifier is code only where the keyword is in code; in any string literal or comment it is a finding.
   CI and a local run use the same command: `pwsh tools/scan-artifacts.ps1 -Path src,tests,infra,packaging -GitTracked`.
+- **Test passwords** live in one file per test project, `tests/<Project>/TestSecrets.cs`; tests use its constants.
+  `tests/infra/TestSecrets.Tests.ps1` fails on a password-shaped literal (a literal set on, initialised into or passed by name to
+  anything named like a password, or a JSON password pair) in any other test file, so a new test cannot turn the scan red.
 - **Allow-lists**, both reviewed by a person and both matched by hash, so an edit re-flags the text:
-  `tools/secret-scan-allowlist.txt` (`path|rule|sha256 of the line`, paths under `tests/` only) for throw-away test values, and
+  `tools/secret-scan-allowlist.txt` (`path|rule|sha256 of the line`; only `tests/<Project>/TestSecrets.cs` lines, today none) and
   `tools/secret-scan-binary-allowlist.txt` (`file name|rule|sha256 of the matched text`) for benign strings in third-party files, today
-  the 20 strings of the stock aspnet:11.0 layers. A finding prints the hash to list; names starting with `Lifestream` or `appsettings`
-  are refused. Nothing is exempted by path or by rule.
+  the 20 public strings of the stock aspnet:11.0 layers. Names starting with `Lifestream` or `appsettings` are refused. Nothing is
+  exempted by path or by rule.
 - **Images**: `tools/scan-image.sh <image>` scans `docker save` output, so each layer tar is scanned on its own and a file that one
   layer adds and a later layer deletes is still found, plus `docker image inspect` (baked environment variables) and the history.
-- The matched value is never printed; reports carry the file, rule, encoding, offset and hash only. A full Desktop publish (250 MB)
+- The matched value is never printed, and neither is a hash of it: in a public CI log a SHA-256 of a short value can be
+  brute-forced. Findings and reports carry the file, rule, encoding, offset (and line). The hash an allow-list entry needs comes from a
+  local run with `-ShowMatchHashes`, which the scanner refuses when `CI` or `GITHUB_ACTIONS` is set. A full Desktop publish (250 MB)
   scans in about 6 seconds and the Releases folder (1.1 GB, every member opened) in about 16.
 
 ## Every Azure CLI call passes the subscription

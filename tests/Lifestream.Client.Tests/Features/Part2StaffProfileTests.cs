@@ -153,8 +153,8 @@ public sealed class Part2StaffProfileTests
         Assert.Equal("Type the password again.", form.GetError(nameof(StaffEditorViewModel.ConfirmPassword)));
         Assert.Null(form.GetError(nameof(StaffEditorViewModel.SalaryText))); // optional
 
-        form.Password = "short";
-        form.ConfirmPassword = "different";
+        form.Password = TestSecrets.TooShort;
+        form.ConfirmPassword = TestSecrets.Different;
         Assert.False(form.ValidateAll());
         Assert.Contains("at least 12", form.GetError(nameof(StaffEditorViewModel.Password))!, StringComparison.Ordinal);
         Assert.Equal("The two passwords don't match.", form.GetError(nameof(StaffEditorViewModel.ConfirmPassword)));
@@ -177,14 +177,14 @@ public sealed class Part2StaffProfileTests
         form.Designation = Designation.Assistant;
         form.Shift = Shift.FullTime;
         form.SalaryText = "4200";
-        form.Password = "a-long-enough-password";
-        form.ConfirmPassword = "a-long-enough-password";
+        form.Password = TestSecrets.LongEnough;
+        form.ConfirmPassword = TestSecrets.LongEnough;
 
         await form.SaveCommand.ExecuteAsync();
 
         Assert.Equal("That username is already taken. Choose another.", form.GetError(nameof(StaffEditorViewModel.Username)));
         var sent = rig.Recorder.LastArg<CreateStaffRequest>("CreateStaffAsync");
-        Assert.Equal(("nurse.joy", 4200, Role.Staff, "a-long-enough-password"), (sent.Username, sent.Salary, sent.Role, sent.InitialPassword));
+        Assert.Equal(("nurse.joy", 4200, Role.Staff, TestSecrets.LongEnough), (sent.Username, sent.Salary, sent.Role, sent.InitialPassword));
 
         rig.Fake.On("CreateStaffAsync", ApiResult<StaffDetail>.Ok(Samples2.Staff(9, "Nurse Joy")));
         await form.SaveCommand.ExecuteAsync();
@@ -339,27 +339,27 @@ public sealed class Part2StaffProfileTests
             Assert.Equal(string.Empty, dialog.TemporaryPassword); // starts empty: nothing stored is ever shown
             Assert.Equal(string.Empty, dialog.ConfirmPassword);
 
-            dialog.TemporaryPassword = "short";
-            dialog.ConfirmPassword = "other";
+            dialog.TemporaryPassword = TestSecrets.TooShort;
+            dialog.ConfirmPassword = TestSecrets.Other;
             await dialog.PrimaryCommand.ExecuteAsync();
             Assert.False(dialog.Completed);
             Assert.Equal(0, rig.Recorder.CountOf("ResetStaffPasswordAsync")); // invalid: nothing sent
             Assert.Contains("at least 12", dialog.GetError(nameof(ResetPasswordDialogViewModel.TemporaryPassword))!, StringComparison.Ordinal);
             Assert.Equal("The two passwords don't match.", dialog.GetError(nameof(ResetPasswordDialogViewModel.ConfirmPassword)));
 
-            dialog.TemporaryPassword = "Temporary-Pass-12";
-            dialog.ConfirmPassword = "Temporary-Pass-12";
+            dialog.TemporaryPassword = TestSecrets.Temporary;
+            dialog.ConfirmPassword = TestSecrets.Temporary;
             await dialog.PrimaryCommand.ExecuteAsync();
         };
 
         await vm.ResetPasswordCommand.ExecuteAsync();
 
         var request = (ResetPasswordRequest)rig.Recorder.Calls.Single(c => c.Name == "ResetStaffPasswordAsync").Args[1]!;
-        Assert.Equal("Temporary-Pass-12", request.TemporaryPassword);
+        Assert.Equal(TestSecrets.Temporary, request.TemporaryPassword);
         Assert.Equal(2, rig.Recorder.Calls.Single(c => c.Name == "ResetStaffPasswordAsync").Args[0]);
         var toast = Assert.Single(rig.Toasts.Toasts);
         Assert.Equal("Password reset for Selected. They must choose a new one at next sign-in.", toast.Message);
-        Assert.DoesNotContain("Temporary-Pass-12", toast.Message, StringComparison.Ordinal); // no password is ever displayed
+        Assert.DoesNotContain(TestSecrets.Temporary, toast.Message, StringComparison.Ordinal); // no password is ever displayed
         Assert.Equal(string.Empty, dialog!.TemporaryPassword); // and the typed values are gone
         Assert.Equal(string.Empty, dialog.ConfirmPassword);
         Assert.DoesNotContain(typeof(StaffViewModel).GetProperties(BindingFlags.Public | BindingFlags.Instance), p => p.Name.Contains("Password", StringComparison.OrdinalIgnoreCase) && p.PropertyType == typeof(string));
@@ -370,14 +370,14 @@ public sealed class Part2StaffProfileTests
     {
         var rig = new Part2Rig();
         rig.Fake.OnVoid("ResetStaffPasswordAsync", ApiResult.Fail(new ApiProblem(403, ProblemCodes.DemoForbidden, "forbidden")));
-        var dialog = new ResetPasswordDialogViewModel(rig.Api, 2, "Staff 002") { TemporaryPassword = "Temporary-Pass-12", ConfirmPassword = "Temporary-Pass-12" };
+        var dialog = new ResetPasswordDialogViewModel(rig.Api, 2, "Staff 002") { TemporaryPassword = TestSecrets.Temporary, ConfirmPassword = TestSecrets.Temporary };
 
         await dialog.PrimaryCommand.ExecuteAsync();
 
         Assert.False(dialog.Completed);
         Assert.Equal("The demo account can't make this change.", dialog.FormError);
         Assert.False(dialog.IsBusy);
-        Assert.Equal("Temporary-Pass-12", dialog.TemporaryPassword); // what was typed is kept so it can be corrected
+        Assert.Equal(TestSecrets.Temporary, dialog.TemporaryPassword); // what was typed is kept so it can be corrected
     }
 
     // FEAT-24, FEAT-26
@@ -557,8 +557,8 @@ public sealed class Part2StaffProfileTests
         form.DateOfBirth = new DateOnly(1990, 1, 1);
         form.Designation = Designation.Assistant;
         form.Shift = Shift.FullTime;
-        form.Password = "a-long-enough-password";
-        form.ConfirmPassword = "a-long-enough-password";
+        form.Password = TestSecrets.LongEnough;
+        form.ConfirmPassword = TestSecrets.LongEnough;
 
         await form.SaveCommand.ExecuteAsync();
 
@@ -598,15 +598,15 @@ public sealed class Part2StaffProfileTests
             rig.Forms.Script = async dialog =>
             {
                 var change = Assert.IsType<ChangePasswordDialogViewModel>(dialog);
-                change.CurrentPassword = "the-old-password";
-                change.NewPassword = "the-new-password-1";
-                change.ConfirmPassword = "the-new-password-1";
+                change.CurrentPassword = TestSecrets.Current;
+                change.NewPassword = TestSecrets.Next;
+                change.ConfirmPassword = TestSecrets.Next;
                 await change.PrimaryCommand.ExecuteAsync();
             };
             await profile.ChangePasswordCommand.ExecuteAsync();
 
             var sent = rig.Recorder.LastArg<ChangePasswordRequest>("ChangePasswordAsync");
-            Assert.Equal(("the-old-password", "the-new-password-1"), (sent.CurrentPassword, sent.NewPassword));
+            Assert.Equal((TestSecrets.Current, TestSecrets.Next), (sent.CurrentPassword, sent.NewPassword));
             Assert.Equal(0, rig.Recorder.CountOf("SetMyPhotoAsync")); // the password change never touches the photo
             Assert.Equal(0, rig.Recorder.CountOf("UpdateProfileAsync"));
             Assert.Equal(hasPhoto ? 1 : 0, rig.Recorder.CountOf("GetMyPhotoAsync"));
@@ -625,16 +625,16 @@ public sealed class Part2StaffProfileTests
         Assert.Equal("Enter a new password.", dialog.GetError(nameof(ChangePasswordDialogViewModel.NewPassword)));
         Assert.Equal("Type the new password again.", dialog.GetError(nameof(ChangePasswordDialogViewModel.ConfirmPassword)));
 
-        dialog.CurrentPassword = "same-password-12";
-        dialog.NewPassword = "same-password-12";
-        dialog.ConfirmPassword = "other";
+        dialog.CurrentPassword = TestSecrets.Same;
+        dialog.NewPassword = TestSecrets.Same;
+        dialog.ConfirmPassword = TestSecrets.Other;
         await dialog.PrimaryCommand.ExecuteAsync();
         Assert.Equal("The new password must be different from the current one.", dialog.GetError(nameof(ChangePasswordDialogViewModel.NewPassword)));
         Assert.Equal("The two passwords don't match.", dialog.GetError(nameof(ChangePasswordDialogViewModel.ConfirmPassword)));
         Assert.Equal(0, rig.Recorder.CountOf("ChangePasswordAsync"));
 
-        dialog.NewPassword = "brand-new-password";
-        dialog.ConfirmPassword = "brand-new-password";
+        dialog.NewPassword = TestSecrets.BrandNew;
+        dialog.ConfirmPassword = TestSecrets.BrandNew;
         rig.Fake.OnVoid("ChangePasswordAsync", ApiResult.Fail(new ApiProblem(400, ProblemCodes.Validation, "Validation failed", "c", null, new Dictionary<string, string[]> { ["currentPassword"] = ["is not correct"] })));
         await dialog.PrimaryCommand.ExecuteAsync();
 

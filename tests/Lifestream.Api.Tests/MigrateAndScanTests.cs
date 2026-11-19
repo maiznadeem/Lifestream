@@ -42,7 +42,7 @@ public sealed class MigrateTests
         await using var db = await NewEmptyAsync();
         Assert.Contains("Microsoft SQL Server", db.ServerVersion);
         Assert.Equal(0, await db.ScalarAsync<int>("SELECT COUNT(*) FROM sys.tables", Ct));
-        var password = "Owner-" + Guid.NewGuid().ToString("N");
+        var password = TestSecrets.OwnerPrefix + Guid.NewGuid().ToString("N");
         using var logs = new CapturingLoggerProvider();
 
         var exit = await Migrator.RunAsync(Args(db, password), extraLogs: logs);

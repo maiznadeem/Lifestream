@@ -255,7 +255,7 @@ public sealed class AuthorizationMatrixTests(ApiFixture fx) : IClassFixture<ApiF
             await demo.Client.PatchApi(ApiRoutes.StaffById, target.Id, new { rowVersion = "AAAAAAAAAAE=", displayName = "X" }),
             await demo.Client.DeleteApi(ApiRoutes.StaffById, target.Id),
             await demo.Client.PostApi(ApiRoutes.StaffResetPassword, id: target.Id),
-            await demo.Client.PutApi(ApiRoutes.MePassword, new { currentPassword = "a", newPassword = "bbbbbbbbbbbbbbbb" }),
+            await demo.Client.PutApi(ApiRoutes.MePassword, new { currentPassword = TestSecrets.MatrixCurrent, newPassword = TestSecrets.MatrixNew }),
             await demo.Client.PatchMe(new { rowVersion = "AAAAAAAAAAE=", displayName = "X" }),
         })
         {

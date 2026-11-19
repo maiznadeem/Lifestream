@@ -389,7 +389,7 @@ public sealed class ShellViewTests
             using var host = Hosted.Create(LoginFor(vm), 520, 688);
             host.Settle(200);
             vm.Username = "nadeem";
-            vm.Password = "pw";
+            vm.Password = TestSecrets.Pw;
             host.Settle(100);
             var signIn = host.Find<Button>("SignInButton");
 
@@ -441,7 +441,7 @@ public sealed class ShellViewTests
                 using var host = Hosted.Create(LoginFor(vm), 520, 688);
                 host.Settle(100);
                 vm.Username = "u";
-                vm.Password = "p";
+                vm.Password = TestSecrets.P;
                 vm.SignInCommand.ExecuteAsync().GetAwaiter().GetResult();
                 host.Settle(200);
                 host.Capture($"LoginWindow_{name}.png");

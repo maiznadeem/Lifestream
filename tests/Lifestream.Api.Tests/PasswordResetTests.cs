@@ -96,15 +96,15 @@ public sealed partial class PasswordResetTests(ApiFixture fx) : IClassFixture<Ap
         var refreshed = await (await anonymous.PostApi(ApiRoutes.AuthRefresh, new RefreshRequest(tokens.RefreshToken))).Read<TokenResponse>();
         Assert.True(refreshed.User.MustChangePassword);
         using var client2 = fx.NewClient(refreshed.AccessToken);
-        using var wrongCurrent = await client2.PutApi(ApiRoutes.MePassword, new ChangePasswordRequest("not-the-password", "a-brand-new-password-1"));
+        using var wrongCurrent = await client2.PutApi(ApiRoutes.MePassword, new ChangePasswordRequest("not-the-password", TestSecrets.BrandNew));
         using var p = await wrongCurrent.Problem(400, ProblemCodes.Validation);
-        using var changed = await client2.PutApi(ApiRoutes.MePassword, new ChangePasswordRequest(Temporary, "a-brand-new-password-1"));
+        using var changed = await client2.PutApi(ApiRoutes.MePassword, new ChangePasswordRequest(Temporary, TestSecrets.BrandNew));
         Assert.Equal(HttpStatusCode.NoContent, changed.StatusCode);
         Assert.Equal(0, await fx.Db.ScalarAsync<int>($"SELECT MustChangePassword FROM StaffCredential WHERE StaffId = {worker.Id}", Ct));
 
         // The same session now works everywhere, and a new sign-in no longer says it.
         Assert.Equal(HttpStatusCode.OK, (await client2.GetApi(ApiRoutes.Donors)).StatusCode);
-        var fresh = await (await anonymous.PostApi(ApiRoutes.AuthLogin, new LoginRequest(worker.Username, "a-brand-new-password-1"))).Read<TokenResponse>();
+        var fresh = await (await anonymous.PostApi(ApiRoutes.AuthLogin, new LoginRequest(worker.Username, TestSecrets.BrandNew))).Read<TokenResponse>();
         Assert.False(fresh.User.MustChangePassword);
     }
 
@@ -182,12 +182,12 @@ public sealed partial class PasswordResetTests(ApiFixture fx) : IClassFixture<Ap
         responses.Add(("create staff", await admin.Client.PostRaw(ApiRoutes.Staff, JsonSerializer.Serialize(new Dictionary<string, object?>
         {
             ["displayName"] = "Sweep Person", ["username"] = fx.NextName("sweep"), ["gender"] = "Female", ["dateOfBirth"] = "1992-03-04", ["designation"] = "Doctor",
-            ["shift"] = "Morning", ["role"] = "Staff", ["salary"] = 51000, ["phone"] = "+1-555-0150", ["initialPassword"] = "a-long-initial-password",
+            ["shift"] = "Morning", ["role"] = "Staff", ["salary"] = 51000, ["phone"] = "+1-555-0150", ["initialPassword"] = TestSecrets.Initial,
         }))));
         responses.Add(("reset", await admin.Client.PostApi(ApiRoutes.StaffResetPassword, new ResetPasswordRequest(Temporary), worker.Id)));
         var me = await (await admin.Client.GetApi(ApiRoutes.Me)).Read<ProfileResponse>();
         responses.Add(("patch me", await admin.Client.PatchMe(new UpdateProfileRequest(me.RowVersion, DisplayName: "Sweep Admin"))));
-        responses.Add(("change password", await admin.Client.PutApi(ApiRoutes.MePassword, new ChangePasswordRequest(ApiFixture.Password, "a-brand-new-password-1"))));
+        responses.Add(("change password", await admin.Client.PutApi(ApiRoutes.MePassword, new ChangePasswordRequest(ApiFixture.Password, TestSecrets.BrandNew))));
         responses.Add(("photo", await admin.Client.PutBytes(ApiRoutes.StaffPhoto, worker.Id, TestImages.Png(100, 100), "image/png")));
 
         var offenders = new List<string>();
