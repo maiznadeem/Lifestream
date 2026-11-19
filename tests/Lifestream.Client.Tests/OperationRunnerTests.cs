@@ -14,7 +14,6 @@ namespace Lifestream.Client.Tests;
 /// SHELL-07: the waking state and Cancel of every kind of operation (save, dialog submit, detail pane, picker, load), and that Cancel reaches the
 /// HTTP request. Tests named RealClient use the real API client, the wake-aware handler and a stub server on a manual clock; the others use the fake API.
 /// </summary>
-[Collection("GlobalErrorHandler")]
 public sealed class OperationRunnerTests
 {
     /// <summary>A stub server that holds every request until it is opened, and records which requests it answered and which were cancelled before.</summary>
@@ -373,15 +372,9 @@ public sealed class OperationRunnerTests
         using var inner = new LifestreamApiClient(http, rig.Session);
         var login = new Auth.LoginViewModel(ScopedApiClient.Wrap(inner, strict: true), rig.Session, rig.Get<Navigation.IAppFlow>()) { Username = "u", Password = TestSecrets.P };
         var reported = new List<Exception>();
-        var previous = AsyncRelayCommand.DefaultErrorHandler;
-        AsyncRelayCommand.DefaultErrorHandler = reported.Add;
-        try
+        using (AsyncRelayCommand.CaptureErrors(reported.Add))
         {
             await login.SignInCommand.ExecuteAsync();
-        }
-        finally
-        {
-            AsyncRelayCommand.DefaultErrorHandler = previous;
         }
 
         Assert.Empty(reported);

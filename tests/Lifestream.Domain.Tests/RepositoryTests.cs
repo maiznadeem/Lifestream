@@ -235,6 +235,30 @@ public sealed partial class RepositoryTests
         Assert.DoesNotContain("continue-on-error: true", ci, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Ci_RunsEveryTestProjectUnderTwoFixedSeeds_SoAnOrderDependenceFailsThePullRequest()
+    {
+        // xUnit's default order is derived from the assembly path, so a test that leaks state passes in one checkout and fails in another.
+        // A seeded order is the same on every machine: CI runs each project under two fixed seeds and fails the job when either run fails.
+        var ci = Read(".github/workflows/ci.yml");
+        var job = Regex.Match(ci, @"(?ms)^  test-order:\r?\n(?<body>.*?)(?=^  \S|\z)");
+        Assert.True(job.Success, "ci.yml has no test-order job");
+        var body = job.Groups["body"].Value;
+
+        foreach (var project in new[] { "Domain", "Client", "Api", "Desktop" })
+        {
+            Assert.Matches($@"(?m)^\s*projects:\s*""[^""\r\n]*\b{project}\b", body);
+        }
+
+        var seeds = Regex.Match(body, @"(?m)^\s*SEEDS:\s*""(?<seeds>\d+( \d+)+)""").Groups["seeds"].Value.Split(' ');
+        Assert.True(seeds.Distinct().Count() >= 2, "the test-order job needs at least two distinct fixed seeds");
+        Assert.Contains("\":$seed\"", body, StringComparison.Ordinal);
+        Assert.Matches(@"(?m)^\s*pull_request:", ci);
+        Assert.DoesNotContain("continue-on-error", body, StringComparison.Ordinal);
+        Assert.Contains("exit $fail", body, StringComparison.Ordinal);
+        Assert.Contains("-notrait \"Category=Perf\"", body, StringComparison.Ordinal); // running the exe directly skips the csproj filter: wall-clock tests stay out of it too
+    }
+
     // ---- INFRA-18: repository hygiene ----
 
     [Theory]

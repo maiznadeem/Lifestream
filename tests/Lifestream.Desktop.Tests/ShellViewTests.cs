@@ -377,6 +377,8 @@ public sealed class ShellViewTests
         Assert.DoesNotContain(texts, t => t.Contains("password:", StringComparison.OrdinalIgnoreCase) || t.Contains("admin123", StringComparison.OrdinalIgnoreCase));
     }
 
+    [Trait("Category", "Perf")] // asserts a wall-clock budget: runs in the perf pass (tests/perf/run-perf.ps1), not in the loaded default run
+    [Trait("PerfPhase", "timing")]
     [Fact]
     public void Login_SignIn_ShowsBusyWithin100ms_WithSpinnerAndSigningInText_ReadOnlyFields_EnterSubmits()
     {

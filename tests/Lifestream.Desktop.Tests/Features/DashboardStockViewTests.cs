@@ -25,6 +25,8 @@ public sealed class DashboardStockViewTests
     private static bool ChartsDrawn(byte[] png) =>
         StaHost.CountPixelsNear(png, 0xFF, 0x7A, 0x8A, 3) > 400 && StaHost.CountPixelsNear(png, 0x7C, 0xB8, 0xFF, 3) > 400;
 
+    [Trait("Category", "Perf")] // asserts a wall-clock budget: runs in the perf pass (tests/perf/run-perf.ps1), not in the loaded default run
+    [Trait("PerfPhase", "timing")]
     [Fact]
     public void Dashboard_OneApiCall_SkeletonShowsFirst_ChartsRenderWithin300msOfDataArrival_FakeApi()
     {
@@ -170,7 +172,7 @@ public sealed class DashboardStockViewTests
     [Fact]
     public void Dashboard_Cards_AreFlat_NoBlurOrShadowEffect_InXamlOrOnTheRenderedTree_FakeApi()
     {
-        var featuresDir = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "src", "Lifestream.Desktop", "Features");
+        var featuresDir = Lifestream.Client.Tests.RepoPaths.Find("src/Lifestream.Desktop/Features");
         var xaml = Directory.EnumerateFiles(Path.GetFullPath(featuresDir), "*.xaml", SearchOption.AllDirectories).ToList();
         Assert.True(xaml.Count >= 10, $"scanned {xaml.Count} feature xaml files");
         foreach (var file in xaml)
@@ -307,7 +309,7 @@ public sealed class DashboardStockViewTests
     [Fact]
     public void FeatureXaml_UsesThemeTokensForSpacingAndRadius_NoLiteralNumbers_NoHexColours()
     {
-        var featuresDir = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "src", "Lifestream.Desktop", "Features"));
+        var featuresDir = Path.GetFullPath(Lifestream.Client.Tests.RepoPaths.Find("src/Lifestream.Desktop/Features"));
         var literal = new System.Text.RegularExpressions.Regex(""""(?:Margin|Padding|CornerRadius|Spacing)\s*=\s*"([^"{]*)"|Property="(?:Margin|Padding|CornerRadius|Spacing)"\s+Value="([^"{]*)"""");
         var hex = new System.Text.RegularExpressions.Regex("""#[0-9A-Fa-f]{6,8}""");
         var offenders = new List<string>();

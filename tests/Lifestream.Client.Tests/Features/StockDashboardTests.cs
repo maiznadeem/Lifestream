@@ -140,6 +140,7 @@ public sealed class StockDashboardTests
 
     // FEAT-27
 
+    [Trait("Category", "Perf")] // asserts a wall-clock budget: runs in the perf pass (tests/perf/run-perf.ps1), not in the loaded default run
     [Fact]
     public async Task Dashboard_OneApiCall_SkeletonWithin100ms_FakeApi()
     {

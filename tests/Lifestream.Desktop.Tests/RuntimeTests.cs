@@ -171,6 +171,8 @@ public sealed class RuntimeTests
         protected override void Apply() => UiThread = Environment.CurrentManagedThreadId;
     }
 
+    [Trait("Category", "Perf")] // asserts a wall-clock budget: runs in the perf pass (tests/perf/run-perf.ps1), not in the loaded default run
+    [Trait("PerfPhase", "timing")]
     [Fact]
     public void Dispatcher_NeverGapsOver50ms_WhileAScreenLoadsOverAThrottledNetwork_AndNoApiCallRunsOnTheUiThread()
     {

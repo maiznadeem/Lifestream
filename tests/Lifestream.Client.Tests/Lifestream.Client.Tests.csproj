@@ -1,4 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- Tests that assert a wall-clock budget are tagged Category=Perf and run in the perf pass (tests/perf/run-perf.ps1); an explicit test filter replaces this default. -->
+    <VSTestTestCaseFilter>Category!=Perf</VSTestTestCaseFilter>
+  </PropertyGroup>
   <ItemGroup>
     <!-- Hosts a loopback Kestrel server for the one-HTTP/2-connection test; the Client assembly itself stays free of it. -->
     <FrameworkReference Include="Microsoft.AspNetCore.App" />

@@ -7,7 +7,6 @@ using Lifestream.Client.Tests.Fakes;
 
 namespace Lifestream.Client.Tests;
 
-[Collection("GlobalErrorHandler")]
 public sealed class ViewModelTests
 {
     private sealed class TestViewModel : ViewModelBase
@@ -139,15 +138,9 @@ public sealed class ViewModelTests
     {
         var vm = new TestViewModel { Fetch = _ => throw new InvalidOperationException("secret internal detail") };
         var seen = new List<Exception>();
-        var previous = AsyncRelayCommand.DefaultErrorHandler;
-        AsyncRelayCommand.DefaultErrorHandler = seen.Add;
-        try
+        using (AsyncRelayCommand.CaptureErrors(seen.Add))
         {
             await vm.LoadAsync();
-        }
-        finally
-        {
-            AsyncRelayCommand.DefaultErrorHandler = previous;
         }
 
         Assert.Equal(LoadState.Error, vm.State);
@@ -299,8 +292,17 @@ public sealed class ViewModelTests
                 }
 
                 tested++;
+                // The handler also runs on the thread of a background load that raises other properties: it only ever writes true,
+                // because `raised |= name == x` is a read-modify-write that another thread's "false" could overwrite.
                 var raised = false;
-                void Handler(object? s, System.ComponentModel.PropertyChangedEventArgs e) => raised |= e.PropertyName == property.Name;
+                void Handler(object? s, System.ComponentModel.PropertyChangedEventArgs e)
+                {
+                    if (e.PropertyName == property.Name)
+                    {
+                        Volatile.Write(ref raised, true);
+                    }
+                }
+
                 instance.PropertyChanged += Handler;
 
                 // A screen may still be finishing its first load on another thread and change the property between the sample and the set;
@@ -313,7 +315,7 @@ public sealed class ViewModelTests
 
                 property.SetValue(instance, value);
                 instance.PropertyChanged -= Handler;
-                if (!raised)
+                if (!Volatile.Read(ref raised))
                 {
                     failures.Add($"{type.Name}.{property.Name} ({property.PropertyType.Name}) did not raise PropertyChanged");
                 }
@@ -468,9 +470,7 @@ public sealed class ViewModelTests
     public async Task AsyncRelayCommand_CapturesException_NeverThrows_AndReportsIt()
     {
         var reported = new List<Exception>();
-        var previous = AsyncRelayCommand.DefaultErrorHandler;
-        AsyncRelayCommand.DefaultErrorHandler = reported.Add;
-        try
+        using (AsyncRelayCommand.CaptureErrors(reported.Add))
         {
             var command = new AsyncRelayCommand(_ => throw new InvalidOperationException("kaboom"));
 
@@ -483,10 +483,48 @@ public sealed class ViewModelTests
             Assert.False(command.IsRunning);
             Assert.True(command.CanExecute(null));
         }
-        finally
+    }
+
+    [Fact]
+    public void CancelLoadAndDispose_WhenTheLoadJustFinishedAndDisposedItsSource_DoNotThrow()
+    {
+        // A load's last step disposes its cancellation source; a cancel or a dispose that read the field a moment earlier must find that harmless
+        // (seen as "The CancellationTokenSource has been disposed" when a screen was torn down while its first load was finishing).
+        var vm = new TestViewModel();
+        var finished = new CancellationTokenSource();
+        typeof(ViewModelBase).GetField("_loadCts", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(vm, finished);
+        finished.Dispose();
+
+        vm.CancelLoad();
+        vm.Dispose();
+    }
+
+    [Fact]
+    public async Task CaptureErrors_ReceivesOnlyTheErrorsOfItsOwnFlow_NotThoseOfACommandRunningElsewhere()
+    {
+        // Tests that run in parallel must not see each other's command errors: a failing command started before the capture, on another flow,
+        // reports to the process-wide handler while the capture is open, and never to the capture.
+        var mine = new List<Exception>();
+        var handlerBefore = AsyncRelayCommand.DefaultErrorHandler;
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var other = new AsyncRelayCommand(async _ =>
         {
-            AsyncRelayCommand.DefaultErrorHandler = previous;
+            await gate.Task;
+            throw new InvalidOperationException("another test's failure");
+        });
+        var otherRun = Task.Run(() => other.ExecuteAsync());
+
+        using (AsyncRelayCommand.CaptureErrors(mine.Add))
+        {
+            var own = new AsyncRelayCommand(_ => throw new InvalidOperationException("this test's failure"));
+            await own.ExecuteAsync();
+            gate.SetResult();
+            await otherRun;
+            Assert.Same(handlerBefore, AsyncRelayCommand.DefaultErrorHandler); // the capture did not swap the shared handler
         }
+
+        Assert.Equal("this test's failure", Assert.Single(mine).Message);
+        Assert.IsType<InvalidOperationException>(other.LastException);
     }
 
     [Fact]

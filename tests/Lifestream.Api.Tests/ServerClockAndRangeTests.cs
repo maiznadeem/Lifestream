@@ -40,24 +40,30 @@ public sealed class ServerClockAndRangeTests(ApiFixture fx) : IClassFixture<ApiF
 
     private static string Skew(int hours = 5) => DateTime.UtcNow.AddHours(hours).ToString("o", CultureInfo.InvariantCulture);
 
-    /// <summary>The distance in seconds between a stored value and the database server's own UTC clock, read in SQL.</summary>
-    private async Task<double> SecondsFromServerClockAsync(string table, string column, string where)
-    {
-        var rows = await fx.Db.RowsAsync($"SELECT TOP 1 CAST(DATEDIFF_BIG(MILLISECOND, SYSUTCDATETIME(), [{column}]) AS float) / 1000.0 FROM [{table}] WHERE {where}", Ct);
-        Assert.NotEmpty(rows);
-        return Math.Abs(Convert.ToDouble(rows[0][0], CultureInfo.InvariantCulture));
-    }
+    private DateTime _lowestServerUtc;
 
+    /// <summary>
+    /// A stamp is server-set when it lies between the earliest server time the test could see when it began and the latest one now. "Server time" is
+    /// the database's clock (column defaults, audit rows) or the API host's clock (the fixture's <see cref="TestClock"/>, which is frozen at the
+    /// moment the fixture was created, and other tests move it), so both are read. Whatever the client claimed (hours ahead or behind) falls
+    /// outside; a slow or loaded machine cannot push a stamp outside, because no number of seconds is assumed.
+    /// </summary>
     private async Task AssertServerStampedAsync(string table, string column, string where)
     {
-        var seconds = await SecondsFromServerClockAsync(table, column, where);
-        Assert.True(seconds < 20, $"{table}.{column} is {seconds:F1} s from the server clock");
+        var rows = await fx.Db.RowsAsync($"SELECT TOP 1 [{column}] FROM [{table}] WHERE {where}", Ct);
+        Assert.NotEmpty(rows);
+        var stamp = Convert.ToDateTime(rows[0][0], CultureInfo.InvariantCulture);
+        var databaseNow = await fx.Db.ScalarAsync<DateTime>("SELECT SYSUTCDATETIME()", Ct);
+        var highest = new[] { databaseNow, fx.Clock.GetUtcNow().UtcDateTime }.Max().AddSeconds(1);
+        var lowest = _lowestServerUtc.AddSeconds(-1);
+        Assert.True(stamp >= lowest && stamp <= highest, $"{table}.{column} is {stamp:O}, outside the server's own time {lowest:O} to {highest:O}: it was not stamped by the server clock");
     }
 
     [Fact]
     public async Task EveryStoredStamp_IsSetFromTheServerClock_WhateverTheClientSends()
     {
         Assert.Contains("Microsoft SQL Server", fx.Db.ServerVersion, StringComparison.Ordinal);
+        _lowestServerUtc = new[] { await fx.Db.ScalarAsync<DateTime>("SELECT SYSUTCDATETIME()", Ct), fx.Clock.GetUtcNow().UtcDateTime }.Min();
         var staff = await fx.AddStaffAsync(Role.Staff);
         var donor = await Seed.DonorAsync(fx);
         var patient = await Seed.PatientAsync(fx, type: BloodType.ABNeg);

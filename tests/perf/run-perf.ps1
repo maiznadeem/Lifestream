@@ -22,7 +22,7 @@
 
 .PARAMETER AssertBudgets  Exit non-zero on any miss, and refuse to measure on a busy machine.
 .PARAMETER ResultsFile    Where the report goes (default docs/perf/results.md).
-.PARAMETER Phases         Which parts to run: launch, 1x, 10x, 100x (default all).
+.PARAMETER Phases         Which parts to run: launch, timing, 1x, 10x, 100x (default all). "timing" runs the fake-API tests that assert a wall-clock budget.
 .PARAMETER ColdRuns       Fresh processes for the cold dashboard (default 7, the statistic is their median).
 .PARAMETER RunDir         The orchestrated run folder; when it and its launcher exist the API is started through the launcher.
 #>
@@ -30,7 +30,7 @@
 param(
     [switch]$AssertBudgets,
     [string]$ResultsFile,
-    [string[]]$Phases = @('launch', '1x', '10x', '100x'),
+    [string[]]$Phases = @('launch', 'timing', '1x', '10x', '100x'),
     [int]$ColdRuns = 7,
     [int]$LaunchRuns = 10,
     [string]$RunDir = 'G:/Claude/workspace/lifestream/run',
@@ -151,6 +151,15 @@ try {
         $focus = @($runs | Where-Object FocusChanged).Count
         $detail = "runs (ms): $(($wall | ForEach-Object { [math]::Round($_) }) -join ', '); in-app time from process start to first frame, median $([math]::Round((@($runs.InAppMs | Sort-Object))[[int][math]::Floor($runs.Count / 2)])) ms; foreground window changed in $focus of $($runs.Count) runs; window created at -20000,-20000 not activated, not in the task bar"
         Add-Record 'launch' 'App launch to login window rendered (self-contained ReadyToRun, Release)' 'n/a' "median of $LaunchRuns cold-process runs after 1 warm-up" $LaunchRuns $median 'ms' '< 1000' (($median -lt 1000) -and $focus -eq 0) $detail
+    }
+
+    # ---- 1b. wall-clock budgets of the fake-API tests (Category=Perf, left out of the default run because a loaded machine fails them) ----
+    if ($Phases -contains 'timing') {
+        Write-Host '== fake-API timing tests (Desktop PerfPhase=timing, Client Category=Perf) =='
+        & $script:testExe -trait 'PerfPhase=timing' -noColor 2>&1 | Select-Object -Last 12 | Out-Host
+        if ($LASTEXITCODE -ne 0) { $script:testFailures += 'timing (Desktop)' }
+        & dotnet test (Join-Path $root 'tests/Lifestream.Client.Tests') -c Release --filter 'Category=Perf' 2>&1 | Select-Object -Last 12 | Out-Host
+        if ($LASTEXITCODE -ne 0) { $script:testFailures += 'timing (Client)' }
     }
 
     # ---- fixture databases, API, measurements ----
