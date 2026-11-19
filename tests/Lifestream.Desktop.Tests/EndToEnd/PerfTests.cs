@@ -481,7 +481,10 @@ public sealed class PerfTests
                     var pixels = new byte[Width * Height * 4];
                     bitmap.CopyPixels(pixels, Width * 4, 0);
                     drawnAt = Stopwatch.GetTimestamp();
-                    drawnNow = CountNear(pixels, 0xFF, 0x7A, 0x8A) > 400 && CountNear(pixels, 0x7C, 0xB8, 0xFF) > 400;
+                    // The two series colours of the theme in use (Brush.Chart1, Brush.Chart2), in numbers only a drawn chart produces.
+                    var one = ((SolidColorBrush)view.FindResource("Brush.Chart1")).Color;
+                    var two = ((SolidColorBrush)view.FindResource("Brush.Chart2")).Color;
+                    drawnNow = CountNear(pixels, one.R, one.G, one.B) > 400 && CountNear(pixels, two.R, two.G, two.B) > 400;
                     if (!drawnNow)
                     {
                         PumpFor(1);
