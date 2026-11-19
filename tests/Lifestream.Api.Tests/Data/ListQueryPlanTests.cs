@@ -31,10 +31,10 @@ public sealed class ListQueryPlanTests(ScaleDatabaseFixture fixture) : IClassFix
     // What each record's filter properties map to; the "Page", "PageSize" and "Sort" properties are the paging and ordering.
     private static readonly Dictionary<Type, string[]> Filters = new()
     {
-        [typeof(DonorQuery)] = ["Search", "BloodType"],
+        [typeof(DonorQuery)] = ["Search", "BloodType", "Eligible", "LastDonated"],
         [typeof(PatientQuery)] = ["Search", "BloodType"],
-        [typeof(AppointmentQuery)] = ["Search", "DonorId", "Status", "BloodType", "FromUtc", "ToUtc"],
-        [typeof(RequestQuery)] = ["Search", "PatientId", "Status", "BloodType"],
+        [typeof(AppointmentQuery)] = ["Search", "DonorId", "Status", "BloodType", "FromUtc", "ToUtc", "View", "UtcOffsetMinutes"],
+        [typeof(RequestQuery)] = ["Search", "PatientId", "Status", "BloodType", "View", "UtcOffsetMinutes"],
         [typeof(ReceiptQuery)] = ["Search", "Kind", "BloodType", "FromUtc", "ToUtc"],
     };
 
@@ -50,10 +50,19 @@ public sealed class ListQueryPlanTests(ScaleDatabaseFixture fixture) : IClassFix
 
     private static readonly Dictionary<string, string[]> ListFilters = new()
     {
-        ["Donors"] = ["none", "Search", "BloodType", "Search+BloodType"],
+        ["Donors"] = ["none", "Search", "BloodType", "Search+BloodType", "Eligible", "LastDonated", "Eligible+BloodType", "Search+Eligible+LastDonated"],
         ["Patients"] = ["none", "Search", "BloodType", "Search+BloodType"],
-        ["Appointments"] = ["none", "Search", "DonorId", "Status", "BloodType", "FromUtc", "ToUtc", "FromUtc+ToUtc", "Status+BloodType"],
-        ["Requests"] = ["none", "Search", "PatientId", "Status", "BloodType", "Status+BloodType"],
+        // A saved view is written "View=<name>"; with "UtcOffsetMinutes" the caller's day starts 5 hours after UTC's (the offset only moves the view's dates).
+        ["Appointments"] =
+        [
+            "none", "Search", "DonorId", "Status", "BloodType", "FromUtc", "ToUtc", "FromUtc+ToUtc", "Status+BloodType",
+            "View=Today", "View=Today+UtcOffsetMinutes", "View=Upcoming+UtcOffsetMinutes", "View=Past+UtcOffsetMinutes", "View=Cancelled", "View=Past+BloodType", "Search+View=Upcoming",
+        ],
+        ["Requests"] =
+        [
+            "none", "Search", "PatientId", "Status", "BloodType", "Status+BloodType",
+            "View=Open", "View=DueSoon+UtcOffsetMinutes", "View=Fulfilled", "View=Cancelled", "View=DueSoon+BloodType", "Search+View=Open",
+        ],
         ["Receipts"] = ["none", "Search", "Kind", "BloodType", "FromUtc", "ToUtc", "FromUtc+ToUtc", "Kind+BloodType"],
         ["Staff"] = ["none", "Search"],
     };
@@ -81,7 +90,14 @@ public sealed class ListQueryPlanTests(ScaleDatabaseFixture fixture) : IClassFix
     public void Matrix_CoversEveryFilterOfEveryQueryRecord()
     {
         // Single filters named in ListFilters must equal the record's filter properties, so a new filter cannot go untested.
-        var covered = ListFilters.SelectMany(l => l.Value).SelectMany(f => f.Split('+')).ToHashSet();
+        var covered = ListFilters.SelectMany(l => l.Value).SelectMany(f => f.Split('+')).Select(f => f.Split('=')[0]).ToHashSet();
+
+        // Every saved view of both lists has a shape here, so a new view cannot go untested either.
+        foreach (var (list, views) in new[] { ("Appointments", Enum.GetNames<AppointmentView>()), ("Requests", Enum.GetNames<RequestView>()) })
+        {
+            Assert.All(views, v => Assert.Contains(ListFilters[list], f => f.Split('+').Contains("View=" + v)));
+        }
+
         foreach (var (type, filters) in Filters)
         {
             var actual = type.GetProperties().Select(p => p.Name).Where(n => n is not ("Page" or "PageSize" or "Sort")).Order().ToArray();
@@ -183,10 +199,37 @@ public sealed class ListQueryPlanTests(ScaleDatabaseFixture fixture) : IClassFix
 
     // ---- the query shapes: what the API's list endpoints are required to send ----
 
+    /// <summary>The caller's offset from UTC when a case names it (minutes, as the API takes it).</summary>
+    private const int OffsetMinutes = -300;
+
+    /// <summary>The saved view a case names ("View=Past"), or null.</summary>
+    private static string? ViewOf(string[] f) => f.FirstOrDefault(x => x.StartsWith("View=", StringComparison.Ordinal))?["View=".Length..];
+
+    /// <summary>The caller's local today, as the API works it out from the offset (ListScreenEndpoints.LocalToday).</summary>
+    private static DateOnly LocalToday(string[] f) => DateOnly.FromDateTime(DateTime.UtcNow.AddMinutes(f.Contains("UtcOffsetMinutes") ? OffsetMinutes : 0));
+
     private static IQueryable<Donor> DonorFilter(IQueryable<Donor> q, string[] f, Sample s)
     {
         if (f.Contains("Search")) { q = q.NameStartsWith(s.DonorPrefix); }
         if (f.Contains("BloodType")) { q = q.Where(d => d.BloodType == s.BloodType); }
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        if (f.Contains("Eligible"))
+        {
+            // The API's eligibility filter (ListScreenEndpoints.WhereEligible): no hold, aged 18 to 60, 90 days since the last donation.
+            var oldEnough = Lifestream.Api.Features.ListScreenEndpoints.LatestBirthDateForAge(today, Eligibility.MinAgeYears);
+            var tooOld = Lifestream.Api.Features.ListScreenEndpoints.LatestBirthDateForAge(today, Eligibility.MaxAgeYears + 1);
+            var lastAllowed = today.AddDays(-Eligibility.MinDaysBetweenDonations);
+            q = q.Where(d => !d.MedicalHold && d.DateOfBirth <= oldEnough && d.DateOfBirth > tooOld && (d.LastDonated == null || d.LastDonated <= lastAllowed));
+        }
+
+        if (f.Contains("LastDonated"))
+        {
+            // DonationRecency.Within12Months, the window with both ends.
+            var threeMonths = today.AddMonths(-3);
+            var twelveMonths = today.AddMonths(-12);
+            q = q.Where(d => d.LastDonated != null && d.LastDonated < threeMonths && d.LastDonated >= twelveMonths);
+        }
+
         return q;
     }
 
@@ -205,6 +248,22 @@ public sealed class ListQueryPlanTests(ScaleDatabaseFixture fixture) : IClassFix
         if (f.Contains("BloodType")) { q = q.Where(a => a.DonorBloodType == s.BloodType); }
         if (f.Contains("FromUtc")) { var from = s.From; q = q.Where(a => a.SlotStartUtc >= from); }
         if (f.Contains("ToUtc")) { var to = s.To; q = q.Where(a => a.SlotStartUtc < to); }
+        if (ViewOf(f) is { } view)
+        {
+            // The caller's local day as a half-open UTC range (ListScreenEndpoints.LocalDayUtc), then the view's rule (InView).
+            var offset = f.Contains("UtcOffsetMinutes") ? OffsetMinutes : 0;
+            var start = DateTime.SpecifyKind(LocalToday(f).ToDateTime(TimeOnly.MinValue).AddMinutes(-offset), DateTimeKind.Utc);
+            var end = start.AddDays(1);
+            q = view switch
+            {
+                "Today" => q.Where(a => a.SlotStartUtc >= start && a.SlotStartUtc < end && a.Status != AppointmentStatus.Cancelled),
+                "Upcoming" => q.Where(a => a.SlotStartUtc >= end && a.Status == AppointmentStatus.Pending),
+                "Past" => q.Where(a => a.SlotStartUtc < start && a.Status != AppointmentStatus.Cancelled),
+                "Cancelled" => q.Where(a => a.Status == AppointmentStatus.Cancelled),
+                _ => throw new InvalidOperationException(view),
+            };
+        }
+
         return q;
     }
 
@@ -214,6 +273,19 @@ public sealed class ListQueryPlanTests(ScaleDatabaseFixture fixture) : IClassFix
         if (f.Contains("PatientId")) { q = q.Where(r => r.PatientId == s.PatientId); }
         if (f.Contains("Status")) { q = q.Where(r => r.Status == RequestStatus.Pending); }
         if (f.Contains("BloodType")) { q = q.Where(r => r.BloodType == s.BloodType); }
+        if (ViewOf(f) is { } view)
+        {
+            var dueBy = LocalToday(f).AddDays(2); // "Due in 48 h": needed by the day after tomorrow at the latest (ListScreenEndpoints.DueSoonBy)
+            q = view switch
+            {
+                "Open" => q.Where(r => r.Status == RequestStatus.Pending),
+                "DueSoon" => q.Where(r => r.Status == RequestStatus.Pending && r.RequiredBy <= dueBy),
+                "Fulfilled" => q.Where(r => r.Status == RequestStatus.Fulfilled),
+                "Cancelled" => q.Where(r => r.Status == RequestStatus.Cancelled),
+                _ => throw new InvalidOperationException(view),
+            };
+        }
+
         return q;
     }
 

@@ -51,7 +51,11 @@ public sealed class ApiPlanMatrixTests(ScaleApiFixture fx) : IClassFixture<Scale
 
     private static readonly Dictionary<string, ListShape> Lists = new()
     {
-        ["donors"] = new(ApiRoutes.Donors, ["name", "-name", "lastDonated", "-lastDonated"], ["", "bloodType=OPos", "bloodType=ONeg", .. Letters.Select(l => "search=" + l), "search=a&bloodType=OPos", "search=Al&bloodType=APos"], 60),
+        ["donors"] = new(ApiRoutes.Donors, ["name", "-name", "lastDonated", "-lastDonated"], [
+            "", "bloodType=OPos", "bloodType=ONeg", .. Letters.Select(l => "search=" + l), "search=a&bloodType=OPos", "search=Al&bloodType=APos",
+            "eligible=true", "eligible=false", "lastDonated=Within3Months", "lastDonated=Within12Months", "lastDonated=Over12Months", "lastDonated=Never",
+            "eligible=true&bloodType=OPos", "search=a&eligible=true&lastDonated=Over12Months",
+        ], 60),
         ["patients"] = new(ApiRoutes.Patients, ["name", "-name"], ["", "bloodType=OPos", .. Letters.Select(l => "search=" + l), "search=a&bloodType=OPos"], 60),
         ["appointments"] = new(
             ApiRoutes.Appointments,
@@ -76,6 +80,14 @@ public sealed class ApiPlanMatrixTests(ScaleApiFixture fx) : IClassFixture<Scale
                 "status=Completed&bloodType=OPos&fromUtc={from}&toUtc={to}",
                 .. Letters.Select(l => "search=" + l),
                 "search=a&status=Completed&bloodType=OPos",
+                "view=Today",
+                "view=Today&utcOffsetMinutes=-300",
+                "view=Upcoming&utcOffsetMinutes=-300",
+                "view=Past&utcOffsetMinutes=-300",
+                "view=Cancelled",
+                "view=Past&bloodType=OPos",
+                "view=Upcoming&donorId={donor}",
+                "search=a&view=Past&utcOffsetMinutes=-300",
             ],
             500),
         ["requests"] = new(
@@ -98,6 +110,13 @@ public sealed class ApiPlanMatrixTests(ScaleApiFixture fx) : IClassFixture<Scale
                 "status=Fulfilled&fromUtc={from}&toUtc={to}",
                 .. Letters.Select(l => "search=" + l),
                 "search=a&status=Fulfilled&bloodType=OPos",
+                "view=Open",
+                "view=DueSoon&utcOffsetMinutes=-300",
+                "view=Fulfilled",
+                "view=Cancelled",
+                "view=Open&bloodType=OPos",
+                "view=DueSoon&patientId={patient}",
+                "search=a&view=Open",
             ],
             250),
         ["receipts"] = new(
@@ -181,6 +200,28 @@ public sealed class ApiPlanMatrixTests(ScaleApiFixture fx) : IClassFixture<Scale
         data.Add("receipt-counts|search=a");
         data.Add("receipt-counts|search=Al&bloodType=APos");
         data.Add("receipt-counts|fromUtc={from}&toUtc={to}");
+
+        // A saved view opened without a sort (the open request views then list the request needed first), and the counts of the saved views.
+        foreach (var view in Enum.GetNames<AppointmentView>())
+        {
+            data.Add($"view-default|appointments|view={view}&utcOffsetMinutes=-300");
+        }
+
+        foreach (var view in Enum.GetNames<RequestView>())
+        {
+            data.Add($"view-default|requests|view={view}&utcOffsetMinutes=-300");
+        }
+
+        foreach (var filter in new[] { "", "utcOffsetMinutes=-300", "bloodType=OPos", "search=a", "search=Al&bloodType=APos", "donorId={donor}" })
+        {
+            data.Add("appointment-views|" + filter);
+        }
+
+        foreach (var filter in new[] { "", "utcOffsetMinutes=-300", "bloodType=OPos", "search=a", "search=Al&bloodType=APos", "patientId={patient}" })
+        {
+            data.Add("request-views|" + filter);
+        }
+
         return data;
     }
 
@@ -189,10 +230,10 @@ public sealed class ApiPlanMatrixTests(ScaleApiFixture fx) : IClassFixture<Scale
     {
         var records = new Dictionary<string, (Type Type, string[] Properties)>
         {
-            ["donors"] = (typeof(DonorQuery), ["Search", "BloodType"]),
+            ["donors"] = (typeof(DonorQuery), ["Search", "BloodType", "Eligible", "LastDonated"]),
             ["patients"] = (typeof(PatientQuery), ["Search", "BloodType"]),
-            ["appointments"] = (typeof(AppointmentQuery), ["Search", "DonorId", "Status", "BloodType", "FromUtc", "ToUtc"]),
-            ["requests"] = (typeof(RequestQuery), ["Search", "PatientId", "Status", "BloodType"]),
+            ["appointments"] = (typeof(AppointmentQuery), ["Search", "DonorId", "Status", "BloodType", "FromUtc", "ToUtc", "View", "UtcOffsetMinutes"]),
+            ["requests"] = (typeof(RequestQuery), ["Search", "PatientId", "Status", "BloodType", "View", "UtcOffsetMinutes"]),
             ["receipts"] = (typeof(ReceiptQuery), ["Search", "Kind", "BloodType", "FromUtc", "ToUtc"]),
         };
         foreach (var (list, (type, expected)) in records)
@@ -202,6 +243,13 @@ public sealed class ApiPlanMatrixTests(ScaleApiFixture fx) : IClassFixture<Scale
             var filters = Lists[list].Filters;
             Assert.All(expected, name => Assert.Contains(filters, f => f.Contains(char.ToLowerInvariant(name[0]) + name[1..], StringComparison.Ordinal)));
         }
+
+        // Every value of the new filters is in the matrix: each saved view, each donation recency, eligible and not.
+        Assert.All(Enum.GetNames<AppointmentView>(), v => Assert.Contains(Lists["appointments"].Filters, f => f.Contains("view=" + v, StringComparison.Ordinal)));
+        Assert.All(Enum.GetNames<RequestView>(), v => Assert.Contains(Lists["requests"].Filters, f => f.Contains("view=" + v, StringComparison.Ordinal)));
+        Assert.All(Enum.GetNames<DonationRecency>(), v => Assert.Contains("lastDonated=" + v, Lists["donors"].Filters));
+        Assert.Contains("eligible=true", Lists["donors"].Filters);
+        Assert.Contains("eligible=false", Lists["donors"].Filters);
 
         // The common values the earlier verification found scanning must be in the matrix.
         Assert.Contains("status=Fulfilled&bloodType=OPos", Lists["requests"].Filters);
@@ -278,7 +326,7 @@ public sealed class ApiPlanMatrixTests(ScaleApiFixture fx) : IClassFixture<Scale
             }
         }
 
-        if (kind is "donors" or "patients" or "appointments" or "requests" or "receipts" or "page-size-200" or "staff")
+        if (kind is "donors" or "patients" or "appointments" or "requests" or "receipts" or "page-size-200" or "staff" or "view-default" or "appointment-views" or "request-views")
         {
             // API-22: a filter click is one database call (page and total together); the deep pages here are inside the data.
             Assert.True(plans.Count == 1, $"{url}: {plans.Count} database calls, expected 1:\n{string.Join("\n---\n", plans.Select(p => p.Sql))}");
@@ -368,6 +416,12 @@ public sealed class ApiPlanMatrixTests(ScaleApiFixture fx) : IClassFixture<Scale
                 return ApiRoutes.Path(ApiRoutes.StockBags) + "?bloodType=" + parts[1];
             case "receipt-counts":
                 return ApiRoutes.Path(ApiRoutes.ReceiptCounts) + (parts[1].Length == 0 ? "" : "?" + Fill(parts[1]));
+            case "view-default":
+                return ApiRoutes.Path(Lists[parts[1]].Route) + "?" + parts[2];
+            case "appointment-views":
+                return ApiRoutes.Path(ApiRoutes.AppointmentViews) + (parts[1].Length == 0 ? "" : "?" + Fill(parts[1]));
+            case "request-views":
+                return ApiRoutes.Path(ApiRoutes.RequestViews) + (parts[1].Length == 0 ? "" : "?" + Fill(parts[1]));
             default:
                 var shape = Lists[parts[0]];
                 var query = new List<string>();

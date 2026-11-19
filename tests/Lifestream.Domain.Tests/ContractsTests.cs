@@ -134,7 +134,7 @@ public sealed class ContractsTests
     public void ApiRoutes_AreUnique_AndPathsBuild()
     {
         Assert.Equal(ApiRoutes.All.Count, ApiRoutes.All.Distinct().Count());
-        Assert.Equal(41, ApiRoutes.All.Count);
+        Assert.Equal(47, ApiRoutes.All.Count);
         Assert.Equal("/api/v1/donors/7/eligibility", ApiRoutes.Path(ApiRoutes.DonorEligibility, 7));
         Assert.Equal("/api/v1/stock", ApiRoutes.Path(ApiRoutes.Stock));
         Assert.Equal("/healthz", ApiRoutes.Path(ApiRoutes.Healthz));
