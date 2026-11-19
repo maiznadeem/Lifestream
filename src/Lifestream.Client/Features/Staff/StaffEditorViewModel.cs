@@ -40,10 +40,10 @@ public sealed partial class StaffEditorViewModel : RecordEditorViewModel
     {
         _api = api;
         _id = existing?.Id;
-        GenderChoices = [.. Enum.GetValues<Gender>().Select(g => new Choice<Gender>(g.ToString(), g))];
-        DesignationChoices = [.. Enum.GetValues<Designation>().Select(d => new Choice<Designation>(d.ToString(), d))];
-        ShiftChoices = [.. Enum.GetValues<Shift>().Select(s => new Choice<Shift>(StaffText.Shift(s), s))];
-        RoleChoices = [.. Enum.GetValues<Role>().Select(r => new Choice<Role>(r.ToString(), r))];
+        GenderChoices = SharedLists.Genders;
+        DesignationChoices = SharedLists.Designations;
+        ShiftChoices = SharedLists.Shifts;
+        RoleChoices = SharedLists.Roles;
         DeclareFormFields(nameof(DisplayName), nameof(Username), nameof(DateOfBirth), nameof(Gender), nameof(Designation), nameof(Shift), nameof(Role), nameof(SalaryText), nameof(Phone), nameof(Password), nameof(ConfirmPassword));
         if (existing is not null)
         {

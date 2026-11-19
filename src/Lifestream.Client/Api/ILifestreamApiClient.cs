@@ -57,6 +57,9 @@ public interface ILifestreamApiClient
 
     Task<ApiResult> DeleteDonorAsync(int id, CancellationToken ct = default);
 
+    /// <summary>Undo of a delete: the API puts the donor back with the same id and every value (within a few seconds of the delete).</summary>
+    Task<ApiResult<DonorDetail>> RestoreDonorAsync(int id, CancellationToken ct = default);
+
     Task<ApiResult<DonorEligibility>> GetDonorEligibilityAsync(int id, CancellationToken ct = default);
 
     // Patients
@@ -69,6 +72,9 @@ public interface ILifestreamApiClient
     Task<ApiResult<PatientDetail>> UpdatePatientAsync(int id, UpdatePatientRequest request, CancellationToken ct = default);
 
     Task<ApiResult> DeletePatientAsync(int id, CancellationToken ct = default);
+
+    /// <summary>Undo of a delete: the API puts the patient back with the same id and every value (within a few seconds of the delete).</summary>
+    Task<ApiResult<PatientDetail>> RestorePatientAsync(int id, CancellationToken ct = default);
 
     // Appointments
     Task<ApiResult<PagedResult<AppointmentListItem>>> GetAppointmentsAsync(AppointmentQuery query, CancellationToken ct = default);
@@ -106,10 +112,10 @@ public interface ILifestreamApiClient
     // Stock and dashboard
     Task<ApiResult<IReadOnlyList<StockItem>>> GetStockAsync(CancellationToken ct = default);
 
-    Task<ApiResult<DashboardResponse>> GetDashboardAsync(DateOnly rangeStart, DateOnly rangeEnd, CancellationToken ct = default);
+    Task<ApiResult<DashboardResponse>> GetDashboardAsync(DateOnly rangeStart, DateOnly rangeEnd, int? utcOffsetMinutes = null, CancellationToken ct = default);
 
     // Staff (the list is paged like every list; a plain JSON array is accepted too)
-    Task<ApiResult<PagedResult<StaffListItem>>> GetStaffAsync(string? search = null, int page = 1, int pageSize = Paging.DefaultPageSize, CancellationToken ct = default);
+    Task<ApiResult<PagedResult<StaffListItem>>> GetStaffAsync(string? search = null, int page = 1, int pageSize = Paging.DefaultPageSize, string? sort = null, int? minSalary = null, int? maxSalary = null, CancellationToken ct = default);
 
     Task<ApiResult<StaffDetail>> GetStaffMemberAsync(int id, CancellationToken ct = default);
 

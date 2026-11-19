@@ -1,23 +1,51 @@
 using Lifestream.Client.Api;
 using Lifestream.Client.Common;
 using Lifestream.Client.Features.ListScreens;
+using Lifestream.Client.Features.Requests;
+using Lifestream.Client.Navigation;
 using Lifestream.Contracts;
 using Lifestream.Contracts.Patients;
 using Lifestream.Domain;
+using ContractSortKeys = Lifestream.Contracts.SortKeys;
 
 namespace Lifestream.Client.Features.Patients;
 
 /// <summary>The Patients screen: a paged, filterable list with the selected patient's detail beside it and the editor in a drawer (FEAT-01 to FEAT-08).</summary>
-public sealed class PatientsViewModel(ILifestreamApiClient api, IListViewStateStore states, IToastService toasts, IDialogService dialogs, IUiDispatcher ui)
-    : RecordListViewModel<PatientListItem, PatientDetail>(states, "patients", toasts, dialogs, ui)
+public sealed class PatientsViewModel : SortedRecordListViewModel<PatientListItem, PatientDetail>
 {
+    private readonly ILifestreamApiClient api;
+    private readonly INavigationService navigation;
+
+    public PatientsViewModel(ILifestreamApiClient api, IListViewStateStore states, IToastService toasts, IDialogService dialogs, INavigationService navigation, IUiDispatcher ui)
+        : base(states, "patients", toasts, dialogs, ui)
+    {
+        this.api = api;
+        this.navigation = navigation;
+        NewRequestCommand = new AsyncRelayCommand(
+            _ => Detail is { } patient ? this.navigation.NavigateTo<RequestsViewModel>(new RelatedRecord(RecordKind.Patient, patient.Id, patient.Name)) : Task.CompletedTask,
+            () => Detail is not null && !IsEditing);
+        PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(Detail) or nameof(Editor))
+            {
+                NewRequestCommand.RaiseCanExecuteChanged();
+            }
+        };
+    }
+
+    /// <summary>"New request" for the selected patient: opens the request form on the Requests screen with this patient already chosen (FEAT-04).</summary>
+    public AsyncRelayCommand NewRequestCommand { get; }
+
     public override string PageTitle => "Patients";
 
     protected override string PluralName => "patients";
 
     protected override string RecordType => "patient";
 
-    protected override Task<ApiResult<PagedResult<PatientListItem>>> FetchPageAsync(ListRequest request, CancellationToken ct) =>
+    /// <summary>The columns that sort, as the API's validator names them (defined once in the contracts).</summary>
+    public override IReadOnlyList<string> SortKeys { get; } = ContractSortKeys.Patients;
+
+    protected override Task<ApiResult<PagedResult<PatientListItem>>> FetchSortedAsync(ListRequest request, CancellationToken ct) =>
         api.GetPatientsAsync(new PatientQuery(request.Search, BloodTypeValue, request.Page, request.PageSize, request.Sort), ct);
 
     protected override int IdOf(PatientListItem item) => item.Id;
@@ -42,7 +70,7 @@ public sealed class PatientsViewModel(ILifestreamApiClient api, IListViewStateSt
     protected override Task<ApiResult> DeleteRecordAsync(int id, CancellationToken ct) => api.DeletePatientAsync(id, ct);
 
     protected override Task<ApiResult<PatientDetail>> RestoreAsync(PatientDetail d, CancellationToken ct) =>
-        api.CreatePatientAsync(new CreatePatientRequest(d.Name, d.DateOfBirth, d.Gender, d.BloodType, d.Phone, d.Address), ct);
+        api.RestorePatientAsync(d.Id, ct);
 
     protected override RecordEditorViewModel CreateEditor(PatientDetail? existing) =>
         existing is null

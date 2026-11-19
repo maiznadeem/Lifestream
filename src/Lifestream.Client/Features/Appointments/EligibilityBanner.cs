@@ -24,7 +24,7 @@ public enum BannerState
 /// <summary>
 /// The eligibility banner: a headline (eligible or not), the facts that decide it (age, days since the last donation) and the reasons.
 /// The rule is the shared Domain rule the server applies; the banner only explains it. An ineligible donor can still be booked or
-/// recorded, but only with a reason (<see cref="RequiresReason"/>). The data model has no medical flag, so none is shown.
+/// recorded, but only with a reason (<see cref="RequiresReason"/>). The medical hold is one of the facts it shows.
 /// </summary>
 public sealed partial class EligibilityBannerViewModel : ObservableObject
 {
@@ -70,11 +70,19 @@ public sealed partial class EligibilityBannerViewModel : ObservableObject
         Lines = ["The server will check again when you send this."];
     }
 
-    /// <summary>Shows the result for a donor as of a day, using the shared rule.</summary>
+    /// <summary>The server refused a booking or a donation because the donor is not eligible: show its reasons and ask for an override reason.</summary>
+    public void ShowRefused(IEnumerable<string> reasons)
+    {
+        ArgumentNullException.ThrowIfNull(reasons);
+        Lines = [.. reasons];
+        State = BannerState.NotEligible;
+    }
+
+    /// <summary>Shows the result for a donor as of a day, using the shared rule (age, days since the last donation and the medical hold).</summary>
     public void Show(DonorDetail donor, DateOnly asOf, DateOnly today)
     {
         ArgumentNullException.ThrowIfNull(donor);
-        Show(donor, Eligibility.Evaluate(donor.DateOfBirth, donor.LastDonated, asOf), today, asOf);
+        Show(donor, Eligibility.Evaluate(donor.DateOfBirth, donor.LastDonated, asOf, donor.MedicalHold), today, asOf);
     }
 
     /// <summary>Shows a result the server computed (the eligibility endpoint).</summary>
@@ -91,6 +99,7 @@ public sealed partial class EligibilityBannerViewModel : ObservableObject
         lines.Add(donor.LastDonated is { } last
             ? $"Last donation: {Formatting.Date(last)} ({DaysText(today.DayNumber - last.DayNumber)})"
             : "Last donation: none recorded");
+        lines.Add(donor.MedicalHold ? "Medical hold: yes" : "Medical hold: none");
         lines.AddRange(result.Reasons);
         if (result.NextEligibleDate is { } next && !result.Reasons.Any(r => r.Contains(Formatting.Date(next), StringComparison.Ordinal)))
         {

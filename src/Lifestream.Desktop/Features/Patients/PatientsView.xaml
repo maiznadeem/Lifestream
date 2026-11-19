@@ -39,7 +39,13 @@
                                        AutomationProperties.Name="Patients">
             <DataGrid.Columns>
               <DataGridTextColumn Header="Name" Binding="{Binding Name}" SortMemberPath="name" Width="2*" />
-              <DataGridTextColumn Header="Blood type" Binding="{Binding BloodType, Converter={StaticResource BloodTypeText}}" SortMemberPath="bloodType" Width="100" />
+              <DataGridTemplateColumn Header="Blood type" Width="100" CanUserSort="False">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate>
+                    <TextBlock Text="{Binding BloodType, Converter={StaticResource BloodTypeText}}" Style="{DynamicResource DataGrid.TextCell}" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
               <DataGridTemplateColumn Header="Gender" Width="90">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate>
@@ -54,14 +60,29 @@
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTextColumn Header="Date of birth" Binding="{Binding DateOfBirth, Converter={StaticResource DateText}}" SortMemberPath="dateOfBirth" Width="130" />
+              <DataGridTemplateColumn Header="Date of birth" Width="130" CanUserSort="False">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate>
+                    <TextBlock Text="{Binding DateOfBirth, Converter={StaticResource DateText}}" Style="{DynamicResource DataGrid.TextCell}" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
             </DataGrid.Columns>
           </controls:LifestreamDataGrid>
           <lists:ListFooter Grid.Row="1" />
         </Grid>
       </controls:LoadSurface>
       <Grid Grid.Column="2">
-        <lists:RecordDetailPane Visibility="{Binding Editor, Converter={StaticResource NullToVisible}}" />
+        <lists:RecordDetailPane Visibility="{Binding Editor, Converter={StaticResource NullToVisible}}">
+          <lists:RecordDetailPane.RelatedActions>
+            <Button Style="{DynamicResource Button.Secondary}" Command="{Binding NewRequestCommand}" AutomationProperties.Name="New request">
+              <StackPanel Orientation="Horizontal">
+                <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE710;" feat:Edge.Right="{DynamicResource Space.8}" VerticalAlignment="Center" />
+                <TextBlock Text="New request" VerticalAlignment="Center" />
+              </StackPanel>
+            </Button>
+          </lists:RecordDetailPane.RelatedActions>
+        </lists:RecordDetailPane>
         <ContentControl Content="{Binding Editor}" ContentTemplateSelector="{x:Static services:ViewLocator.Instance}" IsTabStop="False" Focusable="False"
                         HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" Visibility="{Binding Editor, Converter={StaticResource NullToCollapsed}}" />
       </Grid>

@@ -8,6 +8,7 @@ using Lifestream.Contracts;
 using Lifestream.Contracts.Appointments;
 using Lifestream.Contracts.Lookups;
 using Lifestream.Domain;
+using ContractSortKeys = Lifestream.Contracts.SortKeys;
 
 namespace Lifestream.Client.Features.Appointments;
 
@@ -46,7 +47,7 @@ public sealed class AppointmentsViewModel : SortedRecordListViewModel<Appointmen
         _forms = forms;
         _receipts = receipts;
         _navigation = navigation;
-        StatusOptions = FilterOptions.WithAll(Enum.GetValues<AppointmentStatus>(), StatusText, "All statuses");
+        StatusOptions = SharedLists.WithAll(SharedLists.AppointmentStatuses, "All statuses");
         _statusFilter = StatusOptions[0];
         if (ViewState.Filters.TryGetValue(StatusKey, out var savedStatus) && Enum.TryParse<AppointmentStatus>(savedStatus, out var status))
         {
@@ -76,7 +77,7 @@ public sealed class AppointmentsViewModel : SortedRecordListViewModel<Appointmen
         {
             if (parameter is AppointmentListItem item)
             {
-                await _navigation.NavigateTo<DonorsViewModel>(new ListPrefilter(Search: item.DonorName)).ConfigureAwait(true);
+                await _navigation.NavigateTo<DonorsViewModel>(new ListPrefilter(RecordId: item.DonorId)).ConfigureAwait(true);
             }
         });
         ViewReceiptCommand = new AsyncRelayCommand(_ => Detail?.ReceiptId is { } id ? _receipts.ShowAsync(id, isDuplicate: true) : Task.CompletedTask, () => Detail?.ReceiptId is not null);
@@ -158,7 +159,7 @@ public sealed class AppointmentsViewModel : SortedRecordListViewModel<Appointmen
     }
 
     /// <summary>The only column that sorts is the appointment time; the API supports "slot" and "placed" and this screen offers the first.</summary>
-    public override IReadOnlyList<string> SortKeys { get; } = ["slot"];
+    public override IReadOnlyList<string> SortKeys { get; } = [ContractSortKeys.Slot];
 
     protected override Task<ApiResult<PagedResult<AppointmentListItem>>> FetchSortedAsync(ListRequest request, CancellationToken ct) =>
         _api.GetAppointmentsAsync(new AppointmentQuery(request.Search, _donorFilter?.Id, _statusFilter.Value, BloodTypeValue, null, null, request.Page, request.PageSize, request.Sort), ct);

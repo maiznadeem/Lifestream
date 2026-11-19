@@ -46,13 +46,8 @@ public sealed partial class ThemeTests
         }
     }
 
-    // C# that builds elements itself must read spacing and radii from the tokens too (SHELL-25). Only paths that print or
-    // feed a charting library, where the theme does not apply, are listed here, each with its reason.
-    private static readonly Dictionary<string, string> CodeLiteralExemptions = new(StringComparer.OrdinalIgnoreCase)
-    {
-        [Path.Combine("Features", "Receipts", "ReceiptDocumentBuilder.cs")] = "the printed receipt is a fixed-layout paged document in print units, not themed UI",
-        [Path.Combine("Features", "Dashboard", "DashboardView.xaml.cs")] = "Padding on a LiveCharts column series is the gap between bars, not layout spacing",
-    };
+    // C# that builds elements itself must read spacing and radii from the tokens too (SHELL-25), with no exceptions: the printed receipt
+    // and the chart series read their sizes from the Print.* and Chart.* tokens.
 
     [GeneratedRegex(@"//[^\r\n]*|/\*.*?\*/", RegexOptions.CultureInvariant | RegexOptions.Singleline, matchTimeoutMilliseconds: 5000)]
     private static partial Regex CodeComment();
@@ -109,11 +104,6 @@ public sealed partial class ThemeTests
         {
             var name = Path.GetRelativePath(DesktopDir, file);
             scanned.Add(name);
-            if (CodeLiteralExemptions.ContainsKey(name))
-            {
-                continue;
-            }
-
             offenders.AddRange(CodeSpacingLiterals(name, File.ReadAllText(file)));
         }
 

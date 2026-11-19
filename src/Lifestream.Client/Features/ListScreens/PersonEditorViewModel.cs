@@ -33,8 +33,8 @@ public abstract partial class PersonEditorViewModel : RecordEditorViewModel
         : base(toasts, dialogs, clock, recordType, isNew)
     {
         MinimumAgeYears = minimumAgeYears;
-        GenderChoices = [.. Enum.GetValues<Gender>().Select(g => new Choice<Gender>(g.ToString(), g))];
-        BloodTypeChoices = [.. BloodTypeExtensions.All.Select(b => new Choice<BloodType>(b.ToDisplay(), b))];
+        GenderChoices = SharedLists.Genders;
+        BloodTypeChoices = SharedLists.BloodTypes;
     }
 
     public int MinimumAgeYears { get; }

@@ -86,6 +86,14 @@
   <sys:Double x:Key="Space.24">24</sys:Double>
   <sys:Double x:Key="Space.32">32</sys:Double>
   <sys:Double x:Key="Space.48">48</sys:Double>
+  <!-- The gap between the two bars of a month on the dashboard chart (a charting-library setting, in pixels) -->
+  <sys:Double x:Key="Chart.BarGap">2</sys:Double>
+  <!-- The printed receipt: paper margins and the small gaps of its table, in print units -->
+  <Thickness x:Key="Print.Page">48</Thickness>
+  <Thickness x:Key="Print.B2">0,0,0,2</Thickness>
+  <Thickness x:Key="Print.B1">0,0,0,1</Thickness>
+  <Thickness x:Key="Print.CellLabel">0,4,8,4</Thickness>
+  <Thickness x:Key="Print.CellValue">0,4,0,4</Thickness>
   <Thickness x:Key="Pad.4">4</Thickness>
   <Thickness x:Key="Pad.8">8</Thickness>
   <Thickness x:Key="Pad.12">12</Thickness>

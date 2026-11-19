@@ -106,6 +106,7 @@ public static class DemoReset
         await db.Appointments.ExecuteDeleteAsync(ct);
         await db.Patients.ExecuteDeleteAsync(ct);
         await db.Donors.ExecuteDeleteAsync(ct);
+        await db.DeletedRecords.ExecuteDeleteAsync(ct);
         await db.RefreshTokens.Where(t => !t.Staff!.IsProtected).ExecuteDeleteAsync(ct);
         await db.StaffPhotos.Where(p => !p.Staff!.IsProtected).ExecuteDeleteAsync(ct);
         await db.AuditLogs.Where(a => !db.Staff.Any(s => s.IsProtected && s.Id == a.StaffId)).ExecuteDeleteAsync(ct);

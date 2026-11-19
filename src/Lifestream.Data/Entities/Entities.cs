@@ -72,6 +72,9 @@ public sealed class Staff : IEntity
     /// <summary>Set when an administrator resets the password: the person must choose their own before anything else is allowed.</summary>
     public bool MustChangePassword { get; set; }
 
+    /// <summary>When the account was created (server time, default <c>SYSUTCDATETIME()</c>); the profile shows it as "Member since" (FEAT-24).</summary>
+    public DateTime CreatedAtUtc { get; set; }
+
     public byte[] RowVersion { get; set; } = [];
 }
 
@@ -183,6 +186,25 @@ public sealed class AuditLog : IEntity
     public string Entity { get; set; } = "";
     public int EntityId { get; set; }
     public DateTime OccurredAtUtc { get; set; }
+}
+
+/// <summary>
+/// What a deleted donor or patient looked like, so Undo can put the same record back with the same id (FEAT-06). A row is written in
+/// the transaction of the delete and removed by a restore; rows older than the restore window are dropped by the next delete.
+/// </summary>
+public sealed class DeletedRecord : IEntity
+{
+    public int Id { get; set; }
+
+    /// <summary>The table the record came from: "Donor" or "Patient".</summary>
+    public string Entity { get; set; } = "";
+
+    public int EntityId { get; set; }
+
+    /// <summary>The row as JSON (columns only, no navigations).</summary>
+    public string Json { get; set; } = "";
+
+    public DateTime DeletedAtUtc { get; set; }
 }
 
 /// <summary>Single row (Id = 1) holding the demo reset bookkeeping.</summary>

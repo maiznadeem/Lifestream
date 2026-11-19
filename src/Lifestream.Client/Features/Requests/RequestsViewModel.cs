@@ -8,6 +8,7 @@ using Lifestream.Contracts;
 using Lifestream.Contracts.Lookups;
 using Lifestream.Contracts.Requests;
 using Lifestream.Domain;
+using ContractSortKeys = Lifestream.Contracts.SortKeys;
 
 namespace Lifestream.Client.Features.Requests;
 
@@ -41,7 +42,7 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
         _forms = forms;
         _receipts = receipts;
         _navigation = navigation;
-        StatusOptions = FilterOptions.WithAll(Enum.GetValues<RequestStatus>(), StatusText, "All statuses");
+        StatusOptions = SharedLists.WithAll(SharedLists.RequestStatuses, "All statuses");
         _statusFilter = StatusOptions[0];
         if (ViewState.Filters.TryGetValue(StatusKey, out var saved) && Enum.TryParse<RequestStatus>(saved, out var status))
         {
@@ -55,7 +56,7 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
         {
             if (parameter is RequestListItem item)
             {
-                await _navigation.NavigateTo<PatientsViewModel>(new ListPrefilter(Search: item.PatientName)).ConfigureAwait(true);
+                await _navigation.NavigateTo<PatientsViewModel>(new ListPrefilter(RecordId: item.PatientId)).ConfigureAwait(true);
             }
         });
         ViewReceiptCommand = new AsyncRelayCommand(_ => Detail?.ReceiptId is { } id ? _receipts.ShowAsync(id, isDuplicate: true) : Task.CompletedTask, () => Detail?.ReceiptId is not null);
@@ -119,7 +120,7 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
 
     /// <summary>One call: the search text matches the patient's name (or the request number), the blood type and status filters are sent with it.</summary>
     /// <summary>The columns that sort: when the request was placed and the date it is needed by (the API supports exactly these two).</summary>
-    public override IReadOnlyList<string> SortKeys { get; } = ["placed", "requiredBy"];
+    public override IReadOnlyList<string> SortKeys { get; } = ContractSortKeys.Requests;
 
     protected override Task<ApiResult<PagedResult<RequestListItem>>> FetchSortedAsync(ListRequest request, CancellationToken ct) =>
         _api.GetRequestsAsync(new RequestQuery(request.Search, null, _statusFilter.Value, BloodTypeValue, request.Page, request.PageSize, request.Sort), ct);

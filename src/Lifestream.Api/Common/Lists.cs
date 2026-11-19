@@ -88,6 +88,9 @@ public sealed class SortMap<T>
         _defaultDescending = defaultDescending;
     }
 
+    /// <summary>The names this map accepts (compared by tests with <see cref="Lifestream.Contracts.SortKeys"/>).</summary>
+    public IReadOnlyCollection<string> Keys => _keys.Keys;
+
     public SortMap<T> Add<TKey>(string name, Expression<Func<T, TKey>> key)
     {
         _keys[name] = (q, desc) => desc ? q.OrderByDescending(key) : q.OrderBy(key);

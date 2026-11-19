@@ -1,6 +1,3 @@
-using System.Reflection;
-using Lifestream.Api.Features;
-using Lifestream.Api.Infrastructure;
 using Lifestream.Client.Api;
 using Lifestream.Client.Tests.Fakes;
 using Lifestream.Contracts;
@@ -12,27 +9,15 @@ using Lifestream.Contracts.Staff;
 namespace Lifestream.Client.Tests.Features;
 
 /// <summary>
-/// Sorting on the part 2 lists. Every sort key a screen offers is checked against the API's own validator (its <c>SortMap</c>, read by reflection from
-/// the endpoint class, not copied here); a key the API would refuse is never sent, and a refusal that still happens resets to the default sort.
+/// Sorting on the part 2 lists. Every sort key a screen offers is checked against the keys the shared contracts define (the API builds its own validators from
+/// the same constants, which its own tests check, so this project needs no reference to the API); a key the API would refuse is never sent, and a refusal that
+/// still happens resets to the default sort.
 /// </summary>
 public sealed class Part2SortTests
 {
-    /// <summary>Asks the API's real sort validator whether it accepts a key: true when it does, false when it throws its validation problem.</summary>
-    private static bool ApiAccepts(Type endpoints, string sort)
-    {
-        var map = endpoints.GetField("Sorts", BindingFlags.NonPublic | BindingFlags.Static)!.GetValue(null)!;
-        var entity = map.GetType().GetGenericArguments()[0];
-        var empty = typeof(Queryable).GetMethods().First(m => m.Name == "AsQueryable" && !m.IsGenericMethodDefinition).Invoke(null, [Array.CreateInstance(entity, 0)]);
-        try
-        {
-            map.GetType().GetMethod("Apply")!.Invoke(map, [empty, sort]);
-            return true;
-        }
-        catch (TargetInvocationException ex) when (ex.InnerException is ApiException { Code: ProblemCodes.Validation })
-        {
-            return false;
-        }
-    }
+    /// <summary>Whether the contracts' list accepts a key the way the API's validator does: case-insensitive, with an optional "-" or "+" in front.</summary>
+    private static bool Accepts(IReadOnlyList<string> contract, string sort) =>
+        contract.Contains(sort.Trim().TrimStart('-', '+'), StringComparer.OrdinalIgnoreCase);
 
     [Fact]
     public void Appointments_EverySortableColumnKey_IsAcceptedByTheApiValidator()
@@ -41,8 +26,8 @@ public sealed class Part2SortTests
         Assert.NotEmpty(keys);
         Assert.All(keys, key =>
         {
-            Assert.True(ApiAccepts(typeof(AppointmentEndpoints), key), key);
-            Assert.True(ApiAccepts(typeof(AppointmentEndpoints), "-" + key), "-" + key);
+            Assert.True(Accepts(SortKeys.Appointments, key), key);
+            Assert.True(Accepts(SortKeys.Appointments, "-" + key), "-" + key);
         });
     }
 
@@ -53,8 +38,8 @@ public sealed class Part2SortTests
         Assert.Equal(["placed", "requiredBy"], keys);
         Assert.All(keys, key =>
         {
-            Assert.True(ApiAccepts(typeof(RequestEndpoints), key), key);
-            Assert.True(ApiAccepts(typeof(RequestEndpoints), "-" + key), "-" + key);
+            Assert.True(Accepts(SortKeys.Requests, key), key);
+            Assert.True(Accepts(SortKeys.Requests, "-" + key), "-" + key);
         });
     }
 
@@ -65,27 +50,35 @@ public sealed class Part2SortTests
         Assert.NotEmpty(keys);
         Assert.All(keys, key =>
         {
-            Assert.True(ApiAccepts(typeof(ReceiptEndpoints), key), key);
-            Assert.True(ApiAccepts(typeof(ReceiptEndpoints), "-" + key), "-" + key);
+            Assert.True(Accepts(SortKeys.Receipts, key), key);
+            Assert.True(Accepts(SortKeys.Receipts, "-" + key), "-" + key);
         });
     }
 
     [Fact]
-    public void Staff_OffersNoSortableColumn_BecauseTheClientCallHasNoSortParameter()
+    public void Staff_OffersExactlyTheSortKeysTheContractsDefine_AndTheClientCallCarriesASortParameter()
     {
-        Assert.Empty(new Part2Rig().Staff().SortKeys);
-        Assert.DoesNotContain(typeof(ILifestreamApiClient).GetMethod(nameof(ILifestreamApiClient.GetStaffAsync))!.GetParameters(), p => p.Name == "sort");
-        Assert.True(ApiAccepts(typeof(StaffEndpoints), "name")); // the API could sort, so the validator is the real one
+        Assert.Equal(SortKeys.Staff, new Part2Rig().Staff().SortKeys);
+        Assert.Contains(typeof(ILifestreamApiClient).GetMethod(nameof(ILifestreamApiClient.GetStaffAsync))!.GetParameters(), p => p.Name == "sort");
+    }
+
+    [Fact]
+    public void DonorsAndPatients_OfferOnlyTheContractsKeys()
+    {
+        var rig = new Part2Rig();
+        Assert.Equal(SortKeys.Donors, rig.Base.Donors().SortKeys);
+        Assert.Equal(SortKeys.Patients, rig.Base.Patients().SortKeys);
     }
 
     [Fact]
     public void TheApiValidator_RefusesTheKeysTheOldGridsSent_SoTheTestCanFail()
     {
         // The bound property names a DataGrid column sorts by when no SortMemberPath is set: the API refuses them.
-        Assert.False(ApiAccepts(typeof(AppointmentEndpoints), "DonorName"));
-        Assert.False(ApiAccepts(typeof(RequestEndpoints), "PatientName"));
-        Assert.False(ApiAccepts(typeof(ReceiptEndpoints), "PartyName"));
-        Assert.False(ApiAccepts(typeof(AppointmentEndpoints), "-Status"));
+        Assert.False(Accepts(SortKeys.Appointments, "DonorName"));
+        Assert.False(Accepts(SortKeys.Requests, "PatientName"));
+        Assert.False(Accepts(SortKeys.Receipts, "PartyName"));
+        Assert.False(Accepts(SortKeys.Appointments, "-Status"));
+        Assert.False(Accepts(SortKeys.Donors, "bloodType")); // the Donors grid used to send this one
     }
 
     [Fact]
@@ -148,18 +141,23 @@ public sealed class Part2SortTests
     }
 
     [Fact]
-    public async Task Staff_NeverSendsASort_EvenWhenAskedTo()
+    public async Task Staff_SendsTheSortToTheApi_AndDropsAKeyItCannotSend()
     {
         var rig = new Part2Rig();
         rig.Fake.On("GetStaffAsync", ApiResult<PagedResult<StaffListItem>>.Ok(Samples2.StaffPage(Samples2.StaffRow(1))));
         var vm = rig.Staff();
         await vm.LoadAsync();
 
-        await vm.SortCommand.ExecuteAsync("name");
+        await vm.SortCommand.ExecuteAsync("-username");
 
         Assert.True(vm.IsReady);
+        Assert.Equal("username", vm.ViewState.SortColumn);
+        Assert.Equal("-username", rig.Recorder.Calls.Last(c => c.Name == "GetStaffAsync").Args[3]);
+
+        vm.ViewState.SortColumn = "salary"; // not a staff sort key
+        await vm.RefreshAsync();
+        Assert.Null(rig.Recorder.Calls.Last(c => c.Name == "GetStaffAsync").Args[3]);
         Assert.Null(vm.ViewState.SortColumn);
-        Assert.Equal(2, rig.Recorder.CountOf("GetStaffAsync"));
     }
 
     [Fact]

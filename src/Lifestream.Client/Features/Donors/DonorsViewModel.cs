@@ -1,23 +1,51 @@
 using Lifestream.Client.Api;
 using Lifestream.Client.Common;
+using Lifestream.Client.Features.Appointments;
 using Lifestream.Client.Features.ListScreens;
+using Lifestream.Client.Navigation;
 using Lifestream.Contracts;
 using Lifestream.Contracts.Donors;
 using Lifestream.Domain;
+using ContractSortKeys = Lifestream.Contracts.SortKeys;
 
 namespace Lifestream.Client.Features.Donors;
 
 /// <summary>The Donors screen: a paged, filterable list with the selected donor's detail beside it and the editor in a drawer (FEAT-01 to FEAT-08).</summary>
-public sealed class DonorsViewModel(ILifestreamApiClient api, IListViewStateStore states, IToastService toasts, IDialogService dialogs, IUiDispatcher ui)
-    : RecordListViewModel<DonorListItem, DonorDetail>(states, "donors", toasts, dialogs, ui)
+public sealed class DonorsViewModel : SortedRecordListViewModel<DonorListItem, DonorDetail>
 {
+    private readonly ILifestreamApiClient api;
+    private readonly INavigationService navigation;
+
+    public DonorsViewModel(ILifestreamApiClient api, IListViewStateStore states, IToastService toasts, IDialogService dialogs, INavigationService navigation, IUiDispatcher ui)
+        : base(states, "donors", toasts, dialogs, ui)
+    {
+        this.api = api;
+        this.navigation = navigation;
+        BookAppointmentCommand = new AsyncRelayCommand(
+            _ => Detail is { } donor ? this.navigation.NavigateTo<AppointmentsViewModel>(new RelatedRecord(RecordKind.Donor, donor.Id, donor.Name)) : Task.CompletedTask,
+            () => Detail is not null && !IsEditing);
+        PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(Detail) or nameof(Editor))
+            {
+                BookAppointmentCommand.RaiseCanExecuteChanged();
+            }
+        };
+    }
+
+    /// <summary>"Book appointment" on the selected donor: opens the booking form on the Appointments screen with this donor already chosen (FEAT-04).</summary>
+    public AsyncRelayCommand BookAppointmentCommand { get; }
+
     public override string PageTitle => "Donors";
 
     protected override string PluralName => "donors";
 
     protected override string RecordType => "donor";
 
-    protected override Task<ApiResult<PagedResult<DonorListItem>>> FetchPageAsync(ListRequest request, CancellationToken ct) =>
+    /// <summary>The columns that sort, as the API's validator names them (defined once in the contracts).</summary>
+    public override IReadOnlyList<string> SortKeys { get; } = ContractSortKeys.Donors;
+
+    protected override Task<ApiResult<PagedResult<DonorListItem>>> FetchSortedAsync(ListRequest request, CancellationToken ct) =>
         api.GetDonorsAsync(new DonorQuery(request.Search, BloodTypeValue, request.Page, request.PageSize, request.Sort), ct);
 
     protected override int IdOf(DonorListItem item) => item.Id;
@@ -57,8 +85,8 @@ public sealed class DonorsViewModel(ILifestreamApiClient api, IListViewStateStor
 
     protected override Task<ApiResult> DeleteRecordAsync(int id, CancellationToken ct) => api.DeleteDonorAsync(id, ct);
 
-    protected override Task<ApiResult<DonorDetail>> RestoreAsync(DonorDetail d, CancellationToken ct) =>
-        api.CreateDonorAsync(new CreateDonorRequest(d.Name, d.DateOfBirth, d.Gender, d.BloodType, d.Phone, d.Address, d.Frequency), ct);
+    // The API keeps the deleted donor for a few seconds and puts it back as it was (same id, last-donation date, medical hold), so Undo restores rather than re-creates.
+    protected override Task<ApiResult<DonorDetail>> RestoreAsync(DonorDetail d, CancellationToken ct) => api.RestoreDonorAsync(d.Id, ct);
 
     protected override RecordEditorViewModel CreateEditor(DonorDetail? existing) =>
         existing is null

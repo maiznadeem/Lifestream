@@ -1245,3 +1245,55 @@ END;
 COMMIT;
 GO
 
+BEGIN TRANSACTION;
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261119130000_TombstonesAndStaffCreatedAt'
+)
+BEGIN
+    ALTER TABLE [Staff] ADD [CreatedAtUtc] datetime2(3) NOT NULL DEFAULT (SYSUTCDATETIME());
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261119130000_TombstonesAndStaffCreatedAt'
+)
+BEGIN
+    CREATE TABLE [DeletedRecord] (
+        [Id] int NOT NULL IDENTITY,
+        [Entity] varchar(30) NOT NULL,
+        [EntityId] int NOT NULL,
+        [Json] nvarchar(max) NOT NULL,
+        [DeletedAtUtc] datetime2(3) NOT NULL DEFAULT (SYSUTCDATETIME()),
+        CONSTRAINT [PK_DeletedRecord] PRIMARY KEY ([Id])
+    );
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261119130000_TombstonesAndStaffCreatedAt'
+)
+BEGIN
+    CREATE INDEX [IX_DeletedRecord_DeletedAtUtc] ON [DeletedRecord] ([DeletedAtUtc]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261119130000_TombstonesAndStaffCreatedAt'
+)
+BEGIN
+    CREATE INDEX [IX_DeletedRecord_Entity_EntityId] ON [DeletedRecord] ([Entity], [EntityId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261119130000_TombstonesAndStaffCreatedAt'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20261119130000_TombstonesAndStaffCreatedAt', N'11.0.0');
+END;
+
+COMMIT;
+GO
+
