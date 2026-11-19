@@ -21,7 +21,7 @@ public sealed class LoadSurface : ContentControl
     public static readonly DependencyProperty ErrorMessageProperty = DependencyProperty.Register(nameof(ErrorMessage), typeof(string), typeof(LoadSurface), new FrameworkPropertyMetadata(null));
     public static readonly DependencyProperty ErrorDetailProperty = DependencyProperty.Register(nameof(ErrorDetail), typeof(string), typeof(LoadSurface), new FrameworkPropertyMetadata(null));
     public static readonly DependencyProperty RetryCommandProperty = DependencyProperty.Register(nameof(RetryCommand), typeof(ICommand), typeof(LoadSurface), new FrameworkPropertyMetadata(null));
-    public static readonly DependencyProperty CancelCommandProperty = DependencyProperty.Register(nameof(CancelCommand), typeof(ICommand), typeof(LoadSurface), new FrameworkPropertyMetadata(null));
+    public static readonly DependencyProperty CancelCommandProperty = DependencyProperty.Register(nameof(CancelCommand), typeof(ICommand), typeof(LoadSurface), new FrameworkPropertyMetadata(null, (d, _) => ((LoadSurface)d).BindCancel()));
     public static readonly DependencyProperty EmptyGlyphProperty = DependencyProperty.Register(nameof(EmptyGlyph), typeof(string), typeof(LoadSurface), new FrameworkPropertyMetadata(""));
     public static readonly DependencyProperty EmptyTitleProperty = DependencyProperty.Register(nameof(EmptyTitle), typeof(string), typeof(LoadSurface), new FrameworkPropertyMetadata("Nothing here yet"));
     public static readonly DependencyProperty EmptyMessageProperty = DependencyProperty.Register(nameof(EmptyMessage), typeof(string), typeof(LoadSurface), new FrameworkPropertyMetadata(null));
@@ -56,9 +56,24 @@ public sealed class LoadSurface : ContentControl
     /// <summary>The skeleton part of the template (for tests).</summary>
     public Skeleton? SkeletonPart => GetTemplateChild("PART_Skeleton") as Skeleton;
 
+    public LoadSurface() => DataContextChanged += (_, _) => BindCancel();
+
+    /// <summary>
+    /// The banner's Cancel runs <see cref="CancelCommand"/> when a view sets one, and otherwise cancels the load of the
+    /// screen's own view model, so Cancel works wherever the banner appears (SHELL-07).
+    /// </summary>
+    private void BindCancel()
+    {
+        if (GetTemplateChild("PART_CancelWaking") is Button cancel)
+        {
+            cancel.Command = CancelCommand ?? (DataContext as ViewModelBase)?.CancelLoadCommand;
+        }
+    }
+
     public override void OnApplyTemplate()
     {
         base.OnApplyTemplate();
+        BindCancel();
         if (GetTemplateChild("PART_WakingBanner") is UIElement banner)
         {
             AutomationProperties.SetLiveSetting(banner, AutomationLiveSetting.Polite);

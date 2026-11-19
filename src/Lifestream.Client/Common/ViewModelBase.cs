@@ -13,6 +13,7 @@ public abstract partial class ViewModelBase : ObservableObject, IDisposable
 {
     private CancellationTokenSource? _loadCts;
     private ITimer? _timeoutTimer;
+    private ITimer? _wakingTimer;
     private IServerStatus? _serverStatus;
     private SynchronizationContext? _context;
 
@@ -109,6 +110,7 @@ public abstract partial class ViewModelBase : ObservableObject, IDisposable
         ErrorDetail = null;
         State = LoadState.Loading;
         StartTimeout(cts);
+        StartWakingWatch(cts);
 
         try
         {
@@ -142,6 +144,8 @@ public abstract partial class ViewModelBase : ObservableObject, IDisposable
         {
             _timeoutTimer?.Dispose();
             _timeoutTimer = null;
+            _wakingTimer?.Dispose();
+            _wakingTimer = null;
             if (ReferenceEquals(_loadCts, cts))
             {
                 _loadCts = null;
@@ -156,6 +160,15 @@ public abstract partial class ViewModelBase : ObservableObject, IDisposable
     /// <summary>Stops a load that is in flight (the "Cancel" of the waking state).</summary>
     public void CancelLoad() => _loadCts?.Cancel();
 
+    /// <summary>The "Cancel" button of the waking banner, on every screen that shows one (SHELL-07).</summary>
+    public AsyncRelayCommand CancelLoadCommand => _cancelLoadCommand ??= new AsyncRelayCommand(_ =>
+    {
+        CancelLoad();
+        return Task.CompletedTask;
+    });
+
+    private AsyncRelayCommand? _cancelLoadCommand;
+
     private void StartTimeout(CancellationTokenSource cts)
     {
         _timedOut = false;
@@ -168,6 +181,13 @@ public abstract partial class ViewModelBase : ObservableObject, IDisposable
                 {
                     if (State == LoadState.Loading && ReferenceEquals(_loadCts, cts))
                     {
+                        if (_serverStatus?.State == ServerState.Waking)
+                        {
+                            // Another call is already waking the server: this call gets the long budget too, not the 10 s one.
+                            Post(MarkWaking);
+                            return;
+                        }
+
                         _timedOut = true;
                         Post(() => ShowError("This is taking longer than expected.", null));
                         cts.Cancel();
@@ -181,6 +201,43 @@ public abstract partial class ViewModelBase : ObservableObject, IDisposable
             null,
             LoadTimeout,
             Timeout.InfiniteTimeSpan);
+    }
+
+    /// <summary>
+    /// A load that starts while another call is already waking the server never sees the Online-to-Waking edge, so
+    /// after the same 3 s the API client uses it moves to the waking state itself (SHELL-07).
+    /// </summary>
+    private void StartWakingWatch(CancellationTokenSource cts)
+    {
+        _wakingTimer?.Dispose();
+        _wakingTimer = null;
+        if (_serverStatus?.State != ServerState.Waking)
+        {
+            return;
+        }
+
+        _wakingTimer = Clock.CreateTimer(
+            _ =>
+            {
+                if (ReferenceEquals(_loadCts, cts))
+                {
+                    Post(MarkWaking);
+                }
+            },
+            null,
+            WakingAfter,
+            Timeout.InfiniteTimeSpan);
+    }
+
+    /// <summary>How long a load stays in Loading, while the server is already waking, before the waking state shows.</summary>
+    public TimeSpan WakingAfter { get; init; } = TimeSpan.FromSeconds(3);
+
+    private void MarkWaking()
+    {
+        if (_serverStatus?.State == ServerState.Waking && State == LoadState.Loading && _loadCts is not null)
+        {
+            State = LoadState.Waking;
+        }
     }
 
     private void OnServerStatusChanged(object? sender, EventArgs e) =>
@@ -257,6 +314,7 @@ public abstract partial class ViewModelBase : ObservableObject, IDisposable
             _loadCts?.Cancel();
             _loadCts?.Dispose();
             _timeoutTimer?.Dispose();
+            _wakingTimer?.Dispose();
             if (_serverStatus is not null)
             {
                 _serverStatus.Changed -= OnServerStatusChanged;
