@@ -279,20 +279,7 @@
                     </Style>
                   </controls:Icon.Style>
                 </controls:Icon>
-                <TextBlock x:Name="StaffAccessText" Grid.Row="2" Grid.Column="1" TextWrapping="Wrap">
-                  <TextBlock.Style>
-                    <Style TargetType="TextBlock">
-                      <Setter Property="Text" Value="Staff list, view only" />
-                      <Setter Property="Foreground" Value="{DynamicResource Brush.Ink2}" />
-                      <Style.Triggers>
-                        <DataTrigger Binding="{Binding DetailIsAdmin}" Value="True">
-                          <Setter Property="Text" Value="Staff accounts: add, change, reset passwords" />
-                          <Setter Property="Foreground" Value="{DynamicResource Brush.Ink}" />
-                        </DataTrigger>
-                      </Style.Triggers>
-                    </Style>
-                  </TextBlock.Style>
-                </TextBlock>
+                <TextBlock x:Name="StaffAccessText" Grid.Row="2" Grid.Column="1" Style="{DynamicResource Text.Body}" Text="{Binding DetailStaffAccessText}" TextWrapping="Wrap" />
               </Grid>
 
               <!-- Details: label and value, as in every A panel. -->

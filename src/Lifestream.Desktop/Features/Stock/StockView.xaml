@@ -139,7 +139,7 @@
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="In stock against the minimum" Width="2*" MinWidth="200" CanUserSort="False">
+                <DataGridTemplateColumn Header="In stock" Width="2*" MinWidth="200" CanUserSort="False">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate DataType="{x:Type stock:StockTile}">
                       <Grid VerticalAlignment="Center" AutomationProperties.Name="{Binding AutomationName}">
@@ -163,7 +163,7 @@
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn x:Name="FreshColumn" Header="More than 7 days left" Width="150" CanUserSort="False">
+                <DataGridTemplateColumn x:Name="FreshColumn" Header="More than 7 days" Width="140" CanUserSort="False">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate DataType="{x:Type stock:StockTile}">
                       <TextBlock x:Name="Fresh" Style="{DynamicResource DataGrid.TextCell}" Text="{Binding FreshText}" Typography.NumeralAlignment="Tabular" />
@@ -175,7 +175,7 @@
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="Expires within 7 days" Width="160" CanUserSort="False">
+                <DataGridTemplateColumn Header="Within 7 days" Width="120" CanUserSort="False">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate DataType="{x:Type stock:StockTile}">
                       <Grid VerticalAlignment="Center" HorizontalAlignment="Left">

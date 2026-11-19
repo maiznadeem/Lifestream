@@ -58,6 +58,7 @@ public sealed partial class StaffViewModel : SortedRecordListViewModel<StaffRow,
                 OnPropertyChanged(nameof(DetailInitials));
                 OnPropertyChanged(nameof(DetailIsAdmin));
                 OnPropertyChanged(nameof(DetailIsProtected));
+                OnPropertyChanged(nameof(DetailStaffAccessText));
                 OnPropertyChanged(nameof(DetailSubtitle));
                 OnPropertyChanged(nameof(PanelOverline));
             }
@@ -100,6 +101,9 @@ public sealed partial class StaffViewModel : SortedRecordListViewModel<StaffRow,
 
     /// <summary>True when the selected person's account is protected (the owner account: it can't be deleted or demoted).</summary>
     public bool DetailIsProtected => Detail?.IsProtected == true;
+
+    /// <summary>What the selected person can do with staff accounts: the last line of the panel's Access list.</summary>
+    public string DetailStaffAccessText => DetailIsAdmin ? "Staff accounts: add, change and reset passwords" : "Staff list, view only";
 
     /// <summary>"Doctor, morning shift": what the person does, under their name.</summary>
     public string DetailSubtitle => Detail is { } s ? $"{s.Designation}, {(s.Shift == Lifestream.Domain.Shift.FullTime ? "full time" : $"{s.Shift.ToString().ToLowerInvariant()} shift")}" : string.Empty;
