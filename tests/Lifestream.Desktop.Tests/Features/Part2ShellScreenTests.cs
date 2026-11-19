@@ -19,7 +19,7 @@ using Lifestream.Desktop.Shell;
 
 namespace Lifestream.Desktop.Tests.Features;
 
-/// <summary>The part 2 screens inside the real shell: found by the view locator, opened from the sidebar with exactly one load, named for assistive technology, and captured as README screenshots.</summary>
+/// <summary>The part 2 screens inside the real shell: found by the view locator, opened from the sidebar with exactly one load, named for assistive technology, and captured over the fake API for development (the README screenshots come from the real demo dataset, see EndToEnd/DemoScreenshotTests.cs).</summary>
 [Collection("Wpf")]
 public sealed class Part2ShellScreenTests
 {
@@ -159,16 +159,16 @@ public sealed class Part2ShellScreenTests
         Assert.True(unnamed.Count == 0, string.Join("; ", unnamed));
     }
 
-    // README screenshots (INFRA-19): one PNG per screen, at least 1366 x 768.
+    // Captures of each screen over the FAKE API and its made-up data (DemoData.cs), for looking at a view while developing. They are not the README screenshots: those come from
+    // the real demo dataset through the real API (EndToEnd/DemoScreenshotTests.cs, tools/generate-screenshots.ps1, INFRA-19).
 
     [Theory]
-    [Trait("Category", "Screenshots")]
     [InlineData("Appointments", "appointments.png")]
     [InlineData("Requests", "requests.png")]
     [InlineData("Receipts", "receipts.png")]
     [InlineData("Staff", "staff.png")]
     [InlineData("Profile", "profile.png")]
-    public void Screenshot_Part2Screen_IsCapturedFromTheDemoData(string title, string fileName)
+    public void Part2Screen_IsCapturedFromFakeApiData_NotForTheReadme(string title, string fileName)
     {
         var size = StaHost.Run(() =>
         {

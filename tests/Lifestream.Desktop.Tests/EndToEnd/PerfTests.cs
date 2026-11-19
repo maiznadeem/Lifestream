@@ -37,7 +37,7 @@ public sealed class PerfTests
 
     // ---- pumping without sleeping, so the UI thread is idle (and measurable) whenever nothing needs doing ----
 
-    private static void Pump(Task task, int timeoutMilliseconds = 30_000)
+    internal static void Pump(Task task, int timeoutMilliseconds = 30_000)
     {
         if (task.IsCompleted)
         {
@@ -58,7 +58,7 @@ public sealed class PerfTests
         task.GetAwaiter().GetResult();
     }
 
-    private static void PumpFor(int milliseconds)
+    internal static void PumpFor(int milliseconds)
     {
         var dispatcher = Dispatcher.CurrentDispatcher;
         var frame = new DispatcherFrame();
@@ -167,11 +167,12 @@ public sealed class PerfTests
             ("GET stock", ApiRoutes.Stock, ""),
         };
 
+        PerfLog.Expect([.. cases.Select(c => "lists " + c.Name), "dashboard"]);
         var failures = new List<string>();
         foreach (var (name, route, query) in cases)
         {
             var (p95, median, bytes) = await TimeAsync(http, ApiRoutes.Path(route) + query, name);
-            if (!PerfLog.Record("lists", name, "p95 of 40 warm requests", 40, p95, "ms", "< 100", p95 < 100, $"median {median:F1} ms, {bytes} bytes"))
+            if (!PerfLog.Record("lists", name, "p95 of 40 warm requests", 40, p95, "ms", "< 100", p95 < 100, $"median {median:F1} ms, {bytes} bytes", "lists " + name))
             {
                 failures.Add($"{name}: p95 {p95:F1} ms");
             }
@@ -207,6 +208,30 @@ public sealed class PerfTests
 
     // ---- screens: skeleton, calls, UI-thread gap, grid ----
 
+    internal static string SkeletonKey(string screen) => "skeleton " + screen.ToLowerInvariant();
+
+    /// <summary>
+    /// Records the skeleton time of one screen: the slowest of its visits. A visit on which no skeleton was visible (<c>null</c>) is a skeleton that was never shown, so the
+    /// screen is MISSED (a row with no value, never Infinity) and the test fails with "MISSED skeleton &lt;screen&gt;"; every later screen is still measured.
+    /// </summary>
+    internal static bool RecordSkeleton(string screen, int visits, IReadOnlyList<double?> times, out string problem)
+    {
+        var key = SkeletonKey(screen);
+        var shown = times.Where(t => t is not null).Select(t => t!.Value).ToList();
+        if (shown.Count < times.Count)
+        {
+            problem = $"MISSED {key}: no skeleton was visible after navigating to {screen} on {times.Count - shown.Count} of {times.Count} visits";
+            PerfLog.Missed("skeleton", $"Skeleton after navigating to {screen}", $"max of {visits} visits (the first one is cold)", visits, "< 100", problem, key);
+            return false;
+        }
+
+        var worst = shown.Max();
+        var pass = worst < 100;
+        PerfLog.Record("skeleton", $"Skeleton after navigating to {screen}", $"max of {visits} visits (the first one is cold)", visits, worst, "ms", "< 100", pass, $"first visit {shown[0]:F1} ms, median {PerfLog.Median(shown):F1} ms", key);
+        problem = pass ? "" : $"{screen}: {worst:F1} ms";
+        return pass;
+    }
+
     [Fact]
     [Trait("PerfPhase", "screens")]
     public void Perf_EveryScreen_SkeletonVisibleWithin100ms_OfNavigating_RealApi()
@@ -220,9 +245,10 @@ public sealed class PerfTests
             {
                 rig.Probe.Latency = TimeSpan.FromMilliseconds(300); // keeps the load running long enough to see the skeleton; the skeleton itself does not wait for the network
                 var problems = new List<string>();
+                PerfLog.Expect([.. Screens.Select(s => SkeletonKey(s))]);
                 foreach (var screen in Screens)
                 {
-                    var times = new List<double>();
+                    var times = new List<double?>();
                     for (var i = 0; i < Visits; i++)
                     {
                         var started = Stopwatch.GetTimestamp();
@@ -230,17 +256,14 @@ public sealed class PerfTests
                         Dispatcher.CurrentDispatcher.Invoke(DispatcherPriority.Render, () => { }); // the binding, the template and the layout pass that put the skeleton on screen
                         var elapsed = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
                         var visible = host.All<Skeleton>().Any(s => s.IsVisible && s.ActualHeight > 0);
-                        times.Add(visible ? elapsed : double.PositiveInfinity);
+                        times.Add(visible ? elapsed : null);
                         Pump(navigation);
                         PumpFor(50);
                     }
 
-                    var worst = times.Max();
-                    var pass = worst < 100;
-                    PerfLog.Record("skeleton", $"Skeleton after navigating to {screen}", $"max of {Visits} visits (the first one is cold)", Visits, worst, "ms", "< 100", pass, $"first visit {times[0]:F1} ms, median {PerfLog.Median(times):F1} ms");
-                    if (!pass)
+                    if (!RecordSkeleton(screen, Visits, times, out var problem))
                     {
-                        problems.Add($"{screen}: {worst:F1} ms");
+                        problems.Add(problem);
                     }
                 }
 
@@ -262,6 +285,7 @@ public sealed class PerfTests
             using (host)
             {
                 var found = new List<string>();
+                PerfLog.Expect([.. Screens.Select(s => "api-calls " + s.ToLowerInvariant()), "api-calls ui-thread"]);
                 var navigation = rig.Provider.GetRequiredService<Lifestream.Client.Navigation.INavigationService>();
                 var pageHost = host.Find<ContentControl>("PageHost");
                 foreach (var screen in Screens)
@@ -279,7 +303,7 @@ public sealed class PerfTests
                     var page = Hosted.Descendants(pageHost).OfType<FrameworkElement>().FirstOrDefault(e => ReferenceEquals(e.DataContext, rig.Shell.CurrentPage) && e is UserControl);
                     var dataContextIsTheViewModel = page is not null;
                     var pass = calls.Count == 1 && changes == 1 && dataContextIsTheViewModel;
-                    PerfLog.Record("api-calls", $"{screen}: API calls for one screen load", "count of one load", 1, calls.Count, "calls", "== 1", pass, $"{string.Join(", ", calls)}; view models created {changes}; DataContext is the view model: {dataContextIsTheViewModel}");
+                    PerfLog.Record("api-calls", $"{screen}: API calls for one screen load", "count of one load", 1, calls.Count, "calls", "== 1", pass, $"{string.Join(", ", calls)}; view models created {changes}; DataContext is the view model: {dataContextIsTheViewModel}", "api-calls " + screen.ToLowerInvariant());
                     if (!pass)
                     {
                         found.Add($"{screen}: {calls.Count} calls ({string.Join(", ", calls)}), {changes} view model(s), context ok {dataContextIsTheViewModel}");
@@ -287,7 +311,7 @@ public sealed class PerfTests
                 }
 
                 var onUi = rig.Probe.CallsStartedOnUiThread;
-                PerfLog.Record("api-calls", "API calls started on the UI thread (all screens)", "count over all loads", Screens.Length, onUi, "calls", "== 0", onUi == 0);
+                PerfLog.Record("api-calls", "API calls started on the UI thread (all screens)", "count over all loads", Screens.Length, onUi, "calls", "== 0", onUi == 0, key: "api-calls ui-thread");
                 if (onUi != 0)
                 {
                     found.Add($"{onUi} call(s) started on the UI thread");
@@ -315,6 +339,7 @@ public sealed class PerfTests
                 var found = new List<string>();
                 var overall = 0.0;
                 var worstScreen = "";
+                PerfLog.Expect([.. Screens.Select(s => "ui-gap " + s.ToLowerInvariant()), "ui-gap worst"]);
                 foreach (var screen in Screens)
                 {
                     // A thread of its own posts a no-op at input priority every few ms; how long each waits for the UI thread is the gap in which input would not be processed.
@@ -351,14 +376,14 @@ public sealed class PerfTests
                         worstScreen = screen;
                     }
 
-                    PerfLog.Record("ui-gap", $"UI thread gap while loading {screen} over 250 ms latency", "largest wait of an input-priority post during one load", 1, worst, "ms", "< 50", worst < 50);
+                    PerfLog.Record("ui-gap", $"UI thread gap while loading {screen} over 250 ms latency", "largest wait of an input-priority post during one load", 1, worst, "ms", "< 50", worst < 50, key: "ui-gap " + screen.ToLowerInvariant());
                     if (worst >= 50)
                     {
                         found.Add($"{screen}: {worst:F1} ms");
                     }
                 }
 
-                PerfLog.Record("ui-gap", "UI thread gap, worst of all screens", "max over 9 loads", Screens.Length, overall, "ms", "< 50", overall < 50, $"worst on {worstScreen}");
+                PerfLog.Record("ui-gap", "UI thread gap, worst of all screens", "max over 9 loads", Screens.Length, overall, "ms", "< 50", overall < 50, $"worst on {worstScreen}", "ui-gap worst");
                 return found;
             }
         });

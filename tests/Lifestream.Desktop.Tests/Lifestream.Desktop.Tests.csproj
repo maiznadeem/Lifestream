@@ -7,6 +7,8 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\Lifestream.Desktop\Lifestream.Desktop.csproj" />
+    <!-- The demo dataset generator: the screenshot test checks the dashboard against the counts of the data the API was seeded with (EndToEnd/DemoScreenshotTests.cs). -->
+    <ProjectReference Include="..\..\src\Lifestream.Data\Lifestream.Data.csproj" />
     <Using Include="System.Net.Http" />
     <Using Include="System.IO" />
     <!-- The fake API and the manual clock are shared with the Client tests, so both projects exercise the same fakes. -->
