@@ -7,8 +7,9 @@
     <ResourceDictionary Source="/Lifestream;component/Theme/Typography.xaml" />
   </ResourceDictionary.MergedDictionaries>
 
-  <!-- Text input: the label lives above the field (FormField), never inside it. The border thickens to the 2 px focus ring
-       colour on focus. A watermark is not part of the value: there is no Text trick, the hint is a separate element. -->
+  <!-- Text input: the label lives above the field (FormField), never inside it; an optional placeholder (InputAssist.Placeholder) shows
+       inside while the field is empty. Focus turns the border to the accent colour and draws a 2 px accent line along the bottom. The
+       placeholder is not part of the value: there is no Text trick, it is a separate element. -->
   <Style x:Key="Input.Base" TargetType="Control">
     <Setter Property="FontFamily" Value="{DynamicResource Font.Family}" />
     <Setter Property="FontSize" Value="{StaticResource FontSize.Body}" />
@@ -29,26 +30,76 @@
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="TextBox">
-          <Border x:Name="Box" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
-                  BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="{StaticResource Radius.Control}" SnapsToDevicePixels="True">
+          <!-- Rest: raised fill and a quiet border. Hover: a lighter fill. Focus: a darker fill, the accent border and a 2 px accent line along
+               the bottom, faded in and out over Motion.Fast. The layers are separate borders so the change can animate (opacity, not colour). -->
+          <Grid SnapsToDevicePixels="True">
+            <Border x:Name="Box" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="{StaticResource Radius.Control}" />
+            <Border x:Name="HoverFill" Background="{DynamicResource Brush.SurfaceInputHover}" CornerRadius="{StaticResource Radius.Control}" Margin="{DynamicResource Pad.1}" Opacity="0" IsHitTestVisible="False" />
+            <Border x:Name="FocusFill" Background="{DynamicResource Brush.SurfaceInputFocus}" CornerRadius="{StaticResource Radius.Control}" Margin="{DynamicResource Pad.1}" Opacity="0" IsHitTestVisible="False" />
+            <TextBlock x:Name="Placeholder" Text="{TemplateBinding assist:InputAssist.Placeholder}" Margin="{TemplateBinding Padding}" Padding="{DynamicResource Inset.L2}"
+                       VerticalAlignment="Center" Foreground="{DynamicResource Brush.TextMuted}" FontSize="{TemplateBinding FontSize}" FontFamily="{TemplateBinding FontFamily}"
+                       TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" IsHitTestVisible="False" Visibility="Collapsed" />
             <ScrollViewer x:Name="PART_ContentHost" VerticalAlignment="Center"
                           Focusable="False" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden" />
-          </Border>
+            <Border x:Name="Underline" Height="2" VerticalAlignment="Bottom" CornerRadius="{StaticResource Radius.Underline}" Margin="{DynamicResource Inset.H1}"
+                    Background="{DynamicResource Brush.FocusRing}" Opacity="0" IsHitTestVisible="False" />
+          </Grid>
           <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Trigger.EnterActions>
+                <BeginStoryboard>
+                  <Storyboard>
+                    <DoubleAnimation Storyboard.TargetName="HoverFill" Storyboard.TargetProperty="Opacity" To="1" Duration="{StaticResource Motion.Fast}" />
+                  </Storyboard>
+                </BeginStoryboard>
+              </Trigger.EnterActions>
+              <Trigger.ExitActions>
+                <BeginStoryboard>
+                  <Storyboard>
+                    <DoubleAnimation Storyboard.TargetName="HoverFill" Storyboard.TargetProperty="Opacity" To="0" Duration="{StaticResource Motion.Fast}" />
+                  </Storyboard>
+                </BeginStoryboard>
+              </Trigger.ExitActions>
+            </Trigger>
             <Trigger Property="IsKeyboardFocusWithin" Value="True">
               <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brush.FocusRing}" />
-              <Setter TargetName="Box" Property="BorderThickness" Value="2" />
+              <Trigger.EnterActions>
+                <BeginStoryboard>
+                  <Storyboard>
+                    <DoubleAnimation Storyboard.TargetName="FocusFill" Storyboard.TargetProperty="Opacity" To="1" Duration="{StaticResource Motion.Fast}" />
+                    <DoubleAnimation Storyboard.TargetName="Underline" Storyboard.TargetProperty="Opacity" To="1" Duration="{StaticResource Motion.Fast}" />
+                  </Storyboard>
+                </BeginStoryboard>
+              </Trigger.EnterActions>
+              <Trigger.ExitActions>
+                <BeginStoryboard>
+                  <Storyboard>
+                    <DoubleAnimation Storyboard.TargetName="FocusFill" Storyboard.TargetProperty="Opacity" To="0" Duration="{StaticResource Motion.Fast}" />
+                    <DoubleAnimation Storyboard.TargetName="Underline" Storyboard.TargetProperty="Opacity" To="0" Duration="{StaticResource Motion.Fast}" />
+                  </Storyboard>
+                </BeginStoryboard>
+              </Trigger.ExitActions>
             </Trigger>
             <Trigger Property="IsReadOnly" Value="True">
               <Setter TargetName="Box" Property="Background" Value="{DynamicResource Brush.SurfaceCanvas}" />
             </Trigger>
+            <Trigger Property="Validation.HasError" Value="True">
+              <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brush.StatusDanger}" />
+              <Setter TargetName="Underline" Property="Background" Value="{DynamicResource Brush.StatusDanger}" />
+            </Trigger>
             <Trigger Property="IsEnabled" Value="False">
               <Setter Property="Foreground" Value="{DynamicResource Brush.TextDisabled}" />
               <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brush.BorderSubtle}" />
+              <Setter TargetName="HoverFill" Property="Visibility" Value="Collapsed" />
             </Trigger>
-            <Trigger Property="Validation.HasError" Value="True">
-              <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brush.StatusDanger}" />
-            </Trigger>
+            <MultiTrigger>
+              <MultiTrigger.Conditions>
+                <Condition Property="Text" Value="" />
+                <Condition Property="IsEnabled" Value="True" />
+              </MultiTrigger.Conditions>
+              <Setter TargetName="Placeholder" Property="Visibility" Value="Visible" />
+            </MultiTrigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>
       </Setter.Value>
@@ -64,18 +115,57 @@
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="PasswordBox">
-          <Border x:Name="Box" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
-                  BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="{StaticResource Radius.Control}" SnapsToDevicePixels="True">
+          <!-- Rest: raised fill and a quiet border. Hover: a lighter fill. Focus: a darker fill, the accent border and a 2 px accent line along
+               the bottom, faded in and out over Motion.Fast. The layers are separate borders so the change can animate (opacity, not colour). -->
+          <Grid SnapsToDevicePixels="True">
+            <Border x:Name="Box" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="{StaticResource Radius.Control}" />
+            <Border x:Name="HoverFill" Background="{DynamicResource Brush.SurfaceInputHover}" CornerRadius="{StaticResource Radius.Control}" Margin="{DynamicResource Pad.1}" Opacity="0" IsHitTestVisible="False" />
+            <Border x:Name="FocusFill" Background="{DynamicResource Brush.SurfaceInputFocus}" CornerRadius="{StaticResource Radius.Control}" Margin="{DynamicResource Pad.1}" Opacity="0" IsHitTestVisible="False" />
             <ScrollViewer x:Name="PART_ContentHost" VerticalAlignment="Center" Focusable="False" />
-          </Border>
+            <Border x:Name="Underline" Height="2" VerticalAlignment="Bottom" CornerRadius="{StaticResource Radius.Underline}" Margin="{DynamicResource Inset.H1}"
+                    Background="{DynamicResource Brush.FocusRing}" Opacity="0" IsHitTestVisible="False" />
+          </Grid>
           <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Trigger.EnterActions>
+                <BeginStoryboard>
+                  <Storyboard>
+                    <DoubleAnimation Storyboard.TargetName="HoverFill" Storyboard.TargetProperty="Opacity" To="1" Duration="{StaticResource Motion.Fast}" />
+                  </Storyboard>
+                </BeginStoryboard>
+              </Trigger.EnterActions>
+              <Trigger.ExitActions>
+                <BeginStoryboard>
+                  <Storyboard>
+                    <DoubleAnimation Storyboard.TargetName="HoverFill" Storyboard.TargetProperty="Opacity" To="0" Duration="{StaticResource Motion.Fast}" />
+                  </Storyboard>
+                </BeginStoryboard>
+              </Trigger.ExitActions>
+            </Trigger>
             <Trigger Property="IsKeyboardFocusWithin" Value="True">
               <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brush.FocusRing}" />
-              <Setter TargetName="Box" Property="BorderThickness" Value="2" />
+              <Trigger.EnterActions>
+                <BeginStoryboard>
+                  <Storyboard>
+                    <DoubleAnimation Storyboard.TargetName="FocusFill" Storyboard.TargetProperty="Opacity" To="1" Duration="{StaticResource Motion.Fast}" />
+                    <DoubleAnimation Storyboard.TargetName="Underline" Storyboard.TargetProperty="Opacity" To="1" Duration="{StaticResource Motion.Fast}" />
+                  </Storyboard>
+                </BeginStoryboard>
+              </Trigger.EnterActions>
+              <Trigger.ExitActions>
+                <BeginStoryboard>
+                  <Storyboard>
+                    <DoubleAnimation Storyboard.TargetName="FocusFill" Storyboard.TargetProperty="Opacity" To="0" Duration="{StaticResource Motion.Fast}" />
+                    <DoubleAnimation Storyboard.TargetName="Underline" Storyboard.TargetProperty="Opacity" To="0" Duration="{StaticResource Motion.Fast}" />
+                  </Storyboard>
+                </BeginStoryboard>
+              </Trigger.ExitActions>
             </Trigger>
             <Trigger Property="IsEnabled" Value="False">
               <Setter Property="Foreground" Value="{DynamicResource Brush.TextDisabled}" />
               <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brush.BorderSubtle}" />
+              <Setter TargetName="HoverFill" Property="Visibility" Value="Collapsed" />
             </Trigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>
@@ -94,7 +184,7 @@
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="ComboBoxItem">
-          <Border x:Name="Bd" Background="Transparent" Padding="{TemplateBinding Padding}">
+          <Border x:Name="Bd" Background="Transparent" Padding="{TemplateBinding Padding}" CornerRadius="{StaticResource Radius.Control}">
             <ContentPresenter VerticalAlignment="Center" />
           </Border>
           <ControlTemplate.Triggers>
@@ -122,13 +212,23 @@
                           AutomationProperties.Name="{Binding (AutomationProperties.Name), RelativeSource={RelativeSource TemplatedParent}, StringFormat='{}{0} options'}">
               <ToggleButton.Template>
                 <ControlTemplate TargetType="ToggleButton">
-                  <Border x:Name="Box" Background="{Binding Background, RelativeSource={RelativeSource AncestorType=ComboBox}}"
-                          BorderBrush="{Binding BorderBrush, RelativeSource={RelativeSource AncestorType=ComboBox}}"
-                          BorderThickness="1" CornerRadius="{StaticResource Radius.Control}" />
+                  <Grid>
+                    <Border x:Name="Box" Background="{Binding Background, RelativeSource={RelativeSource AncestorType=ComboBox}}"
+                            BorderBrush="{Binding BorderBrush, RelativeSource={RelativeSource AncestorType=ComboBox}}"
+                            BorderThickness="1" CornerRadius="{StaticResource Radius.Control}" />
+                    <Border x:Name="Underline" Height="2" VerticalAlignment="Bottom" CornerRadius="{StaticResource Radius.Underline}" Margin="{DynamicResource Inset.H1}"
+                            Background="{DynamicResource Brush.FocusRing}" Visibility="Collapsed" />
+                  </Grid>
                   <ControlTemplate.Triggers>
+                    <Trigger Property="IsMouseOver" Value="True">
+                      <Setter TargetName="Box" Property="Background" Value="{DynamicResource Brush.SurfaceInputHover}" />
+                    </Trigger>
+                    <DataTrigger Binding="{Binding IsDropDownOpen, RelativeSource={RelativeSource AncestorType=ComboBox}}" Value="True">
+                      <Setter TargetName="Box" Property="Background" Value="{DynamicResource Brush.SurfaceInputFocus}" />
+                    </DataTrigger>
                     <DataTrigger Binding="{Binding IsKeyboardFocusWithin, RelativeSource={RelativeSource AncestorType=ComboBox}}" Value="True">
                       <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brush.FocusRing}" />
-                      <Setter TargetName="Box" Property="BorderThickness" Value="2" />
+                      <Setter TargetName="Underline" Property="Visibility" Value="Visible" />
                     </DataTrigger>
                   </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -143,15 +243,15 @@
                                 VerticalAlignment="Center" TextElement.Foreground="{TemplateBinding Foreground}" />
               <controls:IconText Grid.Column="1" Style="{StaticResource Text.Icon}" Text="&#xE70D;" Foreground="{DynamicResource Brush.TextSecondary}" VerticalAlignment="Center" />
             </Grid>
-            <Popup x:Name="PART_Popup" IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom" AllowsTransparency="True" Focusable="False"
+            <Popup x:Name="PART_Popup" IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom" HorizontalOffset="-8" AllowsTransparency="True" Focusable="False"
                    PopupAnimation="None" StaysOpen="False">
-              <Border MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}" MaxHeight="{TemplateBinding MaxDropDownHeight}"
-                      Background="{DynamicResource Brush.SurfaceRaised}" BorderBrush="{DynamicResource Brush.BorderInput}" BorderThickness="1"
-                      CornerRadius="{StaticResource Radius.Control}" Margin="{DynamicResource Inset.T4B8}">
+              <controls:Card MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}" MaxHeight="{TemplateBinding MaxDropDownHeight}"
+                             Background="{DynamicResource Brush.SurfaceRaised}" BorderBrush="{DynamicResource Brush.BorderCard}" BorderThickness="1" Elevation="2"
+                             CornerRadius="{StaticResource Radius.Card}" Padding="{DynamicResource Pad.4}" Margin="{DynamicResource Inset.Popup}">
                 <ScrollViewer>
                   <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained" />
                 </ScrollViewer>
-              </Border>
+              </controls:Card>
             </Popup>
           </Grid>
           <ControlTemplate.Triggers>
@@ -236,7 +336,7 @@
     <Setter Property="Control.Template">
       <Setter.Value>
         <ControlTemplate>
-          <Rectangle Margin="{DynamicResource Inset.Neg3}" RadiusX="6" RadiusY="6" StrokeThickness="{StaticResource Size.FocusRing}"
+          <Rectangle Margin="{DynamicResource Inset.Neg3}" RadiusX="9" RadiusY="9" StrokeThickness="{StaticResource Size.FocusRing}"
                      Stroke="{DynamicResource Brush.FocusRing}" SnapsToDevicePixels="True" IsHitTestVisible="False" />
         </ControlTemplate>
       </Setter.Value>

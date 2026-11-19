@@ -3,84 +3,148 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="clr-namespace:Lifestream.Desktop.Controls"
              xmlns:services="clr-namespace:Lifestream.Desktop.Services"
-             Focusable="False">
+             Focusable="False" SizeChanged="OnSizeChanged">
   <UserControl.Resources>
     <services:HasTextToVisibilityConverter x:Key="HasText" />
     <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+    <!-- The inline bars (update, notice, problem, waking): a tinted fill, a status-colour edge, an icon and the words. -->
+    <Style x:Key="LoginBar" TargetType="Border">
+      <Setter Property="Margin" Value="{DynamicResource Gap.Field}" />
+      <Setter Property="Padding" Value="{DynamicResource Inset.H12V8}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="{DynamicResource Radius.Control}" />
+      <Setter Property="Background" Value="{DynamicResource Brush.SurfaceInfo}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Brush.StatusInfo}" />
+    </Style>
   </UserControl.Resources>
+
+  <!-- Wide: a branded panel on the left and the sign-in card on the right. Narrow (under 760 DIP): the panel folds away and a compact
+       logo row tops the card (OnSizeChanged). -->
   <Grid Background="{DynamicResource Brush.SurfaceCanvas}">
-    <ScrollViewer VerticalScrollBarVisibility="Auto" Focusable="False">
-      <StackPanel Width="360" Margin="{DynamicResource Inset.V32}" VerticalAlignment="Center" HorizontalAlignment="Center" KeyboardNavigation.TabNavigation="Cycle">
-        <Image Source="{DynamicResource Image.Logo}" Width="56" Height="56" HorizontalAlignment="Left" />
-        <TextBlock Style="{DynamicResource Text.Title}" Text="Lifestream" Margin="{DynamicResource Inset.T16}" AutomationProperties.HeadingLevel="Level1" />
-        <TextBlock Style="{DynamicResource Text.Body}" Foreground="{DynamicResource Brush.TextSecondary}" Text="Sign in to manage donors, requests and stock." Margin="{DynamicResource Inset.T4B32}" />
+    <Grid.ColumnDefinitions>
+      <ColumnDefinition x:Name="HeroColumn" Width="5*" MaxWidth="520" />
+      <ColumnDefinition Width="6*" />
+    </Grid.ColumnDefinitions>
 
-        <!-- Update ready: the feed is checked when the app starts, so this shows before anyone signs in (SHELL-44). -->
-        <Border x:Name="UpdateBanner" Margin="{DynamicResource Gap.Field}" Padding="{DynamicResource Inset.H12V8}" Background="{DynamicResource Brush.SurfaceRaised}" BorderBrush="{DynamicResource Brush.StatusInfo}" BorderThickness="1"
-                CornerRadius="{DynamicResource Radius.Control}" Visibility="{Binding UpdatePrompt, Converter={StaticResource HasText}}" AutomationProperties.LiveSetting="Polite">
-          <StackPanel>
-            <StackPanel Orientation="Horizontal">
-              <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE895;" Foreground="{DynamicResource Brush.StatusInfo}" VerticalAlignment="Top" Margin="{DynamicResource Inset.T2R10}" />
-              <TextBlock Style="{DynamicResource Text.Body}" Text="{Binding UpdatePrompt}" MaxWidth="290" AutomationProperties.Name="Update ready" />
-            </StackPanel>
-            <Button Style="{DynamicResource Button.Secondary}" Content="Restart and update" Command="{Binding ApplyUpdateCommand}" HorizontalAlignment="Left" Margin="{DynamicResource Inset.T8}" MinHeight="32"
-                    controls:ButtonAssist.IsBusy="{Binding ApplyUpdateCommand.IsRunning}" controls:ButtonAssist.BusyText="Updating..." />
+    <!-- The brand panel: the crimson of the mark fading into the canvas, a few stream lines, the mark and one sentence about the app. -->
+    <Grid x:Name="Hero" ClipToBounds="True">
+      <Border Background="{DynamicResource Brush.Hero}" />
+      <Viewbox Stretch="UniformToFill" VerticalAlignment="Bottom" Opacity="0.22" IsHitTestVisible="False">
+        <Canvas Width="520" Height="420">
+          <Path Stroke="{DynamicResource Brush.TextOnPrimary}" StrokeThickness="1.5" Data="M -20,300 C 90,250 160,360 280,310 S 460,220 560,270" />
+          <Path Stroke="{DynamicResource Brush.TextOnPrimary}" StrokeThickness="1.5" Opacity="0.8" Data="M -20,330 C 100,280 170,390 290,340 S 470,250 560,300" />
+          <Path Stroke="{DynamicResource Brush.TextOnPrimary}" StrokeThickness="1.5" Opacity="0.6" Data="M -20,360 C 110,310 180,420 300,370 S 480,280 560,330" />
+          <Path Stroke="{DynamicResource Brush.TextOnPrimary}" StrokeThickness="1.5" Opacity="0.4" Data="M -20,390 C 120,340 190,450 310,400 S 490,310 560,360" />
+        </Canvas>
+      </Viewbox>
+      <Grid Margin="{DynamicResource Pad.48}">
+        <Grid.RowDefinitions>
+          <RowDefinition Height="Auto" />
+          <RowDefinition Height="*" />
+          <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <StackPanel Orientation="Horizontal">
+          <Image Source="{DynamicResource Image.Logo}" Width="40" Height="40" VerticalAlignment="Center" />
+          <TextBlock Style="{DynamicResource Text.Heading}" Text="Lifestream" Foreground="{DynamicResource Brush.TextOnPrimary}" FontWeight="Bold" VerticalAlignment="Center"
+                     Margin="{DynamicResource Inset.L12}" />
+        </StackPanel>
+        <StackPanel Grid.Row="2" MaxWidth="400" HorizontalAlignment="Left">
+          <TextBlock Style="{DynamicResource Text.Display}" Foreground="{DynamicResource Brush.TextOnPrimary}" FontWeight="Bold" Text="Every donation, from donor to patient." />
+          <TextBlock Style="{DynamicResource Text.Body}" Foreground="{DynamicResource Brush.TextPrimary}" Margin="{DynamicResource Inset.T12}"
+                     Text="Donors, appointments, requests and blood stock for your blood bank team, in one place." />
+        </StackPanel>
+      </Grid>
+    </Grid>
+
+    <ScrollViewer x:Name="FormScroll" Grid.Column="1" VerticalScrollBarVisibility="Auto" Focusable="False">
+      <controls:Card Width="400" Margin="{DynamicResource Inset.V32}" Padding="{DynamicResource Pad.32}" VerticalAlignment="Center" HorizontalAlignment="Center"
+                     Background="{DynamicResource Brush.SurfaceRaised}" BorderBrush="{DynamicResource Brush.BorderCard}" BorderThickness="1" CornerRadius="{DynamicResource Radius.Card}">
+        <StackPanel KeyboardNavigation.TabNavigation="Cycle">
+          <StackPanel x:Name="CompactBrand" Orientation="Horizontal" Margin="{DynamicResource Inset.B24}" Visibility="Collapsed">
+            <Image Source="{DynamicResource Image.Logo}" Width="32" Height="32" VerticalAlignment="Center" />
+            <TextBlock Style="{DynamicResource Text.Heading}" Text="Lifestream" FontWeight="Bold" VerticalAlignment="Center" Margin="{DynamicResource Inset.L12}" />
           </StackPanel>
-        </Border>
+          <TextBlock Style="{DynamicResource Text.Title}" Text="Sign in" AutomationProperties.HeadingLevel="Level1" />
+          <TextBlock Style="{DynamicResource Text.Body}" Foreground="{DynamicResource Brush.TextSecondary}" Text="Welcome back. Sign in to manage donors, requests and stock."
+                     Margin="{DynamicResource Inset.T4B24}" />
 
-        <!-- Notice (for example "Your session expired") -->
-        <Border Margin="{DynamicResource Gap.Field}" Padding="{DynamicResource Inset.H12V8}" Background="{DynamicResource Brush.SurfaceRaised}" BorderBrush="{DynamicResource Brush.StatusInfo}" BorderThickness="1"
-                CornerRadius="{DynamicResource Radius.Control}" Visibility="{Binding Notice, Converter={StaticResource HasText}}" AutomationProperties.LiveSetting="Polite">
-          <TextBlock Style="{DynamicResource Text.Body}" Text="{Binding Notice}" />
-        </Border>
-
-        <controls:FormField Label="Username">
-          <TextBox x:Name="UsernameBox" Text="{Binding Username, UpdateSourceTrigger=PropertyChanged}" IsReadOnly="{Binding AreFieldsReadOnly}" MaxLength="64"
-                   AutomationProperties.Name="Username" />
-        </controls:FormField>
-        <controls:FormField Label="Password">
-          <controls:PasswordField x:Name="PasswordBox" Password="{Binding Password, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsReadOnly="{Binding AreFieldsReadOnly}"
-                                  AutomationProperties.Name="Password" />
-        </controls:FormField>
-
-        <!-- Inline message with icon and text; a polite live region so a screen reader hears it. -->
-        <Border Margin="{DynamicResource Gap.Field}" Padding="{DynamicResource Inset.H12V8}" Background="{DynamicResource Brush.SurfaceRaised}" BorderBrush="{DynamicResource Brush.StatusDanger}" BorderThickness="1"
-                CornerRadius="{DynamicResource Radius.Control}" Visibility="{Binding HasProblem, Converter={StaticResource BoolToVisibility}}"
-                AutomationProperties.LiveSetting="Assertive" AutomationProperties.Name="Sign-in problem">
-          <StackPanel>
-            <StackPanel Orientation="Horizontal">
-              <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE783;" Foreground="{DynamicResource Brush.StatusDanger}" VerticalAlignment="Top" Margin="{DynamicResource Inset.T2R10}" />
-              <TextBlock Style="{DynamicResource Text.Body}" Text="{Binding Message}" MaxWidth="290" />
+          <!-- Update ready: the feed is checked when the app starts, so this shows before anyone signs in (SHELL-44). -->
+          <Border x:Name="UpdateBanner" Style="{StaticResource LoginBar}" Visibility="{Binding UpdatePrompt, Converter={StaticResource HasText}}" AutomationProperties.LiveSetting="Polite">
+            <StackPanel>
+              <StackPanel Orientation="Horizontal">
+                <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE895;" Foreground="{DynamicResource Brush.StatusInfo}" VerticalAlignment="Top" Margin="{DynamicResource Inset.T2R10}" />
+                <TextBlock Style="{DynamicResource Text.Body}" Text="{Binding UpdatePrompt}" MaxWidth="290" AutomationProperties.Name="Update ready" />
+              </StackPanel>
+              <Button Style="{DynamicResource Button.Secondary}" Content="Restart and update" Command="{Binding ApplyUpdateCommand}" HorizontalAlignment="Left" Margin="{DynamicResource Inset.T8}" MinHeight="32"
+                      controls:ButtonAssist.IsBusy="{Binding ApplyUpdateCommand.IsRunning}" controls:ButtonAssist.BusyText="Updating..." />
             </StackPanel>
-            <Button Style="{DynamicResource Button.Secondary}" Content="Retry" Command="{Binding RetryCommand}" HorizontalAlignment="Left" Margin="{DynamicResource Inset.T8}" MinHeight="32"
-                    Visibility="{Binding CanRetry, Converter={StaticResource BoolToVisibility}}" />
-          </StackPanel>
-        </Border>
+          </Border>
 
-        <!-- Cold start: the server is waking up (shown from the third second of a slow call). Cancel stops the attempt (SHELL-07). -->
-        <Border x:Name="WakingBanner" Margin="{DynamicResource Gap.Field}" Padding="{DynamicResource Inset.H12V8}" Background="{DynamicResource Brush.SurfaceRaised}" BorderBrush="{DynamicResource Brush.StatusInfo}" BorderThickness="1"
-                CornerRadius="{DynamicResource Radius.Control}" Visibility="{Binding IsServerWaking, Converter={StaticResource BoolToVisibility}}"
-                AutomationProperties.LiveSetting="Polite" AutomationProperties.Name="Waking up the server">
-          <StackPanel>
+          <!-- Notice (for example "Your session expired") -->
+          <Border Style="{StaticResource LoginBar}" Visibility="{Binding Notice, Converter={StaticResource HasText}}" AutomationProperties.LiveSetting="Polite">
             <StackPanel Orientation="Horizontal">
-              <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE895;" Foreground="{DynamicResource Brush.StatusInfo}" VerticalAlignment="Top" Margin="{DynamicResource Inset.T2R10}" />
-              <TextBlock Style="{DynamicResource Text.Body}" Text="{Binding WakingText}" MaxWidth="290" />
+              <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE946;" Foreground="{DynamicResource Brush.StatusInfo}" VerticalAlignment="Top" Margin="{DynamicResource Inset.T2R10}" />
+              <TextBlock Style="{DynamicResource Text.Body}" Text="{Binding Notice}" MaxWidth="290" />
             </StackPanel>
-            <Button x:Name="CancelButton" Style="{DynamicResource Button.Secondary}" Content="Cancel" Command="{Binding CancelCommand}" HorizontalAlignment="Left" Margin="{DynamicResource Inset.T8}" MinHeight="32"
-                    Visibility="{Binding CanCancel, Converter={StaticResource BoolToVisibility}}" AutomationProperties.Name="Cancel sign-in" />
-          </StackPanel>
-        </Border>
+          </Border>
 
-        <Button x:Name="SignInButton" Style="{DynamicResource Button.Primary}" Content="Sign in" Command="{Binding SignInCommand}" IsDefault="True"
-                controls:ButtonAssist.IsBusy="{Binding SignInCommand.IsRunning}" controls:ButtonAssist.BusyText="Signing in..." HorizontalAlignment="Stretch"
-                AutomationProperties.Name="Sign in" />
-        <TextBlock Style="{DynamicResource Text.Caption}" Text="or" HorizontalAlignment="Center" Margin="{DynamicResource Inset.V12}" />
-        <Button x:Name="DemoButton" Style="{DynamicResource Button.Secondary}" Content="Try the demo" Command="{Binding DemoCommand}"
-                controls:ButtonAssist.IsBusy="{Binding DemoCommand.IsRunning}" controls:ButtonAssist.BusyText="Opening the demo..." HorizontalAlignment="Stretch"
-                AutomationProperties.Name="Try the demo" />
-        <TextBlock Style="{DynamicResource Text.Caption}" Margin="{DynamicResource Inset.T12}" TextAlignment="Center"
-                   Text="The demo uses made-up data and is reset every day." />
-      </StackPanel>
+          <controls:FormField Label="Username">
+            <TextBox x:Name="UsernameBox" Text="{Binding Username, UpdateSourceTrigger=PropertyChanged}" IsReadOnly="{Binding AreFieldsReadOnly}" MaxLength="64"
+                     controls:InputAssist.Placeholder="Your username" AutomationProperties.Name="Username" />
+          </controls:FormField>
+          <controls:FormField Label="Password">
+            <controls:PasswordField x:Name="PasswordBox" Password="{Binding Password, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsReadOnly="{Binding AreFieldsReadOnly}"
+                                    AutomationProperties.Name="Password" />
+          </controls:FormField>
+
+          <!-- Inline message with icon and text; an assertive live region so a screen reader hears it at once. -->
+          <Border Style="{StaticResource LoginBar}" Background="{DynamicResource Brush.SurfaceDanger}" BorderBrush="{DynamicResource Brush.StatusDanger}"
+                  Visibility="{Binding HasProblem, Converter={StaticResource BoolToVisibility}}" AutomationProperties.LiveSetting="Assertive" AutomationProperties.Name="Sign-in problem">
+            <StackPanel>
+              <StackPanel Orientation="Horizontal">
+                <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE783;" Foreground="{DynamicResource Brush.StatusDanger}" VerticalAlignment="Top" Margin="{DynamicResource Inset.T2R10}" />
+                <TextBlock Style="{DynamicResource Text.Body}" Text="{Binding Message}" MaxWidth="290" />
+              </StackPanel>
+              <Button Style="{DynamicResource Button.Secondary}" Content="Retry" Command="{Binding RetryCommand}" HorizontalAlignment="Left" Margin="{DynamicResource Inset.T8}" MinHeight="32"
+                      Visibility="{Binding CanRetry, Converter={StaticResource BoolToVisibility}}" />
+            </StackPanel>
+          </Border>
+
+          <!-- Cold start: the server is waking up (shown from the third second of a slow call). Cancel stops the attempt (SHELL-07). -->
+          <Border x:Name="WakingBanner" Style="{StaticResource LoginBar}" Visibility="{Binding IsServerWaking, Converter={StaticResource BoolToVisibility}}"
+                  AutomationProperties.LiveSetting="Polite" AutomationProperties.Name="Waking up the server">
+            <StackPanel>
+              <StackPanel Orientation="Horizontal">
+                <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE895;" Foreground="{DynamicResource Brush.StatusInfo}" VerticalAlignment="Top" Margin="{DynamicResource Inset.T2R10}" />
+                <TextBlock Style="{DynamicResource Text.Body}" Text="{Binding WakingText}" MaxWidth="290" />
+              </StackPanel>
+              <Button x:Name="CancelButton" Style="{DynamicResource Button.Secondary}" Content="Cancel" Command="{Binding CancelCommand}" HorizontalAlignment="Left" Margin="{DynamicResource Inset.T8}" MinHeight="32"
+                      Visibility="{Binding CanCancel, Converter={StaticResource BoolToVisibility}}" AutomationProperties.Name="Cancel sign-in" />
+            </StackPanel>
+          </Border>
+
+          <Button x:Name="SignInButton" Style="{DynamicResource Button.Primary}" Content="Sign in" Command="{Binding SignInCommand}" IsDefault="True" Margin="{DynamicResource Inset.T8}"
+                  controls:ButtonAssist.IsBusy="{Binding SignInCommand.IsRunning}" controls:ButtonAssist.BusyText="Signing in..." HorizontalAlignment="Stretch"
+                  AutomationProperties.Name="Sign in" />
+
+          <Grid Margin="{DynamicResource Inset.V24}">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="Auto" />
+              <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Border Height="1" Background="{DynamicResource Brush.BorderCard}" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="1" Style="{DynamicResource Text.Caption}" Text="or" Margin="{DynamicResource Inset.H12}" />
+            <Border Grid.Column="2" Height="1" Background="{DynamicResource Brush.BorderCard}" VerticalAlignment="Center" />
+          </Grid>
+
+          <Button x:Name="DemoButton" Style="{DynamicResource Button.Tonal}" Content="Try the demo" Command="{Binding DemoCommand}"
+                  controls:ButtonAssist.IsBusy="{Binding DemoCommand.IsRunning}" controls:ButtonAssist.BusyText="Opening the demo..." HorizontalAlignment="Stretch"
+                  AutomationProperties.Name="Try the demo" />
+          <TextBlock Style="{DynamicResource Text.Caption}" Margin="{DynamicResource Inset.T8}" TextAlignment="Center"
+                     Text="No account needed. The demo uses made-up data and is reset every day." />
+        </StackPanel>
+      </controls:Card>
     </ScrollViewer>
   </Grid>
 </UserControl>

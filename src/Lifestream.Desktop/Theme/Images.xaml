@@ -27,10 +27,26 @@
     </DrawingImage.Drawing>
   </DrawingImage>
 
-  <!-- The blood-drop mark used on the login screen and the sidebar. -->
+  <!-- The app mark (the same geometry as the app icon, tools/generate-icons.ps1): a gradient blood drop with a heart in its belly. Used on the
+       sign-in screen, the sidebar and the caption bar; the wordmark next to it is live text. -->
+  <LinearGradientBrush x:Key="Brush.LogoDrop" StartPoint="0.2,0" EndPoint="0.8,1" po:Freeze="True">
+    <GradientStop Color="{StaticResource Color.LogoTop}" Offset="0" />
+    <GradientStop Color="{StaticResource Color.LogoBottom}" Offset="1" />
+  </LinearGradientBrush>
   <DrawingImage x:Key="Image.Logo" po:Freeze="True">
     <DrawingImage.Drawing>
-      <GeometryDrawing Brush="{StaticResource Brush.Primary}" Geometry="M 16,2 C 16,2 5,14 5,21 A 11,11 0 0 0 27,21 C 27,14 16,2 16,2 Z" />
+      <DrawingGroup>
+        <GeometryDrawing Brush="{StaticResource Brush.LogoDrop}" Geometry="M128,14 C128,14 40,108 40,166 A88,88 0 0 0 216,166 C216,108 128,14 128,14 Z" />
+        <GeometryDrawing Brush="{StaticResource Brush.TextOnPrimary}"
+                         Geometry="M128,200 C100,180 90,166 90,152 C90,140 99,132 109,132 C117,132 124,136 128,144 C132,136 139,132 147,132 C157,132 166,140 166,152 C166,166 156,180 128,200 Z" />
+      </DrawingGroup>
+    </DrawingImage.Drawing>
+  </DrawingImage>
+
+  <!-- The mark for 20 DIP and smaller (the caption bar): the drop alone, as the small icon frames have it. -->
+  <DrawingImage x:Key="Image.LogoSmall" po:Freeze="True">
+    <DrawingImage.Drawing>
+      <GeometryDrawing Brush="{StaticResource Brush.LogoDrop}" Geometry="M128,14 C128,14 40,108 40,166 A88,88 0 0 0 216,166 C216,108 128,14 128,14 Z" />
     </DrawingImage.Drawing>
   </DrawingImage>
 </ResourceDictionary>

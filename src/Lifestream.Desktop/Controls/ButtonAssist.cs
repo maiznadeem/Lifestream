@@ -24,6 +24,10 @@ public static class ButtonAssist
     public static readonly DependencyProperty PressedBackgroundProperty =
         DependencyProperty.RegisterAttached("PressedBackground", typeof(Brush), typeof(ButtonAssist), new FrameworkPropertyMetadata(null));
 
+    /// <summary>A 1 px edge drawn over the button (the primary variant's top sheen and bottom shade); null for none.</summary>
+    public static readonly DependencyProperty SheenProperty =
+        DependencyProperty.RegisterAttached("Sheen", typeof(Brush), typeof(ButtonAssist), new FrameworkPropertyMetadata(null));
+
     static ButtonAssist()
     {
         // A busy button ignores every click, however it was triggered (mouse, Enter, Space, IsDefault).
@@ -45,6 +49,10 @@ public static class ButtonAssist
     public static Brush? GetPressedBackground(DependencyObject element) => (Brush?)(element ?? throw new ArgumentNullException(nameof(element))).GetValue(PressedBackgroundProperty);
 
     public static void SetPressedBackground(DependencyObject element, Brush? value) => (element ?? throw new ArgumentNullException(nameof(element))).SetValue(PressedBackgroundProperty, value);
+
+    public static Brush? GetSheen(DependencyObject element) => (Brush?)(element ?? throw new ArgumentNullException(nameof(element))).GetValue(SheenProperty);
+
+    public static void SetSheen(DependencyObject element, Brush? value) => (element ?? throw new ArgumentNullException(nameof(element))).SetValue(SheenProperty, value);
 
     private static void OnClick(object sender, RoutedEventArgs e)
     {

@@ -8,8 +8,8 @@
     <ResourceDictionary Source="/Lifestream;component/Theme/Typography.xaml" />
   </ResourceDictionary.MergedDictionaries>
 
-  <!-- Generated once from scratch/gen_buttons.py and kept as plain XAML. One template, five variants (primary, secondary,
-       ghost, danger, icon), six states each (idle, hover, pressed, keyboard focus, busy, disabled), all colours from tokens. -->
+  <!-- Generated once from scratch/gen_buttons.py and kept as plain XAML. One template, seven variants (primary, secondary,
+       ghost/subtle, tonal, danger, icon), six states each (idle, hover, pressed, keyboard focus, busy, disabled), all colours from tokens. -->
 
   <Style x:Key="FocusVisual.None">
     <Setter Property="Control.Template">
@@ -22,25 +22,34 @@
   </Style>
 
   <ControlTemplate x:Key="Button.Template" TargetType="Button">
-    <Grid x:Name="Host" SnapsToDevicePixels="True">
+    <Grid x:Name="Host" SnapsToDevicePixels="True" RenderTransformOrigin="0.5,0.5">
+      <Grid.RenderTransform>
+        <ScaleTransform x:Name="PressScale" ScaleX="1" ScaleY="1" />
+      </Grid.RenderTransform>
       <VisualStateManager.VisualStateGroups>
         <VisualStateGroup x:Name="CommonStates">
           <VisualState x:Name="Normal">
             <Storyboard>
               <DoubleAnimation Storyboard.TargetName="HoverLayer" Storyboard.TargetProperty="Opacity" To="0" Duration="{StaticResource Motion.Fast}" />
               <DoubleAnimation Storyboard.TargetName="PressedLayer" Storyboard.TargetProperty="Opacity" To="0" Duration="{StaticResource Motion.Fast}" />
+              <DoubleAnimation Storyboard.TargetName="PressScale" Storyboard.TargetProperty="ScaleX" To="1" Duration="{StaticResource Motion.Fast}" />
+              <DoubleAnimation Storyboard.TargetName="PressScale" Storyboard.TargetProperty="ScaleY" To="1" Duration="{StaticResource Motion.Fast}" />
             </Storyboard>
           </VisualState>
           <VisualState x:Name="MouseOver">
             <Storyboard>
               <DoubleAnimation Storyboard.TargetName="HoverLayer" Storyboard.TargetProperty="Opacity" To="1" Duration="{StaticResource Motion.Fast}" />
               <DoubleAnimation Storyboard.TargetName="PressedLayer" Storyboard.TargetProperty="Opacity" To="0" Duration="{StaticResource Motion.Fast}" />
+              <DoubleAnimation Storyboard.TargetName="PressScale" Storyboard.TargetProperty="ScaleX" To="1" Duration="{StaticResource Motion.Fast}" />
+              <DoubleAnimation Storyboard.TargetName="PressScale" Storyboard.TargetProperty="ScaleY" To="1" Duration="{StaticResource Motion.Fast}" />
             </Storyboard>
           </VisualState>
           <VisualState x:Name="Pressed">
             <Storyboard>
               <DoubleAnimation Storyboard.TargetName="HoverLayer" Storyboard.TargetProperty="Opacity" To="1" Duration="{StaticResource Motion.Fast}" />
               <DoubleAnimation Storyboard.TargetName="PressedLayer" Storyboard.TargetProperty="Opacity" To="1" Duration="{StaticResource Motion.Fast}" />
+              <DoubleAnimation Storyboard.TargetName="PressScale" Storyboard.TargetProperty="ScaleX" To="0.97" Duration="{StaticResource Motion.Fast}" />
+              <DoubleAnimation Storyboard.TargetName="PressScale" Storyboard.TargetProperty="ScaleY" To="0.97" Duration="{StaticResource Motion.Fast}" />
             </Storyboard>
           </VisualState>
           <VisualState x:Name="Disabled" />
@@ -52,6 +61,8 @@
       <Border x:Name="HoverLayer" Opacity="0" Background="{TemplateBinding assist:ButtonAssist.HoverBackground}"
               CornerRadius="{StaticResource Radius.Control}" IsHitTestVisible="False" />
       <Border x:Name="PressedLayer" Opacity="0" Background="{TemplateBinding assist:ButtonAssist.PressedBackground}"
+              CornerRadius="{StaticResource Radius.Control}" IsHitTestVisible="False" />
+      <Border x:Name="Sheen" BorderBrush="{TemplateBinding assist:ButtonAssist.Sheen}" BorderThickness="1"
               CornerRadius="{StaticResource Radius.Control}" IsHitTestVisible="False" />
 
       <!-- The label layer and the busy layer share one cell and are both measured (Hidden, not Collapsed), so the button
@@ -74,12 +85,15 @@
                    Text="{TemplateBinding assist:ButtonAssist.BusyText}" />
       </StackPanel>
 
-      <Border x:Name="FocusRing" Margin="{DynamicResource Inset.Neg4}" CornerRadius="{DynamicResource Radius.6}" BorderThickness="{StaticResource Thickness.FocusRing}"
+      <Border x:Name="FocusRing" Margin="{DynamicResource Inset.Neg4}" CornerRadius="{DynamicResource Radius.FocusRing}" BorderThickness="{StaticResource Thickness.FocusRing}"
               BorderBrush="{DynamicResource Brush.FocusRing}" Visibility="Collapsed" IsHitTestVisible="False" />
     </Grid>
     <ControlTemplate.Triggers>
       <Trigger Property="assist:FocusAssist.ShowRing" Value="True">
         <Setter TargetName="FocusRing" Property="Visibility" Value="Visible" />
+      </Trigger>
+      <Trigger Property="IsEnabled" Value="False">
+        <Setter TargetName="Sheen" Property="Visibility" Value="Collapsed" />
       </Trigger>
       <Trigger Property="assist:ButtonAssist.IsBusy" Value="True">
         <Setter TargetName="Content" Property="Visibility" Value="Hidden" />
@@ -122,6 +136,7 @@
     <Setter Property="BorderBrush" Value="{x:Static media:Brushes.Transparent}" />
     <Setter Property="assist:ButtonAssist.HoverBackground" Value="{DynamicResource Brush.PrimaryHover}" />
     <Setter Property="assist:ButtonAssist.PressedBackground" Value="{DynamicResource Brush.PrimaryPressed}" />
+    <Setter Property="assist:ButtonAssist.Sheen" Value="{DynamicResource Brush.PrimarySheen}" />
     <Style.Triggers>
       <Trigger Property="IsEnabled" Value="False">
         <Setter Property="Background" Value="{DynamicResource Brush.SurfaceRaised}" />
@@ -238,6 +253,35 @@
         <Setter Property="Background" Value="{x:Static media:Brushes.Transparent}" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.TextPrimary}" />
         <Setter Property="BorderBrush" Value="{x:Static media:Brushes.Transparent}" />
+        <Setter Property="Cursor" Value="Wait" />
+        <Setter Property="IsHitTestVisible" Value="False" />
+        <Setter Property="AutomationProperties.ItemStatus" Value="Busy" />
+      </Trigger>
+    </Style.Triggers>
+  </Style>
+
+  <!-- Subtle: the quiet action (Windows calls it subtle); the same as Ghost. -->
+  <Style x:Key="Button.Subtle" TargetType="Button" BasedOn="{StaticResource Button.Ghost}" />
+
+  <!-- Tonal: a tinted brand action that stands out without competing with the primary one ("Try the demo"). -->
+  <Style x:Key="Button.Tonal" TargetType="Button" BasedOn="{StaticResource Button.Base}">
+    <Setter Property="Background" Value="{DynamicResource Brush.SurfaceAccent}" />
+    <Setter Property="Foreground" Value="{DynamicResource Brush.TextPrimary}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Brush.Primary}" />
+    <Setter Property="assist:ButtonAssist.HoverBackground" Value="{DynamicResource Brush.SurfaceAccentHover}" />
+    <Setter Property="assist:ButtonAssist.PressedBackground" Value="{DynamicResource Brush.SurfaceAccentPressed}" />
+    <Style.Triggers>
+      <Trigger Property="IsEnabled" Value="False">
+        <Setter Property="Background" Value="{x:Static media:Brushes.Transparent}" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.TextDisabled}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.BorderSubtle}" />
+        <Setter Property="Cursor" Value="Arrow" />
+      </Trigger>
+      <!-- Busy wins over disabled: a command that is running disables its button, but it must look busy, not dead. -->
+      <Trigger Property="assist:ButtonAssist.IsBusy" Value="True">
+        <Setter Property="Background" Value="{DynamicResource Brush.SurfaceAccent}" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.TextPrimary}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Primary}" />
         <Setter Property="Cursor" Value="Wait" />
         <Setter Property="IsHitTestVisible" Value="False" />
         <Setter Property="AutomationProperties.ItemStatus" Value="Busy" />

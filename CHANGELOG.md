@@ -2,6 +2,20 @@
 
 All notable changes to Lifestream are listed here. The section of a version is also the text of its release on the GitHub Releases page.
 
+## [2.0.1] - 2026-11-19
+
+Lifestream 2.0.1 is a polish release: the same features, with a new identity and a more refined look.
+
+### Look and feel
+
+- Lifestream now has its own icon, shown in the Start menu, the taskbar, the installer and the window title bar.
+- The sign-in screen is redesigned, with a branded panel, the new logo and a more prominent "Try the demo" button.
+- Buttons, fields, cards and dialogs have softer rounded corners.
+- Buttons and other controls show clear hover, pressed and focus states, with short animations.
+- Fields show a hint before you type and an accent line while they are focused.
+- Cards and dialogs have soft shadows.
+- Small text is sharper: it is now drawn aligned to the screen's pixels.
+
 ## [2.0.0] - 2026-11-19
 
 Lifestream 2.0 is a ground-up rewrite of the original course project. Everything the old app did is still there; how it works, how fast it is and how it looks are new.

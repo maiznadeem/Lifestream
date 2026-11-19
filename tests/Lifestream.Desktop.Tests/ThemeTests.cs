@@ -242,7 +242,7 @@ public sealed partial class ThemeTests
     }
 
     /// <summary>Tokens that are neither text nor a surface: scrims, shadows and decoration may fall below the bars.</summary>
-    private static readonly string[] ExemptFromContrast = ["Scrim", "Shadow", "BorderSubtle", "SkeletonBase", "SkeletonHighlight", "TextDisabled", "Primary", "PrimaryHover", "PrimaryPressed", "TextOnPrimary"];
+    private static readonly string[] ExemptFromContrast = ["Scrim", "Shadow", "BorderSubtle", "SkeletonBase", "SkeletonHighlight", "TextDisabled", "Primary", "PrimaryHover", "PrimaryPressed", "TextOnPrimary", "BorderCard", "LogoTop", "LogoBottom"];
 
     /// <summary>The surfaces text can sit on: every Surface* token and the two danger-button fills, found by name in the token file.</summary>
     private static List<string> SurfaceTokens() => [.. Colours().Keys.Where(k => k.StartsWith("Surface", StringComparison.Ordinal) || k is "DangerHover" or "DangerPressed")];
@@ -278,6 +278,12 @@ public sealed partial class ThemeTests
         {
             data.Add(("TextOnPrimary", fill, 4.5));
             data.Add(("FocusRing", fill, 3.0));
+        }
+
+        // The sign-in brand panel: white text over every stop of its gradient.
+        foreach (var stop in new[] { "HeroTop", "HeroMid", "HeroBottom" })
+        {
+            data.Add(("TextOnPrimary", stop, 4.5));
         }
 
         foreach (var nonText in new[] { "FocusRing", "BorderInput" })
@@ -320,7 +326,7 @@ public sealed partial class ThemeTests
         var surfaces = SurfaceTokens();
 
         // Discovered by name: a token added to the file joins the pairs without touching this test.
-        Assert.Equal(7, surfaces.Count);
+        Assert.Equal(14, surfaces.Count);
         Assert.Contains("SurfacePressed", surfaces);
         Assert.Contains("SurfaceSelected", surfaces);
         Assert.True(texts.Count >= 7, string.Join(",", texts));
@@ -371,8 +377,8 @@ public sealed partial class ThemeTests
             Assert.Contains($"x:Key=\"Space.{spacing}\">{spacing}<", text, StringComparison.Ordinal);
         }
 
-        Assert.Contains("Radius.Control\">4<", text, StringComparison.Ordinal);
-        Assert.Contains("Radius.Card\">8<", text, StringComparison.Ordinal);
+        Assert.Contains("Radius.Control\">6<", text, StringComparison.Ordinal);
+        Assert.Contains("Radius.Card\">12<", text, StringComparison.Ordinal);
         Assert.Contains("Height.CaptionButton\">32<", text, StringComparison.Ordinal);
         Assert.Contains("Width.CaptionButton\">46<", text, StringComparison.Ordinal);
     }

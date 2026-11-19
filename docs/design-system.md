@@ -75,8 +75,10 @@ and checks the glyphs are Inter's, not Segoe UI's.
   scans every `*.cs` under the Desktop project for `Thickness`/`CornerRadius`/`Margin`/`Padding` literals other than 0. Exempt, with the
   reason in the test: the printed receipt layout and the LiveCharts bar gap.
 - Control height 32 (compact) or 40 (default); grid rows 40 (design range 36 to 40).
-- Radius 4 for inputs and buttons (`Radius.Control`), 8 for cards and dialogs (`Radius.Card`), 12 for chips (`Radius.Pill`); 2, 6 and 14
-  (`Radius.2`, `Radius.6`, `Radius.14`) and the left-side-only 8 (`Radius.Left8`) for the few shapes that need them.
+- Radius 6 for inputs and buttons (`Radius.Control`), 12 for cards and dialogs (`Radius.Card`) and chips (`Radius.Pill`), 10 for the
+  keyboard focus ring that sits 4 DIP outside a control (`Radius.FocusRing`); 2, 6 and 14 (`Radius.2`, `Radius.6`, `Radius.14`) and the
+  left-side-only 12 (`Radius.Left8`) for the few shapes that need them. Cards and popups carry a soft shadow (`controls:Card`, drawn in the
+  card's own visual so text keeps ClearType), and every window draws small text with `TextFormattingMode=Display` (headings stay `Ideal`).
 - Caption buttons 46 x 32. Sidebar 232 wide.
 - One shadow token for dialogs and drawers only; cards are separated by surface colour.
 
