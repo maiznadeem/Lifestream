@@ -53,13 +53,29 @@ public abstract partial class ViewModelBase : ObservableObject, IDisposable
     /// <param name="canExecute">Extra condition for <see cref="AsyncRelayCommand.CanExecute"/>.</param>
     /// <param name="opensModal">True when the command opens a modal dialog (a confirmation, a form, a viewer): it is disabled while any operation of this view model runs, so the screen's "Waking up the server" notice and its Cancel can never be hidden behind a modal (SHELL-07).</param>
     protected AsyncRelayCommand Command(Func<CancellationToken, Task> execute, Func<bool>? canExecute = null, bool opensModal = false) =>
-        Track(new(execute, opensModal ? () => !Operations.IsRunning && (canExecute?.Invoke() ?? true) : canExecute, Operations), opensModal);
+        Track(new(execute, opensModal ? () => !ModalBlocked && (canExecute?.Invoke() ?? true) : canExecute, Operations), opensModal);
 
     /// <summary>Creates a command with a parameter that runs through <see cref="Operations"/>.</summary>
     protected AsyncRelayCommand Command(Func<object?, CancellationToken, Task> execute, Func<object?, bool>? canExecute = null, bool allowConcurrent = false, bool opensModal = false) =>
-        Track(new(execute, opensModal ? p => !Operations.IsRunning && (canExecute?.Invoke(p) ?? true) : canExecute, allowConcurrent, Operations), opensModal);
+        Track(new(execute, opensModal ? p => !ModalBlocked && (canExecute?.Invoke(p) ?? true) : canExecute, allowConcurrent, Operations), opensModal);
 
     private readonly List<AsyncRelayCommand> _modalCommands = [];
+    private OperationRunner? _shellOperations;
+
+    /// <summary>
+    /// True while a modal-opening command must stay disabled: an operation of this view model runs, or a shell-level one does (a toast's Undo, whose
+    /// "Waking up the server" notice and Cancel live in the shell and would be hidden behind the modal) (SHELL-07).
+    /// </summary>
+    private bool ModalBlocked => Operations.IsRunning || _shellOperations?.IsRunning == true;
+
+    private void OnShellOperationsChanged(object? sender, EventArgs e) =>
+        Post(() =>
+        {
+            foreach (var command in _modalCommands)
+            {
+                command.RaiseCanExecuteChanged();
+            }
+        });
 
     /// <summary>The commands of this view model that open a modal dialog; each is disabled while any operation of the view model runs (the <c>opensModal</c> flag of <c>Command</c>).</summary>
     public IReadOnlyList<AsyncRelayCommand> ModalCommands => _modalCommands;
@@ -187,9 +203,23 @@ public abstract partial class ViewModelBase : ObservableObject, IDisposable
     protected virtual bool HasNoData => false;
 
     /// <summary>Called by navigation so the model can show the waking state and so timers use the app clock.</summary>
-    internal void Attach(IServerStatus? status, TimeProvider clock)
+    /// <param name="status">The server's state.</param>
+    /// <param name="clock">The app clock.</param>
+    /// <param name="shellOperations">The shell-level runner (the toasts' actions); while it runs, the modal-opening commands are disabled too.</param>
+    internal void Attach(IServerStatus? status, TimeProvider clock, OperationRunner? shellOperations = null)
     {
         Clock = clock;
+        if (_shellOperations is not null)
+        {
+            _shellOperations.Changed -= OnShellOperationsChanged;
+        }
+
+        _shellOperations = shellOperations;
+        if (shellOperations is not null)
+        {
+            shellOperations.Changed += OnShellOperationsChanged;
+        }
+
         if (_serverStatus is not null)
         {
             _serverStatus.Changed -= OnServerStatusChanged;
@@ -445,6 +475,11 @@ public abstract partial class ViewModelBase : ObservableObject, IDisposable
             }
 
             Operations.Changed -= OnOperationsChanged;
+            if (_shellOperations is not null)
+            {
+                _shellOperations.Changed -= OnShellOperationsChanged;
+            }
+
             Operations.Dispose();
         }
     }

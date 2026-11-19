@@ -55,7 +55,7 @@ public sealed class NavigationService(IServiceProvider services, IDialogService 
         }
 
         var next = (ViewModelBase)ActivatorUtilities.GetServiceOrCreateInstance(services, viewModelType);
-        next.Attach(serverStatus, _clock);
+        next.Attach(serverStatus, _clock, services.GetService<IToastService>()?.Actions);
         if (parameter is not null && next is INavigationParameterReceiver receiver)
         {
             receiver.ReceiveParameter(parameter);

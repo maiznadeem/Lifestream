@@ -86,6 +86,8 @@ public sealed partial class AppFlow(IServiceProvider services, ISessionService s
         {
             // Fail closed: every step runs even if an earlier one throws, so the session never survives a sign-out,
             // and nothing here waits on the network (a waking server can take 120 s to answer).
+            // First: a waiting Undo (or any other toast action) is cancelled while the session still exists, and no toast outlives the sign-out (SHELL-07).
+            Guarded(() => services.GetService<Lifestream.Client.Common.IToastService>()?.EndSession());
             Guarded(session.Clear);
             Guarded(listState.Clear);
             Guarded(windows.CloseMain);

@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using Lifestream.Client.Api;
 using Lifestream.Client.Common;
+using Lifestream.Contracts;
 using Lifestream.Domain;
 
 namespace Lifestream.Client.Features.ListScreens;
@@ -506,19 +507,71 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
         SelectedItem = null;
         ClearDetail();
         await RefreshAsync().ConfigureAwait(true);
-        Toasts.ShowForRecord(ToastKind.Success, Capitalise(RecordType), name, "deleted", SupportsUndo ? "Undo" : null, SupportsUndo ? () => UndoAsync(record) : null);
+        var deletedAt = Clock.GetUtcNow();
+        var clock = Clock;
+        Toasts.ShowForRecord(ToastKind.Success, Capitalise(RecordType), name, "deleted", SupportsUndo ? "Undo" : null, SupportsUndo ? () => UndoAsync(record, deletedAt, clock) : null);
     }
 
-    private async Task UndoAsync(TDetail deleted)
+    /// <summary>
+    /// Runs the restore. When it is cancelled or fails (waking server, no connection, timeout) while the server's restore window (<see cref="UndoWindow"/>) is
+    /// still open, a toast says the record is still deleted and offers "Retry undo", which runs this again with the same waking notice and Cancel. When the
+    /// window has closed, or the server refuses because it has, the toast says the record can no longer be restored and has no action (SHELL-07).
+    /// </summary>
+    private async Task UndoAsync(TDetail deleted, DateTimeOffset deletedAt, TimeProvider clock)
     {
         var name = NameOfDetail(deleted);
+        var epoch = Toasts.Epoch;
+        bool WindowOpen() => clock.GetUtcNow() - deletedAt < UndoWindow.Duration;
+        void ShowUnlessSignedOut(ToastKind kind, string message, string? label = null, Func<Task>? action = null, TimeSpan? lifetime = null)
+        {
+            if (Toasts.Epoch == epoch)
+            {
+                Toasts.Show(kind, message, label, action, lifetime);
+            }
+        }
 
-        // Runs inside the toast's own (shell-level) operation, not this screen's: the toast outlives the screen, so after the user has gone elsewhere the
-        // waking notice and its Cancel are the shell's, and this view model (disposed by then) is not needed for them (SHELL-07).
-        var result = await RestoreAsync(deleted, OperationScope.Current?.Token ?? CancellationToken.None).ConfigureAwait(true);
+        void Failed(string reason)
+        {
+            if (!WindowOpen())
+            {
+                ShowUnlessSignedOut(ToastKind.Error, $"Couldn't restore {RecordType} '{name}'. It can no longer be restored.");
+                return;
+            }
+
+            var remaining = UndoWindow.Duration - (clock.GetUtcNow() - deletedAt);
+            ShowUnlessSignedOut(ToastKind.Warning, $"{Capitalise(RecordType)} '{name}' is still deleted.{(reason.Length > 0 ? " " + reason : string.Empty)}", "Retry undo", () => UndoAsync(deleted, deletedAt, clock), remaining);
+        }
+
+        if (!WindowOpen())
+        {
+            Failed(string.Empty); // the user waited too long before pressing Undo or Retry: nothing to ask the server
+            return;
+        }
+
+        ApiResult<TDetail> result;
+        try
+        {
+            // Runs inside the toast's own (shell-level) operation, not this screen's: the toast outlives the screen, so after the user has gone elsewhere the
+            // waking notice and its Cancel are the shell's, and this view model (disposed by then) is not needed for them (SHELL-07).
+            result = await RestoreAsync(deleted, OperationScope.Current?.Token ?? CancellationToken.None).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
+        {
+            Failed("The restore was cancelled.");
+            return;
+        }
+
         if (!result.IsOk)
         {
-            Toasts.Show(ToastKind.Error, $"Couldn't restore {RecordType} '{name}'. {ProblemText.For(result.Problem!, RecordType, name)}");
+            var problem = result.Problem!;
+            if (problem.Status is 404 or 409 || problem.Code == ProblemCodes.DemoForbidden)
+            {
+                // The server answered: a 404 means its window has closed (or the record is gone), the others will not change on a retry.
+                ShowUnlessSignedOut(ToastKind.Error, $"Couldn't restore {RecordType} '{name}'. {(problem.Status == 404 ? "It can no longer be restored." : ProblemText.For(problem, RecordType, name))}");
+                return;
+            }
+
+            Failed(ProblemText.For(problem, RecordType, name));
             return;
         }
 
