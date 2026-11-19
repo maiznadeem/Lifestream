@@ -106,9 +106,11 @@ public sealed class AppointmentsViewModel : SortedRecordListViewModel<Appointmen
         });
         RecordDonationForCommand = Command(async (parameter, _) =>
         {
-            if (parameter is AppointmentListItem { Status: AppointmentStatus.Pending } item && await OpenRowAsync(item).ConfigureAwait(true) && RecordDonationCommand.CanExecute(null))
+            // This command is itself the modal-opening operation (as Record donation is), so it records the donation directly rather than through that command,
+            // which the runner keeps disabled while any operation, this one included, runs.
+            if (parameter is AppointmentListItem { Status: AppointmentStatus.Pending } item && await OpenRowAsync(item).ConfigureAwait(true) && IsPending && !IsEditing)
             {
-                await RecordDonationCommand.ExecuteAsync().ConfigureAwait(true);
+                await RecordDonationAsync().ConfigureAwait(true);
             }
         }, opensModal: true);
         ClearDonorFilterCommand = new CommunityToolkit.Mvvm.Input.RelayCommand(() => DonorFilter = null);

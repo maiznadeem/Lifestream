@@ -109,6 +109,13 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
             {
                 open.CancelCommand.Execute(null);
             }
+
+            // A fulfil asked for by another screen is dropped when the user chooses another request.
+            if (e.PropertyName is nameof(SelectedItem) && _fulfilWhenOpen is { } wanted && SelectedItem is { } chosen && chosen.Id != wanted)
+            {
+                _fulfilWhenOpen = null;
+                FulfilCommand.CanExecuteChanged -= OnFulfilCanExecuteChanged;
+            }
         };
     }
 
@@ -417,12 +424,42 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
     private async Task FulfilOnceOpenAsync(int id)
     {
         await PendingDetail.ConfigureAwait(true);
-        if (_fulfilWhenOpen == id && Detail?.Id == id && FulfilCommand.CanExecute(null))
+        if (_fulfilWhenOpen == id)
+        {
+            TryStartPendingFulfil();
+        }
+    }
+
+    /// <summary>
+    /// Opens the fulfil step asked for by another screen as soon as it can run: the request's detail is in the panel and no operation of the screen (the list's load)
+    /// keeps the step's command disabled. A request that is no longer pending, or another selection, drops the wish.
+    /// </summary>
+    private void TryStartPendingFulfil()
+    {
+        FulfilCommand.CanExecuteChanged -= OnFulfilCanExecuteChanged;
+        if (_fulfilWhenOpen is not { } id || Detail is not { } detail || detail.Id != id)
+        {
+            return;
+        }
+
+        if (detail.Status != RequestStatus.Pending)
+        {
+            _fulfilWhenOpen = null;
+            return;
+        }
+
+        if (FulfilCommand.CanExecute(null))
         {
             _fulfilWhenOpen = null;
             FulfilCommand.Execute(null);
         }
+        else
+        {
+            FulfilCommand.CanExecuteChanged += OnFulfilCanExecuteChanged;
+        }
     }
+
+    private void OnFulfilCanExecuteChanged(object? sender, EventArgs e) => TryStartPendingFulfil();
 
     protected override void Apply()
     {
