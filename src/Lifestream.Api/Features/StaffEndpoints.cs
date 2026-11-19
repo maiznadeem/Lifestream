@@ -4,6 +4,7 @@ using Lifestream.Api.Infrastructure;
 using Lifestream.Contracts;
 using Lifestream.Contracts.Staff;
 using Lifestream.Data;
+using Lifestream.Data.Queries;
 using Lifestream.Data.Entities;
 using Lifestream.Data.Security;
 using Lifestream.Domain;
@@ -113,6 +114,7 @@ public static class StaffEndpoints
         api.MapPost(ApiRoutes.Staff, CreateAsync).RequireAuthorization(PolicyNames.Admin);
         api.MapPatch(ApiRoutes.StaffById, UpdateAsync).RequireAuthorization(PolicyNames.Admin);
         api.MapDelete(ApiRoutes.StaffById, DeleteAsync).RequireAuthorization(PolicyNames.Admin);
+        api.MapPost(ApiRoutes.StaffRestore, RestoreAsync).RequireAuthorization(PolicyNames.Admin);
         api.MapPost(ApiRoutes.StaffResetPassword, ResetPasswordAsync).RequireAuthorization(PolicyNames.Admin);
         api.MapPut(ApiRoutes.StaffPhoto, UploadPhotoAsync).RequireAuthorization(PolicyNames.Admin).WithMetadata(new BodyLimitMetadata(BodyLimitKind.Photo));
     }
@@ -128,7 +130,7 @@ public static class StaffEndpoints
         if (Lists.CleanSearch(q.Search) is { } term)
         {
             var like = Lists.PrefixPattern(term);
-            var id = int.TryParse(term, out var parsed) ? parsed : -1;
+            var id = SearchQueries.ParseTerm(term).Id ?? -1;
             filtered = filtered.Where(s => s.Id == id || EF.Functions.Like(s.DisplayName, like, "\\") || EF.Functions.Like(s.Username, like, "\\"));
         }
 
@@ -256,7 +258,7 @@ public static class StaffEndpoints
             {
                 DisplayName = r.DisplayName.Trim(),
                 Username = username,
-                PasswordHash = hash,
+                Credential = new StaffCredential { PasswordHash = hash },
                 Gender = r.Gender,
                 DateOfBirth = r.DateOfBirth,
                 Designation = r.Designation,
@@ -391,12 +393,15 @@ public static class StaffEndpoints
         return ToDetail(staff, await db.StaffPhotos.AnyAsync(p => p.StaffId == staff.Id, ct));
     }
 
-    private static async Task<NoContent> DeleteAsync(int id, LifestreamDbContext db, CurrentUser user, IMemoryCache cache, CancellationToken ct)
+    /// <summary>What a delete keeps for Undo: the person with their credential (same hash, lock state and must-change flag) and their photo.</summary>
+    internal sealed record StaffSnapshot(Staff Staff, StaffPhoto? Photo);
+
+    private static async Task<NoContent> DeleteAsync(int id, LifestreamDbContext db, CurrentUser user, TimeProvider time, IMemoryCache cache, CancellationToken ct)
     {
         await db.RunAsync(async token =>
         {
             await db.LockAsync(AdminsLock, token);
-            var entity = await db.Staff.FirstOrDefaultAsync(s => s.Id == id && !s.IsDemo, token) ?? throw ApiException.NotFound("The staff member");
+            var entity = await db.Staff.Include(s => s.Credential).FirstOrDefaultAsync(s => s.Id == id && !s.IsDemo, token) ?? throw ApiException.NotFound("The staff member");
             if (entity.Id == user.TokenStaffId)
             {
                 throw ApiException.Conflict("You cannot delete your own account.");
@@ -412,12 +417,43 @@ public static class StaffEndpoints
                 throw ApiException.Conflict("The last administrator cannot be deleted.");
             }
 
+            var photo = await db.StaffPhotos.AsNoTracking().FirstOrDefaultAsync(p => p.StaffId == id, token);
+            await Tombstones.KeepSnapshotAsync(db, nameof(Staff), new StaffSnapshot(entity, photo), id, time, token);
             db.Staff.Remove(entity);
             await db.SaveChangesAsync(token);
             return true;
         }, ct);
         RevocationCache.Clear(cache);
         return TypedResults.NoContent();
+    }
+
+    /// <summary>
+    /// The Undo of a delete: the person comes back with the same id, password hash, lock state, must-change flag and photo. Their refresh tokens
+    /// are not restored (the delete ended every session), so they sign in again. 404 once the window has passed, 409 when the id or the username is in use again.
+    /// </summary>
+    private static async Task<StaffDetail> RestoreAsync(int id, LifestreamDbContext db, IMemoryCache cache, TimeProvider time, CancellationToken ct)
+    {
+        var restored = await Tombstones.RestoreSnapshotAsync<StaffSnapshot, StaffDetail>(db, nameof(Staff), "Staff", id, "staff member", time, async (snapshot, token) =>
+        {
+            var staff = snapshot.Staff;
+            if (await db.Staff.AnyAsync(s => s.Id == id || s.Username == staff.Username, token))
+            {
+                throw ApiException.Conflict("The staff member is already back, or their username has been taken again.");
+            }
+
+            db.Staff.Add(staff);
+            if (snapshot.Photo is { } photo)
+            {
+                photo.StaffId = id;
+                db.StaffPhotos.Add(photo);
+            }
+
+            return ToDetail(staff, snapshot.Photo is not null);
+        }, ct);
+        RevocationCache.Clear(cache);
+
+        // The row version is made anew by the database: return the saved one.
+        return restored with { RowVersion = RowVersions.ToText(await db.Staff.AsNoTracking().Where(s => s.Id == id).Select(s => s.RowVersion).SingleAsync(ct)) };
     }
 
     /// <summary>
@@ -439,10 +475,13 @@ public static class StaffEndpoints
                 throw ApiException.Forbidden("The owner account can only be changed by the owner.");
             }
 
-            entity.PasswordHash = hash;
-            entity.MustChangePassword = true;
-            entity.FailedLoginCount = 0;
-            entity.LockoutEndUtc = null;
+            var credential = await db.StaffCredentials.FirstOrDefaultAsync(c => c.StaffId == id, token) ?? throw ApiException.NotFound("The staff member");
+            credential.PasswordHash = hash;
+            credential.SecurityStamp = Guid.NewGuid();
+            credential.MustChangePassword = true;
+            credential.FailedCount = 0;
+            credential.LastFailureUtc = null;
+            credential.LockoutEndUtc = null;
             await db.SaveChangesAsync(token);
             return true;
         }, ct);

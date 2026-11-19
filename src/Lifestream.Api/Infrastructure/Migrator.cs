@@ -78,14 +78,14 @@ public static class Migrator
 
     private static async Task EnsureOwnerAsync(LifestreamDbContext db, string password, ILogger logger)
     {
-        var owner = await db.Staff.FirstOrDefaultAsync(s => s.Username == OwnerUsername);
+        var owner = await db.Staff.Include(s => s.Credential).FirstOrDefaultAsync(s => s.Username == OwnerUsername);
         if (owner is null)
         {
             db.Staff.Add(new Staff
             {
                 DisplayName = "Owner",
                 Username = OwnerUsername,
-                PasswordHash = PasswordHashing.Hash(password),
+                Credential = new StaffCredential { PasswordHash = PasswordHashing.Hash(password) },
                 Gender = Gender.Other,
                 DateOfBirth = new DateOnly(1990, 1, 1),
                 Designation = Designation.Admin,
@@ -100,9 +100,15 @@ public static class Migrator
 
         // Only rewrite the hash when the configured password no longer matches, so a re-run changes nothing.
         var changed = false;
-        if (!PasswordHashing.Verify(owner.PasswordHash, password))
+        if (owner.Credential is null)
         {
-            owner.PasswordHash = PasswordHashing.Hash(password);
+            owner.Credential = new StaffCredential { PasswordHash = PasswordHashing.Hash(password) };
+            changed = true;
+        }
+        else if (!PasswordHashing.Verify(owner.Credential.PasswordHash, password))
+        {
+            owner.Credential.PasswordHash = PasswordHashing.Hash(password);
+            owner.Credential.SecurityStamp = Guid.NewGuid();
             changed = true;
         }
 

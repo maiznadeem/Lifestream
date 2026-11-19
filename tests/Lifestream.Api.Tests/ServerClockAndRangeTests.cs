@@ -129,7 +129,7 @@ public sealed class ServerClockAndRangeTests(ApiFixture fx) : IClassFixture<ApiF
             Assert.True(response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.TooManyRequests);
         }
 
-        var lockedUntil = await fx.Db.ScalarAsync<double>($"SELECT CAST(DATEDIFF_BIG(SECOND, SYSUTCDATETIME(), LockoutEndUtc) AS float) FROM Staff WHERE Id = {victim.Id} AND LockoutEndUtc IS NOT NULL", Ct);
+        var lockedUntil = await fx.Db.ScalarAsync<double>($"SELECT CAST(DATEDIFF_BIG(SECOND, SYSUTCDATETIME(), LockoutEndUtc) AS float) FROM StaffCredential WHERE StaffId = {victim.Id} AND LockoutEndUtc IS NOT NULL", Ct);
         Assert.InRange(lockedUntil, 14 * 60, 15 * 60 + 20); // Auth:LockoutMinutes = 15 in the test host, from the server's now
         Assert.NotEqual(0, staff.Id);
     }

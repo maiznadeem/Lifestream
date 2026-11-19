@@ -37,6 +37,9 @@ public sealed class LifestreamDbContext(DbContextOptions<LifestreamDbContext> op
     public DbSet<Receipt> Receipts => Set<Receipt>();
     public DbSet<BloodBag> BloodBags => Set<BloodBag>();
     public DbSet<Staff> Staff => Set<Staff>();
+    public DbSet<StaffCredential> StaffCredentials => Set<StaffCredential>();
+    public DbSet<UnknownLogin> UnknownLogins => Set<UnknownLogin>();
+    public DbSet<DemoRevocation> DemoRevocations => Set<DemoRevocation>();
     public DbSet<StaffPhoto> StaffPhotos => Set<StaffPhoto>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
@@ -466,6 +469,13 @@ public sealed class LifestreamDbContext(DbContextOptions<LifestreamDbContext> op
         var pending = new List<(string, EntityEntry)>();
         foreach (var entry in ChangeTracker.Entries())
         {
+            // A password set or reset is an update of the person (audited as such); failed-login counters and lockouts are not an edit of anyone's record.
+            if (entry.Entity is StaffCredential && entry.State == EntityState.Modified && entry.Property(nameof(StaffCredential.PasswordHash)).IsModified)
+            {
+                pending.Add((AuditActions.Update, entry));
+                continue;
+            }
+
             if (entry.Entity is not IEntity entity || !IsAudited(entity.GetType()))
             {
                 continue;
@@ -490,7 +500,9 @@ public sealed class LifestreamDbContext(DbContextOptions<LifestreamDbContext> op
     // Read from the entry, not the entity: until AcceptAllChanges the generated key is held by the change tracker and the
     // entity's own Id property can still be 0 (reading it was what wrote audit rows with entity id 0).
     private static List<(string Action, string Entity, int EntityId)> AuditRowsFor(List<(string Action, EntityEntry Entry)> pending) =>
-        pending.Select(p => (p.Action, p.Entry.Entity.GetType().Name, (int)p.Entry.Property(nameof(IEntity.Id)).CurrentValue!)).ToList();
+        pending.Select(p => p.Entry.Entity is StaffCredential
+            ? (p.Action, nameof(Entities.Staff), (int)p.Entry.Property(nameof(StaffCredential.StaffId)).CurrentValue!)
+            : (p.Action, p.Entry.Entity.GetType().Name, (int)p.Entry.Property(nameof(IEntity.Id)).CurrentValue!)).ToList();
 
     // The audit rows are inserted with SQL in the current transaction rather than through the change tracker: a second
     // tracked save would send the business rows again (the cause of the double insert this replaces).

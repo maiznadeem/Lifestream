@@ -52,14 +52,14 @@ public sealed class MigrateTests
         await using var context = db.NewContext();
         Assert.Empty(await context.Database.GetPendingMigrationsAsync(Ct));
 
-        var owner = await context.Staff.AsNoTracking().SingleAsync(s => s.Username == Migrator.OwnerUsername, Ct);
+        var owner = await context.Staff.AsNoTracking().Include(s => s.Credential).SingleAsync(s => s.Username == Migrator.OwnerUsername, Ct);
         Assert.True(owner.IsProtected);
         Assert.False(owner.IsDemo);
         Assert.Equal(Role.Admin, owner.Role);
-        Assert.True(PasswordHashing.IsValidHash(owner.PasswordHash));
-        Assert.True(PasswordHashing.Verify(owner.PasswordHash, password));
-        Assert.False(PasswordHashing.Verify(owner.PasswordHash, password + "x"));
-        Assert.NotEqual(password, owner.PasswordHash);
+        Assert.True(PasswordHashing.IsValidHash(owner.Credential!.PasswordHash));
+        Assert.True(PasswordHashing.Verify(owner.Credential!.PasswordHash, password));
+        Assert.False(PasswordHashing.Verify(owner.Credential!.PasswordHash, password + "x"));
+        Assert.NotEqual(password, owner.Credential!.PasswordHash);
 
         // The demo data exists, and the reset bookkeeping says it was seeded.
         Assert.Equal(SeedSizes.Donors, await context.Donors.CountAsync(Ct));
@@ -69,7 +69,7 @@ public sealed class MigrateTests
 
         var text = string.Join('\n', logs.Lines);
         Assert.DoesNotContain(password, text, StringComparison.Ordinal);
-        Assert.DoesNotContain(owner.PasswordHash, text, StringComparison.Ordinal);
+        Assert.DoesNotContain(owner.Credential!.PasswordHash, text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -80,13 +80,13 @@ public sealed class MigrateTests
         Assert.Equal(0, await Migrator.RunAsync(Args(db, first)));
         await using (var before = db.NewContext())
         {
-            var ownerBefore = await before.Staff.AsNoTracking().SingleAsync(s => s.Username == Migrator.OwnerUsername, Ct);
+            var ownerBefore = await before.Staff.AsNoTracking().Include(s => s.Credential).SingleAsync(s => s.Username == Migrator.OwnerUsername, Ct);
             var donorIds = await before.Donors.OrderBy(d => d.Id).Select(d => d.Id).ToListAsync(Ct);
 
             Assert.Equal(0, await Migrator.RunAsync(Args(db, first)));
             await using var after = db.NewContext();
-            var ownerAfter = await after.Staff.AsNoTracking().SingleAsync(s => s.Username == Migrator.OwnerUsername, Ct);
-            Assert.Equal(ownerBefore.PasswordHash, ownerAfter.PasswordHash);
+            var ownerAfter = await after.Staff.AsNoTracking().Include(s => s.Credential).SingleAsync(s => s.Username == Migrator.OwnerUsername, Ct);
+            Assert.Equal(ownerBefore.Credential!.PasswordHash, ownerAfter.Credential!.PasswordHash);
             Assert.Equal(1, await after.Staff.CountAsync(s => s.Username == Migrator.OwnerUsername, Ct));
             Assert.Equal(donorIds, await after.Donors.OrderBy(d => d.Id).Select(d => d.Id).ToListAsync(Ct));
         }
@@ -94,9 +94,9 @@ public sealed class MigrateTests
         var second = "Second-" + Guid.NewGuid().ToString("N");
         Assert.Equal(0, await Migrator.RunAsync(Args(db, second)));
         await using var rotated = db.NewContext();
-        var owner = await rotated.Staff.AsNoTracking().SingleAsync(s => s.Username == Migrator.OwnerUsername, Ct);
-        Assert.True(PasswordHashing.Verify(owner.PasswordHash, second));
-        Assert.False(PasswordHashing.Verify(owner.PasswordHash, first));
+        var owner = await rotated.Staff.AsNoTracking().Include(s => s.Credential).SingleAsync(s => s.Username == Migrator.OwnerUsername, Ct);
+        Assert.True(PasswordHashing.Verify(owner.Credential!.PasswordHash, second));
+        Assert.False(PasswordHashing.Verify(owner.Credential!.PasswordHash, first));
     }
 
     [Fact]

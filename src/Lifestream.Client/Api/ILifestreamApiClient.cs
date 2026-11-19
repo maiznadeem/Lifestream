@@ -127,6 +127,9 @@ public interface ILifestreamApiClient
 
     Task<ApiResult> DeleteStaffAsync(int id, CancellationToken ct = default);
 
+    /// <summary>Undo of a staff delete: the API puts the person back with the same id, credential and photo within a few seconds of the delete.</summary>
+    Task<ApiResult<StaffDetail>> RestoreStaffAsync(int id, CancellationToken ct = default);
+
     /// <summary>Sets the temporary password the admin typed; the API answers 204 and never returns a password. The person must choose a new one at next sign-in.</summary>
     Task<ApiResult> ResetStaffPasswordAsync(int id, ResetPasswordRequest request, CancellationToken ct = default);
 

@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
-# Scans the filesystem and configuration of a local container image for credentials (tools/scan-artifacts.ps1).
+# Scans a local container image for credentials (tools/scan-artifacts.ps1): EVERY layer separately, plus the image configuration.
 #   tools/scan-image.sh <image-ref> [report-path]
-# Exit codes follow scan-artifacts.ps1: 0 clean, 1 credential found, 2 nothing scanned or the export failed.
+# The image is exported with `docker save`, whose tarball holds each layer as its own tar (and the config JSON with the baked
+# environment variables). The scanner opens each layer tar, so a file that one layer adds and a later layer deletes (a whiteout)
+# is still scanned: it is in the pushed layer blob even though a container would not see it. `docker export` of a container
+# only shows the final merged filesystem, which is why it is not used.
+# Exit codes follow scan-artifacts.ps1: 0 clean, 1 credential found, 2 nothing scanned or the save failed.
 # The image must exist locally (docker build --load, or docker pull). Nothing is pushed or changed.
 set -euo pipefail
 
@@ -9,24 +13,17 @@ image="${1:?usage: scan-image.sh <image-ref> [report-path]}"
 report="${2:-}"
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 work="$(mktemp -d)"
-container=""
-cleanup() {
-  if [ -n "$container" ]; then docker rm -f "$container" >/dev/null 2>&1 || true; fi
-  rm -rf "$work"
-}
+cleanup() { rm -rf "$work"; }
 trap cleanup EXIT
 
 docker image inspect "$image" >/dev/null || { echo "ERROR: image $image not found locally" >&2; exit 2; }
 
-mkdir -p "$work/fs"
+mkdir -p "$work/scan"
 # Image configuration (baked environment variables, labels, history) is part of the artifact too.
-docker image inspect "$image" > "$work/fs/_image-inspect.json"
-docker history --no-trunc "$image" > "$work/fs/_image-history.txt"
+docker image inspect "$image" > "$work/scan/_image-inspect.json"
+docker history --no-trunc "$image" > "$work/scan/_image-history.txt"
+docker save -o "$work/scan/image.tar" "$image" || { echo "ERROR: docker save $image failed" >&2; exit 2; }
 
-container="$(docker create "$image")"
-# Special files (devices) cannot be created by an unprivileged tar and hold no credentials.
-docker export "$container" | tar -x --no-same-owner --no-same-permissions --exclude='dev/*' --exclude='./dev/*' -C "$work/fs"
-
-args=(-NoProfile -File "$here/scan-artifacts.ps1" -Path "$work/fs")
+args=(-NoProfile -File "$here/scan-artifacts.ps1" -Path "$work/scan")
 [ -n "$report" ] && args+=(-ReportPath "$report")
 pwsh "${args[@]}"

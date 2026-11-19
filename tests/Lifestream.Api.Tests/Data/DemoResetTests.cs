@@ -50,7 +50,7 @@ public sealed class DemoResetTests(SqlServerDatabaseFixture fixture) : IClassFix
         admin.Role = Role.Admin;
         owner.Staff.Add(admin);
         await owner.SaveChangesAsync(Ct);
-        var protectedHash = admin.PasswordHash;
+        var protectedHash = admin.Credential!.PasswordHash;
 
         await using (var first = fixture.NewContext())
         {
@@ -91,9 +91,9 @@ public sealed class DemoResetTests(SqlServerDatabaseFixture fixture) : IClassFix
 
         // The protected admin is untouched (same row, same hash) and its audit rows survive; other people's audit rows are gone.
         await using var read = fixture.NewContext();
-        var kept = await read.Staff.SingleAsync(s => s.IsProtected, Ct);
+        var kept = await read.Staff.Include(s => s.Credential).SingleAsync(s => s.IsProtected, Ct);
         Assert.Equal(admin.Id, kept.Id);
-        Assert.Equal(protectedHash, kept.PasswordHash);
+        Assert.Equal(protectedHash, kept.Credential!.PasswordHash);
         Assert.True(await read.AuditLogs.AnyAsync(a => a.StaffId == admin.Id, Ct));
         Assert.False(await read.AuditLogs.AnyAsync(a => a.StaffId != admin.Id && a.StaffId != null, Ct));
         Assert.Equal(0, await read.AuditLogs.CountAsync(a => a.StaffId == null && a.Entity == "Receipt", Ct));
@@ -142,8 +142,8 @@ public sealed class DemoResetTests(SqlServerDatabaseFixture fixture) : IClassFix
     {
         await using var db = fixture.NewContext();
         var lines = new List<string>();
-        lines.AddRange((await db.Staff.AsNoTracking().Where(x => !x.IsProtected).ToListAsync(Ct))
-            .Select(x => $"S|{x.Username}|{x.DisplayName}|{x.Gender}|{x.DateOfBirth:O}|{x.Designation}|{x.Shift}|{x.Role}|{x.Salary}|{x.Phone}|{x.IsDemo}|{x.PasswordHash}"));
+        lines.AddRange((await db.Staff.AsNoTracking().Include(x => x.Credential).Where(x => !x.IsProtected).ToListAsync(Ct))
+            .Select(x => $"S|{x.Username}|{x.DisplayName}|{x.Gender}|{x.DateOfBirth:O}|{x.Designation}|{x.Shift}|{x.Role}|{x.Salary}|{x.Phone}|{x.IsDemo}|{x.Credential!.PasswordHash}"));
         lines.AddRange((await db.Donors.AsNoTracking().ToListAsync(Ct))
             .Select(x => $"D|{x.Name}|{x.DateOfBirth:O}|{x.Gender}|{x.BloodType}|{x.Phone}|{x.Address}|{x.Frequency}|{x.LastDonated:O}"));
         lines.AddRange((await db.Patients.AsNoTracking().ToListAsync(Ct))

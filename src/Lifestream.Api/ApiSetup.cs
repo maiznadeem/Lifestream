@@ -1,4 +1,5 @@
 using Lifestream.Api.Auth;
+using Lifestream.Api.Common;
 using Lifestream.Api.Features;
 using Lifestream.Api.Infrastructure;
 using Lifestream.Contracts;
@@ -63,10 +64,13 @@ public static class ApiSetup
         {
             var contract = ContractJson.CreateOptions();
             o.SerializerOptions.TypeInfoResolver = contract.TypeInfoResolver;
-            foreach (var converter in contract.Converters)
+            // The contract's lenient enum converter (numbers, flag lists) is replaced by the strict one: names only.
+            foreach (var converter in contract.Converters.Where(c => c is not System.Text.Json.Serialization.JsonStringEnumConverter))
             {
                 o.SerializerOptions.Converters.Add(converter);
             }
+
+            o.SerializerOptions.Converters.Add(new StrictEnumConverterFactory());
 
             o.SerializerOptions.DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull;
         });
@@ -102,8 +106,8 @@ public static class ApiSetup
 
         services.AddSingleton<TokenService>();
         services.AddSingleton<DemoDirectory>();
-        services.AddSingleton<UnknownLoginTracker>();
-        services.AddSingleton<DemoSessionDenylist>();
+        services.AddScoped<UnknownLoginStore>();
+        services.AddScoped<DemoSessionDenylist>();
         services.AddScoped<CurrentUser>();
         services.AddScoped<AuthService>();
         services.AddScoped<StaffService>();
@@ -124,9 +128,9 @@ public static class ApiSetup
                         var principal = context.Principal!;
                         if (principal.HasClaim(Claims.Demo, "1"))
                         {
-                            // A demo session has no database row; its sign-out is remembered in memory.
+                            // A demo session has no refresh-token row; its sign-out is remembered in the DemoRevocation table.
                             var demoFamily = Guid.TryParseExact(principal.FindFirst(Claims.Family)?.Value, "N", out var df) ? df : Guid.Empty;
-                            if (demoFamily == Guid.Empty || context.HttpContext.RequestServices.GetRequiredService<DemoSessionDenylist>().IsRevoked(demoFamily))
+                            if (demoFamily == Guid.Empty || await context.HttpContext.RequestServices.GetRequiredService<DemoSessionDenylist>().IsRevokedAsync(demoFamily, context.HttpContext.RequestAborted))
                             {
                                 context.Fail("The session has ended.");
                             }
@@ -225,6 +229,7 @@ public static class ApiSetup
         });
 
         var api = app.MapGroup(ApiRoutes.Prefix).RequireAuthorization(PolicyNames.Staff);
+        EnumQueryFilter.AddTo(api);
         AuthEndpoints.Map(api);
         DonorEndpoints.Map(api);
         PatientEndpoints.Map(api);

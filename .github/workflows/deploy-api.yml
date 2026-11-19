@@ -98,14 +98,19 @@ jobs:
 
       # Single architecture, no provenance or SBOM attestation: each version is exactly one manifest, so pruning the old
       # versions can never orphan a manifest list.
+      # The build log is kept (bash with pipefail, so a failed build still fails the step) and scanned like the image.
       - name: Build image (not pushed yet)
+        shell: bash
         run: >
-          docker buildx build --provenance=false --sbom=false --platform linux/amd64 --load
-          -f src/Lifestream.Api/Dockerfile -t "$IMAGE:$GITHUB_SHA" .
+          docker buildx build --progress=plain --provenance=false --sbom=false --platform linux/amd64 --load
+          -f src/Lifestream.Api/Dockerfile -t "$IMAGE:$GITHUB_SHA" . 2>&1 | tee "$RUNNER_TEMP/docker-build.log"
 
-      # A credential in the image would be public the moment the package is pushed, so the scan comes first.
-      - name: Scan the image filesystem and configuration for credentials
-        run: tools/scan-image.sh "$IMAGE:$GITHUB_SHA" "$RUNNER_TEMP/image-scan-report.json"
+      # A credential in the image would be public the moment the package is pushed, so the scan comes first: every layer, the
+      # image configuration, and the build log.
+      - name: Scan the image layers, configuration and build log for credentials
+        run: |
+          tools/scan-image.sh "$IMAGE:$GITHUB_SHA" "$RUNNER_TEMP/image-scan-report.json"
+          pwsh -NoProfile -File tools/scan-artifacts.ps1 -Path "$RUNNER_TEMP/docker-build.log" -ReportPath "$RUNNER_TEMP/build-log-scan-report.json"
 
       - name: Push image
         run: docker push "$IMAGE:$GITHUB_SHA"
@@ -115,7 +120,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: image-scan-report
-          path: ${{ runner.temp }}/image-scan-report.json
+          path: |
+            ${{ runner.temp }}/image-scan-report.json
+            ${{ runner.temp }}/build-log-scan-report.json
           if-no-files-found: ignore
 
   deploy:

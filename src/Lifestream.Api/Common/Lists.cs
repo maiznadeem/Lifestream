@@ -45,6 +45,15 @@ public static class Lists
         return new PagedResult<T>([.. rows.Select(r => r.Item)], total, page, size);
     }
 
+    /// <summary>
+    /// Builds the response from a statement whose TOTAL drives it (<c>from t in total from r in page.DefaultIfEmpty()</c>): a page past the end
+    /// still comes back with the total in one row and no item, so no second statement ever has to count again (a count of a broad search is a big read).
+    /// No row at all means the total is 0.
+    /// </summary>
+    public static PagedResult<T> BuildFromTotal<T>(IReadOnlyList<ListRow<T?>> rows, int page, int size)
+        where T : class =>
+        new([.. rows.Select(r => r.Item).OfType<T>()], rows.Count > 0 ? rows[0].Total : 0, page, size);
+
     /// <summary>The prefix pattern ("term%", wildcards escaped) from the data module, so every name search seeks the name index.</summary>
     public static string PrefixPattern(string term) => Lifestream.Data.Queries.SearchQueries.PrefixPattern(term);
 

@@ -5,6 +5,7 @@ using Lifestream.Contracts;
 using Lifestream.Contracts.Receipts;
 using Lifestream.Contracts.Requests;
 using Lifestream.Data;
+using Lifestream.Data.Queries;
 using Lifestream.Data.Entities;
 using Lifestream.Domain;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -63,10 +64,10 @@ public static class RequestEndpoints
 
         if (Lists.CleanSearch(q.Search) is { } term)
         {
-            // Patient ids by name or contact (two prefix seeks), then the requests of those patients; a numeric term also matches the id.
-            var like = Lists.PrefixPattern(term);
-            var patientIds = db.Patients.Where(p => EF.Functions.Like(p.Name, like, "\\") || EF.Functions.Like(p.Phone!, like, "\\")).Select(p => p.Id);
-            filtered = int.TryParse(term, out var id)
+            // Patient ids by name (and phone, for a term long enough to be one: prefix seeks), then the requests of those patients; a term that is a whole number also matches the id.
+            var parsed = SearchQueries.ParseTerm(term);
+            var patientIds = db.Patients.NameOrPhoneMatching(parsed).Select(p => p.Id);
+            filtered = parsed.Id is { } id
                 ? filtered.Where(r => r.Id == id || patientIds.Contains(r.PatientId))
                 : filtered.Where(r => patientIds.Contains(r.PatientId));
         }
