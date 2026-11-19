@@ -1,0 +1,120 @@
+<UserControl x:Class="Lifestream.Desktop.Controls.RecordPicker"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:Lifestream.Desktop.Controls"
+             xmlns:services="clr-namespace:Lifestream.Desktop.Services"
+             Focusable="False" IsTabStop="False">
+  <UserControl.Resources>
+    <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+    <services:HasTextToVisibilityConverter x:Key="HasText" />
+  </UserControl.Resources>
+  <Grid x:Name="Root">
+    <!-- Search mode: a text box with a hint (the hint is a separate element, never the value) and a popup of matches. -->
+    <Grid x:Name="SearchMode" Visibility="{Binding ShowSearch, Converter={StaticResource BoolToVisibility}}">
+      <TextBox x:Name="SearchBox" Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" Padding="{DynamicResource Inset.L12R36}"
+               AutomationProperties.Name="{Binding Label}" PreviewKeyDown="OnSearchKeyDown" GotKeyboardFocus="OnSearchGotFocus" />
+      <TextBlock x:Name="HintText" Style="{DynamicResource Text.Body}" Foreground="{DynamicResource Brush.TextMuted}" Text="Search by name or ID" IsHitTestVisible="False"
+                 VerticalAlignment="Center" Margin="{DynamicResource Inset.L13R36}" TextWrapping="NoWrap">
+        <TextBlock.Visibility>
+          <Binding ElementName="SearchBox" Path="Text.Length">
+            <Binding.Converter>
+              <controls:ZeroToVisibleConverter />
+            </Binding.Converter>
+          </Binding>
+        </TextBlock.Visibility>
+      </TextBlock>
+      <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE721;" Foreground="{DynamicResource Brush.TextSecondary}" HorizontalAlignment="Right" VerticalAlignment="Center"
+                 Margin="{DynamicResource Inset.R12}" IsHitTestVisible="False" />
+      <Popup x:Name="ResultsPopup" IsOpen="{Binding IsOpen, Mode=TwoWay}" PlacementTarget="{Binding ElementName=SearchBox}" Placement="Bottom" StaysOpen="False"
+             AllowsTransparency="True" Focusable="False">
+        <Border MinWidth="{Binding ActualWidth, ElementName=SearchBox}" MaxHeight="280" Margin="{DynamicResource Inset.T4B8}" Background="{DynamicResource Brush.SurfaceRaised}"
+                BorderBrush="{DynamicResource Brush.BorderInput}" BorderThickness="1" CornerRadius="{DynamicResource Radius.Control}">
+          <Grid MinHeight="52">
+            <ListBox x:Name="ResultsList" ItemsSource="{Binding Options}" BorderThickness="0" Background="Transparent" Focusable="True"
+                     AutomationProperties.Name="Matches" PreviewKeyDown="OnListKeyDown" MouseDoubleClick="OnListChosen">
+              <ListBox.ItemContainerStyle>
+                <Style TargetType="ListBoxItem">
+                  <Setter Property="Padding" Value="{DynamicResource Inset.H12V6}" />
+                  <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+                  <Setter Property="Template">
+                    <Setter.Value>
+                      <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Bd" Background="Transparent" Padding="{TemplateBinding Padding}" MinHeight="40">
+                          <ContentPresenter />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                          <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.SurfaceHover}" />
+                          </Trigger>
+                          <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.SurfaceSelected}" />
+                          </Trigger>
+                        </ControlTemplate.Triggers>
+                      </ControlTemplate>
+                    </Setter.Value>
+                  </Setter>
+                </Style>
+              </ListBox.ItemContainerStyle>
+              <ListBox.ItemTemplate>
+                <DataTemplate>
+                  <Grid>
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="*" />
+                      <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel>
+                      <TextBlock Style="{DynamicResource Text.Body}" Text="{Binding Title}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
+                      <TextBlock Style="{DynamicResource Text.Caption}" Text="{Binding Subtitle}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
+                    </StackPanel>
+                    <TextBlock Grid.Column="1" Style="{DynamicResource Text.Caption}" Text="{Binding Id, StringFormat=#{0}}" VerticalAlignment="Center" Margin="{DynamicResource Inset.L12}" />
+                  </Grid>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+            <controls:Skeleton Kind="Picker" Visibility="{Binding IsSearching, Converter={StaticResource BoolToVisibility}}" />
+            <controls:WakingNotice x:Name="Waking" IsActive="{Binding IsWaking}" CancelCommand="{Binding CancelSearchCommand}" VerticalAlignment="Top" />
+            <TextBlock x:Name="NoMatches" Style="{DynamicResource Text.Body}" Foreground="{DynamicResource Brush.TextSecondary}" Text="No matches" Margin="{DynamicResource Inset.H12V16}"
+                       Visibility="{Binding HasNoMatches, Converter={StaticResource BoolToVisibility}}" />
+            <TextBlock x:Name="SearchError" Style="{DynamicResource Text.Body}" Foreground="{DynamicResource Brush.StatusDanger}" Text="{Binding SearchError}" Margin="{DynamicResource Inset.H12V16}"
+                       Visibility="{Binding SearchError, Converter={StaticResource HasText}}" />
+          </Grid>
+        </Border>
+      </Popup>
+    </Grid>
+
+    <!-- Filter with nothing chosen: the placeholder ("Any donor") and a Choose action. Collapsed unless the view model says otherwise, so a picker without one shows nothing misleading. -->
+    <Border x:Name="Empty" Visibility="{Binding ShowEmpty, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed}" MinHeight="{DynamicResource Height.Control}"
+            Background="{DynamicResource Brush.SurfaceRaised}" BorderBrush="{DynamicResource Brush.BorderInput}" BorderThickness="1"
+            CornerRadius="{DynamicResource Radius.Control}" Padding="{DynamicResource Inset.L12R4}">
+      <Grid>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+        <TextBlock Style="{DynamicResource Text.Body}" Foreground="{DynamicResource Brush.TextMuted}" Text="{Binding EmptyText}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                   TextWrapping="NoWrap" />
+        <Button Grid.Column="1" Style="{DynamicResource Button.Ghost}" Content="Choose" Command="{Binding ChooseCommand}" AutomationProperties.Name="Choose record" />
+      </Grid>
+    </Border>
+
+    <!-- Chosen: a summary chip with Change, and (on a filter) a clear. Collapsed unless something is chosen. -->
+    <Border x:Name="Chip" Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed}" MinHeight="{DynamicResource Height.Control}"
+            Background="{DynamicResource Brush.SurfaceRaised}" BorderBrush="{DynamicResource Brush.BorderInput}" BorderThickness="1"
+            CornerRadius="{DynamicResource Radius.Control}" Padding="{DynamicResource Inset.L12R4}">
+      <Grid>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="Auto" />
+          <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+        <TextBlock Style="{DynamicResource Text.Body}" Text="{Binding SummaryText}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"
+                   AutomationProperties.LiveSetting="Polite" />
+        <Button Grid.Column="1" Style="{DynamicResource Button.Ghost}" Content="Change" Command="{Binding ChangeCommand}" AutomationProperties.Name="Change selection" />
+        <Button Grid.Column="2" Style="{DynamicResource Button.Ghost}" Padding="{DynamicResource Inset.H8}" MinWidth="32" Command="{Binding ClearCommand}" AutomationProperties.Name="Clear selection"
+                Visibility="{Binding IsFilter, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed}">
+          <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE711;" />
+        </Button>
+      </Grid>
+    </Border>
+  </Grid>
+</UserControl>

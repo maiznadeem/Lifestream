@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <RootNamespace>Lifestream.Api</RootNamespace>
+    <!-- Logging call-site performance rules: this API logs a handful of lines per request, not in a hot loop. -->
+    <NoWarn>$(NoWarn);CA1848;CA1873</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+    <PackageReference Include="SkiaSharp" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Lifestream.Contracts\Lifestream.Contracts.csproj" />
+    <ProjectReference Include="..\Lifestream.Data\Lifestream.Data.csproj" />
+    <ProjectReference Include="..\Lifestream.Domain\Lifestream.Domain.csproj" />
+  </ItemGroup>
+</Project>

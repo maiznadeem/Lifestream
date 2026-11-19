@@ -1,0 +1,249 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:media="clr-namespace:System.Windows.Media;assembly=PresentationCore"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:assist="clr-namespace:Lifestream.Desktop.Controls">
+  <ResourceDictionary.MergedDictionaries>
+    <ResourceDictionary Source="/Lifestream;component/Theme/Tokens.xaml" />
+    <ResourceDictionary Source="/Lifestream;component/Theme/Motion.xaml" />
+    <ResourceDictionary Source="/Lifestream;component/Theme/Typography.xaml" />
+  </ResourceDictionary.MergedDictionaries>
+
+  <!-- Generated once from scratch/gen_buttons.py and kept as plain XAML. One template, five variants (primary, secondary,
+       ghost, danger, icon), six states each (idle, hover, pressed, keyboard focus, busy, disabled), all colours from tokens. -->
+
+  <Style x:Key="FocusVisual.None">
+    <Setter Property="Control.Template">
+      <Setter.Value>
+        <ControlTemplate>
+          <Border />
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <ControlTemplate x:Key="Button.Template" TargetType="Button">
+    <Grid x:Name="Host" SnapsToDevicePixels="True">
+      <VisualStateManager.VisualStateGroups>
+        <VisualStateGroup x:Name="CommonStates">
+          <VisualState x:Name="Normal">
+            <Storyboard>
+              <DoubleAnimation Storyboard.TargetName="HoverLayer" Storyboard.TargetProperty="Opacity" To="0" Duration="{StaticResource Motion.Fast}" />
+              <DoubleAnimation Storyboard.TargetName="PressedLayer" Storyboard.TargetProperty="Opacity" To="0" Duration="{StaticResource Motion.Fast}" />
+            </Storyboard>
+          </VisualState>
+          <VisualState x:Name="MouseOver">
+            <Storyboard>
+              <DoubleAnimation Storyboard.TargetName="HoverLayer" Storyboard.TargetProperty="Opacity" To="1" Duration="{StaticResource Motion.Fast}" />
+              <DoubleAnimation Storyboard.TargetName="PressedLayer" Storyboard.TargetProperty="Opacity" To="0" Duration="{StaticResource Motion.Fast}" />
+            </Storyboard>
+          </VisualState>
+          <VisualState x:Name="Pressed">
+            <Storyboard>
+              <DoubleAnimation Storyboard.TargetName="HoverLayer" Storyboard.TargetProperty="Opacity" To="1" Duration="{StaticResource Motion.Fast}" />
+              <DoubleAnimation Storyboard.TargetName="PressedLayer" Storyboard.TargetProperty="Opacity" To="1" Duration="{StaticResource Motion.Fast}" />
+            </Storyboard>
+          </VisualState>
+          <VisualState x:Name="Disabled" />
+        </VisualStateGroup>
+      </VisualStateManager.VisualStateGroups>
+
+      <Border x:Name="Rest" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+              BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="{StaticResource Radius.Control}" />
+      <Border x:Name="HoverLayer" Opacity="0" Background="{TemplateBinding assist:ButtonAssist.HoverBackground}"
+              CornerRadius="{StaticResource Radius.Control}" IsHitTestVisible="False" />
+      <Border x:Name="PressedLayer" Opacity="0" Background="{TemplateBinding assist:ButtonAssist.PressedBackground}"
+              CornerRadius="{StaticResource Radius.Control}" IsHitTestVisible="False" />
+
+      <!-- The label layer and the busy layer share one cell and are both measured (Hidden, not Collapsed), so the button
+           is as wide as the wider of the two and nothing moves when it turns busy. -->
+      <ContentPresenter x:Name="Content" Margin="{TemplateBinding Padding}"
+                        HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                        VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                        RecognizesAccessKey="True" />
+      <StackPanel x:Name="BusyLayer" Orientation="Horizontal" Visibility="Hidden" Margin="{TemplateBinding Padding}"
+                  HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                  VerticalAlignment="{TemplateBinding VerticalContentAlignment}">
+        <Path x:Name="Spinner" Width="16" Height="16" Margin="{DynamicResource Inset.R8}" Stretch="Uniform" StrokeThickness="2"
+              StrokeStartLineCap="Round" StrokeEndLineCap="Round" Stroke="{TemplateBinding Foreground}"
+              Data="M 8,1 A 7,7 0 1 1 1,8" RenderTransformOrigin="0.5,0.5" VerticalAlignment="Center">
+          <Path.RenderTransform>
+            <RotateTransform x:Name="SpinnerRotate" Angle="0" />
+          </Path.RenderTransform>
+        </Path>
+        <TextBlock x:Name="BusyLabel" VerticalAlignment="Center" TextWrapping="NoWrap"
+                   Text="{TemplateBinding assist:ButtonAssist.BusyText}" />
+      </StackPanel>
+
+      <Border x:Name="FocusRing" Margin="{DynamicResource Inset.Neg4}" CornerRadius="{DynamicResource Radius.6}" BorderThickness="{StaticResource Thickness.FocusRing}"
+              BorderBrush="{DynamicResource Brush.FocusRing}" Visibility="Collapsed" IsHitTestVisible="False" />
+    </Grid>
+    <ControlTemplate.Triggers>
+      <Trigger Property="assist:FocusAssist.ShowRing" Value="True">
+        <Setter TargetName="FocusRing" Property="Visibility" Value="Visible" />
+      </Trigger>
+      <Trigger Property="assist:ButtonAssist.IsBusy" Value="True">
+        <Setter TargetName="Content" Property="Visibility" Value="Hidden" />
+        <Setter TargetName="BusyLayer" Property="Visibility" Value="Visible" />
+        <Trigger.EnterActions>
+          <BeginStoryboard x:Name="SpinStoryboard">
+            <Storyboard>
+              <DoubleAnimation Storyboard.TargetName="SpinnerRotate" Storyboard.TargetProperty="Angle" From="0" To="360"
+                               Duration="{StaticResource Motion.SpinnerTurn}" RepeatBehavior="{StaticResource Motion.SpinnerRepeat}" />
+            </Storyboard>
+          </BeginStoryboard>
+        </Trigger.EnterActions>
+        <Trigger.ExitActions>
+          <StopStoryboard BeginStoryboardName="SpinStoryboard" />
+        </Trigger.ExitActions>
+      </Trigger>
+    </ControlTemplate.Triggers>
+  </ControlTemplate>
+
+  <Style x:Key="Button.Base" TargetType="Button">
+    <Setter Property="Template" Value="{StaticResource Button.Template}" />
+    <Setter Property="FocusVisualStyle" Value="{StaticResource FocusVisual.None}" />
+    <Setter Property="FontFamily" Value="{DynamicResource Font.Family}" />
+    <Setter Property="FontSize" Value="{StaticResource FontSize.Label}" />
+    <Setter Property="FontWeight" Value="Medium" />
+    <Setter Property="MinHeight" Value="{StaticResource Height.Control}" />
+    <Setter Property="MinWidth" Value="{StaticResource Height.Control}" />
+    <Setter Property="Padding" Value="{DynamicResource Inset.H16}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+    <Setter Property="Cursor" Value="Hand" />
+    <Setter Property="Focusable" Value="True" />
+    <Setter Property="assist:ButtonAssist.BusyText" Value="Working..." />
+  </Style>
+
+  <Style x:Key="Button.Primary" TargetType="Button" BasedOn="{StaticResource Button.Base}">
+    <Setter Property="Background" Value="{DynamicResource Brush.Primary}" />
+    <Setter Property="Foreground" Value="{DynamicResource Brush.TextOnPrimary}" />
+    <Setter Property="BorderBrush" Value="{x:Static media:Brushes.Transparent}" />
+    <Setter Property="assist:ButtonAssist.HoverBackground" Value="{DynamicResource Brush.PrimaryHover}" />
+    <Setter Property="assist:ButtonAssist.PressedBackground" Value="{DynamicResource Brush.PrimaryPressed}" />
+    <Style.Triggers>
+      <Trigger Property="IsEnabled" Value="False">
+        <Setter Property="Background" Value="{DynamicResource Brush.SurfaceRaised}" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.TextDisabled}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.BorderSubtle}" />
+        <Setter Property="Cursor" Value="Arrow" />
+      </Trigger>
+      <!-- Busy wins over disabled: a command that is running disables its button, but it must look busy, not dead. -->
+      <Trigger Property="assist:ButtonAssist.IsBusy" Value="True">
+        <Setter Property="Background" Value="{DynamicResource Brush.Primary}" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.TextOnPrimary}" />
+        <Setter Property="BorderBrush" Value="{x:Static media:Brushes.Transparent}" />
+        <Setter Property="Cursor" Value="Wait" />
+        <Setter Property="IsHitTestVisible" Value="False" />
+        <Setter Property="AutomationProperties.ItemStatus" Value="Busy" />
+      </Trigger>
+    </Style.Triggers>
+  </Style>
+
+  <Style x:Key="Button.Secondary" TargetType="Button" BasedOn="{StaticResource Button.Base}">
+    <Setter Property="Background" Value="{x:Static media:Brushes.Transparent}" />
+    <Setter Property="Foreground" Value="{DynamicResource Brush.TextPrimary}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Brush.BorderInput}" />
+    <Setter Property="assist:ButtonAssist.HoverBackground" Value="{DynamicResource Brush.SurfaceHover}" />
+    <Setter Property="assist:ButtonAssist.PressedBackground" Value="{DynamicResource Brush.SurfacePressed}" />
+    <Style.Triggers>
+      <Trigger Property="IsEnabled" Value="False">
+        <Setter Property="Background" Value="{x:Static media:Brushes.Transparent}" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.TextDisabled}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.BorderSubtle}" />
+        <Setter Property="Cursor" Value="Arrow" />
+      </Trigger>
+      <!-- Busy wins over disabled: a command that is running disables its button, but it must look busy, not dead. -->
+      <Trigger Property="assist:ButtonAssist.IsBusy" Value="True">
+        <Setter Property="Background" Value="{x:Static media:Brushes.Transparent}" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.TextPrimary}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.BorderInput}" />
+        <Setter Property="Cursor" Value="Wait" />
+        <Setter Property="IsHitTestVisible" Value="False" />
+        <Setter Property="AutomationProperties.ItemStatus" Value="Busy" />
+      </Trigger>
+    </Style.Triggers>
+  </Style>
+
+  <Style x:Key="Button.Ghost" TargetType="Button" BasedOn="{StaticResource Button.Base}">
+    <Setter Property="MinHeight" Value="{StaticResource Height.Compact}" />
+    <Setter Property="Background" Value="{x:Static media:Brushes.Transparent}" />
+    <Setter Property="Foreground" Value="{DynamicResource Brush.TextPrimary}" />
+    <Setter Property="BorderBrush" Value="{x:Static media:Brushes.Transparent}" />
+    <Setter Property="assist:ButtonAssist.HoverBackground" Value="{DynamicResource Brush.SurfaceHover}" />
+    <Setter Property="assist:ButtonAssist.PressedBackground" Value="{DynamicResource Brush.SurfacePressed}" />
+    <Style.Triggers>
+      <Trigger Property="IsEnabled" Value="False">
+        <Setter Property="Background" Value="{x:Static media:Brushes.Transparent}" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.TextDisabled}" />
+        <Setter Property="BorderBrush" Value="{x:Static media:Brushes.Transparent}" />
+        <Setter Property="Cursor" Value="Arrow" />
+      </Trigger>
+      <!-- Busy wins over disabled: a command that is running disables its button, but it must look busy, not dead. -->
+      <Trigger Property="assist:ButtonAssist.IsBusy" Value="True">
+        <Setter Property="Background" Value="{x:Static media:Brushes.Transparent}" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.TextPrimary}" />
+        <Setter Property="BorderBrush" Value="{x:Static media:Brushes.Transparent}" />
+        <Setter Property="Cursor" Value="Wait" />
+        <Setter Property="IsHitTestVisible" Value="False" />
+        <Setter Property="AutomationProperties.ItemStatus" Value="Busy" />
+      </Trigger>
+    </Style.Triggers>
+  </Style>
+
+  <Style x:Key="Button.Danger" TargetType="Button" BasedOn="{StaticResource Button.Base}">
+    <Setter Property="Background" Value="{x:Static media:Brushes.Transparent}" />
+    <Setter Property="Foreground" Value="{DynamicResource Brush.StatusDanger}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Brush.StatusDanger}" />
+    <Setter Property="assist:ButtonAssist.HoverBackground" Value="{DynamicResource Brush.DangerHover}" />
+    <Setter Property="assist:ButtonAssist.PressedBackground" Value="{DynamicResource Brush.DangerPressed}" />
+    <Style.Triggers>
+      <Trigger Property="IsEnabled" Value="False">
+        <Setter Property="Background" Value="{x:Static media:Brushes.Transparent}" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.TextDisabled}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.BorderSubtle}" />
+        <Setter Property="Cursor" Value="Arrow" />
+      </Trigger>
+      <!-- Busy wins over disabled: a command that is running disables its button, but it must look busy, not dead. -->
+      <Trigger Property="assist:ButtonAssist.IsBusy" Value="True">
+        <Setter Property="Background" Value="{x:Static media:Brushes.Transparent}" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.StatusDanger}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.StatusDanger}" />
+        <Setter Property="Cursor" Value="Wait" />
+        <Setter Property="IsHitTestVisible" Value="False" />
+        <Setter Property="AutomationProperties.ItemStatus" Value="Busy" />
+      </Trigger>
+    </Style.Triggers>
+  </Style>
+
+  <Style x:Key="Button.Icon" TargetType="Button" BasedOn="{StaticResource Button.Base}">
+    <Setter Property="MinHeight" Value="{StaticResource Height.Compact}" />
+    <Setter Property="MinWidth" Value="{StaticResource Height.Compact}" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="Background" Value="{x:Static media:Brushes.Transparent}" />
+    <Setter Property="Foreground" Value="{DynamicResource Brush.TextPrimary}" />
+    <Setter Property="BorderBrush" Value="{x:Static media:Brushes.Transparent}" />
+    <Setter Property="assist:ButtonAssist.HoverBackground" Value="{DynamicResource Brush.SurfaceHover}" />
+    <Setter Property="assist:ButtonAssist.PressedBackground" Value="{DynamicResource Brush.SurfacePressed}" />
+    <Style.Triggers>
+      <Trigger Property="IsEnabled" Value="False">
+        <Setter Property="Background" Value="{x:Static media:Brushes.Transparent}" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.TextDisabled}" />
+        <Setter Property="BorderBrush" Value="{x:Static media:Brushes.Transparent}" />
+        <Setter Property="Cursor" Value="Arrow" />
+      </Trigger>
+      <!-- Busy wins over disabled: a command that is running disables its button, but it must look busy, not dead. -->
+      <Trigger Property="assist:ButtonAssist.IsBusy" Value="True">
+        <Setter Property="Background" Value="{x:Static media:Brushes.Transparent}" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.TextPrimary}" />
+        <Setter Property="BorderBrush" Value="{x:Static media:Brushes.Transparent}" />
+        <Setter Property="Cursor" Value="Wait" />
+        <Setter Property="IsHitTestVisible" Value="False" />
+        <Setter Property="AutomationProperties.ItemStatus" Value="Busy" />
+      </Trigger>
+    </Style.Triggers>
+  </Style>
+
+  <Style TargetType="Button" BasedOn="{StaticResource Button.Secondary}" />
+</ResourceDictionary>

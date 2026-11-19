@@ -1,0 +1,44 @@
+<UserControl x:Class="Lifestream.Desktop.Features.ListScreens.ActionDetailPane"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:Lifestream.Desktop.Controls"
+             xmlns:feat="clr-namespace:Lifestream.Desktop.Features"
+             Focusable="False" IsTabStop="False">
+  <!-- The detail pane of a record whose actions are not just Edit and Delete (book, record a donation, fulfil, reset a password): the record's facts and, above them, the actions the screen puts in Actions. The data context is the list view model. -->
+  <UserControl.Resources>
+    <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+    <feat:NullToVisibleConverter x:Key="NullToVisible" />
+  </UserControl.Resources>
+  <Border Background="{DynamicResource Brush.SurfaceRaised}" CornerRadius="{DynamicResource Radius.Card}" Padding="{DynamicResource Pad.16}" AutomationProperties.Name="Details">
+    <DockPanel LastChildFill="True">
+    <Grid>
+      <TextBlock x:Name="NoSelection" Style="{DynamicResource Text.Body}" Foreground="{DynamicResource Brush.TextSecondary}" Text="{Binding NoSelectionText}" TextWrapping="Wrap"
+                 VerticalAlignment="Top" Visibility="{Binding SelectedItem, Converter={StaticResource NullToVisible}}" />
+      <controls:Skeleton Kind="Detail" Visibility="{Binding ShowDetailSkeleton, Converter={StaticResource BoolToVisibility}}" />
+      <controls:ErrorState Message="{Binding DetailError}" RetryCommand="{Binding RetryDetailCommand}" Visibility="{Binding HasDetailError, Converter={StaticResource BoolToVisibility}}" />
+      <Grid x:Name="DetailBody" Visibility="{Binding HasDetail, Converter={StaticResource BoolToVisibility}}">
+        <Grid.RowDefinitions>
+          <RowDefinition Height="Auto" />
+          <RowDefinition Height="Auto" />
+          <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <TextBlock Style="{DynamicResource Text.Heading}" Text="{Binding DetailTitle}" TextWrapping="Wrap" AutomationProperties.HeadingLevel="Level2" />
+        <ContentControl Grid.Row="1" Focusable="False" IsTabStop="False" feat:Edge.Top="{DynamicResource Space.12}" feat:Edge.Bottom="{DynamicResource Space.16}"
+                        Content="{Binding Actions, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Focusable="False">
+          <ItemsControl ItemsSource="{Binding DetailFacts}" Focusable="False" AutomationProperties.Name="Record details">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <StackPanel feat:Edge.Bottom="{DynamicResource Space.12}">
+                  <TextBlock Style="{DynamicResource Text.Caption}" Text="{Binding Label}" Foreground="{DynamicResource Brush.TextMuted}" />
+                  <TextBlock Style="{DynamicResource Text.Body}" Text="{Binding Value}" TextWrapping="Wrap" />
+                </StackPanel>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </ScrollViewer>
+      </Grid>
+    </Grid>
+    </DockPanel>
+  </Border>
+</UserControl>

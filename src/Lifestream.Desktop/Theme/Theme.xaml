@@ -1,0 +1,21 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <!-- Everything a window needs, in dependency order. Loaded once per UI thread by ThemeLoader and shared by every window. -->
+  <ResourceDictionary.MergedDictionaries>
+    <ResourceDictionary Source="/Lifestream;component/Theme/Tokens.xaml" />
+    <ResourceDictionary Source="/Lifestream;component/Theme/Motion.xaml" />
+    <ResourceDictionary Source="/Lifestream;component/Theme/ScrollBars.xaml" />
+    <ResourceDictionary Source="/Lifestream;component/Theme/Typography.xaml" />
+    <ResourceDictionary Source="/Lifestream;component/Theme/Images.xaml" />
+    <ResourceDictionary Source="/Lifestream;component/Controls/Buttons.xaml" />
+    <ResourceDictionary Source="/Lifestream;component/Controls/Menus.xaml" />
+    <ResourceDictionary Source="/Lifestream;component/Controls/Inputs.xaml" />
+    <ResourceDictionary Source="/Lifestream;component/Controls/Calendar.xaml" />
+    <ResourceDictionary Source="/Lifestream;component/Controls/Surfaces.xaml" />
+    <ResourceDictionary Source="/Lifestream;component/Controls/DataGridStyles.xaml" />
+    <ResourceDictionary Source="/Lifestream;component/Controls/PasswordField.xaml" />
+    <ResourceDictionary Source="/Lifestream;component/Controls/Toast.xaml" />
+    <ResourceDictionary Source="/Lifestream;component/Chrome/Chrome.xaml" />
+    <ResourceDictionary Source="/Lifestream;component/Shell/ShellStyles.xaml" />
+  </ResourceDictionary.MergedDictionaries>
+</ResourceDictionary>

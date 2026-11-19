@@ -1,0 +1,115 @@
+using System.Data;
+using Microsoft.Data.SqlClient;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
+
+namespace Lifestream.Data.Seed;
+
+/// <summary>
+/// Restores the demo data without a timer: the API calls <see cref="RunIfDueAsync"/> on the first authenticated request of each
+/// UTC day. An application lock (<c>sp_getapplock</c>) taken inside a serializable transaction makes sure exactly one caller
+/// does the work, however many arrive at once. Protected staff rows (the owner admin) and their audit rows are kept; every other
+/// table is rebuilt from <see cref="DemoDataGenerator"/>.
+/// </summary>
+public static class DemoReset
+{
+    public const string LockName = "lifestream-demo-reset";
+
+    /// <summary>A manual "Reset demo data" is allowed at most once in this time, for everyone together.</summary>
+    public static readonly TimeSpan ForceCooldown = TimeSpan.FromMinutes(10);
+
+    /// <summary>Resets when the last reset was before <paramref name="todayUtc"/>. Returns true for the one caller that did it.</summary>
+    public static Task<bool> RunIfDueAsync(LifestreamDbContext db, DateOnly todayUtc, CancellationToken cancellationToken) =>
+        ResetAsync(db, todayUtc, force: false, cancellationToken);
+
+    /// <summary>Resets now unless a manual reset already happened in the last <see cref="ForceCooldown"/>. Returns false inside the cooldown.</summary>
+    public static Task<bool> ForceAsync(LifestreamDbContext db, DateOnly todayUtc, CancellationToken cancellationToken) =>
+        ResetAsync(db, todayUtc, force: true, cancellationToken);
+
+    private static async Task<bool> ResetAsync(LifestreamDbContext db, DateOnly todayUtc, bool force, CancellationToken ct)
+    {
+        var previousAudit = db.AuditEnabled;
+        db.AuditEnabled = false;
+        try
+        {
+            var strategy = db.Database.CreateExecutionStrategy();
+            return await strategy.ExecuteAsync(async () =>
+            {
+                db.ChangeTracker.Clear();
+                await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
+                await TakeLockAsync(db, transaction.GetDbTransaction(), ct);
+
+                var state = await db.DemoState.SingleOrDefaultAsync(ct);
+                // A raw query returns Kind=Unspecified; the server clock is UTC by definition.
+                var serverNow = DateTime.SpecifyKind(await db.Database.SqlQuery<DateTime>($"SELECT SYSUTCDATETIME() AS [Value]").SingleAsync(ct), DateTimeKind.Utc);
+                var due = force
+                    ? state?.LastForcedResetAtUtc is not { } last || serverNow - last >= ForceCooldown
+                    : state?.LastResetDate is not { } lastDate || lastDate < todayUtc;
+                if (!due)
+                {
+                    await transaction.CommitAsync(ct);
+                    return false;
+                }
+
+                await WipeAsync(db, ct);
+                new DemoDataGenerator().Generate(todayUtc).AddTo(db);
+                if (state is null)
+                {
+                    state = new Entities.DemoState();
+                    db.DemoState.Add(state);
+                }
+
+                state.LastResetDate = todayUtc;
+                if (force)
+                {
+                    state.LastForcedResetAtUtc = serverNow;
+                }
+
+                await db.SaveChangesAsync(ct);
+                await transaction.CommitAsync(ct);
+                db.ChangeTracker.Clear();
+                return true;
+            });
+        }
+        finally
+        {
+            db.AuditEnabled = previousAudit;
+        }
+    }
+
+    private static async Task TakeLockAsync(LifestreamDbContext db, System.Data.Common.DbTransaction transaction, CancellationToken ct)
+    {
+        var connection = (SqlConnection)db.Database.GetDbConnection();
+        await using var command = connection.CreateCommand();
+        command.Transaction = (SqlTransaction)transaction;
+        command.CommandType = CommandType.StoredProcedure;
+        command.CommandText = "sp_getapplock";
+        command.Parameters.AddWithValue("@Resource", LockName);
+        command.Parameters.AddWithValue("@LockMode", "Exclusive");
+        command.Parameters.AddWithValue("@LockOwner", "Transaction");
+        command.Parameters.AddWithValue("@LockTimeout", 120_000);
+        var result = new SqlParameter("@result", SqlDbType.Int) { Direction = ParameterDirection.ReturnValue };
+        command.Parameters.Add(result);
+        await command.ExecuteNonQueryAsync(ct);
+        if ((int)result.Value < 0)
+        {
+            throw new InvalidOperationException($"Could not take the demo reset lock (sp_getapplock returned {result.Value}).");
+        }
+    }
+
+    /// <summary>Set-based deletes in foreign-key order. Protected staff, their tokens, photos and audit rows stay.</summary>
+    private static async Task WipeAsync(LifestreamDbContext db, CancellationToken ct)
+    {
+        await db.BloodBags.ExecuteDeleteAsync(ct);
+        await db.Receipts.ExecuteDeleteAsync(ct);
+        await db.Requests.ExecuteDeleteAsync(ct);
+        await db.Appointments.ExecuteDeleteAsync(ct);
+        await db.Patients.ExecuteDeleteAsync(ct);
+        await db.Donors.ExecuteDeleteAsync(ct);
+        await db.DeletedRecords.ExecuteDeleteAsync(ct);
+        await db.RefreshTokens.Where(t => !t.Staff!.IsProtected).ExecuteDeleteAsync(ct);
+        await db.StaffPhotos.Where(p => !p.Staff!.IsProtected).ExecuteDeleteAsync(ct);
+        await db.AuditLogs.Where(a => !db.Staff.Any(s => s.IsProtected && s.Id == a.StaffId)).ExecuteDeleteAsync(ct);
+        await db.Staff.Where(s => !s.IsProtected).ExecuteDeleteAsync(ct);
+    }
+}

@@ -1,0 +1,85 @@
+{
+  "dataset": "demo",
+  "generatedBy": "tools/generate-screenshots.ps1",
+  "source": "real API over a fresh database filled by DemoDataGenerator, signed in with Try the demo, data relative to 2026-11-19",
+  "dashboard": {
+    "Donors": 40,
+    "Patients": 35,
+    "Pending appointments": 70,
+    "Pending requests": 40,
+    "Units in stock": 37,
+    "Expiring within 7 days": 8
+  },
+  "files": [
+    {
+      "screen": "login",
+      "file": "login.png",
+      "width": 1366,
+      "height": 768,
+      "sha256": "294819b865c88e5f4e1cb3f5ae5010d757547507a7536f26ffcbd1394f8dac65"
+    },
+    {
+      "screen": "dashboard",
+      "file": "dashboard.png",
+      "width": 1366,
+      "height": 768,
+      "sha256": "8ba7d57e1c58779f9f17b80adb8d8739790bcb2060c94ade16765fa48456b3f5"
+    },
+    {
+      "screen": "donors",
+      "file": "donors.png",
+      "width": 1366,
+      "height": 768,
+      "sha256": "2370aa83201e6b4afa7fefb4dcd94330493008f86dbbc0161190bf3c1c13e42d"
+    },
+    {
+      "screen": "patients",
+      "file": "patients.png",
+      "width": 1366,
+      "height": 768,
+      "sha256": "c8fb1df9a581c5616926f241cb9faa361567b0195e4a17bd3b9650fa78f8a707"
+    },
+    {
+      "screen": "appointments",
+      "file": "appointments.png",
+      "width": 1366,
+      "height": 768,
+      "sha256": "1f0508b6dc873f3ce70d7757310f95747cb735ed8b72369fe182bb79c520b703"
+    },
+    {
+      "screen": "requests",
+      "file": "requests.png",
+      "width": 1366,
+      "height": 768,
+      "sha256": "b14fc2c19ca0c00ad48a6541db611134c6beba9646a953a70d6f7a931dde87ea"
+    },
+    {
+      "screen": "stock",
+      "file": "stock.png",
+      "width": 1366,
+      "height": 768,
+      "sha256": "ef5c6b2b40adf2f21ae34cf87eed3882aaa04499ba15aea426a11f67c25d2f37"
+    },
+    {
+      "screen": "receipts",
+      "file": "receipts.png",
+      "width": 1366,
+      "height": 768,
+      "sha256": "ba066f5440842cd545d582c73a54bc01431c106698b3c63f172832951ea64fd3"
+    },
+    {
+      "screen": "staff",
+      "file": "staff.png",
+      "width": 1366,
+      "height": 768,
+      "sha256": "bc819896fd15ca90f4210c3d33fddbf3830b608167646ccf362bd73960ea3c59"
+    },
+    {
+      "screen": "profile",
+      "file": "profile.png",
+      "width": 1366,
+      "height": 768,
+      "sha256": "308528c0737fad3b85440fa309d782538ce9c811e454e4a2db7f3b0f15510668"
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+<UserControl xmlns:controls="clr-namespace:Lifestream.Desktop.Controls" x:Class="Lifestream.Desktop.Controls.ToastView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Focusable="False" AutomationProperties.Name="Notification">
+  <UserControl.Resources>
+    <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+  </UserControl.Resources>
+  <Border MaxWidth="440" MinWidth="280" Margin="{DynamicResource Inset.T8}" Background="{DynamicResource Brush.SurfaceRaised}" BorderBrush="{DynamicResource Brush.BorderSubtle}"
+          BorderThickness="1" CornerRadius="{DynamicResource Radius.Card}">
+    <Grid>
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="4" />
+        <ColumnDefinition Width="*" />
+      </Grid.ColumnDefinitions>
+      <!-- Kind accent: always present, so a toast never changes size with its kind. -->
+      <Border x:Name="Accent" CornerRadius="{DynamicResource Radius.Left8}" />
+      <Grid Grid.Column="1" Margin="{DynamicResource Inset.L12T8R4B8}">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto" />
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="Auto" />
+          <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+        <controls:IconText x:Name="Icon" Style="{DynamicResource Text.Icon}" VerticalAlignment="Center" Margin="{DynamicResource Inset.R12}" />
+        <TextBlock x:Name="MessageText" Grid.Column="1" Style="{DynamicResource Text.Body}" Text="{Binding Message}" VerticalAlignment="Center"
+                   AutomationProperties.LiveSetting="Polite" />
+        <Button Grid.Column="2" Style="{DynamicResource Button.Ghost}" Content="{Binding ActionLabel}" Command="{Binding ActionCommand}" Margin="{DynamicResource Inset.L8}"
+                Visibility="{Binding HasAction, Converter={StaticResource BoolToVisibility}}" />
+        <Button Grid.Column="3" Style="{DynamicResource Button.Icon}" Command="{Binding DismissCommand}" AutomationProperties.Name="Dismiss notification" ToolTip="Dismiss">
+          <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE711;" FontSize="12" />
+        </Button>
+      </Grid>
+    </Grid>
+  </Border>
+</UserControl>

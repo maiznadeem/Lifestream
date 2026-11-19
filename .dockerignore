@@ -1,0 +1,26 @@
+**/bin/
+**/obj/
+**/.vs/
+**/TestResults/
+.git/
+.github/
+docs/
+tests/
+packaging/
+infra/
+tools/
+publish/
+Releases/
+src/Lifestream.Desktop/
+src/Lifestream.Client/
+*.md
+# Secrets and local settings never enter the build context
+.env
+.env.*
+**/secrets/
+**/appsettings.Local.json
+**/appsettings.*.Local.json
+*.pfx
+*.pem
+*.bak
+*.bacpac

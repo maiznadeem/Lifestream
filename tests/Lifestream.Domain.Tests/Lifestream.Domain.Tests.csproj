@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Lifestream.Domain\Lifestream.Domain.csproj" />
+    <ProjectReference Include="..\..\src\Lifestream.Contracts\Lifestream.Contracts.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net11.0-windows10.0.19041.0</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <!-- The end-to-end timing tests (EndToEnd/PerfTests.cs) are tagged Category=Perf and need the local API and fixture database that tests/perf/run-perf.ps1 starts; an explicit test filter replaces this default. -->
+    <VSTestTestCaseFilter>Category!=Perf</VSTestTestCaseFilter>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Lifestream.Desktop\Lifestream.Desktop.csproj" />
+    <!-- The demo dataset generator: the screenshot test checks the dashboard against the counts of the data the API was seeded with (EndToEnd/DemoScreenshotTests.cs). -->
+    <ProjectReference Include="..\..\src\Lifestream.Data\Lifestream.Data.csproj" />
+    <Using Include="System.Net.Http" />
+    <Using Include="System.IO" />
+    <!-- The fake API and the manual clock are shared with the Client tests, so both projects exercise the same fakes. -->
+    <Compile Include="..\Lifestream.Client.Tests\Fakes\*.cs" Link="Fakes\%(Filename)%(Extension)" />
+  </ItemGroup>
+</Project>

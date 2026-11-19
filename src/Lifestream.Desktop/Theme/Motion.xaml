@@ -1,0 +1,12 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:theme="clr-namespace:Lifestream.Desktop.Theme">
+  <!-- Motion tokens as Duration resources. The numbers are Motion.*.Milliseconds in Tokens.xaml; storyboard durations cannot be dynamic
+       resources, so MotionSettings (Theme/MotionSettings.cs) reads them when this dictionary loads and returns zero when Windows
+       "Animation effects" is off. -->
+  <x:Static x:Key="Motion.Fast" Member="theme:MotionSettings.Fast" />
+  <x:Static x:Key="Motion.Standard" Member="theme:MotionSettings.Standard" />
+  <x:Static x:Key="Motion.Shimmer" Member="theme:MotionSettings.Shimmer" />
+  <x:Static x:Key="Motion.SpinnerTurn" Member="theme:MotionSettings.SpinnerTurn" />
+  <x:Static x:Key="Motion.SpinnerRepeat" Member="theme:MotionSettings.SpinnerRepeat" />
+</ResourceDictionary>

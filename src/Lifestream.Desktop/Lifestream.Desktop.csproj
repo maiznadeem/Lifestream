@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net11.0-windows10.0.19041.0</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>Lifestream.Desktop</RootNamespace>
+    <AssemblyName>Lifestream</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- Own entry point (Program.Main) so Velopack can run its install hooks before WPF starts. -->
+    <StartupObject>Lifestream.Desktop.Program</StartupObject>
+    <!-- LibraryImport (source-generated P/Invoke) emits unsafe marshalling code. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="WPF-UI" />
+    <PackageReference Include="LiveChartsCore.SkiaSharpView.WPF" />
+    <PackageReference Include="CommunityToolkit.Mvvm" />
+    <PackageReference Include="Velopack" />
+    <ProjectReference Include="..\Lifestream.Client\Lifestream.Client.csproj" />
+    <InternalsVisibleTo Include="Lifestream.Desktop.Tests" />
+    <Content Include="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Inter, SIL Open Font License (Fonts/OFL.txt, version and hash in Fonts/README.md): the one font of the app, embedded in the executable. -->
+    <Resource Include="Fonts\InterVariable.ttf" />
+  </ItemGroup>
+</Project>

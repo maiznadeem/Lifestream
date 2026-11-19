@@ -1,0 +1,10 @@
+<UserControl xmlns:controls="clr-namespace:Lifestream.Desktop.Controls" x:Class="Lifestream.Desktop.Shell.AccessDeniedView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="460">
+    <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE72E;" FontSize="40" Foreground="{DynamicResource Brush.StatusWarning}" HorizontalAlignment="Center" Margin="{DynamicResource Gap.Field}" />
+    <TextBlock Style="{DynamicResource Text.Heading}" Text="You don't have access to this page" TextAlignment="Center" />
+    <TextBlock Style="{DynamicResource Text.Body}" Foreground="{DynamicResource Brush.TextSecondary}" Text="{Binding Message}" TextAlignment="Center" Margin="{DynamicResource Inset.T8}" />
+    <Button Style="{DynamicResource Button.Primary}" Content="{Binding PrimaryActionText}" Command="{Binding BackToDashboardCommand}" HorizontalAlignment="Center" Margin="{DynamicResource Inset.T24}" />
+  </StackPanel>
+</UserControl>

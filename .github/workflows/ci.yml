@@ -1,0 +1,217 @@
+name: CI
+
+# The gate. A pull request cannot merge when any job here fails: the build treats every compiler, analyzer and
+# NuGet audit warning as an error, and every test must pass.
+on:
+  pull_request:
+  push:
+    branches: [master, overhaul]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  api:
+    name: api (build, analyzers, Domain/Data/Api/Client tests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      # SQL Server 2025 for the data and API tests. Started here instead of as a `services:` block so the SA password is
+      # generated per run and masked, never written into the repository.
+      - name: Start SQL Server 2025
+        run: |
+          password="Aa1!$(openssl rand -hex 16)"
+          echo "::add-mask::$password"
+          docker run -d --name lifestream-sql -p 1433:1433 \
+            -e ACCEPT_EULA=Y -e "MSSQL_SA_PASSWORD=$password" \
+            mcr.microsoft.com/mssql/server:2025-latest
+          echo "LIFESTREAM_TEST_SQL=Server=localhost,1433;User Id=sa;Password=$password;TrustServerCertificate=true" >> "$GITHUB_ENV"
+          for attempt in $(seq 1 60); do
+            if docker logs lifestream-sql 2>&1 | grep -q "SQL Server is now ready for client connections"; then
+              echo "SQL Server ready after $attempt checks"
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs lifestream-sql | tail -50
+          echo "SQL Server did not become ready" >&2
+          exit 1
+
+      # Build and test output is written to a file, scanned (both scanners), and printed to the job log only after a clean scan
+      # (tools/run-logged.ps1); on a finding only a redacted summary is printed. The exit code is the command's own, or 1 on a finding.
+      # `dotnet build` takes ONE project (MSB1008 otherwise), so each test project is its own logged command.
+      - name: Build (warnings are errors)
+        shell: pwsh
+        run: |
+          $failed = 0
+          foreach ($project in 'Domain', 'Client', 'Api') {
+            ./tools/run-logged.ps1 -Log "$env:RUNNER_TEMP/test-logs/build-$project.log" -Command "dotnet build tests/Lifestream.$project.Tests -c Release"
+            if ($LASTEXITCODE -ne 0) { $failed++ }
+          }
+          if ($failed -gt 0) { exit 1 }
+
+      - name: Test
+        shell: pwsh
+        run: |
+          $failed = 0
+          ./tools/run-logged.ps1 -Log "$env:RUNNER_TEMP/test-logs/domain.log" -Command "dotnet test tests/Lifestream.Domain.Tests -c Release --no-build"
+          if ($LASTEXITCODE -ne 0) { $failed++ }
+          ./tools/run-logged.ps1 -Log "$env:RUNNER_TEMP/test-logs/client.log" -Command "dotnet test tests/Lifestream.Client.Tests -c Release --no-build"
+          if ($LASTEXITCODE -ne 0) { $failed++ }
+          ./tools/run-logged.ps1 -Log "$env:RUNNER_TEMP/test-logs/api.log" -Command "dotnet test tests/Lifestream.Api.Tests -c Release --no-build"
+          if ($LASTEXITCODE -ne 0) { $failed++ }
+          if ($failed -gt 0) { exit 1 }
+
+      - name: Scan the test logs for credentials
+        if: always()
+        shell: pwsh
+        run: ./tools/scan-artifacts.ps1 -Path "$env:RUNNER_TEMP/test-logs" -ReportPath "$env:RUNNER_TEMP/scan-test-logs.json"
+
+  desktop:
+    name: desktop (build whole solution, Desktop tests)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      # The runner context is not available in a job-level env, so the capture folder is set for the later steps here.
+      - name: Set the render capture folder
+        run: '"LIFESTREAM_CAPTURE_DIR=$env:RUNNER_TEMP\captures" >> $env:GITHUB_ENV'
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Gate, build (whole solution, warnings are errors)
+        run: ./tools/run-logged.ps1 -Log "$env:RUNNER_TEMP/test-logs/desktop-build.log" -Command "dotnet build Lifestream.slnx -c Release"
+
+      - name: Gate, Desktop and Client tests (off-screen renders, no window is shown)
+        run: |
+          New-Item -ItemType Directory -Force "$env:RUNNER_TEMP/test-logs", "$env:LIFESTREAM_CAPTURE_DIR" | Out-Null
+          ./tools/run-logged.ps1 -Log "$env:RUNNER_TEMP/test-logs/client.log" -Command "dotnet test tests/Lifestream.Client.Tests -c Release --no-build"
+          $client = $LASTEXITCODE
+          ./tools/run-logged.ps1 -Log "$env:RUNNER_TEMP/test-logs/desktop.log" -Command "dotnet test tests/Lifestream.Desktop.Tests -c Release --no-build"
+          $desktop = $LASTEXITCODE
+          if ($client -ne 0 -or $desktop -ne 0) { exit 1 }
+
+      # The captures are uploaded only after they and the test logs were scanned clean.
+      - name: Scan the test logs and render captures for credentials
+        id: scan-logs
+        if: always()
+        run: ./tools/scan-artifacts.ps1 -Path "$env:RUNNER_TEMP/test-logs","$env:LIFESTREAM_CAPTURE_DIR" -ReportPath "$env:RUNNER_TEMP/scan-test-logs.json"
+
+      - name: Upload render captures
+        if: always() && steps.scan-logs.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-captures
+          path: ${{ runner.temp }}\captures
+          if-no-files-found: ignore
+
+  # xUnit's default test order comes from the test assembly's path, so a test that leaks state into another passes in one checkout and
+  # fails in the next. A seeded order is the same on every machine, so this job runs every test project under two fixed seeds
+  # (`Lifestream.X.Tests :<seed>`, the xUnit v3 runner's seed argument) and fails the pull request when any run fails. A failing seed
+  # is reproduced locally with the same command; the build is the one the other jobs already prove.
+  test-order:
+    name: test order (${{ matrix.name }}, two fixed seeds each)
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Domain, Client, Api
+            os: ubuntu-latest
+            projects: "Domain Client Api"
+            sql: true
+          - name: Desktop
+            os: windows-latest
+            projects: "Desktop"
+            sql: false
+    env:
+      SEEDS: "20260101 987654321"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Start SQL Server 2025
+        if: matrix.sql
+        run: |
+          password="Aa1!$(openssl rand -hex 16)"
+          echo "::add-mask::$password"
+          docker run -d --name lifestream-sql -p 1433:1433 \
+            -e ACCEPT_EULA=Y -e "MSSQL_SA_PASSWORD=$password" \
+            mcr.microsoft.com/mssql/server:2025-latest
+          echo "LIFESTREAM_TEST_SQL=Server=localhost,1433;User Id=sa;Password=$password;TrustServerCertificate=true" >> "$GITHUB_ENV"
+          for attempt in $(seq 1 60); do
+            if docker logs lifestream-sql 2>&1 | grep -q "SQL Server is now ready for client connections"; then
+              echo "SQL Server ready after $attempt checks"
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs lifestream-sql | tail -50
+          echo "SQL Server did not become ready" >&2
+          exit 1
+
+      - name: Build the test projects (warnings are errors)
+        shell: pwsh
+        run: |
+          $failed = 0
+          foreach ($project in '${{ matrix.projects }}' -split ' ') {
+            ./tools/run-logged.ps1 -Log "$env:RUNNER_TEMP/test-logs/order-build-$project.log" -Command "dotnet build tests/Lifestream.$project.Tests -c Release"
+            if ($LASTEXITCODE -ne 0) { $failed++ }
+          }
+          if ($failed -gt 0) { exit 1 }
+
+      # Every project and seed runs even when an earlier one failed, so one pull request shows all the order failures at once.
+      # The test program of each project runs inside tools/run-logged.ps1 too (file first, scan, then print), in its own folder.
+      - name: Test, two fixed seeds per project
+        shell: pwsh
+        env:
+          LIFESTREAM_CAPTURE_DIR: ${{ runner.temp }}/captures
+        run: |
+          New-Item -ItemType Directory -Force "$env:RUNNER_TEMP/test-logs", "$env:LIFESTREAM_CAPTURE_DIR" | Out-Null
+          $env:DOTNET_HOST_PATH = (Get-Command dotnet).Source
+          $fail = 0
+          foreach ($project in '${{ matrix.projects }}' -split ' ') {
+            $testDir = (Get-ChildItem "tests/Lifestream.$project.Tests/bin/Release" -Directory -Filter 'net11.0*' | Select-Object -First 1).FullName
+            $testExe = Join-Path $testDir "Lifestream.$project.Tests"
+            if (Test-Path "$testExe.exe") { $testExe = "$testExe.exe" }
+            foreach ($seed in $env:SEEDS -split ' ') {
+              Write-Host "::group::$project, seed $seed"
+              # The command is single-quoted: $testDir, $testExe and $seed are read by the wrapper's scriptblock from this script's variables.
+              ./tools/run-logged.ps1 -Log "$env:RUNNER_TEMP/test-logs/order-$project-$seed.log" -Command 'Push-Location "$testDir"; & "$testExe" ":$seed" -noLogo -notrait "Category=Perf"; Pop-Location'
+              $status = $LASTEXITCODE
+              Write-Host '::endgroup::'
+              if ($status -ne 0) {
+                Write-Host "::error::$project failed under seed $seed (exit $status). Reproduce: Lifestream.$project.Tests :$seed"
+                $fail = 1
+              }
+            }
+          }
+          exit $fail
+
+      - name: Scan the test logs for credentials
+        if: always()
+        shell: pwsh
+        run: ./tools/scan-artifacts.ps1 -Path "$env:RUNNER_TEMP/test-logs" -ReportPath "$env:RUNNER_TEMP/scan-test-logs.json"
+

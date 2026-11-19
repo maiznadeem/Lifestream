@@ -1,0 +1,244 @@
+name: Deploy API
+
+# Separate from the PR build (ci.yml). Runs on a push to master that touches the API, its libraries or the
+# infrastructure, after its own build-and-test gate. Signs in to Azure with GitHub OIDC (no stored cloud secret; the
+# only secret used is the built-in GITHUB_TOKEN). Order: gate, image (built, scanned, then pushed), SQL firewall sync (only the
+# environment's outbound addresses), migrate job, app update, health check, prune old image versions. The decisions
+# (firewall set, which image versions to delete or keep, the count and manifest checks) live in scripts under infra/ and tools/ with
+# Pester tests (tests/infra), not in this file.
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'src/Lifestream.Api/**'
+      - 'src/Lifestream.Data/**'
+      - 'src/Lifestream.Contracts/**'
+      - 'src/Lifestream.Domain/**'
+      - 'infra/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-api
+  cancel-in-progress: false
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  IMAGE: ghcr.io/maiznadeem/lifestream-api
+  AZURE_RESOURCE_GROUP: Lifestream
+  CONTAINER_APP: lifestream-api
+  MIGRATE_JOB: lifestream-migrate
+  CONTAINER_ENVIRONMENT: lifestream-env
+  SQL_SERVER: lifestream-server
+  # An identifier, not a secret. Every az command passes it explicitly so it can never run against the CLI's default subscription.
+  AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+jobs:
+  gate:
+    name: gate (build and tests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Start SQL Server 2025
+        run: |
+          password="Aa1!$(openssl rand -hex 16)"
+          echo "::add-mask::$password"
+          docker run -d --name lifestream-sql -p 1433:1433 \
+            -e ACCEPT_EULA=Y -e "MSSQL_SA_PASSWORD=$password" \
+            mcr.microsoft.com/mssql/server:2025-latest
+          echo "LIFESTREAM_TEST_SQL=Server=localhost,1433;User Id=sa;Password=$password;TrustServerCertificate=true" >> "$GITHUB_ENV"
+          for attempt in $(seq 1 60); do
+            if docker logs lifestream-sql 2>&1 | grep -q "SQL Server is now ready for client connections"; then
+              echo "SQL Server ready after $attempt checks"
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs lifestream-sql | tail -50
+          echo "SQL Server did not become ready" >&2
+          exit 1
+
+      # Build and test output goes to a file, is scanned (both scanners) and is printed to the job log only after a clean scan
+      # (tools/run-logged.ps1). `dotnet build` takes ONE project (MSB1008 otherwise), so each test project is its own command.
+      - name: Build (warnings are errors)
+        shell: pwsh
+        run: |
+          $failed = 0
+          foreach ($project in 'Domain', 'Client', 'Api') {
+            ./tools/run-logged.ps1 -Log "$env:RUNNER_TEMP/gate-logs/build-$project.log" -Command "dotnet build tests/Lifestream.$project.Tests -c Release"
+            if ($LASTEXITCODE -ne 0) { $failed++ }
+          }
+          if ($failed -gt 0) { exit 1 }
+
+      - name: Test
+        shell: pwsh
+        run: |
+          $failed = 0
+          foreach ($project in 'Domain', 'Client', 'Api') {
+            ./tools/run-logged.ps1 -Log "$env:RUNNER_TEMP/gate-logs/test-$project.log" -Command "dotnet test tests/Lifestream.$project.Tests -c Release --no-build"
+            if ($LASTEXITCODE -ne 0) { $failed++ }
+          }
+          if ($failed -gt 0) { exit 1 }
+
+  image:
+    name: image (build, scan, push)
+    needs: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sign in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Single architecture, no provenance or SBOM attestation: each version is exactly one manifest, so pruning the old
+      # versions can never orphan a manifest list.
+      # The build log is kept (bash with pipefail, so a failed build still fails the step) and scanned like the image.
+      - name: Build image (not pushed yet)
+        shell: bash
+        run: >
+          pwsh -NoProfile -File tools/run-logged.ps1 -Log "$RUNNER_TEMP/docker-build.log" -Command
+          "docker buildx build --progress=plain --provenance=false --sbom=false --platform linux/amd64 --load
+          -f src/Lifestream.Api/Dockerfile -t $IMAGE:$GITHUB_SHA ."
+
+      # A credential in the image would be public the moment the package is pushed, so the scan comes first: every layer, the
+      # image configuration, and the build log.
+      - name: Scan the image layers, configuration and build log for credentials
+        run: |
+          tools/scan-image.sh "$IMAGE:$GITHUB_SHA" "$RUNNER_TEMP/image-scan-report.json"
+          pwsh -NoProfile -File tools/scan-artifacts.ps1 -Path "$RUNNER_TEMP/docker-build.log" -ReportPath "$RUNNER_TEMP/build-log-scan-report.json"
+
+      - name: Push image
+        run: docker push "$IMAGE:$GITHUB_SHA"
+
+      - name: Upload scan report (no values, only file, rule and offset)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-scan-report
+          path: |
+            ${{ runner.temp }}/image-scan-report.json
+            ${{ runner.temp }}/build-log-scan-report.json
+          if-no-files-found: ignore
+
+  deploy:
+    name: deploy (migrate, update, health check, prune)
+    needs: image
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      id-token: write # OIDC token for azure/login
+      contents: read
+      packages: write # prune old image versions
+    steps:
+      - uses: actions/checkout@v4
+
+      # Client, tenant and subscription ids are identifiers, not secrets: repository variables.
+      - name: Sign in to Azure (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Install the Container Apps CLI extension
+        run: az extension add --name containerapp --upgrade --only-show-errors
+
+      # Runs BEFORE the migration job: the job connects from the same outbound addresses, so if Azure changed them since the last
+      # deploy the migration would otherwise be refused by the firewall before this step could fix it. Entra-only authentication is
+      # checked by the script itself (it refuses to open the firewall while SQL logins are still on). When a CanNotDelete lock on the
+      # server blocks deleting a stale rule, the script removes the lock, deletes, and puts it back (see infra/sync-sql-firewall.ps1).
+      # The API reaches Azure SQL from the environment's outbound addresses, which Azure may change. The script makes the firewall
+      # exactly that set (aca-outbound-<n>) and deletes every other rule; it fails, deleting nothing, if no address is returned.
+      - name: Sync the SQL firewall to the environment's outbound addresses
+        shell: pwsh
+        run: ./infra/sync-sql-firewall.ps1 -SubscriptionId $env:AZURE_SUBSCRIPTION_ID -ResourceGroup $env:AZURE_RESOURCE_GROUP -Server $env:SQL_SERVER -Environment $env:CONTAINER_ENVIRONMENT
+
+      - name: Run the migration job
+        run: |
+          set -euo pipefail
+          az containerapp job update --name "$MIGRATE_JOB" --resource-group "$AZURE_RESOURCE_GROUP" --subscription "$AZURE_SUBSCRIPTION_ID" \
+            --image "$IMAGE:$GITHUB_SHA" --only-show-errors --output none
+          execution="$(az containerapp job start --name "$MIGRATE_JOB" --resource-group "$AZURE_RESOURCE_GROUP" --subscription "$AZURE_SUBSCRIPTION_ID" \
+            --query name --output tsv)"
+          echo "Started job execution: $execution"
+          # Proof of life: the execution must report a status within 5 minutes, otherwise the watcher exits NO SIGNAL.
+          # The job's own timeout is 15 minutes (replicaTimeout 900), so the deadline is that plus a margin.
+          started=$(date +%s); first_status=""; failures=0
+          while true; do
+            now=$(date +%s); elapsed=$((now - started))
+            if status="$(az containerapp job execution show --name "$MIGRATE_JOB" --resource-group "$AZURE_RESOURCE_GROUP" --subscription "$AZURE_SUBSCRIPTION_ID" \
+                --job-execution-name "$execution" --query properties.status --output tsv 2>/dev/null)"; then
+              failures=0
+            else
+              failures=$((failures + 1)); status=""
+              if [ "$failures" -ge 10 ]; then echo "WATCHER BROKEN: status query failed 10 times in a row" >&2; exit 1; fi
+            fi
+            if [ -n "$status" ] && [ -z "$first_status" ]; then first_status="$status"; echo "Execution status first seen after ${elapsed}s: $status"; fi
+            case "$status" in
+              Succeeded) echo "MIGRATION SUCCEEDED after ${elapsed}s"; exit 0 ;;
+              Failed|Degraded|Stopped) echo "MIGRATION FAILED (status $status) after ${elapsed}s" >&2; exit 1 ;;
+            esac
+            if [ -z "$first_status" ] && [ "$elapsed" -ge 300 ]; then echo "NO SIGNAL: execution $execution reported no status in 5 minutes" >&2; exit 1; fi
+            if [ "$elapsed" -ge 1080 ]; then echo "TIMEOUT: execution still '$status' after ${elapsed}s" >&2; exit 1; fi
+            sleep 10
+          done
+
+      - name: Update the container app
+        run: |
+          az containerapp update --name "$CONTAINER_APP" --resource-group "$AZURE_RESOURCE_GROUP" --subscription "$AZURE_SUBSCRIPTION_ID" \
+            --image "$IMAGE:$GITHUB_SHA" --only-show-errors --output none
+
+      - name: Wait for /healthz to return 200 (up to 5 minutes)
+        run: |
+          set -euo pipefail
+          fqdn="$(az containerapp show --name "$CONTAINER_APP" --resource-group "$AZURE_RESOURCE_GROUP" --subscription "$AZURE_SUBSCRIPTION_ID" \
+            --query properties.configuration.ingress.fqdn --output tsv)"
+          [ -n "$fqdn" ] || { echo "NO SIGNAL: the container app has no ingress address" >&2; exit 1; }
+          url="https://$fqdn/healthz"
+          started=$(date +%s)
+          while true; do
+            code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$url" || true)"
+            elapsed=$(( $(date +%s) - started ))
+            echo "GET $url -> ${code:-000} (${elapsed}s)"
+            if [ "$code" = "200" ]; then echo "HEALTHY after ${elapsed}s"; exit 0; fi
+            if [ "$elapsed" -ge 300 ]; then echo "TIMEOUT: /healthz did not return 200 within 5 minutes (last status ${code:-000})" >&2; exit 1; fi
+            sleep 5
+          done
+
+      # Runs only after a green health check. The guards (keep at least 1, the deployed tag must exist and be among the newest 3,
+      # an empty list is an error) are in tools/prune-image-versions.ps1 and tested in tests/infra/ImageVersions.Tests.ps1.
+      - name: Prune old image versions (keep the newest 3)
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./tools/prune-image-versions.ps1 -Owner $env:GITHUB_REPOSITORY_OWNER -Package lifestream-api -DeployedTag $env:GITHUB_SHA -Keep 3
+
+      - name: Sign in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify at most 3 versions remain, the deployed tag is among them and its manifest inspects
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./tools/verify-image-versions.ps1 -Owner $env:GITHUB_REPOSITORY_OWNER -Package lifestream-api -Image $env:IMAGE -DeployedTag $env:GITHUB_SHA -Max 3

@@ -1,0 +1,170 @@
+using Lifestream.Data.Entities;
+using Lifestream.Domain;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using static Lifestream.Data.Configurations.ConfigurationHelpers;
+
+namespace Lifestream.Data.Configurations;
+
+internal sealed class DonorConfiguration : IEntityTypeConfiguration<Donor>
+{
+    public void Configure(EntityTypeBuilder<Donor> b)
+    {
+        b.Table(
+            "Donor",
+            ("BloodType", InList<BloodType>("BloodType")),
+            ("Gender", InList<Gender>("Gender")),
+            ("Frequency", InList<DonorFrequency>("Frequency")));
+        b.Property(x => x.Name).HasMaxLength(100).UseCollation(NameCollation);
+        b.Property(x => x.Phone).HasMaxLength(20).IsUnicode(false);
+        b.Property(x => x.Address).HasMaxLength(200);
+        b.Property(x => x.RowVersion).IsRowVersion();
+
+        // The list shows these columns; every index the list is sorted by carries them, so a page never goes back to the table.
+        b.HasIndex(x => x.Name).IncludeProperties(x => new { x.DateOfBirth, x.Gender, x.BloodType, x.Phone, x.Frequency, x.LastDonated, x.MedicalHold });
+        b.HasIndex(x => new { x.BloodType, x.Name }).IncludeProperties(x => new { x.DateOfBirth, x.Gender, x.Phone, x.Frequency, x.LastDonated, x.MedicalHold });
+        b.HasIndex(x => x.LastDonated).IncludeProperties(x => new { x.Name, x.DateOfBirth, x.Gender, x.BloodType, x.Phone, x.Frequency, x.MedicalHold });
+        b.HasIndex(x => new { x.BloodType, x.LastDonated }).IncludeProperties(x => new { x.Name, x.DateOfBirth, x.Gender, x.Phone, x.Frequency, x.MedicalHold });
+        b.HasIndex(x => x.Phone);
+        b.HasIndex(x => x.Gender);
+    }
+}
+
+internal sealed class PatientConfiguration : IEntityTypeConfiguration<Patient>
+{
+    public void Configure(EntityTypeBuilder<Patient> b)
+    {
+        b.Table(
+            "Patient",
+            ("BloodType", InList<BloodType>("BloodType")),
+            ("Gender", InList<Gender>("Gender")));
+        b.Property(x => x.Name).HasMaxLength(100).UseCollation(NameCollation);
+        b.Property(x => x.Phone).HasMaxLength(20).IsUnicode(false);
+        b.Property(x => x.Address).HasMaxLength(200);
+        b.Property(x => x.RowVersion).IsRowVersion();
+
+        b.HasIndex(x => x.Name).IncludeProperties(x => new { x.DateOfBirth, x.Gender, x.BloodType, x.Phone });
+        b.HasIndex(x => new { x.BloodType, x.Name }).IncludeProperties(x => new { x.DateOfBirth, x.Gender, x.Phone });
+        b.HasIndex(x => x.Phone);
+        b.HasIndex(x => x.Gender);
+    }
+}
+
+internal sealed class StaffCredentialConfiguration : IEntityTypeConfiguration<StaffCredential>
+{
+    /// <summary>
+    /// The most of an ASP.NET Core Identity v3 hash that a T-SQL CHECK can verify (no function may be created, and XML methods
+    /// are not allowed in a CHECK, so the base64 text is inspected with LIKE under a binary collation, where case matters):
+    /// <list type="bullet">
+    /// <item>base64 alphabet only (<c>A-Za-z0-9+/</c>), padding <c>=</c> only at the end and at most two;</item>
+    /// <item>a length that is a multiple of 4, at least 84 characters (13 header bytes + 16 salt bytes + 32 subkey bytes, 61
+    /// bytes decoded) and at most 256;</item>
+    /// <item>the exact header: byte 0 = 0x01 (v3), bytes 1-4 = 2 (PRF HMAC-SHA512), byte 5 = 0 (so under 2^24 iterations),
+    /// bytes 9-12 = 16 (salt length). Base64 characters 1-8 are therefore <c>AQAAAAIA</c> and 13-17 are <c>AAAAE</c>.</item>
+    /// </list>
+    /// What it cannot check: the iteration count floor (the application's <c>PasswordHashing.IsValidHash</c> does) and that
+    /// the salt and subkey are random. Plain text and anything that breaks the header or the base64 shape cannot pass; base64-looking
+    /// text behind a valid header can (a real hash with a low iteration count passes too), so only the application's check is complete.
+    /// </summary>
+    public const string HashCheck =
+        "LEN([PasswordHash]) BETWEEN 84 AND 256 AND LEN([PasswordHash]) % 4 = 0 " +
+        "AND [PasswordHash] NOT LIKE '%[^A-Za-z0-9+/=]%' COLLATE Latin1_General_100_BIN2 " +
+        "AND [PasswordHash] NOT LIKE '%=%[^=]%' COLLATE Latin1_General_100_BIN2 " +
+        "AND [PasswordHash] NOT LIKE '%===%' COLLATE Latin1_General_100_BIN2 " +
+        "AND [PasswordHash] LIKE 'AQAAAAIA____AAAAE%' COLLATE Latin1_General_100_BIN2";
+
+    public void Configure(EntityTypeBuilder<StaffCredential> b)
+    {
+        b.Table("StaffCredential", ("PasswordHash", HashCheck));
+        b.HasKey(x => x.StaffId);
+        b.Property(x => x.PasswordHash).HasMaxLength(256).IsUnicode(false);
+        b.Property(x => x.MustChangePassword).HasDefaultValue(false);
+        b.Property(x => x.SecurityStamp).HasDefaultValueSql("NEWID()");
+        b.Property(x => x.RowVersion).IsRowVersion();
+        b.HasOne(x => x.Staff).WithOne(s => s.Credential).HasForeignKey<StaffCredential>(x => x.StaffId).OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+internal sealed class UnknownLoginConfiguration : IEntityTypeConfiguration<UnknownLogin>
+{
+    public void Configure(EntityTypeBuilder<UnknownLogin> b)
+    {
+        b.Table("UnknownLogin");
+
+        // The same collation as Staff.Username: two spellings the database treats as one user name are one row here too.
+        b.Property(x => x.Name).HasMaxLength(UnknownLogin.MaxNameLength).UseCollation(UsernameCollation);
+        b.HasIndex(x => x.Name).IsUnique();
+        b.HasIndex(x => x.ExpiresAtUtc);
+    }
+}
+
+internal sealed class DemoRevocationConfiguration : IEntityTypeConfiguration<DemoRevocation>
+{
+    public void Configure(EntityTypeBuilder<DemoRevocation> b)
+    {
+        b.Table("DemoRevocation");
+        b.HasKey(x => x.Key);
+        b.Property(x => x.Key).HasMaxLength(40).IsUnicode(false).UseCollation("Latin1_General_100_BIN2");
+        b.HasIndex(x => x.ExpiresAtUtc);
+    }
+}
+
+internal sealed class StaffConfiguration : IEntityTypeConfiguration<Staff>
+{
+    public void Configure(EntityTypeBuilder<Staff> b)
+    {
+        b.Table(
+            "Staff",
+            ("Gender", InList<Gender>("Gender")),
+            ("Designation", InList<Designation>("Designation")),
+            ("Shift", InList<Shift>("Shift")),
+            ("Role", InList<Role>("Role")),
+            ("Salary", "[Salary] IS NULL OR [Salary] >= 0"));
+        b.Property(x => x.DisplayName).HasMaxLength(100).UseCollation(NameCollation);
+        b.Property(x => x.Username).HasMaxLength(50).UseCollation(UsernameCollation);
+        b.Property(x => x.Phone).HasMaxLength(20).IsUnicode(false);
+        b.Property(x => x.CreatedAtUtc).HasDefaultValueSql(UtcNow);
+        b.Property(x => x.RowVersion).IsRowVersion();
+        b.HasIndex(x => x.Username).IsUnique();
+        b.HasIndex(x => x.DisplayName);
+
+        // Every demo request resolves the demo account (WHERE IsDemo = 1) and every login excludes it: one tiny filtered index holds just that row.
+        // The other columns the API filters Staff by have an index too (every filtered column is indexed, whatever the table's size today): Salary (the salary range),
+        // Role (the administrator checks) and IsProtected (what the demo account may see).
+        b.HasIndex(x => x.Salary);
+        b.HasIndex(x => x.Role);
+        b.HasIndex(x => x.IsProtected);
+        b.HasIndex(x => x.IsDemo).HasFilter("[IsDemo] = 1").IncludeProperties(x => x.DisplayName);
+    }
+}
+
+internal sealed class StaffPhotoConfiguration : IEntityTypeConfiguration<StaffPhoto>
+{
+    public void Configure(EntityTypeBuilder<StaffPhoto> b)
+    {
+        b.Table(
+            "StaffPhoto",
+            ("Size", $"DATALENGTH([Content]) BETWEEN 1 AND {StaffPhoto.MaxBytes}"),
+            ("Pixels", $"[Width] BETWEEN 1 AND {StaffPhoto.MaxPixels} AND [Height] BETWEEN 1 AND {StaffPhoto.MaxPixels}"));
+        b.HasKey(x => x.StaffId);
+        b.Property(x => x.Content).HasMaxLength(StaffPhoto.MaxBytes);
+        b.Property(x => x.ContentType).HasMaxLength(50).IsUnicode(false);
+        b.Property(x => x.UpdatedAtUtc).HasDefaultValueSql(UtcNow);
+        b.HasOne(x => x.Staff).WithOne().HasForeignKey<StaffPhoto>(x => x.StaffId).OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+internal sealed class RefreshTokenConfiguration : IEntityTypeConfiguration<RefreshToken>
+{
+    public void Configure(EntityTypeBuilder<RefreshToken> b)
+    {
+        b.Table("RefreshToken");
+        b.Property(x => x.TokenHash).HasMaxLength(128).IsUnicode(false);
+        b.Property(x => x.CreatedAtUtc).HasDefaultValueSql(UtcNow);
+        b.HasOne(x => x.Staff).WithMany().HasForeignKey(x => x.StaffId).OnDelete(DeleteBehavior.Cascade);
+        b.HasIndex(x => x.TokenHash).IsUnique();
+        b.HasIndex(x => x.StaffId);
+        b.HasIndex(x => x.FamilyId);
+        b.HasIndex(x => x.ExpiresAtUtc);
+    }
+}
