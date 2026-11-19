@@ -77,7 +77,7 @@ public sealed class AppointmentsViewModel : SortedRecordListViewModel<Appointmen
         {
             if (parameter is AppointmentListItem item)
             {
-                await _navigation.NavigateTo<DonorsViewModel>(new ListPrefilter(Search: item.DonorName)).ConfigureAwait(true);
+                await _navigation.NavigateTo<DonorsViewModel>(new ListPrefilter(RecordId: item.DonorId)).ConfigureAwait(true);
             }
         });
         ViewReceiptCommand = new AsyncRelayCommand(_ => Detail?.ReceiptId is { } id ? _receipts.ShowAsync(id, isDuplicate: true) : Task.CompletedTask, () => Detail?.ReceiptId is not null);

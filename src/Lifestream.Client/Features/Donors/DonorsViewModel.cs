@@ -1,6 +1,8 @@
 using Lifestream.Client.Api;
 using Lifestream.Client.Common;
+using Lifestream.Client.Features.Appointments;
 using Lifestream.Client.Features.ListScreens;
+using Lifestream.Client.Navigation;
 using Lifestream.Contracts;
 using Lifestream.Contracts.Donors;
 using Lifestream.Domain;
@@ -9,9 +11,31 @@ using ContractSortKeys = Lifestream.Contracts.SortKeys;
 namespace Lifestream.Client.Features.Donors;
 
 /// <summary>The Donors screen: a paged, filterable list with the selected donor's detail beside it and the editor in a drawer (FEAT-01 to FEAT-08).</summary>
-public sealed class DonorsViewModel(ILifestreamApiClient api, IListViewStateStore states, IToastService toasts, IDialogService dialogs, IUiDispatcher ui)
-    : SortedRecordListViewModel<DonorListItem, DonorDetail>(states, "donors", toasts, dialogs, ui)
+public sealed class DonorsViewModel : SortedRecordListViewModel<DonorListItem, DonorDetail>
 {
+    private readonly ILifestreamApiClient api;
+    private readonly INavigationService navigation;
+
+    public DonorsViewModel(ILifestreamApiClient api, IListViewStateStore states, IToastService toasts, IDialogService dialogs, INavigationService navigation, IUiDispatcher ui)
+        : base(states, "donors", toasts, dialogs, ui)
+    {
+        this.api = api;
+        this.navigation = navigation;
+        BookAppointmentCommand = new AsyncRelayCommand(
+            _ => Detail is { } donor ? this.navigation.NavigateTo<AppointmentsViewModel>(new RelatedRecord(RecordKind.Donor, donor.Id, donor.Name)) : Task.CompletedTask,
+            () => Detail is not null && !IsEditing);
+        PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(Detail) or nameof(Editor))
+            {
+                BookAppointmentCommand.RaiseCanExecuteChanged();
+            }
+        };
+    }
+
+    /// <summary>"Book appointment" on the selected donor: opens the booking form on the Appointments screen with this donor already chosen (FEAT-04).</summary>
+    public AsyncRelayCommand BookAppointmentCommand { get; }
+
     public override string PageTitle => "Donors";
 
     protected override string PluralName => "donors";

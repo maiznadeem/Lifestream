@@ -8,8 +8,10 @@ namespace Lifestream.Client.Features.ListScreens;
 /// <summary>
 /// Passed to a list screen when another screen opens it already filtered (a dashboard card, FEAT-30). Every member is optional.
 /// <see cref="Status"/> is for screens that have a status filter (appointments, requests); <see cref="StockView"/> is for the stock screen.
+/// <see cref="RecordId"/> opens that exact record: it is selected in the list when it is on the page and its detail is shown either way (a link from
+/// another screen names the record by id, never by a name search, so two people with one name can't be mixed up, FEAT-14).
 /// </summary>
-public sealed record ListPrefilter(BloodType? BloodType = null, string? Search = null, string? Status = null, StockFilter? StockView = null);
+public sealed record ListPrefilter(BloodType? BloodType = null, string? Search = null, string? Status = null, StockFilter? StockView = null, int? RecordId = null);
 
 /// <summary>Passed to another screen to start an action on a record (for example "book an appointment for this donor").</summary>
 public sealed record RelatedRecord(RecordKind Kind, int Id, string Name);
@@ -33,6 +35,7 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
 {
     private CancellationTokenSource? _detailCts;
     private int? _selectedId;
+    private int? _openedId; // a record another screen asked to open by id: kept selected while it is not on the loaded page
     private bool _applying;
     private TDetail? _fetchedDetail;
     private IReadOnlyList<DetailFact> _fetchedExtraFacts = [];
@@ -201,6 +204,13 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
             SetSearchWithoutRefresh(search);
         }
 
+        if (prefilter.RecordId is { } recordId)
+        {
+            _selectedId = recordId;
+            _openedId = recordId;
+            PendingDetail = LoadDetailAsync(recordId); // the detail does not wait for the list, and does not depend on the record being on its first page
+        }
+
         OnFiltersChanged();
     }
 
@@ -221,7 +231,7 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
             // Keep the same record selected across a refresh (a page change, a filter, a demo reset).
             var keep = _selectedId is { } id ? Items.FirstOrDefault(i => IdOf(i) == id) : null;
             SelectedItem = keep;
-            if (keep is null && _selectedId is not null)
+            if (keep is null && _selectedId is not null && _selectedId != _openedId)
             {
                 ClearDetail();
             }
@@ -240,6 +250,7 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
         }
 
         _selectedId = value is null ? null : IdOf(value);
+        _openedId = null; // the user chose something themselves
         if (value is null)
         {
             ClearDetail();

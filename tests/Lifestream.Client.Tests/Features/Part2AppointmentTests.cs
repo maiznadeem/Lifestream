@@ -482,7 +482,8 @@ public sealed class Part2AppointmentTests
 
         var visit = Assert.Single(rig.Navigation.Visits);
         Assert.Equal(typeof(DonorsViewModel), visit.ViewModel);
-        Assert.Equal("Omar Haddad", ((ListPrefilter)visit.Parameter!).Search);
+        Assert.Equal(42, ((ListPrefilter)visit.Parameter!).RecordId); // the record, by id (RecordLinkTests covers the rest)
+        Assert.Null(((ListPrefilter)visit.Parameter!).Search);
     }
 
     [Fact]

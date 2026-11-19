@@ -23,7 +23,10 @@ public sealed class FeatureRig
         Toasts = new ToastService(Ui, Clock);
         Dialogs = new FakeDialogs();
         States = new ListViewStateStore();
+        Navigation = new FakeNavigation();
     }
+
+    public FakeNavigation Navigation { get; }
 
     public FakeApiClient Fake { get; }
 
@@ -46,14 +49,14 @@ public sealed class FeatureRig
 
     public DonorsViewModel Donors()
     {
-        var vm = new DonorsViewModel(Api, States, Toasts, Dialogs, Ui);
+        var vm = new DonorsViewModel(Api, States, Toasts, Dialogs, Navigation, Ui);
         vm.Attach(null, Clock);
         return vm;
     }
 
     public PatientsViewModel Patients()
     {
-        var vm = new PatientsViewModel(Api, States, Toasts, Dialogs, Ui);
+        var vm = new PatientsViewModel(Api, States, Toasts, Dialogs, Navigation, Ui);
         vm.Attach(null, Clock);
         return vm;
     }

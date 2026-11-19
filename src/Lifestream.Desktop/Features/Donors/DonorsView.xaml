@@ -61,7 +61,16 @@
         </Grid>
       </controls:LoadSurface>
       <Grid Grid.Column="2">
-        <lists:RecordDetailPane Visibility="{Binding Editor, Converter={StaticResource NullToVisible}}" />
+        <lists:RecordDetailPane Visibility="{Binding Editor, Converter={StaticResource NullToVisible}}">
+          <lists:RecordDetailPane.RelatedActions>
+            <Button Style="{DynamicResource Button.Secondary}" Command="{Binding BookAppointmentCommand}" AutomationProperties.Name="Book appointment">
+              <StackPanel Orientation="Horizontal">
+                <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE787;" feat:Edge.Right="{DynamicResource Space.8}" VerticalAlignment="Center" />
+                <TextBlock Text="Book appointment" VerticalAlignment="Center" />
+              </StackPanel>
+            </Button>
+          </lists:RecordDetailPane.RelatedActions>
+        </lists:RecordDetailPane>
         <ContentControl Content="{Binding Editor}" ContentTemplateSelector="{x:Static services:ViewLocator.Instance}" IsTabStop="False" Focusable="False"
                         HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" Visibility="{Binding Editor, Converter={StaticResource NullToCollapsed}}" />
       </Grid>

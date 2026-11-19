@@ -94,22 +94,51 @@ public sealed class ReceiptsViewModel : SortedRecordListViewModel<ReceiptRow, Re
             };
             return id is { } receiptId ? _viewer.ShowAsync(receiptId, isDuplicate: true) : Task.CompletedTask;
         });
-        OpenPartyCommand = new AsyncRelayCommand(async (parameter, _) =>
-        {
-            if (parameter is ReceiptRow row)
-            {
-                var prefilter = new ListPrefilter(Search: row.PartyName);
-                await (row.Item.Kind == ReceiptKind.Donation ? _navigation.NavigateTo<DonorsViewModel>(prefilter) : _navigation.NavigateTo<PatientsViewModel>(prefilter)).ConfigureAwait(true);
-            }
-        });
+        OpenPartyCommand = new AsyncRelayCommand((parameter, _) => parameter is ReceiptRow row ? OpenPartyAsync(row) : Task.CompletedTask);
         OpenSourceCommand = new AsyncRelayCommand(async (parameter, _) =>
         {
-            if (parameter is ReceiptRow row)
+            // The appointment or request the receipt was issued for, opened by its id.
+            if (parameter is ReceiptRow { Item: { } item })
             {
-                var prefilter = new ListPrefilter(Search: row.PartyName);
-                await (row.Item.Kind == ReceiptKind.Donation ? _navigation.NavigateTo<AppointmentsViewModel>(prefilter) : _navigation.NavigateTo<RequestsViewModel>(prefilter)).ConfigureAwait(true);
+                if (item.Kind == ReceiptKind.Donation && item.AppointmentId is { } appointment)
+                {
+                    await _navigation.NavigateTo<AppointmentsViewModel>(new ListPrefilter(RecordId: appointment)).ConfigureAwait(true);
+                }
+                else if (item.Kind == ReceiptKind.Issue && item.RequestId is { } request)
+                {
+                    await _navigation.NavigateTo<RequestsViewModel>(new ListPrefilter(RecordId: request)).ConfigureAwait(true);
+                }
             }
         });
+    }
+
+    /// <summary>
+    /// Opens the donor (donation) or patient (issue) the receipt names, by id. The list carries the appointment or request, not the person's id, so the person's
+    /// id comes from that record; if it can't be fetched the user is told and nothing is searched by name instead.
+    /// </summary>
+    private async Task OpenPartyAsync(ReceiptRow row)
+    {
+        var item = row.Item;
+        int? personId = null;
+        if (item.Kind == ReceiptKind.Donation && item.AppointmentId is { } appointmentId)
+        {
+            var appointment = await Task.Run(() => _api.GetAppointmentAsync(appointmentId)).ConfigureAwait(true);
+            personId = appointment.IsOk ? appointment.Value.DonorId : null;
+        }
+        else if (item.Kind == ReceiptKind.Issue && item.RequestId is { } requestId)
+        {
+            var request = await Task.Run(() => _api.GetRequestAsync(requestId)).ConfigureAwait(true);
+            personId = request.IsOk ? request.Value.PatientId : null;
+        }
+
+        if (personId is not { } id)
+        {
+            Toasts.Show(ToastKind.Error, $"Couldn't open {row.PartyName}. Try again.");
+            return;
+        }
+
+        var prefilter = new ListPrefilter(RecordId: id);
+        await (item.Kind == ReceiptKind.Donation ? _navigation.NavigateTo<DonorsViewModel>(prefilter) : _navigation.NavigateTo<PatientsViewModel>(prefilter)).ConfigureAwait(true);
     }
 
     public override string PageTitle => "Receipts";

@@ -56,7 +56,7 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
         {
             if (parameter is RequestListItem item)
             {
-                await _navigation.NavigateTo<PatientsViewModel>(new ListPrefilter(Search: item.PatientName)).ConfigureAwait(true);
+                await _navigation.NavigateTo<PatientsViewModel>(new ListPrefilter(RecordId: item.PatientId)).ConfigureAwait(true);
             }
         });
         ViewReceiptCommand = new AsyncRelayCommand(_ => Detail?.ReceiptId is { } id ? _receipts.ShowAsync(id, isDuplicate: true) : Task.CompletedTask, () => Detail?.ReceiptId is not null);

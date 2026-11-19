@@ -56,7 +56,7 @@
                                        SortColumn="{Binding SortColumn, Mode=OneWay}" SortDescending="{Binding SortDescending, Mode=OneWay}"
                                        AutomationProperties.Name="Receipts" MouseDoubleClick="OnRowDoubleClick" KeyDown="OnGridKeyDown">
             <DataGrid.Columns>
-              <DataGridTemplateColumn Header="Date" Width="130" SortMemberPath="date">
+              <DataGridTemplateColumn Header="Date" Width="Auto" MinWidth="130" SortMemberPath="date">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate>
                     <TextBlock Text="{Binding WhenText}" Style="{DynamicResource DataGrid.TextCell}" />

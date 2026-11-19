@@ -7,6 +7,7 @@ using Lifestream.Client.Features.Receipts;
 using Lifestream.Client.Features.Requests;
 using Lifestream.Client.Tests.Fakes;
 using Lifestream.Contracts;
+using Lifestream.Contracts.Appointments;
 using Lifestream.Contracts.Lookups;
 using Lifestream.Contracts.Receipts;
 using Lifestream.Contracts.Requests;
@@ -68,7 +69,8 @@ public sealed class Part2RequestReceiptTests
         var (rig, vm) = await LoadedRequestsAsync(Samples2.RequestRow(7, 3, "Omar Haddad"));
         await vm.OpenPatientCommand.ExecuteAsync(vm.Items[0]);
         Assert.Equal(typeof(PatientsViewModel), rig.Navigation.Visits.Single().ViewModel);
-        Assert.Equal("Omar Haddad", ((ListPrefilter)rig.Navigation.Visits.Single().Parameter!).Search);
+        Assert.Equal(3, ((ListPrefilter)rig.Navigation.Visits.Single().Parameter!).RecordId);
+        Assert.Null(((ListPrefilter)rig.Navigation.Visits.Single().Parameter!).Search);
 
         var pending = new Part2Rig();
         pending.Fake.On("GetRequestsAsync", ApiResult<PagedResult<RequestListItem>>.Ok(new([], 0, 1, 50)));
@@ -236,6 +238,8 @@ public sealed class Part2RequestReceiptTests
     {
         var rig = new Part2Rig();
         rig.Fake.On("GetReceiptsAsync", ApiResult<PagedResult<ReceiptListItem>>.Ok(new([Samples2.ReceiptRow(90), Samples2.ReceiptRow(91, ReceiptKind.Issue, "Omar Haddad")], 2, 1, 50)));
+        rig.Fake.On("GetAppointmentAsync", ApiResult<AppointmentDetail>.Ok(Samples2.Appointment(5, donorId: 42)));
+        rig.Fake.On("GetRequestAsync", ApiResult<RequestDetail>.Ok(Samples2.Request(7, patientId: 3)));
         var vm = rig.Receipts();
         await vm.LoadAsync();
 
@@ -245,7 +249,9 @@ public sealed class Part2RequestReceiptTests
         await vm.OpenPartyCommand.ExecuteAsync(vm.Items[0]);
         await vm.OpenPartyCommand.ExecuteAsync(vm.Items[1]);
         Assert.Equal(typeof(DonorsViewModel), rig.Navigation.Visits[0].ViewModel);
+        Assert.Equal(42, ((ListPrefilter)rig.Navigation.Visits[0].Parameter!).RecordId);
         Assert.Equal(typeof(PatientsViewModel), rig.Navigation.Visits[1].ViewModel);
+        Assert.Equal(3, ((ListPrefilter)rig.Navigation.Visits[1].Parameter!).RecordId);
     }
 
     [Fact]
