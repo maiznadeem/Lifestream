@@ -16,70 +16,70 @@
       "file": "login.png",
       "width": 1366,
       "height": 768,
-      "sha256": "b335ff87db8cc611368c856a64669ac8345945863cf668173dbdb7762aa2c34b"
+      "sha256": "d60d34b5fa4c666b2256fef0d2cb0da49844093d07cdcb036bab750401caf54b"
     },
     {
       "screen": "dashboard",
       "file": "dashboard.png",
       "width": 1366,
       "height": 768,
-      "sha256": "342340408b1c5a37c9dbe3a5d819ac21c886edf70e0bb2d740ddacb909c971a5"
+      "sha256": "6f5b273f8618688a375eabc1a9b7b32a264cfab833616bfa9da2999d65d0b859"
     },
     {
       "screen": "donors",
       "file": "donors.png",
       "width": 1366,
       "height": 768,
-      "sha256": "d22bebe7166c787bc677dbbfae1a372e3042becf56aa7c95d1d918ce5634b862"
+      "sha256": "197b8d864c33d9ca0d68d95a4731cbc6a40ae4ceeec6dd4c19c1370fda286451"
     },
     {
       "screen": "patients",
       "file": "patients.png",
       "width": 1366,
       "height": 768,
-      "sha256": "c1702daa105221cf771f331d43054c576a762418c6b34f5656a7eec3c4ebb4dd"
+      "sha256": "b9ef3a985ee629b7a798aa564080f5314f923edac11ec006c2144403049ce0e0"
     },
     {
       "screen": "appointments",
       "file": "appointments.png",
       "width": 1366,
       "height": 768,
-      "sha256": "ca83b28ef8587b26b9f6a8738d4a2e45f66cdb6b7be26c34af61806dd0f8b876"
+      "sha256": "a8e3f07b7201f51a9c4d2c22ba38433b3bf059282bd5224827876b43f2d37be8"
     },
     {
       "screen": "requests",
       "file": "requests.png",
       "width": 1366,
       "height": 768,
-      "sha256": "30a07792bd3c4bcee770b752abbc900357f50ed05956d00d65dc695de96aae0e"
+      "sha256": "4b9d420731034eb1f00d908875604c5a6b8a28bf1d197bc07eb7d93c99145daa"
     },
     {
       "screen": "stock",
       "file": "stock.png",
       "width": 1366,
       "height": 768,
-      "sha256": "44ab9894b9427151a04b5a5236af79ff8f8487d59872d919c7045b3d0f0b69c0"
+      "sha256": "b7ffccb2fee261771dd7770995b8f6eb705438d8044338931a09677e59c688e3"
     },
     {
       "screen": "receipts",
       "file": "receipts.png",
       "width": 1366,
       "height": 768,
-      "sha256": "79ff5323f4f92ba450a245ea3bdd3726d13f304c7d65d57d1150356accefcdf5"
+      "sha256": "fdb83a74ffd187d565c90520484188ac81df2bbe63d8ebb08a1378178489cca9"
     },
     {
       "screen": "staff",
       "file": "staff.png",
       "width": 1366,
       "height": 768,
-      "sha256": "98f7e0df743ce3a10987fdc13a0c7eeee8552ca0c566c10fdd135d5b35282cd6"
+      "sha256": "f652a14e25238b7a69713a669f1b4b79563b093ecab6fdd6962f3f0e3e49d23a"
     },
     {
       "screen": "profile",
       "file": "profile.png",
       "width": 1366,
       "height": 768,
-      "sha256": "873d78c9f78d3b4e6e5f21c415b3da1f6f3794ae6d500b13f68272376ec9832b"
+      "sha256": "2e8a7c4f949f17aaf67d13fc24ec8d0d9dc43d297093203fcbc0526406b8fdbb"
     }
   ]
 }
