@@ -107,7 +107,7 @@ public sealed class Part2RequestReceiptTests
         Assert.Equal(7, rig.Recorder.Calls.Single(c => c.Name == "FulfilRequestAsync").Args[0]);
         var toast = Assert.Single(rig.Toasts.Toasts);
         Assert.Contains("Omar Haddad", toast.Message, StringComparison.Ordinal);
-        Assert.Contains("#92", toast.Message, StringComparison.Ordinal);
+        Assert.Contains("RC-0092", toast.Message, StringComparison.Ordinal);
         Assert.Equal(2, rig.Recorder.CountOf("GetRequestsAsync")); // refreshed
         await toast.ActionCommand.ExecuteAsync();
         Assert.Equal([(92, false)], rig.Viewer.Opened);

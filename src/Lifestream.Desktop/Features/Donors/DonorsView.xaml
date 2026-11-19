@@ -7,8 +7,10 @@
              xmlns:services="clr-namespace:Lifestream.Desktop.Services"
              controls:ShellPage.OwnsHeader="True"
              Focusable="False">
-  <!-- Donors (direction A): the page header with the count and "Add donor", the search and filter chips, the table in its panel with the footer, and the selected donor
-       (or the donor form) in the side panel at the right: who they are, "Book appointment", the eligibility card and the details. -->
+  <!-- Donors (direction A, as A-donors.png): the page header with the count and "Add donor" (secondary while a donor is open, so the panel's action is the one primary),
+       the search with the Blood group, Eligibility and Last donated chips, the table (Name capped at 320 so the details share the room; Age at Wide), the paging footer,
+       and the selected donor (or the donor form) in the side panel: who they are, "Book appointment", Edit and "...", the eligibility card (with the reason when they
+       can't donate), the details with their donations, and the donation history (date, bag, where it went). -->
   <UserControl.Resources>
     <feat:DateTextConverter x:Key="DateText" />
     <feat:NullToCollapsedConverter x:Key="NullToCollapsed" />
@@ -18,14 +20,20 @@
     <lists:InitialsConverter x:Key="Initials" />
     <lists:RecordCodeConverter x:Key="Code" />
     <lists:DonorStandingConverter x:Key="Standing" />
+    <lists:AgeConverter x:Key="Age" />
     <lists:PanelWidthConverter x:Key="PanelWidth" />
     <lists:IsCompactConverter x:Key="IsCompact" />
+    <lists:HasContentToVisibleConverter x:Key="HasContent" />
     <Thickness x:Key="Donors.ToolbarGap">0,20,0,16</Thickness>
     <Thickness x:Key="Donors.CardPad">16,14,16,14</Thickness>
     <Thickness x:Key="Donors.CardGap">0,0,0,24</Thickness>
     <Thickness x:Key="Donors.NameGap">10,0,0,0</Thickness>
     <Thickness x:Key="Donors.HeaderGap">14,0,12,0</Thickness>
     <Thickness x:Key="Donors.IconGap">0,1,12,0</Thickness>
+    <Thickness x:Key="Donors.ChipGap">0,0,8,0</Thickness>
+    <Thickness x:Key="Donors.HistoryTop">0,12,0,0</Thickness>
+    <Thickness x:Key="Donors.HistoryRow">0,0,0,14</Thickness>
+    <Thickness x:Key="Donors.DotGap">0,5,14,0</Thickness>
   </UserControl.Resources>
   <Grid>
     <Grid.ColumnDefinitions>
@@ -42,9 +50,10 @@
         <RowDefinition Height="Auto" />
         <RowDefinition Height="*" />
       </Grid.RowDefinitions>
-      <controls:PageHeader x:Name="Header" Title="{Binding PageTitle}" Count="{Binding Total}">
+      <controls:PageHeader x:Name="Header" Title="{Binding PageTitle}" Count="{Binding HeaderCount}">
         <controls:PageHeader.Actions>
-          <Button x:Name="AddButton" Style="{DynamicResource Button.Primary}" Command="{Binding AddCommand}" controls:ButtonAssist.BusyText="" AutomationProperties.Name="{Binding NewActionLabel}" ToolTip="Add donor (Ctrl+N)">
+          <Button x:Name="AddButton" Style="{DynamicResource Button.Primary}" lists:HeaderAction.IsDemoted="{Binding IsDetailOpen}" Command="{Binding AddCommand}"
+                  controls:ButtonAssist.BusyText="" AutomationProperties.Name="{Binding NewActionLabel}" ToolTip="Add donor (Ctrl+N)">
             <StackPanel Orientation="Horizontal">
               <controls:Icon Kind="Userplus" Size="16" VerticalAlignment="Center" />
               <TextBlock x:Name="AddLabel" Text="{Binding NewActionLabel}" VerticalAlignment="Center" Margin="{DynamicResource Inset.L8}">
@@ -62,11 +71,20 @@
           </Button>
         </controls:PageHeader.Actions>
       </controls:PageHeader>
-      <lists:ListToolbar x:Name="Toolbar" Grid.Row="1" Margin="{StaticResource Donors.ToolbarGap}" SearchPlaceholder="Search name, phone or ID" />
+      <lists:ListToolbar x:Name="Toolbar" Grid.Row="1" Margin="{StaticResource Donors.ToolbarGap}" SearchPlaceholder="Search donors">
+        <lists:ListToolbar.Filters>
+          <StackPanel Orientation="Horizontal">
+            <lists:FilterChip AutomationProperties.AutomationId="EligibilityChip" Label="Eligibility" AutomationProperties.Name="Eligibility filter" ItemsSource="{Binding EligibilityOptions}"
+                              SelectedItem="{Binding EligibilityFilter, Mode=TwoWay}" DisplayMemberPath="Display" Margin="{StaticResource Donors.ChipGap}" />
+            <lists:FilterChip AutomationProperties.AutomationId="LastDonatedChip" Label="Last donated" AutomationProperties.Name="Last donated filter" ItemsSource="{Binding LastDonatedOptions}"
+                              SelectedItem="{Binding LastDonatedFilter, Mode=TwoWay}" DisplayMemberPath="Display" Margin="{StaticResource Donors.ChipGap}" />
+          </StackPanel>
+        </lists:ListToolbar.Filters>
+      </lists:ListToolbar>
       <lists:ScreenWakingNotice Grid.Row="2" />
       <Border x:Name="TablePanel" Grid.Row="3" Background="{DynamicResource Brush.Layer}" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="1"
               CornerRadius="{DynamicResource Radius.Panel}" SnapsToDevicePixels="True">
-        <controls:LoadSurface x:Name="ListSurface" State="{Binding State}" SkeletonKind="List" SkeletonColumns="2*,80,130,130,140"
+        <controls:LoadSurface x:Name="ListSurface" State="{Binding State}" SkeletonKind="List" SkeletonColumns="2*,80,*,*,100,*"
                               ErrorMessage="{Binding ErrorMessage}" ErrorDetail="{Binding ErrorDetail}" RetryCommand="{Binding RetryCommand}"
                               EmptyGlyph="&#xE716;" EmptyTitle="{Binding EmptyTitle}" EmptyMessage="{Binding EmptyMessage}" EmptyActionText="{Binding EmptyActionText}"
                               EmptyActionCommand="{Binding EmptyActionCommand}">
@@ -80,27 +98,31 @@
                                          lists:ListColumns.IsResponsive="True" lists:ListKeys.Panel="{Binding ElementName=Panel}"
                                          AutomationProperties.Name="Donors">
               <DataGrid.Columns>
-                <DataGridTemplateColumn Header="Name" SortMemberPath="name" Width="2*" MinWidth="200">
+                <DataGridTemplateColumn Header="Name" SortMemberPath="name" Width="1.6*" MinWidth="184" MaxWidth="320">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
-                      <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                      <Grid VerticalAlignment="Center">
+                        <Grid.ColumnDefinitions>
+                          <ColumnDefinition Width="Auto" />
+                          <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
                         <controls:Avatar Initials="{Binding Name, Converter={StaticResource Initials}}" Size="28" VerticalAlignment="Center" />
-                        <StackPanel Margin="{StaticResource Donors.NameGap}" VerticalAlignment="Center">
-                          <TextBlock Style="{DynamicResource Text.Body}" FontWeight="Medium" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                        <StackPanel Grid.Column="1" Margin="{StaticResource Donors.NameGap}" VerticalAlignment="Center">
+                          <TextBlock Style="{DynamicResource DataGrid.PrimaryLine}" FontWeight="Medium" Text="{Binding Name}" />
                           <TextBlock Style="{DynamicResource Text.Caption}" Text="{Binding Id, Converter={StaticResource Code}, ConverterParameter=D}" />
                         </StackPanel>
-                      </StackPanel>
+                      </Grid>
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="Group" Width="80" CanUserSort="False">
+                <DataGridTemplateColumn Header="Group" Width="72" CanUserSort="False">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
                       <controls:BloodGroupTag Text="{Binding BloodType, Converter={StaticResource BloodGroup}}" HorizontalAlignment="Left" VerticalAlignment="Center" />
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="Eligibility" Width="130" CanUserSort="False">
+                <DataGridTemplateColumn Header="Eligibility" Width="*" MinWidth="136" MaxWidth="240" CanUserSort="False">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
                       <controls:Badge HorizontalAlignment="Left" VerticalAlignment="Center">
@@ -122,11 +144,17 @@
                             <Binding Path="DataContext.Today" RelativeSource="{RelativeSource AncestorType=DataGrid}" />
                           </MultiBinding>
                         </controls:Badge.ShowDot>
+                        <controls:Badge.Icon>
+                          <MultiBinding Converter="{StaticResource Standing}" ConverterParameter="Icon">
+                            <Binding />
+                            <Binding Path="DataContext.Today" RelativeSource="{RelativeSource AncestorType=DataGrid}" />
+                          </MultiBinding>
+                        </controls:Badge.Icon>
                       </controls:Badge>
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="Last donated" SortMemberPath="lastDonated" Width="130" lists:ListColumns.HideBelow="560">
+                <DataGridTemplateColumn Header="Last donated" SortMemberPath="lastDonated" Width="*" MinWidth="114" MaxWidth="220" lists:ListColumns.HideBelow="560">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
                       <TextBlock x:Name="LastText" Style="{DynamicResource DataGrid.TextCell}" Text="{Binding LastDonated, Converter={StaticResource DateText}, ConverterParameter=Never}" />
@@ -138,17 +166,32 @@
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="Donates" Width="110" CanUserSort="False" lists:ListColumns.HideBelow="900">
+                <DataGridTemplateColumn Header="Donations" Width="96" CanUserSort="False" lists:ListColumns.HideBelow="660" lists:ListColumns.IsNumeric="True">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
-                      <TextBlock Style="{DynamicResource DataGrid.TextCell}" Text="{Binding Frequency}" />
+                      <!-- Proportional figures: Onest's tabular 1 is very wide, so "11" would read "1 1" (design-qa 25); the right edge still lines the counts up -->
+                      <TextBlock Style="{DynamicResource DataGrid.TextCell}" Text="{Binding Donations}" HorizontalAlignment="Right" />
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="Phone" Width="140" CanUserSort="False" lists:ListColumns.HideBelow="680">
+                <DataGridTemplateColumn Header="Phone" Width="*" MinWidth="118" MaxWidth="220" CanUserSort="False" lists:ListColumns.HideBelow="720">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
                       <TextBlock Style="{DynamicResource DataGrid.TextCell}" Text="{Binding Phone}" />
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="Age" Width="70" CanUserSort="False" lists:ListColumns.HideBelow="1100" lists:ListColumns.IsNumeric="True">
+                  <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate>
+                      <TextBlock Style="{DynamicResource DataGrid.TextCell}" HorizontalAlignment="Right">
+                        <TextBlock.Text>
+                          <MultiBinding Converter="{StaticResource Age}">
+                            <Binding Path="DateOfBirth" />
+                            <Binding Path="DataContext.Today" RelativeSource="{RelativeSource AncestorType=DataGrid}" />
+                          </MultiBinding>
+                        </TextBlock.Text>
+                      </TextBlock>
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
@@ -193,7 +236,7 @@
             </Button>
           </lists:RecordDetailPane.RelatedActions>
           <lists:RecordDetailPane.Body>
-            <!-- The eligibility card: eligible (green), waiting or on hold (amber), not checked (neutral) -->
+            <!-- The eligibility card: eligible (green), waiting or on hold (amber), not eligible (red, with the reason), not checked (neutral) -->
             <Border DataContext="{Binding EligibilityCard}" Visibility="{Binding Converter={StaticResource NullToCollapsed}}" BorderThickness="1"
                     CornerRadius="{DynamicResource Radius.Panel}" Padding="{StaticResource Donors.CardPad}" Margin="{StaticResource Donors.CardGap}" SnapsToDevicePixels="True"
                     AutomationProperties.Name="{Binding Headline}">
@@ -212,6 +255,11 @@
                       <Setter Property="Background" Value="{DynamicResource Brush.WarningSoft}" />
                       <Setter Property="BorderBrush" Value="{DynamicResource Brush.Stroke}" />
                       <Setter Property="TextElement.Foreground" Value="{DynamicResource Brush.Warning}" />
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding Kind}" Value="NotEligible">
+                      <Setter Property="Background" Value="{DynamicResource Brush.CriticalSoft}" />
+                      <Setter Property="BorderBrush" Value="{DynamicResource Brush.CriticalStroke}" />
+                      <Setter Property="TextElement.Foreground" Value="{DynamicResource Brush.Critical}" />
                     </DataTrigger>
                   </Style.Triggers>
                 </Style>
@@ -232,6 +280,9 @@
                         <DataTrigger Binding="{Binding Kind}" Value="Waiting">
                           <Setter Property="Kind" Value="Clock" />
                         </DataTrigger>
+                        <DataTrigger Binding="{Binding Kind}" Value="NotEligible">
+                          <Setter Property="Kind" Value="Alert" />
+                        </DataTrigger>
                       </Style.Triggers>
                     </Style>
                   </controls:Icon.Style>
@@ -244,6 +295,60 @@
               </Grid>
             </Border>
           </lists:RecordDetailPane.Body>
+          <lists:RecordDetailPane.Extra>
+            <!-- The donation history (design system 7.6 step 4): newest first, a dot (filled when issued, ringed while in stock, hollow when unused), the date, the bag at
+                 the right and where it went under it; "Show all" when there are more than four. -->
+            <StackPanel AutomationProperties.AutomationId="History" Margin="{StaticResource Donors.HistoryTop}" Visibility="{Binding HasHistorySection, Converter={StaticResource BoolToVisibility}}"
+                        AutomationProperties.Name="Donation history">
+              <Grid Margin="{DynamicResource Inset.B12}">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="*" />
+                  <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Style="{DynamicResource Text.Heading}" Text="Donation history" VerticalAlignment="Center" AutomationProperties.HeadingLevel="Level3" />
+                <Button AutomationProperties.AutomationId="ShowAllHistory" Grid.Column="1" Style="{DynamicResource Button.Subtle.Small}" Command="{Binding ShowAllHistoryCommand}" Content="{Binding HistoryMoreText}"
+                        controls:ButtonAssist.BusyText="" Visibility="{Binding HistoryMoreText, Converter={StaticResource HasContent}}" />
+              </Grid>
+              <ItemsControl AutomationProperties.AutomationId="HistoryList" ItemsSource="{Binding VisibleHistory}" Focusable="False" AutomationProperties.Name="Donations">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <Grid Margin="{StaticResource Donors.HistoryRow}">
+                      <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                      </Grid.ColumnDefinitions>
+                      <Ellipse Width="10" Height="10" VerticalAlignment="Top" Margin="{StaticResource Donors.DotGap}" StrokeThickness="1.5">
+                        <Ellipse.Style>
+                          <Style TargetType="Ellipse">
+                            <Setter Property="Fill" Value="{DynamicResource Brush.Blood}" />
+                            <Setter Property="Stroke" Value="{DynamicResource Brush.Blood}" />
+                            <Style.Triggers>
+                              <DataTrigger Binding="{Binding Fate}" Value="InStock">
+                                <Setter Property="Fill" Value="{DynamicResource Brush.BloodSoft}" />
+                              </DataTrigger>
+                              <DataTrigger Binding="{Binding Fate}" Value="Unused">
+                                <Setter Property="Fill" Value="{DynamicResource Brush.Layer}" />
+                                <Setter Property="Stroke" Value="{DynamicResource Brush.Stroke2}" />
+                              </DataTrigger>
+                            </Style.Triggers>
+                          </Style>
+                        </Ellipse.Style>
+                      </Ellipse>
+                      <StackPanel Grid.Column="1">
+                        <TextBlock Style="{DynamicResource Text.BodyStrong}" Text="{Binding DateText}" />
+                        <TextBlock Style="{DynamicResource Text.Secondary}" Text="{Binding FateText}" TextWrapping="Wrap" />
+                      </StackPanel>
+                      <TextBlock Grid.Column="2" Style="{DynamicResource Text.Caption}" Text="{Binding CodeText}" VerticalAlignment="Top" Margin="{DynamicResource Inset.L12}"
+                                 Typography.NumeralAlignment="Tabular" />
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <TextBlock AutomationProperties.AutomationId="HistoryNote" Style="{DynamicResource Text.Caption}" Text="{Binding HistoryNote}" TextWrapping="Wrap"
+                         Visibility="{Binding HistoryNote, Converter={StaticResource HasContent}}" />
+            </StackPanel>
+          </lists:RecordDetailPane.Extra>
         </lists:RecordDetailPane>
         <ContentControl x:Name="EditorHost" Content="{Binding Editor}" ContentTemplateSelector="{x:Static services:ViewLocator.Instance}" IsTabStop="False" Focusable="False"
                         HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" Visibility="{Binding Editor, Converter={StaticResource NullToCollapsed}}" />

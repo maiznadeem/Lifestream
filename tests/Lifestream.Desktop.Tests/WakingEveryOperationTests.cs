@@ -124,6 +124,8 @@ public sealed class WakingEveryOperationTests
         ["Stock.RecordDonationCommand"] = "the empty state's action: navigates to Appointments (a fake navigation here)",
         ["Stock.RetryBagsCommand"] = "reloads the open group's bags; with no group selected (this walk selects none on Stock) there is nothing to load",
         ["Staff.ClearSalaryCommand"] = "empties the two salary boxes; the list then reloads through the filter, after the search pause",
+        ["Patients.FulfilRequestCommand"] = "navigates to Requests with the request to fulfil (a fake navigation here; the fulfil step is covered by the Requests tests)",
+        ["Appointments.CheckInCommand"] = "selects the row, whose detail is already loaded in this state (selecting a row is covered by the detail tests)",
     };
 
     /// <summary>Commands that are disabled on a freshly loaded screen with the first record selected, each with the reason; they make no call of their own.</summary>

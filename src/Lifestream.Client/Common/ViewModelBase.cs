@@ -285,7 +285,7 @@ public abstract partial class ViewModelBase : ObservableObject, IDisposable
         }
         catch (Exception ex)
         {
-            ShowError("Something went wrong while loading this screen.", ex.Message);
+            ShowError(UnexpectedMessage, ex.Message);
             AsyncRelayCommand.ReportError(ex);
         }
         finally
@@ -348,7 +348,7 @@ public abstract partial class ViewModelBase : ObservableObject, IDisposable
                         }
 
                         _timedOut = true;
-                        Post(() => ShowError("This is taking longer than expected.", null));
+                        Post(() => ShowError(TimeoutMessage, null));
                         cts.Cancel();
                     }
                 }
@@ -433,14 +433,27 @@ public abstract partial class ViewModelBase : ObservableObject, IDisposable
         {
             Contracts.ProblemCodes.DatabaseWaking => "The server is still starting up. Try again in a moment.",
             Contracts.ProblemCodes.DatabaseResting => "The demo is resting until the start of next month.",
-            ClientProblemCodes.Unreachable => "Can't reach the server. Check your internet connection.",
+            ClientProblemCodes.Unreachable => UnreachableMessage,
             ClientProblemCodes.SessionExpired => "Your session has expired. Sign in again.",
             "forbidden" => "You don't have permission to see this.",
-            _ => "Something went wrong while loading this screen.",
+            _ when problem.Status >= 500 => ServerFailedMessage,
+            _ => UnexpectedMessage,
         };
         var detail = $"{problem.Status} {problem.Code}: {problem.Title}" + (problem.CorrelationId is null ? string.Empty : $" (correlation {problem.CorrelationId})");
         ShowError(message, detail);
     }
+
+    /// <summary>The error state's cause and fix when the server can't be reached (design system 7.5: name the cause, then what to do).</summary>
+    public const string UnreachableMessage = "Can't reach the server. Check your internet connection, then retry.";
+
+    /// <summary>The cause and fix when a load ran past its time limit.</summary>
+    public const string TimeoutMessage = "The server is taking too long to answer. Check your connection, then retry.";
+
+    /// <summary>The cause and fix when the server failed while answering.</summary>
+    public const string ServerFailedMessage = "The server ran into a problem while loading this. Retry in a moment; if it keeps happening, tell your administrator.";
+
+    /// <summary>The cause and fix when the answer could not be shown (a fault in the app, not the server).</summary>
+    public const string UnexpectedMessage = "Lifestream couldn't show this data. Retry; if it keeps happening, restart Lifestream.";
 
     private void ShowError(string message, string? detail)
     {

@@ -561,7 +561,7 @@ public sealed class Part2AppointmentTests
         Assert.Equal(5, rig.Recorder.Calls.Single(c => c.Name == "RecordDonationAsync").Args[0]); // exactly that appointment
         var toast = Assert.Single(rig.Toasts.Toasts);
         Assert.Contains("Omar Haddad", toast.Message, StringComparison.Ordinal);
-        Assert.Contains("#91", toast.Message, StringComparison.Ordinal);
+        Assert.Contains("RC-0091", toast.Message, StringComparison.Ordinal);
         Assert.Equal("View receipt", toast.ActionLabel);
         Assert.Equal(2, rig.Recorder.CountOf("GetAppointmentsAsync")); // the list was refreshed
         await toast.ActionCommand.ExecuteAsync();

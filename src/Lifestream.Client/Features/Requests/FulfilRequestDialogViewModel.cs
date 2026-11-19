@@ -10,9 +10,10 @@ using Lifestream.Domain;
 namespace Lifestream.Client.Features.Requests;
 
 /// <summary>
-/// The "Fulfil request" dialog, opened from a request (FEAT-16). It shows what will be issued and how much of that blood is in stock; the
-/// oldest unexpired bags are issued by the API in one step. When the stock is not enough the API changes nothing, and the dialog says so in plain
-/// words and stays open. A successful call issues the receipt, available as <see cref="Receipt"/>.
+/// The "Fulfil request" step, opened from a request (FEAT-16). It shows what will be issued, the bags the API will take (the oldest unexpired bags of the group, in
+/// that order, with their codes, collection and expiry dates, audit R3) and how much of that blood is in stock; the API issues them in one step. When the stock is not
+/// enough the API changes nothing, and the step says so in plain words and stays open. A successful call issues the receipt, available as <see cref="Receipt"/>.
+/// "Not now" leaves the request as it is.
 /// </summary>
 [NoUserInput("It shows what will be issued and asks to confirm; there is no field to type in.")]
 public sealed partial class FulfilRequestDialogViewModel : DialogViewModel
@@ -21,11 +22,45 @@ public sealed partial class FulfilRequestDialogViewModel : DialogViewModel
     private readonly RequestDetail _request;
 
     public FulfilRequestDialogViewModel(ILifestreamApiClient api, RequestDetail request)
-        : base("Fulfil request", "Fulfil request", "Issuing...")
+        : base("Fulfil request", "Fulfil request", "Issuing...", "Not now")
     {
         _api = api;
         _request = request;
         PendingStock = LoadStockAsync();
+        PendingBags = LoadBagsAsync();
+    }
+
+    /// <summary>Completes when the list of bags to issue has loaded (for tests).</summary>
+    internal Task PendingBags { get; private set; }
+
+    /// <summary>The bags the fulfil will issue, oldest first. Empty until known (or when the list could not be loaded).</summary>
+    [ObservableProperty]
+    public partial IReadOnlyList<SuggestedBagRow> Bags { get; set; } = [];
+
+    /// <summary>A line above or instead of the bags: what the list is, that it could not be loaded, or how many are missing.</summary>
+    [ObservableProperty]
+    public partial string? BagsNote { get; set; }
+
+    private async Task LoadBagsAsync()
+    {
+        var result = await RunOperationAsync(ct => _api.GetFulfilPreviewAsync(_request.Id, ct)).ConfigureAwait(true);
+        if (!result.IsOk)
+        {
+            BagsNote = "The bags couldn't be listed. The oldest bags that have not expired are issued.";
+            return;
+        }
+
+        var preview = result.Value;
+        var zone = Clock.LocalTimeZone;
+        Bags = [.. preview.Bags.Select((b, i) => new SuggestedBagRow(
+            i + 1,
+            Donors.DonationHistory.BagCode(b.Id),
+            $"Collected {Formatting.Date(RecordFormatting.LocalDate(b.CollectedAtUtc, zone))}" + (b.DonorName is { Length: > 0 } donor ? $" from {donor}" : string.Empty),
+            "Use by " + Formatting.Date(b.ExpiresOn)))];
+        var missing = _request.Units - preview.Bags.Count;
+        BagsNote = preview.Bags.Count == 0 ? $"There is no {BloodTypeText} blood in stock that has not expired."
+            : missing > 0 ? $"Only {RecordFormatting.Units(preview.Bags.Count)} can be issued; {RecordFormatting.Units(missing)} short."
+            : "These bags are issued, oldest first:";
     }
 
     /// <summary>The request being fulfilled.</summary>
@@ -100,6 +135,7 @@ public sealed partial class FulfilRequestDialogViewModel : DialogViewModel
             FormError = $"There isn't enough {BloodTypeText} blood in stock: this request needs {RecordFormatting.Units(_request.Units)}. Nothing was issued.";
             StockIsShort = true;
             PendingStock = LoadStockAsync(); // show the current figure
+            PendingBags = LoadBagsAsync(); // and the bags there are now
             return;
         }
 

@@ -281,7 +281,7 @@ public sealed class LastWakingGapsTests
                 [typeof(DonorsViewModel)] = ["DeleteCommand"],
                 [typeof(PatientsViewModel)] = ["DeleteCommand"],
                 [typeof(StaffViewModel)] = ["DeleteCommand", nameof(StaffViewModel.ResetPasswordCommand)],
-                [typeof(AppointmentsViewModel)] = ["DeleteCommand", "RecordDonationCommand", "CancelAppointmentCommand", "ViewReceiptCommand"],
+                [typeof(AppointmentsViewModel)] = ["DeleteCommand", "RecordDonationCommand", "RecordDonationForCommand", "CancelAppointmentCommand", "ViewReceiptCommand"],
                 [typeof(RequestsViewModel)] = ["DeleteCommand", "FulfilCommand", "CancelRequestCommand", "ViewReceiptCommand"],
                 [typeof(ReceiptsViewModel)] = ["DeleteCommand", "OpenReceiptCommand"],
                 [typeof(ProfileViewModel)] = ["PickPhotoCommand", nameof(ProfileViewModel.ChangePasswordCommand)],

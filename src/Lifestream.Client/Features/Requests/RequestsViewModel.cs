@@ -7,6 +7,7 @@ using Lifestream.Client.Navigation;
 using Lifestream.Contracts;
 using Lifestream.Contracts.Lookups;
 using Lifestream.Contracts.Requests;
+using Lifestream.Contracts.Stock;
 using Lifestream.Domain;
 using ContractSortKeys = Lifestream.Contracts.SortKeys;
 
@@ -15,16 +16,23 @@ namespace Lifestream.Client.Features.Requests;
 /// <summary>
 /// The Requests screen (FEAT-14, FEAT-15, FEAT-16). A paged list that shows the patient's name with the id as secondary text; one search box finds a
 /// request by patient name (or number) and the blood type filter narrows it, each in a single API call, with the patient column explaining why a
-/// row matched. A request is fulfilled from its own detail pane (a dialog that issues the receipt), edited while pending, or cancelled.
+/// row matched. Direction A adds the saved views (Open, Due in 48 h, Fulfilled, Cancelled, with their counts), the open views sorted by the date needed
+/// (overdue first, by the API), and the Cover of each open request from the stock. A request is fulfilled from its own side panel (the bags that will
+/// be issued, then the receipt), edited while pending, or cancelled.
 /// </summary>
 public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListItem, RequestDetail>, INavigationParameterReceiver
 {
     private const string StatusKey = "status";
+    private const string ViewKey = "view";
 
     private readonly ILifestreamApiClient _api;
     private readonly IReceiptViewer _receipts;
     private readonly INavigationService _navigation;
     private FilterOption<RequestStatus> _statusFilter;
+    private RequestView? _view = RequestView.Open;
+    private RequestViewCounts? _fetchedCounts;
+    private IReadOnlyList<StockItem>? _fetchedStock;
+    private Dictionary<BloodType, int>? _available;
 
     public RequestsViewModel(
         ILifestreamApiClient api,
@@ -48,14 +56,25 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
             _statusFilter = StatusOptions.First(o => o.Value == status);
         }
 
+        if (ViewState.Filters.TryGetValue(ViewKey, out var savedView) && Enum.TryParse<RequestView>(savedView, out var view))
+        {
+            _view = view;
+        }
+
         FulfilCommand = Command(_ => FulfilSelectedAsync(), () => IsPending && !IsEditing, opensModal: true);
         CancelRequestCommand = Command(_ => CancelSelectedAsync(), () => IsPending && !IsEditing, opensModal: true);
         EditRequestCommand = Command(_ => EditCommand.ExecuteAsync(), () => IsPending && EditCommand.CanExecute(null));
         OpenPatientCommand = Command(async (parameter, _) =>
         {
-            if (parameter is RequestListItem item)
+            var patientId = parameter switch
             {
-                await _navigation.NavigateTo<PatientsViewModel>(new ListPrefilter(RecordId: item.PatientId)).ConfigureAwait(true);
+                RequestListItem item => item.PatientId,
+                RequestDetail detail => detail.PatientId,
+                _ => (int?)null,
+            };
+            if (patientId is { } id)
+            {
+                await _navigation.NavigateTo<PatientsViewModel>(new ListPrefilter(RecordId: id)).ConfigureAwait(true);
             }
         });
         ViewReceiptCommand = Command(_ => Detail?.ReceiptId is { } id ? _receipts.ShowAsync(id, isDuplicate: true) : Task.CompletedTask, () => Detail?.ReceiptId is not null, opensModal: true);
@@ -75,10 +94,12 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
                 OnPropertyChanged(nameof(DetailSubtitle));
                 OnPropertyChanged(nameof(DetailBloodGroup));
                 OnPropertyChanged(nameof(DetailUrgency));
+                OnPropertyChanged(nameof(DetailCover));
                 OnPropertyChanged(nameof(IsPendingDetail));
+                OnPropertyChanged(nameof(IsClosedDetail));
             }
 
-            if (e.PropertyName is nameof(DetailFacts))
+            if (e.PropertyName is nameof(DetailFacts) or nameof(Detail))
             {
                 OnPropertyChanged(nameof(PanelFacts));
             }
@@ -88,12 +109,19 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
             {
                 open.CancelCommand.Execute(null);
             }
+
+            // A fulfil asked for by another screen is dropped when the user chooses another request.
+            if (e.PropertyName is nameof(SelectedItem) && _fulfilWhenOpen is { } wanted && SelectedItem is { } chosen && chosen.Id != wanted)
+            {
+                _fulfilWhenOpen = null;
+                FulfilCommand.CanExecuteChanged -= OnFulfilCanExecuteChanged;
+            }
         };
     }
 
     /// <summary>
-    /// The fulfil step of the selected request, shown in the side panel in place of its details (FEAT-16): what will be issued, the stock of that blood, and "Fulfil
-    /// request" to confirm or Cancel. Null when not fulfilling.
+    /// The fulfil step of the selected request, shown in the side panel in place of its details (FEAT-16): the bags that will be issued (oldest first), the stock of that
+    /// blood, and "Fulfil request" to confirm or "Not now". Null when not fulfilling.
     /// </summary>
     public FulfilRequestDialogViewModel? Fulfilment
     {
@@ -120,19 +148,67 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
     /// <summary>The selected request's urgency, for the side panel's header.</summary>
     public RequestUrgency? DetailUrgency => Detail is { } r ? UrgencyOf(r.Status, r.RequiredBy) : null;
 
-    /// <summary>The side panel's overline, "Request #148".</summary>
-    public string? DetailCode => Detail is { } r ? "Request " + RecordFormatting.IdText(r.Id) : null;
+    /// <summary>The side panel's overline, "Request R-0148".</summary>
+    public string? DetailCode => Detail is { } r ? "Request " + Code(r.Id) : null;
 
-    /// <summary>"3 units of AB+ for Petra Iversen": the side panel's header line.</summary>
-    public string? DetailSubtitle => Detail is { } r ? $"{RecordFormatting.Units(r.Units)}, needed by {Formatting.Date(r.RequiredBy)}" : null;
+    /// <summary>The request's code as the screens show it, "R-0148".</summary>
+    public static string Code(int id) => RecordFormatting.Code("R", id);
+
+    /// <summary>"3 units, needed by 19 Nov": the side panel's header line (the year only when it is not this year, so the line stays short in a narrow panel).</summary>
+    public string? DetailSubtitle => Detail is { } r
+        ? $"{RecordFormatting.Units(r.Units)}, needed by {r.RequiredBy.ToString(r.RequiredBy.Year == Today.Year ? "dd MMM" : "dd MMM yyyy", System.Globalization.CultureInfo.InvariantCulture)}"
+        : null;
 
     public string? DetailBloodGroup => Detail?.BloodType.ToTypographic();
 
     /// <summary>True while the selected request is still waiting for blood (its actions apply).</summary>
     public bool IsPendingDetail => IsPending;
 
-    /// <summary>The facts under "Details" in the side panel, without those its header already shows (patient, blood group, units, date, status).</summary>
-    public IReadOnlyList<DetailFact> PanelFacts => [.. DetailFacts.Where(f => f.Label is not ("Patient" or "Blood type" or "Units" or "Needed by" or "Status"))];
+    /// <summary>True for a fulfilled or cancelled request: its status shows in the panel.</summary>
+    public bool IsClosedDetail => Detail is { Status: not RequestStatus.Pending };
+
+    /// <summary>Whether the stock covers the selected pending request now; null for a closed request or while the stock is unknown.</summary>
+    public RequestCoverage? DetailCover => Detail is { Status: RequestStatus.Pending } r ? CoverOf(r.BloodType, r.Units) : null;
+
+    /// <summary>
+    /// The side panel's details (audit R2): the patient with their code, when it is needed and how urgent, the stock against it, when it was placed, and the receipt or
+    /// status of a closed request. The header already shows the patient's name, the group and the units.
+    /// </summary>
+    public IReadOnlyList<DetailFact> PanelFacts
+    {
+        get
+        {
+            if (Detail is not { } r)
+            {
+                return [.. DetailFacts];
+            }
+
+            var facts = new List<DetailFact> { new("Patient", $"{r.PatientName} ({PatientsViewModel.Code(r.PatientId)})") };
+            var urgency = DetailUrgency;
+            facts.Add(new("Needed by", Formatting.Date(r.RequiredBy) + (urgency is { Kind: not RequestUrgencyKind.None } u ? $" ({u.Text.ToLowerInvariant()})" : string.Empty)));
+            facts.Add(new("Units", RecordFormatting.Units(r.Units)));
+            if (DetailCover is { } cover)
+            {
+                facts.Add(new("In stock", cover.Sentence(r.BloodType)));
+            }
+
+            facts.AddRange(DetailFacts.Where(f => f.Label is "Requested on"));
+            if (r.Status != RequestStatus.Pending)
+            {
+                facts.Add(new("Status", StatusText(r.Status)));
+            }
+
+            if (r.ReceiptId is { } receipt)
+            {
+                facts.Add(new("Receipt", ReceiptCode(receipt)));
+            }
+
+            return facts;
+        }
+    }
+
+    /// <summary>A receipt's code, "RC-0012".</summary>
+    public static string ReceiptCode(int id) => RecordFormatting.Code("RC", id);
 
     public override string PageTitle => "Requests";
 
@@ -158,6 +234,12 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
 
     private bool _openNew;
 
+    private int? _fulfilWhenOpen;
+
+    /// <summary>
+    /// The status filter; "All statuses" sends none. The saved views replace it on screen, so it is shown (as a chip that can be cleared) only while a link from another
+    /// screen has set it.
+    /// </summary>
     public FilterOption<RequestStatus> StatusFilter
     {
         get => _statusFilter;
@@ -166,10 +248,94 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
             if (SetProperty(ref _statusFilter, value))
             {
                 ViewState.Filters[StatusKey] = value.Value?.ToString();
+                OnPropertyChanged(nameof(HasStatusFilter));
                 FilterChanged();
             }
         }
     }
+
+    public bool HasStatusFilter => _statusFilter.Value is not null;
+
+    // ---- the saved views ----
+
+    /// <summary>The saved view shown (Open by default), or null for all requests (a link from another screen with a status of its own).</summary>
+    public RequestView? View
+    {
+        get => _view;
+        set
+        {
+            if (_view == value)
+            {
+                return;
+            }
+
+            _view = value;
+            ViewState.Filters[ViewKey] = value?.ToString();
+            RaiseViewChanged();
+            FilterChanged();
+        }
+    }
+
+    public bool IsOpenView { get => _view == RequestView.Open; set => SetViewFromTab(value, RequestView.Open); }
+
+    public bool IsDueSoonView { get => _view == RequestView.DueSoon; set => SetViewFromTab(value, RequestView.DueSoon); }
+
+    public bool IsFulfilledView { get => _view == RequestView.Fulfilled; set => SetViewFromTab(value, RequestView.Fulfilled); }
+
+    public bool IsCancelledView { get => _view == RequestView.Cancelled; set => SetViewFromTab(value, RequestView.Cancelled); }
+
+    /// <summary>How many requests each view holds (the tabs' counts), with the same search and filters; null until known or when the count call failed.</summary>
+    public RequestViewCounts? ViewCounts { get; private set; }
+
+    /// <summary>The Status column shows for closed requests (and the list of all requests); an open view's rows are all pending, so it would repeat "Pending".</summary>
+    public bool ShowStatusColumn => _view is null or RequestView.Fulfilled or RequestView.Cancelled;
+
+    /// <summary>The Urgency and Cover columns show where requests are still open; a fulfilled or cancelled request has neither.</summary>
+    public bool ShowOpenColumns => _view is null or RequestView.Open or RequestView.DueSoon;
+
+    private void SetViewFromTab(bool isChecked, RequestView view)
+    {
+        if (isChecked)
+        {
+            View = view;
+        }
+    }
+
+    private void RaiseViewChanged()
+    {
+        OnPropertyChanged(nameof(View));
+        OnPropertyChanged(nameof(IsOpenView));
+        OnPropertyChanged(nameof(IsDueSoonView));
+        OnPropertyChanged(nameof(IsFulfilledView));
+        OnPropertyChanged(nameof(IsCancelledView));
+        OnPropertyChanged(nameof(ShowStatusColumn));
+        OnPropertyChanged(nameof(ShowOpenColumns));
+        OnPropertyChanged(nameof(EmptyTitle));
+        OnPropertyChanged(nameof(EmptyMessage));
+    }
+
+    protected override string EmptyNoFilterTitle => _view switch
+    {
+        RequestView.Open => "No requests waiting for blood",
+        RequestView.DueSoon => "Nothing is due in the next 48 hours",
+        RequestView.Fulfilled => "No fulfilled requests yet",
+        RequestView.Cancelled => "No cancelled requests",
+        _ => "No requests yet",
+    };
+
+    protected override string EmptyAddMessage => _view switch
+    {
+        RequestView.Open => "Every request has been fulfilled or cancelled.",
+        RequestView.DueSoon => "No open request is needed by the day after tomorrow.",
+        _ => "There are no requests to show.",
+    };
+
+    // ---- cover ----
+
+    /// <summary>The Cover of a pending request from the stock fetched with the list (same group only, as Fulfil issues it); null for a closed request or unknown stock.</summary>
+    public RequestCoverage? CoverOf(RequestListItem item) => item is { Status: RequestStatus.Pending } ? CoverOf(item.BloodType, item.Units) : null;
+
+    private RequestCoverage? CoverOf(BloodType group, int units) => _available is { } stock ? RequestCoverage.Of(units, stock.GetValueOrDefault(group)) : null;
 
     protected override bool HasExtraFilters => base.HasExtraFilters || _statusFilter.Value is not null;
 
@@ -178,14 +344,29 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
         base.ResetExtraFilters();
         _statusFilter = StatusOptions[0];
         OnPropertyChanged(nameof(StatusFilter));
+        OnPropertyChanged(nameof(HasStatusFilter));
     }
 
-    /// <summary>One call: the search text matches the patient's name (or the request number), the blood type and status filters are sent with it.</summary>
     /// <summary>The columns that sort: when the request was placed and the date it is needed by (the API supports exactly these two).</summary>
     public override IReadOnlyList<string> SortKeys { get; } = ContractSortKeys.Requests;
 
-    protected override Task<ApiResult<PagedResult<RequestListItem>>> FetchSortedAsync(ListRequest request, CancellationToken ct) =>
-        _api.GetRequestsAsync(new RequestQuery(request.Search, null, _statusFilter.Value, BloodTypeValue, request.Page, request.PageSize, request.Sort), ct);
+    private int UtcOffsetMinutes => (int)Clock.GetLocalNow().Offset.TotalMinutes;
+
+    /// <summary>
+    /// One call for the page (the search matches the patient's name or the request number; the view, blood type and status go with it), and beside it, best effort, the
+    /// views' counts and the stock (for the Cover column). Either of those may fail without failing the list.
+    /// </summary>
+    protected override async Task<ApiResult<PagedResult<RequestListItem>>> FetchSortedAsync(ListRequest request, CancellationToken ct)
+    {
+        var query = new RequestQuery(request.Search, null, _statusFilter.Value, BloodTypeValue, request.Page, request.PageSize, request.Sort) { View = _view, UtcOffsetMinutes = UtcOffsetMinutes };
+        var page = _api.GetRequestsAsync(query, ct);
+        var counts = _api.GetRequestViewCountsAsync(query, ct);
+        var stock = _api.GetStockAsync(ct);
+        var result = await page.ConfigureAwait(false);
+        _fetchedCounts = await counts.ConfigureAwait(false) is { IsOk: true } c ? c.Value : null;
+        _fetchedStock = await stock.ConfigureAwait(false) is { IsOk: true } s ? s.Value : null;
+        return result;
+    }
 
     protected override void ApplyPrefilter(ListPrefilter prefilter)
     {
@@ -194,12 +375,29 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
         {
             _statusFilter = StatusOptions.First(o => o.Value == status);
             ViewState.Filters[StatusKey] = status.ToString();
+            // The status's own view, so the tabs agree with what the list shows.
+            _view = status switch
+            {
+                RequestStatus.Pending => RequestView.Open,
+                RequestStatus.Fulfilled => RequestView.Fulfilled,
+                _ => RequestView.Cancelled,
+            };
+            ViewState.Filters[ViewKey] = _view.ToString();
             OnPropertyChanged(nameof(StatusFilter));
+            OnPropertyChanged(nameof(HasStatusFilter));
+            RaiseViewChanged();
             OnFiltersChanged();
+        }
+        else if (prefilter.RecordId is not null)
+        {
+            // A link to one request (a dashboard item, a patient's panel): every view, so the request is in the list whatever its status. Not remembered: the
+            // next visit opens on the view the user chose.
+            _view = null;
+            RaiseViewChanged();
         }
     }
 
-    /// <summary>A prefilter, or "request blood for this patient" (a <see cref="RelatedRecord"/> of kind Patient).</summary>
+    /// <summary>A prefilter; "request blood for this patient" (a <see cref="RelatedRecord"/> of kind Patient); or "fulfil this request" (kind Request).</summary>
     void INavigationParameterReceiver.ReceiveParameter(object parameter)
     {
         if (parameter is RelatedRecord { Kind: RecordKind.Patient } patient)
@@ -211,12 +409,67 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
             return;
         }
 
+        if (parameter is RelatedRecord { Kind: RecordKind.Request } fulfil)
+        {
+            _fulfilWhenOpen = fulfil.Id;
+            ReceiveParameter(new ListPrefilter(RecordId: fulfil.Id));
+            _ = FulfilOnceOpenAsync(fulfil.Id);
+            return;
+        }
+
         ReceiveParameter(parameter);
     }
 
+    /// <summary>Starts the fulfil step of the request another screen asked to fulfil, once its detail is in the panel (and only if it is still pending).</summary>
+    private async Task FulfilOnceOpenAsync(int id)
+    {
+        await PendingDetail.ConfigureAwait(true);
+        if (_fulfilWhenOpen == id)
+        {
+            TryStartPendingFulfil();
+        }
+    }
+
+    /// <summary>
+    /// Opens the fulfil step asked for by another screen as soon as it can run: the request's detail is in the panel and no operation of the screen (the list's load)
+    /// keeps the step's command disabled. A request that is no longer pending, or another selection, drops the wish.
+    /// </summary>
+    private void TryStartPendingFulfil()
+    {
+        FulfilCommand.CanExecuteChanged -= OnFulfilCanExecuteChanged;
+        if (_fulfilWhenOpen is not { } id || Detail is not { } detail || detail.Id != id)
+        {
+            return;
+        }
+
+        if (detail.Status != RequestStatus.Pending)
+        {
+            _fulfilWhenOpen = null;
+            return;
+        }
+
+        if (FulfilCommand.CanExecute(null))
+        {
+            _fulfilWhenOpen = null;
+            FulfilCommand.Execute(null);
+        }
+        else
+        {
+            FulfilCommand.CanExecuteChanged += OnFulfilCanExecuteChanged;
+        }
+    }
+
+    private void OnFulfilCanExecuteChanged(object? sender, EventArgs e) => TryStartPendingFulfil();
+
     protected override void Apply()
     {
+        // The stock first: the rows' Cover cells read it when the page's rows are put in place.
+        _available = _fetchedStock?.ToDictionary(s => s.BloodType, s => s.Available);
+        ViewCounts = _fetchedCounts;
         base.Apply();
+        OnPropertyChanged(nameof(ViewCounts));
+        OnPropertyChanged(nameof(DetailCover));
+        OnPropertyChanged(nameof(PanelFacts));
         if (_openNew)
         {
             _openNew = false;
@@ -247,7 +500,7 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
         };
         if (r.ReceiptId is { } receipt)
         {
-            facts.Add(new DetailFact("Receipt", RecordFormatting.IdText(receipt)));
+            facts.Add(new DetailFact("Receipt", ReceiptCode(receipt)));
         }
 
         return facts;
@@ -288,7 +541,7 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
         bool done;
         try
         {
-            // In the side panel: the step closes itself after a fulfilled request, or on Cancel; a refusal (not enough stock) keeps it open with the message.
+            // In the side panel: the step closes itself after a fulfilled request, or on "Not now"; a refusal (not enough stock) keeps it open with the message.
             dialog.Bind(CurrentServerStatus, Clock, Dialogs);
             var closed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             dialog.CloseRequested += (_, _) => closed.TrySetResult();
@@ -304,13 +557,13 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
 
         if (!done)
         {
-            return; // cancelled, or the API refused (insufficient stock): nothing changed, so the list is left as it was
+            return; // not now, or the API refused (insufficient stock): nothing changed, so the list is left as it was
         }
 
         var receiptId = dialog.Receipt?.Id;
         Toasts.Show(
             ToastKind.Success,
-            receiptId is null ? $"Request for '{request.PatientName}' fulfilled." : $"Request for '{request.PatientName}' fulfilled. Receipt {RecordFormatting.IdText(receiptId.Value)} issued.",
+            receiptId is null ? $"Request for '{request.PatientName}' fulfilled." : $"Request for '{request.PatientName}' fulfilled. Receipt {ReceiptCode(receiptId.Value)} issued.",
             receiptId is null ? null : "View receipt",
             receiptId is null ? null : () => _receipts.ShowAsync(receiptId.Value, isDuplicate: false));
         await RefreshAfterActionAsync(request.Id).ConfigureAwait(true);

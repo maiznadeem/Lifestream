@@ -246,6 +246,7 @@ public static class ApiSetup
         DemoEndpoints.Map(api);
         StockBagEndpoints.Map(api);
         ReceiptCountEndpoints.Map(api);
+        ListScreenEndpoints.Map(api);
         return app;
     }
 }

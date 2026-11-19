@@ -8,6 +8,7 @@ using Lifestream.Client.Features.Donors;
 using Lifestream.Client.Features.Requests;
 using Lifestream.Client.Features.Patients;
 using Lifestream.Client.Tests.Fakes;
+using Lifestream.Contracts.Appointments;
 using Lifestream.Desktop.Controls;
 using Lifestream.Desktop.Features.Appointments;
 using Lifestream.Desktop.Features.Donors;
@@ -27,12 +28,13 @@ namespace Lifestream.Desktop.Tests.RedesignA;
 /// facts a broken layout would lose: nothing clipped, the panel's width for the breakpoint, the columns that fold away.
 /// </summary>
 [Trait("Category", "RenderA")]
+[Collection("Wpf")] // the renders switch the app's theme: never at the same time as another WPF test
 public sealed class ListScreenRenderTests
 {
-    /// <summary>Where the renders go: LIFESTREAM_CAPTURE_DIR, else the run's phase 2 captures folder, else the test output.</summary>
+    /// <summary>Where the renders go: LIFESTREAM_CAPTURE_DIR, else the run's fix-round captures folder, else the test output.</summary>
     public static string Directory { get; } = Environment.GetEnvironmentVariable("LIFESTREAM_CAPTURE_DIR") is { Length: > 0 } env
         ? env
-        : System.IO.Directory.Exists(@"G:\Claude\workspace\lifestream\run") ? @"G:\Claude\workspace\lifestream\run\captures\redesign-a\phase2" : Hosted.CaptureDirectory;
+        : System.IO.Directory.Exists(@"G:\Claude\workspace\lifestream\run") ? @"G:\Claude\workspace\lifestream\run\captures\redesign-a\fix" : Hosted.CaptureDirectory;
 
     public static TheoryData<string, string, int, int> Sizes => new()
     {
@@ -48,7 +50,7 @@ public sealed class ListScreenRenderTests
     [MemberData(nameof(Sizes))]
     public void Donors_RendersDirectionA(string theme, string size, int width, int height)
     {
-        var facts = StaHost.Run(() =>
+        var result = StaHost.Run(() =>
         {
             ThemeService.Apply(theme == "dark" ? ThemeMode.Dark : ThemeMode.Light);
             using var rig = new Rig(dispatcher: WpfTestUi.Dispatcher());
@@ -68,12 +70,36 @@ public sealed class ListScreenRenderTests
             var panel = host.Find<SidePanel>("Panel");
             var grid = host.Find<LifestreamDataGrid>("Grid");
             var book = host.All<Button>().First(b => System.Windows.Automation.AutomationProperties.GetName(b) == "Book appointment");
+            var add = host.Find<Button>("AddButton");
+            var primaries = host.All<Button>().Count(b => b.IsVisible && ReferenceEquals(b.Style, b.TryFindResource("Button.Primary")));
             var texts = host.All<TextBlock>().Where(t => t.IsVisible).Select(t => t.Text).ToList();
-            return (Png: png, PanelWidth: panel.ActualWidth, Panel: Hosted.BoundsOf(panel, host.Element), Book: Hosted.BoundsOf(book, host.Element), area,
+            var badges = host.All<Badge>().Where(b => b.IsVisible).Select(b => (b.Text, b.Kind, b.Icon)).ToList();
+            var facts = (Png: png, PanelWidth: panel.ActualWidth, Panel: Hosted.BoundsOf(panel, host.Element), Book: Hosted.BoundsOf(book, host.Element), area,
                 Columns: grid.Columns.Where(c => c.Visibility == Visibility.Visible).Select(c => c.Header as string).ToList(), Texts: texts, Card: vm.EligibilityCard,
-                Eligibility: grid.Columns.First(c => (c.Header as string) == "Eligibility").ActualWidth);
+                Name: grid.Columns.First(c => (c.Header as string) == "Name").ActualWidth, AddIsSecondary: ReferenceEquals(add.Style, add.TryFindResource("Button.Secondary")),
+                Primaries: primaries, Badges: badges, ShownHistory: vm.VisibleHistory.Count, AllHistory: 0);
+
+            // The whole history ("Show all 11"), and the list with no panel open (the header's action is the primary again).
+            vm.ShowAllHistoryCommand.Execute(null);
+            host.Settle(300);
+            if (size == "1440")
+            {
+                Save(host, $"donors-history-{size}-{theme}.png");
+            }
+
+            facts.AllHistory = vm.VisibleHistory.Count;
+            vm.CloseDetailCommand.Execute(null);
+            host.Settle(300);
+            var addAlone = ReferenceEquals(add.Style, add.TryFindResource("Button.Primary"));
+            if (size == "1440")
+            {
+                Save(host, $"donors-nopanel-{size}-{theme}.png");
+            }
+
+            return (facts, addAlone);
         });
 
+        var (facts, addAlone) = result;
         var compact = width < Responsive.StandardWidth;
         Assert.Equal(compact ? 352 : 420, facts.PanelWidth);
         Assert.True(facts.Panel.Right <= facts.area.Width + 0.5 && facts.Book.Bottom <= facts.area.Height, $"the panel is clipped: {facts.Panel}");
@@ -81,13 +107,38 @@ public sealed class ListScreenRenderTests
         Assert.Contains("Donor D-0175", facts.Texts);
         Assert.Contains("Eligible to donate", facts.Texts);
         Assert.Equal("Last donated 29 Jul 2026, 113 days ago.", facts.Card?.Message);
-        Assert.Contains("Until 29 Jan", facts.Texts); // Bianca Whitlock, last donated 31 Oct
-        Assert.Contains("First-time", facts.Texts); // Elio Bergström
+        Assert.Contains(("Until 29 Jan", BadgeKind.Neutral, IconKind.Clock), facts.Badges); // Bianca Whitlock, last donated 31 Oct: a clock with the date
+        Assert.Contains(("First-time", BadgeKind.Info, IconKind.Info), facts.Badges); // Elio Bergström
+        if (!compact)
+        {
+            Assert.Contains(("Not eligible", BadgeKind.Critical, IconKind.Alert), facts.Badges); // Fenna Galloway, 61 (below the fold in a compact window)
+        }
+
         Assert.Equal(["Name", "Group", "Eligibility"], facts.Columns.Take(3));
-        Assert.Equal(130, facts.Eligibility, 0.5); // fixed columns keep their width after the side panel opens (ListColumns.RestoreWidths)
+        Assert.True(facts.Name <= 320.5, $"Name takes {facts.Name}; it is capped at 320 so the details share the room");
+        // Paging: 50 of 118 on page 1 of 3, the range with an en dash.
+        Assert.Contains("Showing 1\u201350 of 118", facts.Texts);
+        Assert.Contains("Page 1 of 3", facts.Texts);
+        // One primary: the panel's "Book appointment"; the header's "Add donor" is secondary while the panel is open, primary again once it closes.
+        Assert.True(facts.AddIsSecondary);
+        Assert.Equal(1, facts.Primaries);
+        Assert.True(addAlone);
+        // The donations: the total in the details, the history with bag codes and where each bag went.
+        Assert.Contains("11 donations, 11 units in all", facts.Texts);
+        Assert.Contains("Donation history", facts.Texts);
+        Assert.Contains("Issued 12 Aug to Quinn Crowhurst", facts.Texts);
+        Assert.Contains("B-4187", facts.Texts);
+        Assert.Contains("Show all 11", facts.Texts);
+        Assert.Equal(DonorsViewModel.HistoryPreviewCount, facts.ShownHistory);
+        Assert.Equal(11, facts.AllHistory);
+        if (!compact)
+        {
+            Assert.Contains("Donations", facts.Columns);
+        }
+
         if (width >= 1920)
         {
-            Assert.Contains("Donates", facts.Columns);
+            Assert.Contains("Age", facts.Columns);
         }
 
         if (compact)
@@ -120,9 +171,11 @@ public sealed class ListScreenRenderTests
             var panel = host.Find<SidePanel>("Panel");
             var grid = host.Find<LifestreamDataGrid>("Grid");
             var texts = host.All<TextBlock>().Where(t => t.IsVisible).Select(t => t.Text).ToList();
-            return (PanelWidth: panel.ActualWidth, Panel: Hosted.BoundsOf(panel, host.Element), area, Texts: texts,
+            var badges = host.All<Badge>().Where(b => b.IsVisible).Select(b => (b.Text, b.Kind)).ToList();
+            var fulfils = host.All<Button>().Count(b => b.IsVisible && AutomationProperties.GetName(b) == "Fulfil this request");
+            return (PanelWidth: panel.ActualWidth, Panel: Hosted.BoundsOf(panel, host.Element), area, Texts: texts, Badges: badges, Fulfils: fulfils,
                 Columns: grid.Columns.Where(c => c.Visibility == Visibility.Visible).Select(c => c.Header as string).ToList(),
-                Requests: grid.Columns.First(c => (c.Header as string) == "Requests").ActualWidth);
+                Name: grid.Columns.First(c => (c.Header as string) == "Name").ActualWidth);
         });
 
         Assert.Equal(width < Responsive.StandardWidth ? 352 : 420, facts.PanelWidth);
@@ -131,7 +184,16 @@ public sealed class ListScreenRenderTests
         Assert.Contains("2 requests waiting for blood", facts.Texts);
         Assert.Contains("2 waiting", facts.Texts);
         Assert.Equal(["Name", "Group", "Requests"], facts.Columns.Take(3));
-        Assert.Equal(140, facts.Requests, 0.5);
+        Assert.True(facts.Name <= 320.5, $"Name takes {facts.Name}");
+        // Each waiting request with its cover (no O− in stock) and a Fulfil action; and the groups the patient can receive.
+        Assert.Contains("Needed by 22 Nov 2026", facts.Texts);
+        Assert.Contains("Needed by 30 Nov 2026", facts.Texts);
+        Assert.Contains(("No stock", BadgeKind.Critical), facts.Badges);
+        Assert.Contains(("In 3 days", BadgeKind.Warning), facts.Badges);
+        Assert.Equal(2, facts.Fulfils);
+        Assert.Contains("Can receive", facts.Texts);
+        Assert.Contains("O\u2212", facts.Texts);
+        Assert.Contains("Page 1 of 1", facts.Texts);
     }
 
     [Theory]
@@ -149,26 +211,61 @@ public sealed class ListScreenRenderTests
             var view = new AppointmentsView { DataContext = vm };
             using var host = Hosted.Create(PageArea(view, width, height, out var area), area.Width, area.Height);
             Hosted.Await(() => vm.LoadAsync());
+            // The Today agenda with nothing open: Next and Check in on the first appointment still to come, Record donation on the later ones.
+            host.Settle(400);
+            Save(host, $"appointments-today-{size}-{theme}.png");
+            var checkIns = host.All<Button>().Count(b => b.IsVisible && AutomationProperties.GetName(b) == "Check in");
+            var records = host.All<Button>().Count(b => b.IsVisible && AutomationProperties.GetName(b) == "Record donation");
             Hosted.Await(() =>
             {
-                vm.SelectedItem = vm.Items[5];
+                vm.SelectedItem = vm.Items.First(a => a.DonorName == "Asher Devereux");
                 return vm.PendingDetail;
             });
             host.Settle(600);
             Save(host, $"appointments-{size}-{theme}.png");
             var panel = host.Find<SidePanel>("Panel");
             var texts = host.All<TextBlock>().Where(t => t.IsVisible).Select(t => t.Text).ToList();
-            return (PanelWidth: panel.ActualWidth, Panel: Hosted.BoundsOf(panel, host.Element), area, Texts: texts, Banner: vm.DonorEligibility.Headline);
+            var badges = host.All<Badge>().Where(b => b.IsVisible).Select(b => b.Text).ToList();
+            var dayTexts = host.All<TextBlock>().Where(t => t.IsVisible && t.Text.StartsWith("Today,", StringComparison.Ordinal)).ToList();
+            var todayInk = dayTexts.All(t => ReferenceEquals(t.Foreground, t.TryFindResource("Brush.Ink")));
+            var facts = (PanelWidth: panel.ActualWidth, Panel: Hosted.BoundsOf(panel, host.Element), area, Texts: texts, Badges: badges, Banner: vm.DonorEligibility.Headline,
+                CheckIns: checkIns, Records: records, TodayInk: todayInk, DayHeaders: dayTexts.Count, UpcomingTexts: new List<string>(), UpcomingError: (string?)null);
+
+            // The Upcoming tab: the days after today, grouped by day.
+            vm.CloseDetailCommand.Execute(null);
+            AppointmentDesignData.Show(rig.Api, AppointmentView.Upcoming);
+            Hosted.Await(() =>
+            {
+                vm.IsUpcomingView = true; // the tab, as a click sets it (inside the dispatcher, as in the app)
+                return vm.PendingRefresh;
+            });
+            host.Settle(500);
+            Save(host, $"appointments-upcoming-{size}-{theme}.png");
+            facts.UpcomingTexts = host.All<TextBlock>().Where(t => t.IsVisible).Select(t => t.Text).ToList();
+            facts.UpcomingError = vm.HasError ? $"{vm.ErrorMessage} {vm.ErrorDetail}" : null;
+            return facts;
         });
 
         Assert.Equal(width < Responsive.StandardWidth ? 352 : 420, facts.PanelWidth);
         Assert.True(facts.Panel.Right <= facts.area.Width + 0.5, $"the panel is clipped: {facts.Panel}");
         Assert.Contains("Today, Thu 19 Nov", facts.Texts);
-        Assert.Contains("Yesterday, Wed 18 Nov", facts.Texts);
+        Assert.True(facts.DayHeaders > 0 && facts.TodayInk, "today's day header is Ink, not blood red");
         Assert.Contains("11:00", facts.Texts);
         Assert.Contains("Thu 19 Nov 2026, 11:00", facts.Texts);
+        Assert.Contains("Appointment A-0905", facts.Texts);
         Assert.Equal("Eligible to donate", facts.Banner); // last donated 3 Aug: 108 days before the appointment
         Assert.Contains("Eligible to donate", facts.Texts);
+        // Tabs with counts; the agenda's marks and inline actions.
+        Assert.Contains("Today 7", facts.Texts);
+        Assert.Contains("Upcoming 3", facts.Texts);
+        Assert.Contains("Past 2", facts.Texts);
+        Assert.Contains("Next", facts.Texts);
+        Assert.Contains("First-time", facts.Badges);
+        Assert.Equal(1, facts.CheckIns);
+        Assert.Equal(3, facts.Records); // Gideon, Elio and Anders (Asher is Next)
+        Assert.True(facts.UpcomingError is null, facts.UpcomingError);
+        Assert.Contains("Tomorrow, Fri 20 Nov", facts.UpcomingTexts);
+        Assert.DoesNotContain("Today, Thu 19 Nov", facts.UpcomingTexts);
     }
 
     [Theory]
@@ -185,39 +282,105 @@ public sealed class ListScreenRenderTests
             var view = new RequestsView { DataContext = vm };
             using var host = Hosted.Create(PageArea(view, width, height, out var area), area.Width, area.Height);
             Hosted.Await(() => vm.LoadAsync());
+            var order = vm.Items.Select(r => r.PatientName).ToList();
             Hosted.Await(() =>
             {
-                vm.SelectedItem = vm.Items[0];
+                vm.SelectedItem = vm.Items.First(r => r.Id == 148);
                 return vm.PendingDetail;
             });
             host.Settle(300);
             Save(host, $"requests-{size}-{theme}.png");
             var badges = host.All<Badge>().Where(b => b.IsVisible).Select(b => (b.Text, b.Kind)).ToList();
+            var grid = host.Find<LifestreamDataGrid>("Grid");
+            var columns = grid.Columns.Where(c => c.Visibility == Visibility.Visible).Select(c => c.Header as string).ToList();
+            var listTexts = host.All<TextBlock>().Where(t => t.IsVisible).Select(t => t.Text).ToList();
 
             // The fulfil step, in the side panel.
             Hosted.Await(() =>
             {
                 _ = vm.FulfilCommand.ExecuteAsync();
-                return vm.Fulfilment!.PendingStock;
+                return Task.WhenAll(vm.Fulfilment!.PendingStock, vm.Fulfilment!.PendingBags);
             });
             host.Settle(400);
             Save(host, $"requests-fulfil-{size}-{theme}.png");
             var panel = host.Find<SidePanel>("Panel");
+            var panelWidth = panel.ActualWidth;
+            var panelBounds = Hosted.BoundsOf(panel, host.Element);
             var texts = host.All<TextBlock>().Where(t => t.IsVisible).Select(t => t.Text).ToList();
+            var buttons = host.All<Button>().Where(b => b.IsVisible).Select(b => b.Content as string).ToList();
             Hosted.Await(() => vm.Fulfilment!.CancelCommand.ExecuteAsync());
             host.Settle(100);
-            return (PanelWidth: panel.ActualWidth, Panel: Hosted.BoundsOf(panel, host.Element), area, Texts: texts, Badges: badges, Closed: vm.Fulfilment is null);
+            var closed = vm.Fulfilment is null;
+
+            // The Fulfilled tab: closed requests show their status, and no urgency or cover.
+            vm.CloseDetailCommand.Execute(null);
+            RequestDesignData.Show(rig.Api, Contracts.Requests.RequestView.Fulfilled);
+            Hosted.Await(() =>
+            {
+                vm.IsFulfilledView = true;
+                return vm.PendingRefresh;
+            });
+            host.Settle(400);
+            Save(host, $"requests-fulfilled-{size}-{theme}.png");
+            var closedColumns = grid.Columns.Where(c => c.Visibility == Visibility.Visible).Select(c => c.Header as string).ToList();
+            return (PanelWidth: panelWidth, Panel: panelBounds, area, Texts: texts, ListTexts: listTexts, Badges: badges, Closed: closed, Order: order,
+                Columns: columns, ClosedColumns: closedColumns, Buttons: buttons);
         });
 
         Assert.Equal(width < Responsive.StandardWidth ? 352 : 420, facts.PanelWidth);
         Assert.True(facts.Panel.Right <= facts.area.Width + 0.5, $"the panel is clipped: {facts.Panel}");
+        Assert.Equal("Leilani Okoro", facts.Order[0]); // overdue first, then by the date needed
         Assert.Contains(("Today", BadgeKind.Critical), facts.Badges);
         Assert.Contains(("Overdue 2 days", BadgeKind.Critical), facts.Badges);
         Assert.Contains(("Tomorrow", BadgeKind.Warning), facts.Badges);
         Assert.Contains(("In 3 days", BadgeKind.Warning), facts.Badges);
+        Assert.Contains(("Can fulfil", BadgeKind.Success), facts.Badges); // Petra: 4 AB+ for 3
+        Assert.Contains(("No stock", BadgeKind.Critical), facts.Badges); // Leilani: no AB−
+        Assert.Contains(("1 short", BadgeKind.Warning), facts.Badges); // Talia: 2 A+ for 3
+        Assert.Contains("Cover", facts.Columns);
+        Assert.DoesNotContain("Status", facts.Columns); // an open view's rows are all pending
+        Assert.Contains("Request R-0148", facts.ListTexts);
+        Assert.Contains("Open 6", facts.ListTexts); // the tabs, with their counts
+        Assert.Contains("Due in 48 h 3", facts.ListTexts);
+        Assert.Contains("Fulfilled 2", facts.ListTexts);
         Assert.Contains("Fulfil this request", facts.Texts);
         Assert.Contains("In stock: 4 units of AB+", facts.Texts);
+        Assert.Contains("B-0601", facts.Texts); // the oldest bag first
+        Assert.Contains("Collected 14 Oct 2026 from Elio Bergstr\u00f6m", facts.Texts);
+        Assert.Contains("Not now", facts.Buttons);
+        Assert.DoesNotContain("Cancel", facts.Buttons);
         Assert.True(facts.Closed);
+        Assert.Contains("Status", facts.ClosedColumns);
+        Assert.DoesNotContain("Cover", facts.ClosedColumns);
+        Assert.DoesNotContain("Urgency", facts.ClosedColumns);
+    }
+
+    /// <summary>The error state of a list (design-qa 21): the cause and the fix in plain words, Retry, and no count in the header while nothing is loaded.</summary>
+    [Theory]
+    [InlineData("light")]
+    [InlineData("dark")]
+    public void Donors_ErrorState_NamesTheCauseAndTheFix_AndHidesTheCount(string theme)
+    {
+        var facts = StaHost.Run(() =>
+        {
+            ThemeService.Apply(theme == "dark" ? ThemeMode.Dark : ThemeMode.Light);
+            using var rig = new Rig(dispatcher: WpfTestUi.Dispatcher());
+            rig.Api.On("GetDonorsAsync", Client.Api.ApiResult<Contracts.PagedResult<Contracts.Donors.DonorListItem>>.Fail(new Client.Api.ApiProblem(0, Client.Api.ClientProblemCodes.Unreachable, "No route to host", "corr-3")));
+            var vm = ActivatorUtilities.CreateInstance<DonorsViewModel>(rig.Provider);
+            vm.Attach(null, new ListScreensClock());
+            var view = new DonorsView { DataContext = vm };
+            using var host = Hosted.Create(PageArea(view, 1440, 900, out var area), area.Width, area.Height);
+            Hosted.Await(() => vm.LoadAsync());
+            host.Settle(400);
+            Save(host, $"donors-error-1440-{theme}.png");
+            var header = host.Find<PageHeader>("Header");
+            return (Texts: host.All<TextBlock>().Where(t => t.IsVisible).Select(t => t.Text).ToList(), vm.HeaderCount, HeaderCount: header.Count, Error: vm.HasError);
+        });
+
+        Assert.True(facts.Error);
+        Assert.Contains("Can't reach the server. Check your internet connection, then retry.", facts.Texts);
+        Assert.Null(facts.HeaderCount); // no "0" while the list could not be loaded
+        Assert.Null(facts.Item3);
     }
 
     public static TheoryData<string, string, int, int> EditorSizes => new()

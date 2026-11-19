@@ -227,4 +227,12 @@ public sealed class FakeApiClient : ILifestreamApiClient
     public Task<ApiResult<StockBagList>> GetStockBagsAsync(BloodType bloodType, CancellationToken ct = default) => Run<StockBagList>(nameof(GetStockBagsAsync), ct);
 
     public Task<ApiResult<ReceiptCounts>> GetReceiptCountsAsync(ReceiptCountQuery query, CancellationToken ct = default) => Run<ReceiptCounts>(nameof(GetReceiptCountsAsync), ct);
+
+    public Task<ApiResult<DonorDonations>> GetDonorDonationsAsync(int id, CancellationToken ct = default) => Run<DonorDonations>(nameof(GetDonorDonationsAsync), ct);
+
+    public Task<ApiResult<AppointmentViewCounts>> GetAppointmentViewCountsAsync(AppointmentQuery query, CancellationToken ct = default) => Run<AppointmentViewCounts>(nameof(GetAppointmentViewCountsAsync), ct);
+
+    public Task<ApiResult<RequestViewCounts>> GetRequestViewCountsAsync(RequestQuery query, CancellationToken ct = default) => Run<RequestViewCounts>(nameof(GetRequestViewCountsAsync), ct);
+
+    public Task<ApiResult<FulfilPreview>> GetFulfilPreviewAsync(int requestId, CancellationToken ct = default) => Run<FulfilPreview>(nameof(GetFulfilPreviewAsync), ct);
 }

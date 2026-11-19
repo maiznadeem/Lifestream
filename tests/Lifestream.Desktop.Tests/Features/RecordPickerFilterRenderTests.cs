@@ -100,26 +100,42 @@ public sealed class RecordPickerFilterRenderTests
         Assert.True(facts.Choosing);
     }
 
+    /// <summary>
+    /// Direction A (audit A5): the Appointments donor filter is a chip of the command bar, not a field. With nothing chosen it reads "+ Donor" (no empty box, no Change, no
+    /// clear); once a donor is chosen it reads "Donor: name" with an x that removes the filter.
+    /// </summary>
     [Fact]
-    public void AppointmentsView_DonorFilter_WithNothingChosen_ShowsAnyDonorAndChoose_FakeApi()
+    public void AppointmentsView_DonorFilter_IsAChip_PlusDonorUntilChosen_ThenTheNameWithAClear_FakeApi()
     {
         using var rig = StaHostRig();
         var facts = StaHost.Run(() =>
         {
-            using var host = Hosted.Create(Part2Harness.OnCanvas(new AppointmentsView(), AppointmentsModel(out var rigInner)), 1366, 736);
+            var vm = AppointmentsModel(out var rigInner);
+            using var host = Hosted.Create(Part2Harness.OnCanvas(new AppointmentsView(), vm), 1366, 736);
             host.Settle(400);
-            var picker = host.Find<RecordPicker>("DonorFilterBox");
-            var inside = Hosted.Descendants(picker).ToList();
-            var buttons = inside.OfType<Button>().Where(b => b.IsVisible).Select(b => b.Content as string ?? AutomationProperties.GetName(b)).ToList();
-            var texts = inside.OfType<TextBlock>().Where(t => t.IsVisible && t.Text.Length > 0).Select(t => t.Text).ToList();
+            var chip = host.All<Lifestream.Desktop.Features.ListScreens.RecordFilterChip>().Single();
+            string[] Read() => [.. Hosted.Descendants(chip).OfType<TextBlock>().Where(t => t.IsVisible && t.Text.Length > 0).Select(t => t.Text)];
+            string[] Buttons() => [.. Hosted.Descendants(chip).OfType<Button>().Where(b => b.IsVisible).Select(b => b.Content as string ?? AutomationProperties.GetName(b))];
+            var empty = (Texts: Read(), Buttons: Buttons(), Boxes: Hosted.Descendants(chip).OfType<TextBox>().Count(t => t.IsVisible));
             Part2Harness.Save(host, "AppointmentsView_DonorFilterEmpty.png");
+            Hosted.Await(() =>
+            {
+                vm.DonorFilter = new RecordOption(101, "Jane Q. Public", "B-");
+                return vm.PendingRefresh;
+            });
+            host.Settle(300);
+            Part2Harness.Save(host, "AppointmentsView_DonorFilterChosen.png");
+            var chosen = (Texts: Read(), Buttons: Buttons());
             rigInner.Dispose();
-            return (buttons, texts);
+            return (empty, chosen);
         });
 
-        Assert.Contains("Any donor", facts.texts);
-        Assert.Contains("Choose", facts.buttons);
-        Assert.DoesNotContain("Change", facts.buttons);
+        Assert.Equal(["Donor"], facts.empty.Texts);
+        Assert.Equal(0, facts.empty.Boxes); // a chip, not a fake text box
+        Assert.DoesNotContain("Change", facts.empty.Buttons);
+        Assert.DoesNotContain("Remove the donor filter", facts.empty.Buttons);
+        Assert.Contains("Donor: Jane Q. Public", facts.chosen.Texts);
+        Assert.Contains("Remove the donor filter", facts.chosen.Buttons);
     }
 
     [Fact]

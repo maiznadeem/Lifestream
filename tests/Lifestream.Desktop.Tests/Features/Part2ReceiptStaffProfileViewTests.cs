@@ -228,7 +228,7 @@ public sealed class Part2ReceiptStaffProfileViewTests
         Assert.Equal(1, facts.Sortable); // only the name column sorts: the API sorts staff by name or username (Contracts SortKeys)
         Assert.Equal(0, facts.PasswordControls);
         Assert.Equal(1, facts.ListCalls);
-        Assert.Equal("Showing 1-50 of 110", facts.Count);
+        Assert.Equal("Showing 1–50 of 110", facts.Count);
         Assert.True(facts.PhotoCalls > 0);
         Assert.True(facts.PhotoCalls < facts.RowsWithPhotoTotal, $"photo requests {facts.PhotoCalls} must be fewer than the {facts.RowsWithPhotoTotal} rows that have one: only shown rows ask"); // lazy
         Assert.Equal(facts.PhotoCalls, facts.LoadedPhotos);

@@ -31,6 +31,20 @@ public sealed class IsTodayConverter : IMultiValueConverter
     public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture) => throw new NotSupportedException();
 }
 
+/// <summary>
+/// Visible when a row's place in today's agenda (<see cref="AppointmentsViewModel.AgendaOf"/>) is one of the parameter's names ("Next", "Waiting|Next"); a
+/// multi-binding of the row, the view model and its AgendaVersion (which changes when the marks are worked out again).
+/// </summary>
+public sealed class AgendaVisibleConverter : IMultiValueConverter
+{
+    public object Convert(object[] values, Type targetType, object parameter, CultureInfo culture) =>
+        values is [AppointmentListItem item, AppointmentsViewModel model, ..] && (parameter as string ?? string.Empty).Split('|').Contains(model.AgendaOf(item).ToString(), StringComparer.Ordinal)
+            ? System.Windows.Visibility.Visible
+            : System.Windows.Visibility.Collapsed;
+
+    public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture) => throw new NotSupportedException();
+}
+
 /// <summary>"3 appointments" under a day group.</summary>
 public sealed class AppointmentCountConverter : IValueConverter
 {

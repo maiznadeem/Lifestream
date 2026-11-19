@@ -128,7 +128,7 @@ public sealed class ViewModelTests
         await vm.LoadAsync();
 
         Assert.Equal(LoadState.Error, vm.State);
-        Assert.Equal("Can't reach the server. Check your internet connection.", vm.ErrorMessage);
+        Assert.Equal("Can't reach the server. Check your internet connection, then retry.", vm.ErrorMessage);
         Assert.Contains("corr-9", vm.ErrorDetail);
         Assert.DoesNotContain("socket", vm.ErrorMessage!);
     }
@@ -185,7 +185,7 @@ public sealed class ViewModelTests
         await load.WaitAsync(TimeSpan.FromSeconds(5));
 
         Assert.Equal(LoadState.Error, vm.State);
-        Assert.Equal("This is taking longer than expected.", vm.ErrorMessage);
+        Assert.Equal("The server is taking too long to answer. Check your connection, then retry.", vm.ErrorMessage);
 
         // Retry: a fresh load with data replaces the error.
         vm.Fetch = _ => Task.CompletedTask;

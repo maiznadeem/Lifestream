@@ -8,6 +8,7 @@ using Lifestream.Data.Queries;
 using Lifestream.Data.Entities;
 using Lifestream.Domain;
 using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -44,15 +45,31 @@ public static class DonorEndpoints
         return donors;
     }
 
-    private static async Task<PagedResult<DonorListItem>> ListAsync([AsParameters] DonorQuery q, LifestreamDbContext db, CancellationToken ct)
+    // Direction A's Eligibility and Last donated chips arrive as two extra optional query values.
+    private static async Task<PagedResult<DonorListItem>> ListAsync([AsParameters] DonorQuery q, [FromQuery] bool? eligible, [FromQuery] DonationRecency? lastDonated, LifestreamDbContext db, TimeProvider time, CancellationToken ct)
     {
         var (page, size) = Lists.Normalize(q.Page, q.PageSize);
         var filtered = Filter(db.Donors.AsNoTracking(), q.Search, q.BloodType);
+        var today = Dates.Today(time);
+        if (eligible is { } wanted)
+        {
+            filtered = ListScreenEndpoints.WhereEligible(filtered, wanted, today);
+        }
+
+        if (lastDonated is { } recency)
+        {
+            filtered = ListScreenEndpoints.WhereLastDonated(filtered, recency, today);
+        }
+
         var total = Lists.Total(filtered);
         var rows = await (from d in Sorts.Apply(filtered, q.Sort).Skip((page - 1) * size).Take(size).ForSearch(q.Search)
                           from t in total
                           select new ListRow<DonorListItem>(
-                              new DonorListItem(d.Id, d.Name, d.DateOfBirth, d.Gender, d.BloodType, d.Phone, d.Frequency, d.LastDonated) { MedicalHold = d.MedicalHold },
+                              new DonorListItem(d.Id, d.Name, d.DateOfBirth, d.Gender, d.BloodType, d.Phone, d.Frequency, d.LastDonated)
+                              {
+                                  MedicalHold = d.MedicalHold,
+                                  Donations = db.Appointments.Count(a => a.DonorId == d.Id && a.Status == AppointmentStatus.Completed), // an index seek per row of the page, same statement
+                              },
                               t))
             .ToListAsync(ct);
         return await Lists.BuildAsync(rows, page, size, () => filtered.CountAsync(ct));

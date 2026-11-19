@@ -14,6 +14,9 @@ public sealed record DonorListItem(
 {
     /// <summary>True when a clinician has put the donor on hold; such a donor is not eligible (API-11).</summary>
     public bool MedicalHold { get; init; }
+
+    /// <summary>How many donations the donor has made (completed appointments). Added for the Donations column; 0 from an older server.</summary>
+    public int Donations { get; init; }
 }
 
 public sealed record DonorDetail(
@@ -65,7 +68,14 @@ public sealed record DonorQuery(
     BloodType? BloodType = null,
     int Page = 1,
     int PageSize = Paging.DefaultPageSize,
-    string? Sort = null);
+    string? Sort = null)
+{
+    /// <summary>Optional: only donors who are (true) or are not (false) eligible to donate today.</summary>
+    public bool? Eligible { get; init; }
+
+    /// <summary>Optional: only donors who last donated in this window (or never).</summary>
+    public DonationRecency? LastDonated { get; init; }
+}
 
 /// <summary>Result of GET donors/{id}/eligibility.</summary>
 public sealed record DonorEligibility(bool IsEligible, IReadOnlyList<string> Reasons, DateOnly? NextEligibleDate);

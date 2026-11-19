@@ -87,6 +87,12 @@ public static class ApiRoutes
     /// <summary>GET receipts/counts?search=&amp;bloodType=: the receipts matching the list's filters, in all and by kind (ReceiptCounts).</summary>
     public const string ReceiptCounts = "receipts/counts";
 
+    // List screens, direction A (fix-a): a donor's donations, the saved views' counts, and the bags a fulfil would issue
+    public const string DonorDonations = "donors/{id}/donations";
+    public const string AppointmentViews = "appointments/views";
+    public const string RequestViews = "requests/views";
+    public const string RequestBags = "requests/{id}/bags";
+
     /// <summary>All route templates, for tests that check every route is mapped and authorised.</summary>
     public static IReadOnlyList<string> All { get; } =
         [.. typeof(ApiRoutes)

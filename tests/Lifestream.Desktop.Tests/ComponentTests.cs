@@ -218,7 +218,7 @@ public sealed class ComponentTests
             return (error.Message, retry.IsVisible && retry.Command is not null, closed, open, main.Any(t => t.Contains("secret", StringComparison.Ordinal) && t != viewModel.ErrorDetail));
         });
 
-        Assert.Equal("Something went wrong while loading this screen.", cause);
+        Assert.Equal("Lifestream couldn't show this data. Retry; if it keeps happening, restart Lifestream.", cause);
         Assert.True(retryVisible);
         Assert.True(detailsClosed);
         Assert.True(detailsOpen);
