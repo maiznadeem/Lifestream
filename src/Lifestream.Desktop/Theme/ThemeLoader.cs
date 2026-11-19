@@ -32,7 +32,12 @@ public static class ThemeLoader
             return;
         }
 
-        theme.MergedDictionaries[theme.MergedDictionaries.IndexOf(current)] = colors;
+        // Overwrite the values in place: setting an entry notifies every window and element that merges the theme, so each DynamicResource
+        // reference updates at once. (Replacing a nested merged dictionary does not reach elements that merged the theme themselves.)
+        foreach (var key in colors.Keys.Cast<object>().ToList())
+        {
+            current[key] = colors[key];
+        }
     }
 
     private static ResourceDictionary Load()

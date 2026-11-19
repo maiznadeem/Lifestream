@@ -400,6 +400,9 @@ public sealed partial class ShellViewModel : ViewModelBase
         });
     }
 
+    /// <summary>Runs an action on the UI thread the shell was created on (the palette's search results arrive from a background continuation).</summary>
+    internal void RunOnUi(Action action) => Post(action);
+
     private void SetBadge(string title, int? count, bool alert)
     {
         if (Items.FirstOrDefault(i => i.Title == title) is { } item)

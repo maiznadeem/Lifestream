@@ -42,7 +42,6 @@
   <Thickness x:Key="Inset.T44">0,44,0,0</Thickness>
   <Thickness x:Key="Chrome.ResizeBorder">6</Thickness>
   <Thickness x:Key="Chrome.GlassFrame">0,0,0,1</Thickness>
-  <sys:Double x:Key="Chrome.MaximizedTopOffset">1</sys:Double>
   <CornerRadius x:Key="Radius.Avatar">36</CornerRadius>
   <CornerRadius x:Key="Radius.AvatarLarge">48</CornerRadius>
   <Thickness x:Key="Inset.B12">0,0,0,12</Thickness>

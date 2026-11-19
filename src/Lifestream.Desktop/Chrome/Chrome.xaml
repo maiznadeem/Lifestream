@@ -12,7 +12,7 @@
        with the glyph at 70 %; close hover: #C42B1C with a white glyph. The highlight is the whole button, and that same rectangle is the hit-test region. -->
   <Style x:Key="CaptionButton" TargetType="Button">
     <Setter Property="Width" Value="{StaticResource Width.CaptionButton}" />
-    <Setter Property="Height" Value="{Binding TitleBarHeight, RelativeSource={RelativeSource AncestorType=chrome:ChromeWindow}}" />
+    <Setter Property="Height" Value="{Binding TitleBarHeight, RelativeSource={RelativeSource TemplatedParent}}" />
     <Setter Property="Foreground" Value="{DynamicResource Brush.Ink}" />
     <Setter Property="Focusable" Value="False" />
     <Setter Property="IsTabStop" Value="False" />

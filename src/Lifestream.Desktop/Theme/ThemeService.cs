@@ -89,9 +89,9 @@ public static class ThemeService
             _ => SystemIsDark,
         };
         var theme = ThemeLoader.Resources;
-        var current = ThemeLoader.ColorsOf(theme);
-        if (current is not null && dark == IsDark && current.Source == (dark ? DarkUri : LightUri) && !SystemParameters.HighContrast)
+        if (dark == IsDark && !SystemParameters.HighContrast)
         {
+            WatchSystem();
             return;
         }
 

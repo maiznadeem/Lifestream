@@ -128,10 +128,13 @@ public sealed partial class CommandPaletteViewModel : ObservableObject
         {
             await Task.Delay(SearchDelay, _clock, ct).ConfigureAwait(true);
             var found = await _shell.Operations.RunAsync(token => FindRecordsAsync(query, token), ct).ConfigureAwait(true);
-            if (!ct.IsCancellationRequested)
+            _shell.RunOnUi(() =>
             {
-                Rebuild(found);
-            }
+                if (!ct.IsCancellationRequested)
+                {
+                    Rebuild(found);
+                }
+            });
         }
         catch (OperationCanceledException)
         {
@@ -143,10 +146,13 @@ public sealed partial class CommandPaletteViewModel : ObservableObject
         }
         finally
         {
-            if (!ct.IsCancellationRequested)
+            _shell.RunOnUi(() =>
             {
-                IsSearching = false;
-            }
+                if (!ct.IsCancellationRequested)
+                {
+                    IsSearching = false;
+                }
+            });
         }
     }
 
