@@ -29,7 +29,7 @@ public partial class SqlServerDatabaseFixture : IAsyncLifetime
     {
         var ct = TestContext.Current.CancellationToken;
         await SweepLeftoverDatabasesOnceAsync(ct);
-        await CreateDatabaseAsync(ct);
+        await CreateAsync(ct);
         if (ApplyMigrations)
         {
             await using var db = NewContext();
@@ -130,6 +130,25 @@ public partial class SqlServerDatabaseFixture : IAsyncLifetime
         }
     }
 
+    /// <summary>Creates the (empty) database; a fixture whose database is a copy of a prepared one restores it here instead.</summary>
+    protected virtual Task CreateAsync(CancellationToken ct) => CreateDatabaseAsync(ct);
+
+    /// <summary>Runs a statement on <c>master</c> with the fixture's database name as <c>@name</c> (checked to be a fixture name first) and the given extra parameters.</summary>
+    private protected async Task ExecuteOnMasterAsync(string sql, string databaseName, CancellationToken ct, params SqlParameter[] parameters)
+    {
+        if (!IsFixtureDatabaseName(databaseName))
+        {
+            throw new InvalidOperationException("Refusing to create or drop a database that is not a fixture database: " + databaseName);
+        }
+
+        await using var connection = new SqlConnection(MasterConnection);
+        await connection.OpenAsync(ct);
+        await using var command = new SqlCommand(sql, connection) { CommandTimeout = 300 };
+        command.Parameters.Add(new SqlParameter("@name", SqlDbType.NVarChar, 128) { Value = databaseName });
+        command.Parameters.AddRange(parameters);
+        await command.ExecuteNonQueryAsync(ct);
+    }
+
     /// <summary>False gives an empty database, for tests that apply the schema some other way (the idempotent script).</summary>
     protected virtual bool ApplyMigrations => true;
 
@@ -205,21 +224,7 @@ public partial class SqlServerDatabaseFixture : IAsyncLifetime
         """,
         ct);
 
-    private async Task ExecuteOnMasterAsync(string sql, string databaseName, CancellationToken ct)
-    {
-        if (!IsFixtureDatabaseName(databaseName))
-        {
-            throw new InvalidOperationException("Refusing to create or drop a database that is not a fixture database: " + databaseName);
-        }
-
-        await using var connection = new SqlConnection(MasterConnection);
-        await connection.OpenAsync(ct);
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.Add(new SqlParameter("@name", SqlDbType.NVarChar, 128) { Value = databaseName });
-        command.CommandType = CommandType.Text;
-        command.CommandTimeout = 120;
-        await command.ExecuteNonQueryAsync(ct);
-    }
+    private Task ExecuteOnMasterAsync(string sql, string databaseName, CancellationToken ct) => ExecuteOnMasterAsync(sql, databaseName, ct, []);
 }
 
 /// <summary>A database with no tables at all.</summary>
@@ -241,38 +246,176 @@ public sealed class DemoSizeDatabaseFixture : SqlServerDatabaseFixture
     }
 }
 
-/// <summary>The same database with the 100x dataset loaded, once per class. Used by the plan and I/O tests and available to performance tests.</summary>
+/// <summary>
+/// The same database with the 100x dataset loaded, once per class. Loading 100,000 rows and settling the indexes takes about 20 s, so it is done once per
+/// test run into a template database that is backed up and dropped at once; each class then gets its own database restored from that backup (seconds):
+/// the same rows, rebuilt indexes and full-scan statistics as a database loaded for the class alone. Used by the plan and I/O tests and available to
+/// performance tests.
+/// </summary>
 public sealed class ScaleDatabaseFixture : SqlServerDatabaseFixture
 {
     public const int Factor = 100;
 
-    public DateOnly Today { get; } = DateOnly.FromDateTime(DateTime.UtcNow);
+    /// <summary>The day the dataset was generated for (the template's).</summary>
+    public DateOnly Today { get; private set; }
 
     public int Receipts { get; private set; }
 
-    protected override async Task OnMigratedAsync(CancellationToken ct)
-    {
-        await using var db = NewContext();
-        db.AuditEnabled = false;
-        db.ChangeTracker.AutoDetectChangesEnabled = false;
-        var set = Lifestream.Data.Seed.ScaleDataGenerator.Generate(Factor, Today);
-        Receipts = set.Receipts.Count;
-        set.AddTo(db);
-        await db.SaveChangesAsync(ct);
-        await SettleAsync(ct);
-    }
+    protected override bool ApplyMigrations => false; // the restored copy already has the schema
 
     /// <summary>
-    /// What a database that has just been bulk loaded needs before its plans mean anything: indexes rebuilt (rows arrive in clustered-key
-    /// order but in random order for every other index, so the nonclustered ones are half empty and look bigger than the table itself)
-    /// and statistics read in full (the automatic ones are sampled, and a sample differs from run to run). The same maintenance a
-    /// production database gets.
+    /// Held while a copy is restored, and by a test that reads plans back from the server's plan cache for its whole run: a RESTORE empties the plan
+    /// cache of the whole instance, so a restore for another class must not happen between that test's request and its reading of the plan.
     /// </summary>
-    private async Task SettleAsync(CancellationToken ct)
+    public static SemaphoreSlim PlanCacheGate { get; } = new(1, 1);
+
+    protected override async Task CreateAsync(CancellationToken ct)
     {
-        foreach (var table in new[] { "Donor", "Patient", "Staff", "Appointment", "Request", "Receipt", "BloodBag" })
+        var template = await ScaleTemplate.GetAsync(ct);
+        Today = template.Today;
+        Receipts = template.Receipts;
+        await PlanCacheGate.WaitAsync(ct);
+        try
         {
-            await ExecuteAsync($"ALTER INDEX ALL ON [{table}] REBUILD; UPDATE STATISTICS [{table}] WITH FULLSCAN;", ct);
+            await RestoreAsync(template, ct);
+        }
+        finally
+        {
+            PlanCacheGate.Release();
+        }
+    }
+
+    private Task RestoreAsync(ScaleTemplate.Built template, CancellationToken ct) =>
+        ExecuteOnMasterAsync(
+            """
+            DECLARE @data nvarchar(4000) = CAST(SERVERPROPERTY('InstanceDefaultDataPath') AS nvarchar(4000)) + @name + N'.mdf';
+            DECLARE @log nvarchar(4000) = CAST(SERVERPROPERTY('InstanceDefaultLogPath') AS nvarchar(4000)) + @name + N'_log.ldf';
+            RESTORE DATABASE @name FROM DISK = @file WITH MOVE @dataFile TO @data, MOVE @logFile TO @log, RECOVERY;
+            """,
+            DatabaseName,
+            ct,
+            new SqlParameter("@file", SqlDbType.NVarChar, 4000) { Value = template.BackupFile },
+            new SqlParameter("@dataFile", SqlDbType.NVarChar, 128) { Value = template.DataFile },
+            new SqlParameter("@logFile", SqlDbType.NVarChar, 128) { Value = template.LogFile });
+
+    /// <summary>The 100x template of this test run: built on first use, backed up into the server's backup folder, then dropped.</summary>
+    private static class ScaleTemplate
+    {
+        private static readonly SemaphoreSlim Gate = new(1, 1);
+        private static Built? _built;
+
+        public sealed record Built(string BackupFile, string DataFile, string LogFile, DateOnly Today, int Receipts);
+
+        public static async Task<Built> GetAsync(CancellationToken ct)
+        {
+            await Gate.WaitAsync(ct);
+            try
+            {
+                return _built ??= await BuildAsync(ct);
+            }
+            finally
+            {
+                Gate.Release();
+            }
+        }
+
+        private static async Task<Built> BuildAsync(CancellationToken ct)
+        {
+            var source = new Loader();
+            await source.InitializeAsync();
+            try
+            {
+                await DeleteStaleBackupsAsync(source, ct);
+                var files = await source.RowsAsync("SELECT type, name FROM sys.database_files", ct);
+                var dataFile = (string)files.Single(f => Convert.ToInt32(f[0], System.Globalization.CultureInfo.InvariantCulture) == 0)[1]!;
+                var logFile = (string)files.Single(f => Convert.ToInt32(f[0], System.Globalization.CultureInfo.InvariantCulture) == 1)[1]!;
+                var backupDirectory = await source.ScalarAsync<string>("SELECT CAST(SERVERPROPERTY('InstanceDefaultBackupPath') AS nvarchar(4000))", ct);
+                var backupFile = Path.Combine(backupDirectory, source.DatabaseName + ".bak");
+                await source.BackupToAsync(backupFile, ct);
+                var master = source.MasterConnection;
+                AppDomain.CurrentDomain.ProcessExit += (_, _) => DeleteBackup(master, backupFile);
+                return new Built(backupFile, dataFile, logFile, source.Today, source.Receipts);
+            }
+            finally
+            {
+                await source.DisposeAsync(); // the template database itself is dropped (and the drop asserted) as soon as its backup exists
+            }
+        }
+
+        /// <summary>Backups of earlier runs that were killed before they could delete theirs (more than two hours old). Best effort, like the database sweep.</summary>
+        private static async Task DeleteStaleBackupsAsync(SqlServerDatabaseFixture any, CancellationToken ct)
+        {
+            try
+            {
+                var stale = await any.RowsAsync(
+                    "SELECT full_filesystem_path FROM sys.dm_os_enumerate_filesystem(CAST(SERVERPROPERTY('InstanceDefaultBackupPath') AS nvarchar(4000)), N'Lifestream_Test_*.bak') " +
+                    "WHERE last_write_time < DATEADD(HOUR, -2, SYSDATETIMEOFFSET())",
+                    ct);
+                foreach (var row in stale)
+                {
+                    if (row[0] is string path && IsFixtureDatabaseName(Path.GetFileNameWithoutExtension(path)))
+                    {
+                        DeleteBackup(any.MasterConnection, path);
+                    }
+                }
+            }
+            catch (SqlException)
+            {
+                // best effort
+            }
+        }
+
+        private static void DeleteBackup(string masterConnection, string backupFile)
+        {
+            try
+            {
+                using var connection = new SqlConnection(masterConnection);
+                connection.Open();
+                using var command = new SqlCommand("EXEC master.dbo.xp_delete_file 0, @file", connection);
+                command.Parameters.Add(new SqlParameter("@file", SqlDbType.NVarChar, 4000) { Value = backupFile });
+                command.ExecuteNonQuery();
+            }
+            catch (SqlException)
+            {
+                // best effort: a later run's sweep deletes it
+            }
+        }
+
+        /// <summary>Loads the dataset the way each class used to load its own: migrations, the 100x rows, then the indexes rebuilt and the statistics read in full.</summary>
+        private sealed class Loader : SqlServerDatabaseFixture
+        {
+            public DateOnly Today { get; } = DateOnly.FromDateTime(DateTime.UtcNow);
+
+            public int Receipts { get; private set; }
+
+            public Task BackupToAsync(string file, CancellationToken ct) =>
+                ExecuteOnMasterAsync("BACKUP DATABASE @name TO DISK = @file WITH COPY_ONLY, INIT, FORMAT", DatabaseName, ct, new SqlParameter("@file", SqlDbType.NVarChar, 4000) { Value = file });
+
+            protected override async Task OnMigratedAsync(CancellationToken ct)
+            {
+                await using var db = NewContext();
+                db.AuditEnabled = false;
+                db.ChangeTracker.AutoDetectChangesEnabled = false;
+                var set = Lifestream.Data.Seed.ScaleDataGenerator.Generate(Factor, Today);
+                Receipts = set.Receipts.Count;
+                set.AddTo(db);
+                await db.SaveChangesAsync(ct);
+                await SettleAsync(ct);
+            }
+
+            /// <summary>
+            /// What a database that has just been bulk loaded needs before its plans mean anything: indexes rebuilt (rows arrive in clustered-key
+            /// order but in random order for every other index, so the nonclustered ones are half empty and look bigger than the table itself)
+            /// and statistics read in full (the automatic ones are sampled, and a sample differs from run to run). The same maintenance a
+            /// production database gets.
+            /// </summary>
+            private async Task SettleAsync(CancellationToken ct)
+            {
+                foreach (var table in new[] { "Donor", "Patient", "Staff", "Appointment", "Request", "Receipt", "BloodBag" })
+                {
+                    await ExecuteAsync($"ALTER INDEX ALL ON [{table}] REBUILD; UPDATE STATISTICS [{table}] WITH FULLSCAN;", ct);
+                }
+            }
         }
     }
 }

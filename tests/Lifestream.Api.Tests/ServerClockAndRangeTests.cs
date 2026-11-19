@@ -135,7 +135,10 @@ public sealed class ServerClockAndRangeTests(ApiFixture fx) : IClassFixture<ApiF
             Assert.True(response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.TooManyRequests);
         }
 
-        var lockedUntil = await fx.Db.ScalarAsync<double>($"SELECT CAST(DATEDIFF_BIG(SECOND, SYSUTCDATETIME(), LockoutEndUtc) AS float) FROM StaffCredential WHERE StaffId = {victim.Id} AND LockoutEndUtc IS NOT NULL", Ct);
+        // The server's now is the API's clock (the test host's TimeProvider, which stands still unless a test moves it), not the database's wall clock:
+        // measured against SYSUTCDATETIME() the result also depended on how long ago the class's host was started.
+        var serverNow = fx.Clock.GetUtcNow().UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffffff", System.Globalization.CultureInfo.InvariantCulture);
+        var lockedUntil = await fx.Db.ScalarAsync<double>($"SELECT CAST(DATEDIFF_BIG(SECOND, CAST('{serverNow}' AS datetime2), LockoutEndUtc) AS float) FROM StaffCredential WHERE StaffId = {victim.Id} AND LockoutEndUtc IS NOT NULL", Ct);
         Assert.InRange(lockedUntil, 14 * 60, 15 * 60 + 20); // Auth:LockoutMinutes = 15 in the test host, from the server's now
         Assert.NotEqual(0, staff.Id);
     }

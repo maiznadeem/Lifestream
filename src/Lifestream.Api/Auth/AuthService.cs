@@ -53,11 +53,12 @@ public sealed class AuthService(
         await unknown.ReserveAsync(staffId, username, Auth.MaxFailedAttempts, Auth.LockoutMinutes, ct);
         if (staffId is null)
         {
-            hasher.Verify(dummyHash.Value, request.Password);
+            await CredentialWork.RunAsync(() => hasher.Verify(dummyHash.Value, request.Password));
             throw InvalidCredentials();
         }
 
-        if (!hasher.Verify(user!.PasswordHash, request.Password))
+        var passwordHash = user!.PasswordHash;
+        if (!await CredentialWork.RunAsync(() => hasher.Verify(passwordHash, request.Password)))
         {
             throw InvalidCredentials();
         }
@@ -100,7 +101,7 @@ public sealed class AuthService(
             {
                 await db.RunAsync(async token =>
                 {
-                    await db.LockAsync($"login:{staffId}", token);
+                    await db.LockAsync($"login:{staffId}", token, LoginLocks.WaitMs);
                     var staff = await AttachCountersAsync(staffId, token);
                     if (staff is not null && (staff.FailedCount != 0 || staff.LockoutEndUtc is not null))
                     {

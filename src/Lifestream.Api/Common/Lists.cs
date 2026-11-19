@@ -137,8 +137,12 @@ public static class Transactions
             return result;
         });
 
-    /// <summary>Takes a named exclusive application lock for the rest of the current transaction (serialises, for example, two bookings of one slot).</summary>
-    public static async Task LockAsync(this Lifestream.Data.LifestreamDbContext db, string name, CancellationToken ct)
+    /// <summary>
+    /// Takes a named exclusive application lock for the rest of the current transaction (serialises, for example, two bookings of one slot).
+    /// Waiting longer than <paramref name="timeoutMs"/> answers 409; <see cref="Timeout.Infinite"/> waits until the lock is granted, the request is
+    /// aborted or the command times out.
+    /// </summary>
+    public static async Task LockAsync(this Lifestream.Data.LifestreamDbContext db, string name, CancellationToken ct, int timeoutMs = 15_000)
     {
         var transaction = db.Database.CurrentTransaction ?? throw new InvalidOperationException("LockAsync needs an open transaction.");
         var connection = db.Database.GetDbConnection();
@@ -149,7 +153,7 @@ public static class Transactions
         AddParameter(command, "@Resource", name);
         AddParameter(command, "@LockMode", "Exclusive");
         AddParameter(command, "@LockOwner", "Transaction");
-        AddParameter(command, "@LockTimeout", 15_000);
+        AddParameter(command, "@LockTimeout", timeoutMs);
         var result = command.CreateParameter();
         result.ParameterName = "@result";
         result.DbType = DbType.Int32;

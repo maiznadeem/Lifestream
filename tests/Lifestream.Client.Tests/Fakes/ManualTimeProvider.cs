@@ -1,8 +1,9 @@
 namespace Lifestream.Client.Tests.Fakes;
 
 /// <summary>A clock the test advances by hand. Timers and Task.Delay on it fire only when time is advanced.</summary>
-public sealed class ManualTimeProvider : TimeProvider
+public sealed class ManualTimeProvider(DateTimeOffset? start = null) : TimeProvider
 {
+    private readonly DateTimeOffset _start = start ?? new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
     private readonly Lock _gate = new();
     private readonly List<ManualTimer> _timers = [];
     private long _ticks;
@@ -21,7 +22,7 @@ public sealed class ManualTimeProvider : TimeProvider
     {
         lock (_gate)
         {
-            return new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero).AddTicks(_ticks);
+            return _start.AddTicks(_ticks);
         }
     }
 

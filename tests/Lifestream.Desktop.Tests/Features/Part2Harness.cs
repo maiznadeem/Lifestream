@@ -124,9 +124,13 @@ public static class Part2Harness
         ? fromEnvironment
         : Directory.Exists(@"G:\Claude\workspace\lifestream\run") ? @"G:\Claude\workspace\lifestream\run\captures\b-06-features2" : Hosted.CaptureDirectory;
 
-    public static Rig NewRig(Role role = Role.Admin, bool demo = false)
+    /// <summary>A rig signed in with the given role, the part 2 data on its fake API and the record pickers wired to it.</summary>
+    /// <param name="role">The signed-in user's role.</param>
+    /// <param name="demo">Whether the session is the public demo's.</param>
+    /// <param name="clock">The clock of the rig's navigation, toasts and dialogs (a manual clock, so a test can step over the 3 s waking threshold); the system clock when null.</param>
+    public static Rig NewRig(Role role = Role.Admin, bool demo = false, TimeProvider? clock = null)
     {
-        var rig = new Rig(dispatcher: WpfTestUi.Dispatcher());
+        var rig = new Rig(dispatcher: WpfTestUi.Dispatcher(), clock: clock);
         DemoData.Configure(rig.Api);
         DemoData2.Configure(rig.Api);
         rig.SignIn(role, demo);
