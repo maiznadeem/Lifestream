@@ -230,9 +230,80 @@ public sealed partial class DashboardViewModel : ViewModelBase
     /// <summary>What needs doing now, most urgent first: requests the stock cannot cover, bags about to expire, groups below their minimum, requests due soon.</summary>
     public ObservableCollection<AttentionItem> Attention { get; } = [];
 
-    /// <summary>"4 items".</summary>
+    /// <summary>"5 items" when every row is shown, "4 of 5" when the list is cut to what fits (it always says what is on screen).</summary>
     [ObservableProperty]
     public partial string AttentionCountText { get; set; } = string.Empty;
+
+    /// <summary>The rows of <see cref="Attention"/> that are on screen: all of them, or the first <see cref="AttentionLimit"/> until "View all" is pressed.</summary>
+    public ObservableCollection<AttentionItem> VisibleAttention { get; } = [];
+
+    /// <summary>How many rows the panel has room for (the view sets it from the window's height). The most urgent rows come first, so those are the ones kept.</summary>
+    public int AttentionLimit
+    {
+        get;
+        set
+        {
+            var limit = Math.Max(1, value);
+            if (field != limit)
+            {
+                field = limit;
+                ApplyAttentionLimit();
+            }
+        }
+    } = int.MaxValue;
+
+    /// <summary>True after "View all": every row is shown, whatever the limit (the page scrolls if it has to).</summary>
+    [ObservableProperty]
+    public partial bool IsAttentionExpanded { get; set; }
+
+    /// <summary>True when the list is longer than the limit, so there is something to show or to fold away.</summary>
+    [ObservableProperty]
+    public partial bool CanToggleAttention { get; set; }
+
+    /// <summary>"View all 5" while rows are hidden, "Show fewer" once they are all shown.</summary>
+    [ObservableProperty]
+    public partial string AttentionToggleText { get; set; } = string.Empty;
+
+    /// <summary>Shows every row, or folds the list back to what fits. It makes no API call.</summary>
+    public System.Windows.Input.ICommand ToggleAttentionCommand => _toggleAttentionCommand ??= new CommunityToolkit.Mvvm.Input.RelayCommand(() => IsAttentionExpanded = !IsAttentionExpanded);
+
+    private System.Windows.Input.ICommand? _toggleAttentionCommand;
+
+    partial void OnIsAttentionExpandedChanged(bool value) => ApplyAttentionLimit();
+
+    /// <summary>Fills <see cref="VisibleAttention"/> from <see cref="Attention"/> and words the count and the toggle for what is shown.</summary>
+    private void ApplyAttentionLimit()
+    {
+        var total = Attention.Count;
+        var canToggle = total > AttentionLimit;
+        var shown = canToggle && !IsAttentionExpanded ? AttentionLimit : total;
+        while (VisibleAttention.Count > shown)
+        {
+            VisibleAttention.RemoveAt(VisibleAttention.Count - 1);
+        }
+
+        for (var i = 0; i < shown; i++)
+        {
+            if (i >= VisibleAttention.Count)
+            {
+                VisibleAttention.Add(Attention[i]);
+            }
+            else if (!ReferenceEquals(VisibleAttention[i], Attention[i]))
+            {
+                VisibleAttention[i] = Attention[i];
+            }
+        }
+
+        CanToggleAttention = canToggle;
+        AttentionToggleText = !canToggle ? string.Empty : IsAttentionExpanded ? "Show fewer" : $"View all {total}";
+        AttentionCountText = total switch
+        {
+            0 => string.Empty,
+            _ when shown < total => $"{shown} of {total}",
+            1 => "1 item",
+            _ => $"{total} items",
+        };
+    }
 
     /// <summary>Today's appointments in time order (cancelled ones left out).</summary>
     public ObservableCollection<TodayAppointment> Today { get; } = [];
@@ -500,12 +571,7 @@ public sealed partial class DashboardViewModel : ViewModelBase
                 $"{request.BloodType.ToTypographic()}, {Units(request.Units)}. {same} {request.BloodType.ToTypographic()} {(same == 1 ? "bag is" : "bags are")} available.", "Fulfil", "Requests", new ListPrefilter(RecordId: request.Id)));
         }
 
-        AttentionCountText = Attention.Count switch
-        {
-            0 => string.Empty,
-            1 => "1 item",
-            var n => $"{n} items",
-        };
+        ApplyAttentionLimit();
     }
 
     private static string Units(int n) => n == 1 ? "1 unit" : $"{n.ToString("N0", CultureInfo.CurrentCulture)} units";

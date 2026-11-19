@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
+using Lifestream.Client.Common;
 using Lifestream.Client.Features.Dashboard;
 using Lifestream.Desktop.Controls;
 using Lifestream.Desktop.Theme;
@@ -19,7 +20,10 @@ namespace Lifestream.Desktop.Features.Dashboard;
 /// The dashboard screen (direction A). The donations and issues chart is a 12-month line chart drawn from the view model's buckets whenever they change
 /// or the theme changes: donated in blood with a soft fill, issued in info blue, the last month marked and labelled at the end of each line, a dashed grid,
 /// no axis titles (the panel header names the chart and holds the legend), and the same numbers behind "View as table". Colours are the theme's tokens.
-/// The panels share the page height so the dashboard fits 1280 x 800 without scrolling; a compact window stacks them in one column and scrolls.
+/// The top row ("Needs attention" and today's appointments) is as tall as its content, and the bottom row (stock and the chart) takes the rest of the
+/// page, so the dashboard fits 1280 x 800 without scrolling and leaves no empty bands in a larger window. "Needs attention" shows as many rows as the
+/// window has room for (the view model words the count and "View all"). A compact window stacks the panels in one column at their own heights and only
+/// the page scrolls.
 /// </summary>
 public partial class DashboardView : UserControl
 {
@@ -58,11 +62,14 @@ public partial class DashboardView : UserControl
         if (_model is not null)
         {
             _model.ChartDataChanged += OnChartDataChanged;
+            _model.PropertyChanged += OnModelChanged;
             if (_model.MonthLabels.Count > 0)
             {
                 Draw(_model);
             }
         }
+
+        ApplyLayout();
     }
 
     private void Detach()
@@ -70,7 +77,18 @@ public partial class DashboardView : UserControl
         if (_model is not null)
         {
             _model.ChartDataChanged -= OnChartDataChanged;
+            _model.PropertyChanged -= OnModelChanged;
             _model = null;
+        }
+    }
+
+    private void OnModelChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(DashboardViewModel.State) or nameof(DashboardViewModel.AttentionCountText))
+        {
+            // An error or the skeleton is shown in the window, not in the middle of a page as tall as the panels would be; and the appointments
+            // list follows the height of "Needs attention" (its count text changes whenever its rows do).
+            ApplyLayout();
         }
     }
 
@@ -86,42 +104,62 @@ public partial class DashboardView : UserControl
 
     private void OnBreakpointChanged(object? sender, EventArgs e) => ApplyLayout();
 
-    /// <summary>Standard and wide: two rows of two panels sharing the page height. Compact: one column at natural heights, scrolling.</summary>
+    /// <summary>The height the bottom row is comfortable at (eight meters at 33 and the panel's header and padding); "Needs attention" leaves it that much.</summary>
+    private const double BottomRowComfort = 340;
+
+    /// <summary>One "Needs attention" row with a one-line description (34 tile, 2 x 12 padding, the divider) and the panel's header and bottom padding.</summary>
+    private const double AttentionRowHeight = 63;
+    private const double AttentionChrome = 54;
+
+    /// <summary>The fewest rows "Needs attention" shows, however short the window (two fit above the stock panel on a maximized 1366 x 768 screen).</summary>
+    private const int MinimumAttentionRows = 2;
+
+    /// <summary>
+    /// Standard and wide: "Needs attention" and today's appointments in a row as tall as its content, then stock and the chart in the rest of the page
+    /// (in a wide window the chart gets the larger share, so the meters do not stretch). Compact: one column at natural heights; only the page scrolls.
+    /// </summary>
     private void ApplyLayout()
     {
-        var compact = Responsive.GetBreakpoint(this) == Breakpoint.Compact;
+        var breakpoint = Responsive.GetBreakpoint(this);
+        var compact = breakpoint == Breakpoint.Compact;
         var viewport = PageScroll.ViewportHeight;
+        var ready = _model is null || _model.State == LoadState.Ready;
+
+        // While the skeleton, the empty state or an error is shown, the page is the window: nothing to scroll, and the message sits where the eye is.
+        Surface.MaxHeight = ready || viewport <= 0 ? double.PositiveInfinity : viewport;
         if (compact)
         {
-            Layout.Height = double.NaN;
-            TopRow.Height = new GridLength(326);
-            StackRow.Height = new GridLength(320);
+            Layout.MinHeight = 0;
             BottomRow.Height = GridLength.Auto;
             RightTop.Width = new GridLength(0);
+            StackRow.Height = GridLength.Auto;
             Grid.SetRow(TodayPanel, 2);
             Grid.SetColumn(TodayPanel, 0);
+            TodayBox.Cap = double.PositiveInfinity; // every appointment, at its own height: no scroll inside the page's scroll
             AttentionPanel.Margin = ThemeTokens.Inset("Inset.B20");
+            StockColumn.Width = new GridLength(1, GridUnitType.Star);
             BottomGrid.ColumnDefinitions[1].Width = new GridLength(0);
-            BottomGrid.ColumnDefinitions[2].Width = new GridLength(0);
-            StockRow.Height = new GridLength(378);
-            ChartGap.Height = new GridLength(20);
-            ChartRow.Height = new GridLength(378);
+            ChartColumn.Width = new GridLength(0);
+            StockRow.Height = GridLength.Auto;
+            ChartGap.Height = new GridLength(ThemeTokens.Space("Space.20"));
+            ChartRow.Height = new GridLength(CompactChartHeight);
             Grid.SetRow(DonationsFrame, 2);
             Grid.SetColumn(DonationsFrame, 0);
         }
         else
         {
-            // Fill the page exactly (no scrolling) down to the layout's minimum height; below that, scroll.
-            Layout.Height = viewport > 0 ? Math.Max(Layout.MinHeight, viewport) : double.NaN;
-            TopRow.Height = new GridLength(330, GridUnitType.Star);
+            // At least the page: the bottom row (a star row) takes what the top row leaves. A shorter window scrolls instead of squeezing the panels.
+            Layout.MinHeight = viewport > 0 ? viewport : 0;
+            BottomRow.Height = new GridLength(1, GridUnitType.Star);
+            RightTop.Width = new GridLength(TodayColumnWidth);
             StackRow.Height = new GridLength(0);
-            BottomRow.Height = new GridLength(374, GridUnitType.Star);
-            RightTop.Width = new GridLength(372);
             Grid.SetRow(TodayPanel, 1);
             Grid.SetColumn(TodayPanel, 2);
             AttentionPanel.Margin = ThemeTokens.Inset("Inset.R20B20");
-            BottomGrid.ColumnDefinitions[1].Width = new GridLength(20);
-            BottomGrid.ColumnDefinitions[2].Width = new GridLength(1, GridUnitType.Star);
+            var wide = breakpoint == Breakpoint.Wide;
+            StockColumn.Width = new GridLength(wide ? 5 : 1, GridUnitType.Star);
+            BottomGrid.ColumnDefinitions[1].Width = new GridLength(ThemeTokens.Space("Space.20"));
+            ChartColumn.Width = new GridLength(wide ? 7 : 1, GridUnitType.Star);
             StockRow.Height = new GridLength(1, GridUnitType.Star);
             ChartGap.Height = new GridLength(0);
             ChartRow.Height = new GridLength(0);
@@ -133,7 +171,44 @@ public partial class DashboardView : UserControl
         Grid.SetColumnSpan(AttentionPanel, compact ? 3 : 1);
         Grid.SetColumnSpan(StockPanel, compact ? 3 : 1);
         Grid.SetColumnSpan(DonationsFrame, compact ? 3 : 1);
+
+        if (_model is not null)
+        {
+            _model.AttentionLimit = compact || viewport <= 0 ? int.MaxValue : AttentionRowsThatFit(viewport);
+        }
+
+        if (!compact)
+        {
+            // Beside "Needs attention" the appointments list asks for about the height that panel has (eight rows at most, three at least), so a short
+            // window's top row is as tall as the attention rows it has room for, and the appointments scroll inside their panel.
+            var rows = _model is null ? 0 : _model.IsAttentionExpanded ? _model.Attention.Count : Math.Min(_model.Attention.Count, _model.AttentionLimit);
+            TodayBox.Cap = rows == 0 ? TodayRowsCap : Math.Clamp((rows * AttentionRowHeight) + AttentionChrome - TodayChrome, TodayRowsFloor, TodayRowsCap);
+        }
     }
+
+    /// <summary>The width of the appointments column beside "Needs attention".</summary>
+    private const double TodayColumnWidth = 372;
+
+    /// <summary>Eight appointment rows (8 x 34): what the appointments panel asks for at most beside "Needs attention"; three rows at least.</summary>
+    private const double TodayRowsCap = 272;
+    private const double TodayRowsFloor = 102;
+
+    /// <summary>The header of the appointments panel.</summary>
+    private const double TodayChrome = 46;
+
+    /// <summary>The chart's height when it is stacked under the stock panel.</summary>
+    private const double CompactChartHeight = 378;
+
+    /// <summary>How many "Needs attention" rows fit above a comfortable bottom row in a page this tall.</summary>
+    private int AttentionRowsThatFit(double viewport)
+    {
+        var header = HeaderRow.ActualHeight > 0 ? HeaderRow.ActualHeight : HeaderHeightGuess;
+        var room = viewport - header - ThemeTokens.Space("Space.20") - BottomRowComfort - AttentionChrome;
+        return Math.Max(MinimumAttentionRows, (int)Math.Floor(room / AttentionRowHeight));
+    }
+
+    /// <summary>The page header (the date, the greeting) with its 20 below, before it has been laid out.</summary>
+    private const double HeaderHeightGuess = 78;
 
     private static SKColor Token(string key)
     {

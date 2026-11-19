@@ -14,8 +14,10 @@
     </Style>
   </UserControl.Resources>
 
-  <!-- Direction A sign-in: the form on its own 560 DIP layer at the left; the right side, on Mica, shows the red-cell compatibility matrix, something
-       only a blood bank has. Under 900 DIP the matrix side folds away and the form takes the window (OnSizeChanged). -->
+  <!-- Direction A sign-in: the form on its own layer at the left (560 DIP, 440 in a compact window); the right side, on Mica, shows the red-cell
+       compatibility matrix, something only a blood bank has, centred in the room it has. The matrix side is never scaled: when the window is too
+       small for all of it, its caption and then its overline go, and when the matrix itself does not fit the side folds away and the form takes
+       the window (LoginView.ApplyLayout). -->
   <Grid x:Name="Root" Background="{DynamicResource Brush.Mica}">
     <Grid.ColumnDefinitions>
       <ColumnDefinition x:Name="FormColumn" Width="560" />
@@ -143,12 +145,10 @@
     </Border>
 
     <!-- The Mica side: one line of context and the ABO/RhD compatibility matrix (donor rows, patient columns), drawn from the domain rule. -->
-    <Grid x:Name="Hero" Grid.Column="1" Margin="{DynamicResource Inset.H96V72}" VerticalAlignment="Center" TextOptions.TextRenderingMode="Grayscale">
-      <!-- In a smaller window the whole explanation scales down as one piece instead of being cut off. -->
-      <Viewbox Stretch="Uniform" StretchDirection="DownOnly" HorizontalAlignment="Left">
-      <StackPanel HorizontalAlignment="Left">
-        <TextBlock Text="Red cell compatibility" FontSize="{DynamicResource FontSize.Label}" FontWeight="SemiBold" Foreground="{DynamicResource Brush.Blood}" />
-        <TextBlock Style="{DynamicResource Text.Hero}" Text="Who can give to whom, at a glance." MaxWidth="330" HorizontalAlignment="Left" Margin="{DynamicResource Inset.T6B28}" />
+    <Grid x:Name="Hero" Grid.Column="1" Margin="{DynamicResource Pad.24}" TextOptions.TextRenderingMode="Grayscale">
+      <StackPanel x:Name="HeroBlock" HorizontalAlignment="Center" VerticalAlignment="Center">
+        <TextBlock x:Name="HeroOverline" Text="Red cell compatibility" FontSize="{DynamicResource FontSize.Label}" FontWeight="SemiBold" Foreground="{DynamicResource Brush.Blood}" />
+        <TextBlock x:Name="HeroTitle" Style="{DynamicResource Text.Hero}" Text="Who can give to whom, at a glance." MaxWidth="330" HorizontalAlignment="Left" Margin="{DynamicResource Inset.T6B28}" />
         <Grid x:Name="Matrix" AutomationProperties.Name="Red cell compatibility: donor groups by patient groups">
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto" />
@@ -210,10 +210,17 @@
             </ItemsControl>
           </StackPanel>
         </Grid>
-        <TextBlock Style="{DynamicResource Text.Body}" Foreground="{DynamicResource Brush.Ink2}" MaxWidth="440" HorizontalAlignment="Left" Margin="{DynamicResource Inset.T28}"
-                   Text="O&#x2212; can give to all eight groups and AB+ can receive from all eight. Lifestream checks this for you every time you fulfil a request." />
+        <!-- What the two reds mean: the dots of the matrix, at legend size, each with its words. -->
+        <StackPanel x:Name="HeroLegend" Orientation="Horizontal" Margin="{DynamicResource Inset.T20}" AutomationProperties.Name="Legend">
+          <Ellipse Width="12" Height="12" Fill="{DynamicResource Brush.Blood}" Opacity="0.78" VerticalAlignment="Center" Margin="{DynamicResource Inset.R6}" />
+          <TextBlock Text="Can give" FontSize="{DynamicResource FontSize.Caption}" Foreground="{DynamicResource Brush.Ink2}" VerticalAlignment="Center" Margin="{DynamicResource Inset.R16}" />
+          <Ellipse Width="12" Height="12" Fill="{DynamicResource Brush.Blood}" VerticalAlignment="Center" Margin="{DynamicResource Inset.R6}" />
+          <TextBlock Text="Universal: O&#x2212; gives to every group, AB+ receives from every group" FontSize="{DynamicResource FontSize.Caption}" Foreground="{DynamicResource Brush.Ink2}"
+                     VerticalAlignment="Center" />
+        </StackPanel>
+        <TextBlock x:Name="HeroCaption" Style="{DynamicResource Text.Body}" Foreground="{DynamicResource Brush.Ink2}" MaxWidth="440" HorizontalAlignment="Left" Margin="{DynamicResource Inset.T16}"
+                   Text="Lifestream checks this for you every time you fulfil a request." />
       </StackPanel>
-      </Viewbox>
     </Grid>
   </Grid>
 </UserControl>

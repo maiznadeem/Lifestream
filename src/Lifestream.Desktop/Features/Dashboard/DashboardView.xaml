@@ -10,6 +10,7 @@
   <UserControl.Resources>
     <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
     <services:ZeroToVisibleConverter x:Key="ZeroToVisible" />
+    <controls:KeepGroupsTogetherConverter x:Key="KeepGroups" />
 
     <!-- One "Needs attention" row: a tinted icon tile, the problem in SemiBold, why it matters, and the one action. -->
     <DataTemplate x:Key="AttentionRow" DataType="{x:Type dashboard:AttentionItem}">
@@ -23,8 +24,9 @@
           <controls:Icon x:Name="TileIcon" Kind="{Binding Icon}" Size="18" Foreground="{DynamicResource Brush.Critical}" HorizontalAlignment="Center" VerticalAlignment="Center" />
         </Border>
         <StackPanel Grid.Column="1" VerticalAlignment="Center">
-          <TextBlock Style="{DynamicResource Text.BodyStrong}" Text="{Binding Title}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
-          <TextBlock Style="{DynamicResource Text.Secondary}" Text="{Binding Detail}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" ToolTip="{Binding Detail}" />
+          <TextBlock x:Name="Title" Style="{DynamicResource Text.BodyStrong}" Text="{Binding Title}" TextWrapping="Wrap" />
+          <!-- Why it matters: up to two lines (2 x 18); a longer one ends in an ellipsis and the tooltip has it whole. -->
+          <TextBlock x:Name="Detail" Style="{DynamicResource Text.Secondary}" Text="{Binding Detail, Converter={StaticResource KeepGroups}}" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" MaxHeight="36" ToolTip="{Binding Detail}" />
         </StackPanel>
         <Button Grid.Column="2" Style="{DynamicResource Button.Secondary.Small}" Content="{Binding ActionText}" Margin="{DynamicResource Inset.L14}" VerticalAlignment="Center"
                 Command="{Binding DataContext.RunAttentionCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}"
@@ -85,9 +87,9 @@
 
     <!-- One stock meter: the group tag, the meter (fill, hatched expiring share, minimum tick) and the count. -->
     <DataTemplate x:Key="MeterRow" DataType="{x:Type dashboard:StockMeter}">
-      <Grid Height="33" AutomationProperties.Name="{Binding AutomationName}">
+      <Grid MinHeight="30" AutomationProperties.Name="{Binding AutomationName}">
         <Grid.ColumnDefinitions>
-          <ColumnDefinition Width="Auto" />
+          <ColumnDefinition Width="Auto" SharedSizeGroup="MeterTag" />
           <ColumnDefinition Width="*" />
           <ColumnDefinition Width="72" />
         </Grid.ColumnDefinitions>
@@ -95,7 +97,8 @@
         <controls:MeterBar x:Name="Bar" Grid.Column="1" VerticalAlignment="Center" Value="{Binding FillFraction}" Hatched="{Binding ExpiringFraction}" Minimum="{Binding MinimumFraction}"
                            Track="{DynamicResource Brush.Layer2}" TrackStroke="{DynamicResource Brush.Stroke}" Fill="{DynamicResource Brush.Ink2}" Hatch="{DynamicResource Brush.WarningHatch}"
                            Tick="{DynamicResource Brush.Ink3}" />
-        <TextBlock x:Name="Count" Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center" Typography.NumeralAlignment="Tabular">
+        <!-- Proportional figures: Onest's tabular 1 is as wide as an 8, which reads as a gap in "17 units". The counts still line up on their right edge. -->
+        <TextBlock x:Name="Count" Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center">
           <Run x:Name="Number" Text="{Binding CountText, Mode=OneWay}" FontWeight="SemiBold" /><Run Text=" " /><Run Text="{Binding UnitText, Mode=OneWay}" Foreground="{DynamicResource Brush.Ink3}" />
         </TextBlock>
       </Grid>
@@ -109,16 +112,18 @@
   </UserControl.Resources>
 
   <!-- Direction A dashboard: the date and greeting with the two primary actions, then "Needs attention" beside "Today's appointments", then stock by
-       blood group beside donations and issues. The rows share the height (it fits 1280 x 800 without scrolling); a compact window stacks the panels. -->
-  <ScrollViewer x:Name="PageScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+       blood group beside donations and issues. The top row is as tall as its content and the bottom row takes the rest of the page (it fits 1280 x 800
+       without scrolling); a compact window stacks the panels at their own heights and only the page scrolls. The page's scroll bar sits in the page's
+       right padding (Inset.RN14 and Inset.R14), beside the panels. -->
+  <ScrollViewer x:Name="PageScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False" Margin="{DynamicResource Inset.RN14}">
     <controls:LoadSurface x:Name="Surface" State="{Binding State}" SkeletonKind="Dashboard" ErrorMessage="{Binding ErrorMessage}" ErrorDetail="{Binding ErrorDetail}"
-                          RetryCommand="{Binding RetryCommand}" MaxWidth="{DynamicResource MaxWidth.Dashboard}" HorizontalAlignment="Stretch">
-      <Grid x:Name="Layout" MinHeight="600">
+                          RetryCommand="{Binding RetryCommand}" MaxWidth="{DynamicResource MaxWidth.Dashboard}" HorizontalAlignment="Stretch" Margin="{DynamicResource Inset.R14}">
+      <Grid x:Name="Layout">
         <Grid.RowDefinitions>
-          <RowDefinition Height="Auto" />
-          <RowDefinition x:Name="TopRow" Height="330*" />
+          <RowDefinition x:Name="HeaderRow" Height="Auto" />
+          <RowDefinition x:Name="TopRow" Height="Auto" />
           <RowDefinition x:Name="StackRow" Height="0" />
-          <RowDefinition x:Name="BottomRow" Height="374*" />
+          <RowDefinition x:Name="BottomRow" Height="*" />
         </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
           <ColumnDefinition x:Name="LeftTop" Width="*" />
@@ -149,8 +154,14 @@
 
         <!-- Needs attention -->
         <controls:Section x:Name="AttentionPanel" Grid.Row="1" Header="Needs attention" Subtitle="{Binding AttentionCountText}" Padding="{DynamicResource Inset.B8}" Margin="{DynamicResource Inset.R20B20}">
+          <!-- When the window has no room for every row, the list shows the most urgent ones, the count says "4 of 5", and this shows the rest (the page then scrolls). -->
+          <controls:Section.HeaderActions>
+            <Button x:Name="AttentionToggle" Style="{DynamicResource Button.Subtle.Small}" Content="{Binding AttentionToggleText}" Command="{Binding ToggleAttentionCommand}"
+                    Visibility="{Binding CanToggleAttention, Converter={StaticResource BoolToVisibility}}" AutomationProperties.Name="{Binding AttentionToggleText}"
+                    AutomationProperties.HelpText="Needs attention" />
+          </controls:Section.HeaderActions>
           <Grid>
-            <ItemsControl x:Name="AttentionList" ItemsSource="{Binding Attention}" Focusable="False" AutomationProperties.Name="Needs attention">
+            <ItemsControl x:Name="AttentionList" ItemsSource="{Binding VisibleAttention}" Focusable="False" AutomationProperties.Name="Needs attention">
               <ItemsControl.ItemContainerStyle>
                 <Style TargetType="ContentPresenter">
                   <Setter Property="Margin" Value="0" />
@@ -175,15 +186,21 @@
         </controls:Section>
 
         <!-- Today's appointments -->
-        <controls:Section x:Name="TodayPanel" Grid.Row="1" Grid.Column="2" Header="Today&#x2019;s appointments" Padding="{DynamicResource Inset.H18}" Margin="{DynamicResource Inset.B20}">
+        <controls:Section x:Name="TodayPanel" Grid.Row="1" Grid.Column="2" Header="Today&#x2019;s appointments" Padding="0" Margin="{DynamicResource Inset.B20}">
           <controls:Section.HeaderActions>
             <TextBlock Text="{Binding TodaySeenText}" FontSize="{DynamicResource FontSize.Label}" Foreground="{DynamicResource Brush.Ink3}" VerticalAlignment="Center" />
           </controls:Section.HeaderActions>
           <Grid>
-            <ScrollViewer VerticalScrollBarVisibility="Auto" Focusable="False">
-              <ItemsControl x:Name="TodayList" ItemsSource="{Binding Today}" ItemTemplate="{StaticResource TodayRow}" Focusable="False" AutomationProperties.Name="Today's appointments" />
-            </ScrollViewer>
-            <StackPanel Visibility="{Binding Today.Count, Converter={StaticResource ZeroToVisible}}" Margin="{DynamicResource Inset.T4}">
+            <!-- Beside "Needs attention" the list asks for eight rows at most (8 x 34) and scrolls inside the panel when the day has more; stacked in a
+                 compact window it is as tall as its rows (the cap is lifted in code) and only the page scrolls. The list keeps 18 at both sides inside
+                 the scroll viewer: the highlighted row reaches 10 past the text, and the scroll bar's strip lies in the right 18, beside the tags. -->
+            <controls:CappedHeightBox x:Name="TodayBox" Cap="272">
+              <ScrollViewer x:Name="TodayScroll" VerticalScrollBarVisibility="Auto" Focusable="False">
+                <ItemsControl x:Name="TodayList" ItemsSource="{Binding Today}" ItemTemplate="{StaticResource TodayRow}" Focusable="False" Margin="{DynamicResource Inset.H18}"
+                              AutomationProperties.Name="Today's appointments" />
+              </ScrollViewer>
+            </controls:CappedHeightBox>
+            <StackPanel Visibility="{Binding Today.Count, Converter={StaticResource ZeroToVisible}}" Margin="{DynamicResource Inset.L18T4R18B12}">
               <TextBlock Style="{DynamicResource Text.Secondary}" Text="Nobody is booked for today." />
             </StackPanel>
           </Grid>
@@ -192,9 +209,9 @@
         <!-- Stock by blood group, and donations and issues: two equal panels. -->
         <Grid x:Name="BottomGrid" Grid.Row="3" Grid.ColumnSpan="3">
           <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="*" />
+            <ColumnDefinition x:Name="StockColumn" Width="*" />
             <ColumnDefinition Width="20" />
-            <ColumnDefinition Width="*" />
+            <ColumnDefinition x:Name="ChartColumn" Width="*" />
           </Grid.ColumnDefinitions>
           <Grid.RowDefinitions>
             <RowDefinition x:Name="StockRow" Height="*" />
@@ -211,7 +228,15 @@
                 <TextBlock Text="{Binding MinimumText}" VerticalAlignment="Center" />
               </StackPanel>
             </controls:Section.HeaderActions>
-            <ItemsControl x:Name="StockList" ItemsSource="{Binding StockMeters}" ItemTemplate="{StaticResource MeterRow}" Focusable="False" AutomationProperties.Name="Stock by blood group" />
+            <!-- The eight meters share the panel's height (no empty band under them) and one tag column (every bar starts at the same x). -->
+            <ItemsControl x:Name="StockList" ItemsSource="{Binding StockMeters}" ItemTemplate="{StaticResource MeterRow}" Focusable="False" Grid.IsSharedSizeScope="True"
+                          AutomationProperties.Name="Stock by blood group">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <UniformGrid Columns="1" />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+            </ItemsControl>
           </controls:Section>
 
           <controls:ChartFrame x:Name="DonationsFrame" Grid.Column="2" Title="Donations and issues" Table="{Binding DonationsTable}" Padding="{DynamicResource Inset.L6T4R10B6}">
@@ -223,8 +248,12 @@
                 <TextBlock Text="Issued" VerticalAlignment="Center" />
               </StackPanel>
             </controls:ChartFrame.Legend>
-            <lvc:CartesianChart x:Name="DonationsChart" Background="{DynamicResource Brush.Layer}" TooltipPosition="Hidden" LegendPosition="Hidden" ZoomMode="None" MinHeight="200"
-                                AutomationProperties.Name="Donations and issues by month, last 12 months" />
+            <!-- The chart asks for 200 of height and takes what the row gives it. Left to itself it asks for about 300 when the page is measured, which
+                 made the bottom row too tall for a short window and the page scroll for nothing. -->
+            <controls:CappedHeightBox Cap="200">
+              <lvc:CartesianChart x:Name="DonationsChart" Background="{DynamicResource Brush.Layer}" TooltipPosition="Hidden" LegendPosition="Hidden" ZoomMode="None" MinHeight="200"
+                                  AutomationProperties.Name="Donations and issues by month, last 12 months" />
+            </controls:CappedHeightBox>
           </controls:ChartFrame>
         </Grid>
       </Grid>
