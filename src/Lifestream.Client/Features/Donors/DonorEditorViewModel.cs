@@ -22,7 +22,7 @@ public sealed partial class DonorEditorViewModel : PersonEditorViewModel
     {
         _api = api;
         _id = existing?.Id;
-        FrequencyChoices = [.. Enum.GetValues<DonorFrequency>().Select(f => new Choice<DonorFrequency>(f.ToString(), f))];
+        FrequencyChoices = SharedLists.DonorFrequencies;
         DeclareFormFields(nameof(Name), nameof(DateOfBirth), nameof(Gender), nameof(BloodType), nameof(Phone), nameof(Address), nameof(Frequency));
         if (existing is not null)
         {

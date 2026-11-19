@@ -187,7 +187,7 @@ public sealed partial class DashboardViewModel : ViewModelBase
 
         if (BloodTypes.Count == 0)
         {
-            foreach (var type in BloodTypeExtensions.All)
+            foreach (var type in SharedLists.BloodTypes.Select(c => c.Value))
             {
                 var toggle = new BloodTypeToggle(type, true);
                 toggle.PropertyChanged += (_, _) => RebuildChart();

@@ -46,7 +46,7 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
     {
         Toasts = toasts;
         Dialogs = dialogs;
-        BloodTypeOptions = FilterOptions.WithAll(BloodTypeExtensions.All, b => b.ToDisplay(), "All blood types");
+        BloodTypeOptions = SharedLists.WithAll(SharedLists.BloodTypes, "All blood types");
         _bloodTypeFilter = BloodTypeOptions[0];
         if (ViewState.Filters.TryGetValue(BloodTypeKey, out var saved) && BloodTypeExtensions.TryParseDisplay(saved, out var remembered))
         {

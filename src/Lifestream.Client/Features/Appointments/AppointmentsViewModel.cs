@@ -47,7 +47,7 @@ public sealed class AppointmentsViewModel : SortedRecordListViewModel<Appointmen
         _forms = forms;
         _receipts = receipts;
         _navigation = navigation;
-        StatusOptions = FilterOptions.WithAll(Enum.GetValues<AppointmentStatus>(), StatusText, "All statuses");
+        StatusOptions = SharedLists.WithAll(SharedLists.AppointmentStatuses, "All statuses");
         _statusFilter = StatusOptions[0];
         if (ViewState.Filters.TryGetValue(StatusKey, out var savedStatus) && Enum.TryParse<AppointmentStatus>(savedStatus, out var status))
         {

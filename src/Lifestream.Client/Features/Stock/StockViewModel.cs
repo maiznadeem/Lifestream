@@ -55,7 +55,7 @@ public sealed partial class StockViewModel(ILifestreamApiClient api, IListViewSt
 
     public override string PageTitle => "Stock";
 
-    private static readonly IReadOnlyList<FilterOption<BloodType>> BloodTypeChoices = FilterOptions.WithAll(BloodTypeExtensions.All, b => b.ToDisplay(), "All blood types");
+    private static readonly IReadOnlyList<FilterOption<BloodType>> BloodTypeChoices = SharedLists.WithAll(SharedLists.BloodTypes, "All blood types");
 
     private static readonly IReadOnlyList<FilterOption<StockFilter>> ViewChoices = FilterOptions.WithAll(
         [StockFilter.BelowThreshold, StockFilter.ExpiringSoon],

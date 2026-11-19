@@ -78,7 +78,7 @@ public sealed class ReceiptsViewModel : SortedRecordListViewModel<ReceiptRow, Re
         _api = api;
         _viewer = viewer;
         _navigation = navigation;
-        KindOptions = FilterOptions.WithAll(Enum.GetValues<ReceiptKind>(), RecordFormatting.Kind, "All receipts");
+        KindOptions = SharedLists.WithAll(SharedLists.ReceiptKinds, "All receipts");
         _kindFilter = KindOptions[0];
         if (ViewState.Filters.TryGetValue(KindKey, out var saved) && Enum.TryParse<ReceiptKind>(saved, out var kind))
         {

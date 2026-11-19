@@ -42,7 +42,7 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
         _forms = forms;
         _receipts = receipts;
         _navigation = navigation;
-        StatusOptions = FilterOptions.WithAll(Enum.GetValues<RequestStatus>(), StatusText, "All statuses");
+        StatusOptions = SharedLists.WithAll(SharedLists.RequestStatuses, "All statuses");
         _statusFilter = StatusOptions[0];
         if (ViewState.Filters.TryGetValue(StatusKey, out var saved) && Enum.TryParse<RequestStatus>(saved, out var status))
         {
