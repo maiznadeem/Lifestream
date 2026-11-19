@@ -258,7 +258,7 @@ resource acaEnvironment 'Microsoft.App/managedEnvironments@2024-03-01' = {
   name: 'lifestream-env'
   location: location
   properties: {
-    appLogsConfiguration: { destination: 'none' } // no log destination, so nothing is ingested or billed; no vnetConfiguration, so no public IP or load balancer is billed
+    // appLogsConfiguration is omitted on purpose: Azure rejects destination 'none' and treats no property as no log destination, so nothing is ingested or billed. No vnetConfiguration, so no public IP or load balancer is billed.
     workloadProfiles: [
       { name: 'Consumption', workloadProfileType: 'Consumption' }
     ]
