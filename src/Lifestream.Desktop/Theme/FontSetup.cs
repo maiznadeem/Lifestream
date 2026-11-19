@@ -25,6 +25,9 @@ public static class FontSetup
     /// <summary>Says whether WPF can resolve the bundled Inter family.</summary>
     public static Func<bool> AppFontAvailable { get; set; } = IsBundledFamilyAvailable;
 
+    /// <summary>Makes a typeface the default of every LiveCharts text. A property so a test can observe the choice without reconfiguring the process-wide LiveCharts settings.</summary>
+    public static Action<SKTypeface> ApplyTypeface { get; set; } = static face => LiveCharts.Configure(settings => settings.HasTextSettings(new TextSettings { DefaultTypeface = face }));
+
     /// <summary>Where warnings go; the app points it at its logger once the host exists.</summary>
     public static Action<string> Warn { get; set; } = static message => System.Diagnostics.Debug.WriteLine(message);
 
@@ -41,6 +44,7 @@ public static class FontSetup
     /// Makes Inter the default of every LiveCharts text (idempotent). A load that fails is logged and replaced by the default typeface; if even that
     /// is unavailable the charts keep LiveCharts' own default.
     /// </summary>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The typeface lives for the whole process: LiveCharts keeps it as its default.")]
     public static void ApplyChartFont()
     {
         // The chart control configures LiveCharts for Skia in its static constructor, but only when nothing configured it
@@ -56,13 +60,13 @@ public static class FontSetup
         {
             ChartFellBack = true;
             Warn($"The bundled chart font could not be loaded ({ex.GetType().Name}: {ex.Message}). Charts use the default font.");
-            face = DefaultTypeface();
+            face = FallbackTypeface();
         }
 
         ChartTypeface = face;
         if (face is not null)
         {
-            LiveCharts.Configure(settings => settings.HasTextSettings(new TextSettings { DefaultTypeface = face }));
+            ApplyTypeface(face);
         }
     }
 
@@ -90,11 +94,13 @@ public static class FontSetup
         }
     }
 
-    private static SKTypeface? DefaultTypeface()
+    /// <summary>The system UI font as a Skia typeface, never null: the UI font, else Skia's default, else a freshly created default. Null only when Skia itself is unusable.</summary>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The typeface lives for the whole process: LiveCharts keeps it as its default.")]
+    private static SKTypeface? FallbackTypeface()
     {
         try
         {
-            return SKTypeface.Default;
+            return SKTypeface.FromFamilyName(SystemFonts.MessageFontFamily.Source) ?? SKTypeface.Default ?? SKTypeface.CreateDefault();
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {

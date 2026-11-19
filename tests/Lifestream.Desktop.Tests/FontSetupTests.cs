@@ -1,6 +1,9 @@
 using System.Windows;
 using System.Windows.Media;
+using System.Windows.Threading;
+using Lifestream.Client.Features.Dashboard;
 using Lifestream.Client.Tests;
+using Lifestream.Desktop.Tests.Features;
 using Lifestream.Desktop.Theme;
 using SkiaSharp;
 
@@ -13,7 +16,8 @@ public sealed class FontSetupTests
     private static void WithLoaders(Func<SKTypeface> chart, Func<bool> app, Action<List<string>> body)
     {
         var warnings = new List<string>();
-        var (previousChart, previousApp, previousWarn) = (FontSetup.ChartTypefaceLoader, FontSetup.AppFontAvailable, FontSetup.Warn);
+        var (previousChart, previousApp, previousWarn, previousApply) = (FontSetup.ChartTypefaceLoader, FontSetup.AppFontAvailable, FontSetup.Warn, FontSetup.ApplyTypeface);
+        FontSetup.ApplyTypeface = _ => { }; // the failure tests never touch the process-wide LiveCharts settings
         FontSetup.ChartTypefaceLoader = chart;
         FontSetup.AppFontAvailable = app;
         FontSetup.Warn = warnings.Add;
@@ -27,8 +31,9 @@ public sealed class FontSetupTests
             FontSetup.ChartTypefaceLoader = previousChart;
             FontSetup.AppFontAvailable = previousApp;
             FontSetup.Warn = previousWarn;
+            FontSetup.ApplyTypeface = previousApply;
             ThemeLoader.Reset();
-            FontSetup.ApplyChartFont();
+            FontSetup.ApplyChartFont(); // put the real Inter back for every test that follows
         }
     }
 
@@ -54,7 +59,8 @@ public sealed class FontSetupTests
         Assert.NotNull(resources);
         Assert.True(chartFellBack);
         Assert.Contains(warnings!, w => w.Contains("chart font could not be loaded", StringComparison.Ordinal) && w.Contains("IOException", StringComparison.Ordinal));
-        Assert.Equal(SKTypeface.Default.FamilyName, typeface);
+        Assert.False(string.IsNullOrEmpty(typeface)); // the fallback is a real typeface, never null
+        Assert.DoesNotContain("Inter", typeface, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -107,6 +113,45 @@ public sealed class FontSetupTests
         });
 
         Assert.True(typeface); // Skia's default typeface exists on this machine; the point is that nothing threw
+    }
+
+    [Fact]
+    public void AfterAChartFontLoadFailure_TheDashboardStillRendersItsCharts_WithTheFallbackFont_FakeApi()
+    {
+        var (errors, fellBack, family, distinctPixels, restored) = StaHost.Run(() =>
+        {
+            var errors = new List<string>();
+            Dispatcher.CurrentDispatcher.UnhandledException += (_, e) =>
+            {
+                errors.Add($"{e.Exception.GetType().Name}: {e.Exception.Message}");
+                e.Handled = true;
+            };
+            var previous = FontSetup.ChartTypefaceLoader;
+            try
+            {
+                FontSetup.ChartTypefaceLoader = () => throw new IOException("Cannot locate resource 'fonts/intervariable.ttf'.");
+                FontSetup.ApplyChartFont(); // for real: LiveCharts now has the fallback typeface
+                using var rig = FeatureHarness.NewRig();
+                var vm = FeatureHarness.Create<DashboardViewModel>(rig);
+                var view = FeatureHarness.DashboardView(vm);
+                using var host = Hosted.Create(view, 1366, 736);
+                Hosted.Await(() => vm.LoadAsync());
+                host.Settle(600);
+                return (errors, FontSetup.ChartFellBack, FontSetup.ChartTypeface?.FamilyName, host.Pixels().Distinct().Count(), false);
+            }
+            finally
+            {
+                FontSetup.ChartTypefaceLoader = previous;
+                FontSetup.ApplyChartFont(); // every later test gets the bundled Inter again
+            }
+        });
+
+        Assert.Empty(errors); // no Tokenize NullReferenceException: the charts drew their text
+        Assert.True(fellBack);
+        Assert.False(string.IsNullOrEmpty(family));
+        Assert.True(distinctPixels > 20, "the dashboard rendered nothing");
+        Assert.False(restored);
+        Assert.False(FontSetup.ChartFellBack); // the real loader is back
     }
 
     [Fact]
