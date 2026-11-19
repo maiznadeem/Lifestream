@@ -299,15 +299,18 @@ public sealed partial class StockViewModel : ViewModelBase, INavigationParameter
 
     internal TimeZoneInfo Zone { get; set; } = TimeZoneInfo.Local;
 
-    public AsyncRelayCommand RetryBagsCommand => field ??= Command(_ => LoadBagsAsync(SelectedTile));
+    public AsyncRelayCommand RetryBagsCommand => field ??= Command(_ => PendingBags = LoadBagsAsync(SelectedTile));
 
     partial void OnSelectedTileChanged(StockTile? oldValue, StockTile? newValue)
     {
         if (oldValue?.BloodType != newValue?.BloodType)
         {
-            _ = LoadBagsAsync(newValue);
+            PendingBags = LoadBagsAsync(newValue);
         }
     }
+
+    /// <summary>The bag list's load in flight (or done): tests and renders wait on it.</summary>
+    internal Task PendingBags { get; private set; } = Task.CompletedTask;
 
     private async Task LoadBagsAsync(StockTile? tile)
     {
@@ -326,35 +329,43 @@ public sealed partial class StockViewModel : ViewModelBase, INavigationParameter
         var load = new CancellationTokenSource();
         _bagsLoad = load;
         BagsState = LoadState.Loading;
+        ApiResult<StockBagList> result;
         try
         {
-            var result = await RunOperationAsync(ct => _api.GetStockBagsAsync(tile.BloodType, ct), load.Token).ConfigureAwait(true);
-            if (load.IsCancellationRequested)
-            {
-                return;
-            }
-
-            if (!result.IsOk)
-            {
-                BagsState = LoadState.Error;
-                return;
-            }
-
-            var today = DateOnly.FromDateTime(Clock.GetUtcNow().UtcDateTime);
-            var position = 0;
-            foreach (var bag in result.Value.Bags)
-            {
-                Bags.Add(new StockBagRow(bag, ++position, today, Zone));
-            }
-
-            BagsMoreText = result.Value.HasMore ? $"Showing the oldest {Bags.Count:N0} of {tile.Available:N0} bags." : string.Empty;
-            BagsState = LoadState.Ready;
-            RaiseBags();
+            result = await RunOperationAsync(ct => _api.GetStockBagsAsync(tile.BloodType, ct), load.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (load.IsCancellationRequested)
         {
-            // Another group was chosen or the panel closed; that load owns the list now.
+            return; // another group was chosen or the panel closed: that load owns the list now
         }
+
+        // Back on the screen's thread (the list is bound to the view), and only if this is still the load the panel waits for.
+        Post(() => ApplyBags(load, tile, result));
+    }
+
+    private void ApplyBags(CancellationTokenSource load, StockTile tile, ApiResult<StockBagList> result)
+    {
+        if (!ReferenceEquals(_bagsLoad, load) || load.IsCancellationRequested)
+        {
+            return;
+        }
+
+        if (!result.IsOk)
+        {
+            BagsState = LoadState.Error;
+            return;
+        }
+
+        var today = DateOnly.FromDateTime(Clock.GetUtcNow().UtcDateTime);
+        var position = 0;
+        foreach (var bag in result.Value.Bags)
+        {
+            Bags.Add(new StockBagRow(bag, ++position, today, Zone));
+        }
+
+        BagsMoreText = result.Value.HasMore ? $"Showing the oldest {Bags.Count:N0} of {tile.Available:N0} bags." : string.Empty;
+        BagsState = LoadState.Ready;
+        RaiseBags();
     }
 
     protected override void Dispose(bool disposing)
@@ -483,7 +494,7 @@ public sealed partial class StockViewModel : ViewModelBase, INavigationParameter
         ApplyFilters();
         if (open is not null && SelectedTile?.BloodType == open)
         {
-            _ = LoadBagsAsync(SelectedTile); // a refresh: the open group's bags may have changed too
+            PendingBags = LoadBagsAsync(SelectedTile); // a refresh: the open group's bags may have changed too
         }
     }
 

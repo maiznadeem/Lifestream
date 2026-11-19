@@ -58,7 +58,7 @@
       <controls:PageHeader Title="Staff" Count="{Binding Total}">
         <controls:PageHeader.Actions>
           <!-- Button.Primary, or Button.Secondary while the panel is open (one filled button per screen: then the panel's action is the filled one); set in code-behind. -->
-          <Button x:Name="AddButton" Style="{DynamicResource Button.Primary}" Command="{Binding AddCommand}" IsEnabled="{Binding CanManageStaff}"
+          <Button x:Name="AddButton" Style="{DynamicResource Button.Primary}" Command="{Binding AddCommand}" IsEnabled="{Binding CanManageStaff}" controls:ButtonAssist.BusyText=""
                   AutomationProperties.Name="Add staff member" ToolTip="Add staff member (Ctrl+N)" ToolTipService.ShowOnDisabled="True">
             <StackPanel Orientation="Horizontal">
               <controls:Icon Kind="Userplus" Size="16" VerticalAlignment="Center" />

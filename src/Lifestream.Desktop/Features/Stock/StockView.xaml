@@ -36,7 +36,7 @@
       <Grid Height="{DynamicResource Height.Compact}" AutomationProperties.Name="{Binding AutomationName}">
         <Border x:Name="Tint" CornerRadius="{DynamicResource Radius.Small}" Background="{DynamicResource Brush.InfoSoft}" Opacity="0" />
         <TextBlock x:Name="Number" Text="{Binding Text}" HorizontalAlignment="Center" VerticalAlignment="Center" Style="{DynamicResource Text.Body}"
-                   Foreground="{DynamicResource Brush.Ink}" FontWeight="SemiBold" Typography.NumeralAlignment="Tabular" />
+                   Foreground="{DynamicResource Brush.Ink}" FontWeight="SemiBold" />
       </Grid>
       <DataTemplate.Triggers>
         <DataTrigger Binding="{Binding IsExpiringBand}" Value="True">
@@ -90,7 +90,7 @@
 
       <controls:PageHeader Title="Stock" Count="{Binding UnitsCountText}">
         <controls:PageHeader.Actions>
-          <Button x:Name="RefreshButton" Style="{DynamicResource Button.Secondary}" Command="{Binding RetryCommand}" AutomationProperties.Name="Refresh stock" ToolTip="Fetch the latest stock">
+          <Button x:Name="RefreshButton" Style="{DynamicResource Button.Secondary}" Command="{Binding RetryCommand}" controls:ButtonAssist.BusyText="" AutomationProperties.Name="Refresh stock" ToolTip="Fetch the latest stock">
             <StackPanel Orientation="Horizontal">
               <controls:Icon Kind="Sync" Size="16" VerticalAlignment="Center" />
               <TextBlock x:Name="RefreshLabel" Text="Refresh" VerticalAlignment="Center" feat:Edge.Left="{DynamicResource Space.8}" />
@@ -184,42 +184,42 @@
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
                 <!-- The six age bands: headers come from the API's band definitions (StockAges.Bands), set in code-behind. -->
-                <DataGridTemplateColumn x:Name="Band0" Width="*" MinWidth="56" MaxWidth="96" CanUserSort="False">
+                <DataGridTemplateColumn x:Name="Band0" Width="*" MinWidth="48" MaxWidth="96" CanUserSort="False">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate DataType="{x:Type stock:StockTile}">
                       <ContentControl Content="{Binding AgeCells[0]}" ContentTemplate="{StaticResource AgeCell}" Focusable="False" IsTabStop="False" />
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn x:Name="Band1" Width="*" MinWidth="56" MaxWidth="96" CanUserSort="False">
+                <DataGridTemplateColumn x:Name="Band1" Width="*" MinWidth="48" MaxWidth="96" CanUserSort="False">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate DataType="{x:Type stock:StockTile}">
                       <ContentControl Content="{Binding AgeCells[1]}" ContentTemplate="{StaticResource AgeCell}" Focusable="False" IsTabStop="False" />
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn x:Name="Band2" Width="*" MinWidth="56" MaxWidth="96" CanUserSort="False">
+                <DataGridTemplateColumn x:Name="Band2" Width="*" MinWidth="48" MaxWidth="96" CanUserSort="False">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate DataType="{x:Type stock:StockTile}">
                       <ContentControl Content="{Binding AgeCells[2]}" ContentTemplate="{StaticResource AgeCell}" Focusable="False" IsTabStop="False" />
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn x:Name="Band3" Width="*" MinWidth="56" MaxWidth="96" CanUserSort="False">
+                <DataGridTemplateColumn x:Name="Band3" Width="*" MinWidth="48" MaxWidth="96" CanUserSort="False">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate DataType="{x:Type stock:StockTile}">
                       <ContentControl Content="{Binding AgeCells[3]}" ContentTemplate="{StaticResource AgeCell}" Focusable="False" IsTabStop="False" />
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn x:Name="Band4" Width="*" MinWidth="56" MaxWidth="96" CanUserSort="False">
+                <DataGridTemplateColumn x:Name="Band4" Width="*" MinWidth="48" MaxWidth="96" CanUserSort="False">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate DataType="{x:Type stock:StockTile}">
                       <ContentControl Content="{Binding AgeCells[4]}" ContentTemplate="{StaticResource AgeCell}" Focusable="False" IsTabStop="False" />
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn x:Name="Band5" Width="*" MinWidth="56" MaxWidth="96" CanUserSort="False">
+                <DataGridTemplateColumn x:Name="Band5" Width="*" MinWidth="48" MaxWidth="96" CanUserSort="False">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate DataType="{x:Type stock:StockTile}">
                       <ContentControl Content="{Binding AgeCells[5]}" ContentTemplate="{StaticResource AgeCell}" Focusable="False" IsTabStop="False" />
@@ -236,7 +236,7 @@
                           <ColumnDefinition Width="72" />
                           <ColumnDefinition Width="96" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock x:Name="Count" Text="{Binding UnitsText}" Style="{DynamicResource Text.Body}" FontWeight="SemiBold" VerticalAlignment="Center" Typography.NumeralAlignment="Tabular" />
+                        <TextBlock x:Name="Count" Text="{Binding UnitsText}" Style="{DynamicResource Text.Body}" FontWeight="SemiBold" VerticalAlignment="Center" />
                         <controls:MeterBar x:Name="Bar" Grid.Column="1" VerticalAlignment="Center" Value="{Binding FillFraction}" Hatched="{Binding ExpiringFraction}" Minimum="{Binding MinimumFraction}"
                                            Track="{DynamicResource Brush.Layer2}" TrackStroke="{DynamicResource Brush.Stroke}" Fill="{DynamicResource Brush.Ink2}"
                                            Hatch="{DynamicResource Brush.WarningHatch}" Tick="{DynamicResource Brush.Ink3}" />
@@ -264,7 +264,8 @@
     <controls:SidePanel x:Name="Panel" Grid.Column="1" IsOpen="{Binding IsPanelOpen}" Overline="{Binding PanelOverline}" CloseCommand="{Binding ClosePanelCommand}"
                         AutomationProperties.Name="Blood group details">
       <ScrollViewer VerticalScrollBarVisibility="Auto" Focusable="False">
-        <StackPanel x:Name="PanelBody" feat:Edge.Bottom="{DynamicResource Space.24}">
+        <!-- The right gutter keeps the overlay scroll bar off the content (the tag, the bag list). -->
+        <StackPanel x:Name="PanelBody" feat:Edge.Bottom="{DynamicResource Space.24}" feat:Edge.Right="{DynamicResource Space.12}">
           <Grid DataContext="{Binding SelectedTile}">
             <Grid.ColumnDefinitions>
               <ColumnDefinition Width="*" />
@@ -310,9 +311,9 @@
               <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
             <TextBlock Style="{DynamicResource Text.Secondary}" TextWrapping="Wrap" Text="More than 7 days left" feat:Edge.Bottom="{DynamicResource Space.8}" />
-            <TextBlock x:Name="PanelFresh" Grid.Column="1" Style="{DynamicResource Text.Body}" Text="{Binding FreshText}" Typography.NumeralAlignment="Tabular" feat:Edge.Bottom="{DynamicResource Space.8}" />
+            <TextBlock x:Name="PanelFresh" Grid.Column="1" Style="{DynamicResource Text.Body}" Text="{Binding FreshText}" feat:Edge.Bottom="{DynamicResource Space.8}" />
             <TextBlock Grid.Row="1" Style="{DynamicResource Text.Secondary}" TextWrapping="Wrap" Text="Expires within 7 days" feat:Edge.Bottom="{DynamicResource Space.8}" />
-            <TextBlock x:Name="PanelExpiring" Grid.Row="1" Grid.Column="1" Style="{DynamicResource Text.Body}" Text="{Binding ExpiringNumber}" Typography.NumeralAlignment="Tabular" feat:Edge.Bottom="{DynamicResource Space.8}" />
+            <TextBlock x:Name="PanelExpiring" Grid.Row="1" Grid.Column="1" Style="{DynamicResource Text.Body}" Text="{Binding ExpiringNumber}" feat:Edge.Bottom="{DynamicResource Space.8}" />
             <TextBlock Grid.Row="2" Style="{DynamicResource Text.Secondary}" TextWrapping="Wrap" Text="Can be given to" feat:Edge.Bottom="{DynamicResource Space.8}" />
             <TextBlock x:Name="GivesTo" Grid.Row="2" Grid.Column="1" Style="{DynamicResource Text.Body}" Text="{Binding GivesToText}" TextWrapping="Wrap" feat:Edge.Bottom="{DynamicResource Space.8}" />
             <TextBlock Grid.Row="3" Style="{DynamicResource Text.Secondary}" TextWrapping="Wrap" Text="Can receive" />
@@ -342,16 +343,18 @@
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                       </Grid.ColumnDefinitions>
-                      <StackPanel>
-                        <StackPanel Orientation="Horizontal">
-                          <TextBlock Style="{DynamicResource Text.Body}" FontWeight="Medium" Text="{Binding Code}" Typography.NumeralAlignment="Tabular" VerticalAlignment="Center" />
-                          <controls:Badge x:Name="First" Text="Use first" Kind="Info" Icon="Arrowright" feat:Edge.Left="{DynamicResource Space.8}" VerticalAlignment="Center" Visibility="Collapsed" />
-                        </StackPanel>
-                        <TextBlock Style="{DynamicResource Text.Caption}" TextWrapping="Wrap" feat:Edge.Top="{DynamicResource Space.4}">
-                          <Run Text="Collected " /><Run Text="{Binding CollectedText, Mode=OneWay}" /><Run Text=", expires " /><Run Text="{Binding ExpiresText, Mode=OneWay}" />
-                        </TextBlock>
+                      <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                      </Grid.RowDefinitions>
+                      <StackPanel Orientation="Horizontal">
+                        <TextBlock Style="{DynamicResource Text.Body}" FontWeight="Medium" Text="{Binding Code}" VerticalAlignment="Center" />
+                        <controls:Badge x:Name="First" Text="Use first" Kind="Info" Icon="Arrowright" feat:Edge.Left="{DynamicResource Space.8}" VerticalAlignment="Center" Visibility="Collapsed" />
                       </StackPanel>
                       <controls:Badge x:Name="Left" Grid.Column="1" Text="{Binding DaysLeftText}" Kind="Neutral" Icon="Clock" VerticalAlignment="Center" feat:Edge.Left="{DynamicResource Space.8}" />
+                      <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Style="{DynamicResource Text.Caption}" TextWrapping="Wrap" feat:Edge.Top="{DynamicResource Space.4}">
+                        <Run Text="Collected " /><Run Text="{Binding CollectedText, Mode=OneWay}" /><Run Text=", expires " /><Run Text="{Binding ExpiresText, Mode=OneWay}" />
+                      </TextBlock>
                     </Grid>
                   </Border>
                   <DataTemplate.Triggers>

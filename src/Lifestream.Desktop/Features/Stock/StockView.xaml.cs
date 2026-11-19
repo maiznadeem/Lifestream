@@ -69,7 +69,7 @@ public partial class StockView : UserControl
         Grid.Focus();
     }
 
-    /// <summary>"0–6" to "35–42" over "days old" for each band column, centred over its cells; the last band is marked as the one that expires soon.</summary>
+    /// <summary>"0–6" to "35–42" for each band column, with what it means as its tooltip; the last band is marked as the one that expires soon.</summary>
     private void SetBandHeaders()
     {
         DataGridTemplateColumn[] columns = [Band0, Band1, Band2, Band3, Band4, Band5];
@@ -79,7 +79,6 @@ public partial class StockView : UserControl
             columns[i].Header = new TextBlock
             {
                 Text = band.Label,
-                HorizontalAlignment = HorizontalAlignment.Center,
                 ToolTip = i == columns.Length - 1
                     ? $"{band.FromDay} to {band.ToDay} days since collection: expires within {Lifestream.Domain.BloodRules.ExpiringSoonDays} days"
                     : $"{band.FromDay} to {band.ToDay} days since collection",
@@ -126,25 +125,10 @@ public partial class StockView : UserControl
 
     private void OnBreakpointChanged(object? sender, EventArgs e) => ApplyBreakpoint();
 
-    /// <summary>The band headers sit centred over their centred counts (the grid's own header style, with the alignment changed).</summary>
-    private void CenterBandHeaders()
-    {
-        if (Band0.HeaderStyle is null && Grid.ColumnHeaderStyle is { } baseStyle)
-        {
-            var style = new Style(typeof(DataGridColumnHeader), baseStyle);
-            style.Setters.Add(new Setter(HorizontalContentAlignmentProperty, HorizontalAlignment.Center));
-            foreach (var column in new[] { Band0, Band1, Band2, Band3, Band4, Band5 })
-            {
-                column.HeaderStyle = style;
-            }
-        }
-    }
-
     private void ApplyBreakpoint()
     {
         var compact = Responsive.GetBreakpoint(this) == Breakpoint.Compact;
         RefreshLabel.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
-        CenterBandHeaders();
         if (compact)
         {
             Panel.SetResourceReference(SidePanel.PanelWidthProperty, "Width.PanelCompact");

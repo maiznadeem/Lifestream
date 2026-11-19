@@ -105,8 +105,8 @@
                                          SortColumn="{Binding SortColumn, Mode=OneWay}" SortDescending="{Binding SortDescending, Mode=OneWay}"
                                          AutomationProperties.Name="Receipts" MouseDoubleClick="OnRowDoubleClick" KeyDown="OnGridKeyDown" lists:ListColumns.IsResponsive="True">
               <DataGrid.Columns>
-                <!-- The date over its time, so neither is ever cut. -->
-                <DataGridTemplateColumn Header="Date" Width="Auto" MinWidth="104" SortMemberPath="date">
+                <!-- The date over its time, so neither is ever cut: a fixed width that fits "18 Nov 2026", given back after the panel opens (ListColumns). -->
+                <DataGridTemplateColumn Header="Date" Width="120" MinWidth="120" SortMemberPath="date">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate DataType="{x:Type vm:ReceiptRow}">
                       <StackPanel VerticalAlignment="Center" AutomationProperties.Name="{Binding WhenText}">
@@ -116,8 +116,8 @@
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <!-- The kind as a pill that takes the width it needs (the column is Auto), over the receipt's code. Both kinds are neutral; the icon tells them apart. -->
-                <DataGridTemplateColumn Header="Receipt" Width="Auto" MinWidth="112" CanUserSort="False">
+                <!-- The kind as a pill over the receipt's code, in a column wide enough for the longer pill ("Donation"). Both kinds are neutral; the icon tells them apart. -->
+                <DataGridTemplateColumn Header="Receipt" Width="124" MinWidth="124" CanUserSort="False">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate DataType="{x:Type vm:ReceiptRow}">
                       <StackPanel VerticalAlignment="Center" HorizontalAlignment="Left">

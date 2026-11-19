@@ -217,7 +217,7 @@
                       <ColumnDefinition Width="104" />
                       <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
-                    <ItemsControl ItemsSource="{Binding Keys}" Focusable="False" VerticalAlignment="Top">
+                    <ItemsControl ItemsSource="{Binding Keys}" Focusable="False" VerticalAlignment="Center">
                       <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
                           <StackPanel Orientation="Horizontal" />

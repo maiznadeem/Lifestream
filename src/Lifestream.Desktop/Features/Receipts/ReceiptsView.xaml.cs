@@ -22,6 +22,9 @@ public partial class ReceiptsView : UserControl
     public ReceiptsView()
     {
         InitializeComponent();
+
+        // The "..." menu lives outside the visual tree: give it the screen's model, so its commands are bound before it opens.
+        DataContextChanged += (_, e) => MoreButton.ContextMenu.DataContext = e.NewValue;
         Loaded += (_, _) =>
         {
             BreakpointDescriptor.AddValueChanged(this, OnBreakpointChanged);
