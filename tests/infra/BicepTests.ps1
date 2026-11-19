@@ -217,7 +217,8 @@ Describe 'INFRA-09 / OWN-02 container app on Consumption, scale to zero' {
         $profiles = @($env.properties.workloadProfiles)
         $profiles.Count | Should -Be 1
         $profiles[0].workloadProfileType | Should -Be 'Consumption'
-        $env.properties.appLogsConfiguration.destination | Should -Be 'none'
+        $env.properties.PSObject.Properties.Name | Should -Not -Contain 'appLogsConfiguration' -Because "Azure preflight rejects destination 'none'; no log destination means the property is omitted"
+        $script:RawJson | Should -Not -Match '"destination"\s*:\s*"none"'
         $env.properties.PSObject.Properties.Name | Should -Not -Contain 'vnetConfiguration'
         $env.properties.zoneRedundant | Should -Be $false
     }
@@ -288,7 +289,7 @@ Describe 'INFRA-09 / OWN-02 container app on Consumption, scale to zero' {
 Describe 'OWN-02 allow-list of resource types that cost nothing while idle' {
     BeforeAll {
         $script:IdleFree = [ordered]@{
-            'Microsoft.App/managedEnvironments'                                             = 'plain Consumption environment: no VNet, so no public IP or load balancer; logs destination none'
+            'Microsoft.App/managedEnvironments'                                             = 'plain Consumption environment: no VNet, so no public IP or load balancer; no log destination (appLogsConfiguration omitted)'
             'Microsoft.App/containerApps'                                                   = 'Consumption app, minReplicas 0: no resource charge at zero replicas; first 2M requests a month free'
             'Microsoft.App/jobs'                                                            = 'manual job: bills only while an execution runs'
             'Microsoft.ManagedIdentity/userAssignedIdentities'                              = 'managed identities are free'
@@ -328,7 +329,8 @@ Describe 'OWN-02 allow-list of resource types that cost nothing while idle' {
     It 'keeps the environment without a VNet and the app at zero minimum replicas' {
         $env = @($script:Resources | Where-Object type -eq 'Microsoft.App/managedEnvironments')[0]
         $env.properties.PSObject.Properties.Name | Should -Not -Contain 'vnetConfiguration'
-        $env.properties.appLogsConfiguration.destination | Should -Be 'none'
+        $env.properties.PSObject.Properties.Name | Should -Not -Contain 'appLogsConfiguration' -Because "Azure preflight rejects destination 'none'; no log destination means the property is omitted"
+        $script:RawJson | Should -Not -Match '"destination"\s*:\s*"none"'
         @($env.properties.workloadProfiles | Where-Object workloadProfileType -ne 'Consumption') | Should -BeNullOrEmpty
         @($script:Resources | Where-Object type -eq 'Microsoft.App/containerApps')[0].properties.template.scale.minReplicas | Should -Be 0
     }
