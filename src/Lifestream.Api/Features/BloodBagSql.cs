@@ -28,7 +28,7 @@ public static class BloodBagSql
         var inserted = await db.Database.ExecuteSqlRawAsync(
             BuildInsert(units),
             [
-                new SqlParameter("@type", bloodType.ToString()),
+                TypeParameter(bloodType),
                 new SqlParameter("@collected", System.Data.SqlDbType.DateTime2) { Value = collectedAtUtc },
                 new SqlParameter("@expires", System.Data.SqlDbType.Date) { Value = StockRulesExpiry(collectedAtUtc).ToDateTime(TimeOnly.MinValue) },
                 new SqlParameter("@receipt", receiptId),
@@ -47,10 +47,17 @@ public static class BloodBagSql
             [
                 new SqlParameter("@receipt", receiptId),
                 new SqlParameter("@units", units),
-                new SqlParameter("@type", bloodType.ToString()),
+                TypeParameter(bloodType),
                 new SqlParameter("@today", System.Data.SqlDbType.Date) { Value = today.ToDateTime(TimeOnly.MinValue) },
             ],
             ct);
+
+    /// <summary>
+    /// The column is varchar(5): a plain string parameter is nvarchar, which makes SQL Server convert the COLUMN (CONVERT_IMPLICIT) and turns the
+    /// blood-type seek of the issue statement into a scan of the whole table. A varchar(5) parameter matches the column and the index.
+    /// </summary>
+    private static SqlParameter TypeParameter(BloodType bloodType) =>
+        new("@type", System.Data.SqlDbType.VarChar, 5) { Value = bloodType.ToString() };
 
     private static DateOnly StockRulesExpiry(DateTime collectedAtUtc) => StockRules.ExpiryFor(collectedAtUtc);
 

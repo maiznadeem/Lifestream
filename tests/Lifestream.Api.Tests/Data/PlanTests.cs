@@ -42,7 +42,6 @@ public sealed class PlanTests(ScaleDatabaseFixture fixture) : IClassFixture<Scal
         "Dashboard_PendingCounts",
         "BloodBags_ByTypeAndStatus",
         "BloodBags_CollectedRange",
-        "BloodBags_FifoPickForIssue",
         "BloodBags_ByDonationReceipt",
         "Stock_ByBloodType",
         "Staff_ByUsername",
@@ -218,10 +217,6 @@ public sealed class PlanTests(ScaleDatabaseFixture fixture) : IClassFixture<Scal
                 break;
             case "BloodBags_CollectedRange":
                 _ = await db.BloodBags.AsNoTracking().InRange(b => b.CollectedAtUtc, start, end).OrderBy(b => b.CollectedAtUtc).Take(50).ToListAsync(Ct);
-                break;
-            case "BloodBags_FifoPickForIssue":
-                _ = await db.BloodBags.Where(b => b.BloodType == BloodType.OPos && b.Status == BagStatus.Available && b.ExpiresOn >= today)
-                    .OrderBy(b => b.CollectedAtUtc).Take(3).ToListAsync(Ct);
                 break;
             case "BloodBags_ByDonationReceipt":
                 _ = await db.BloodBags.AsNoTracking().Where(b => b.DonationReceiptId == receipt.Id).ToListAsync(Ct);

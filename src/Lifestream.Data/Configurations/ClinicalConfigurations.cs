@@ -111,6 +111,11 @@ internal sealed class BloodBagConfiguration : IEntityTypeConfiguration<BloodBag>
 
         // Stock by blood type reads only this narrow index: available bags in expiry order.
         b.HasIndex(x => new { x.ExpiresOn, x.BloodType }).HasFilter("[Status] = 'Available'");
+
+        // The oldest-first pick of a fulfil (BloodBagSql.IssueOldestFirst): one seek on the blood type and the expiry date (only unexpired bags of the type
+        // are read, at most the stock of that type), with the collection date and the id already in the index, so the pick sorts those few rows and the
+        // clustered index is touched only to update the bags chosen.
+        b.HasIndex(x => new { x.BloodType, x.ExpiresOn }).IncludeProperties(x => x.CollectedAtUtc).HasFilter("[Status] = 'Available'");
     }
 }
 

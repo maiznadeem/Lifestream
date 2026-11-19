@@ -92,6 +92,10 @@ internal sealed class StaffConfiguration : IEntityTypeConfiguration<Staff>
         b.Property(x => x.RowVersion).IsRowVersion();
         b.HasIndex(x => x.Username).IsUnique();
         b.HasIndex(x => x.DisplayName);
+
+        // Every demo request resolves the demo account (WHERE IsDemo = 1) and every login excludes it: one tiny filtered index holds just that row.
+        // IsProtected is not indexed: the API only tests it on a row it already found by Id, or as "not protected" (nearly every row), which no index helps.
+        b.HasIndex(x => x.IsDemo).HasFilter("[IsDemo] = 1").IncludeProperties(x => x.DisplayName);
     }
 }
 

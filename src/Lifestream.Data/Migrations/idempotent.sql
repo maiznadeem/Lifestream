@@ -1297,3 +1297,32 @@ END;
 COMMIT;
 GO
 
+BEGIN TRANSACTION;
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261119140000_WriteIssueFifoAndDemoIndexes'
+)
+BEGIN
+    EXEC(N'CREATE INDEX [IX_Staff_IsDemo] ON [Staff] ([IsDemo]) INCLUDE ([DisplayName]) WHERE [IsDemo] = 1');
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261119140000_WriteIssueFifoAndDemoIndexes'
+)
+BEGIN
+    EXEC(N'CREATE INDEX [IX_BloodBag_BloodType_ExpiresOn] ON [BloodBag] ([BloodType], [ExpiresOn]) INCLUDE ([CollectedAtUtc]) WHERE [Status] = ''Available''');
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261119140000_WriteIssueFifoAndDemoIndexes'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20261119140000_WriteIssueFifoAndDemoIndexes', N'11.0.0');
+END;
+
+COMMIT;
+GO
+

@@ -16,7 +16,7 @@ partial class LifestreamDbContextModelSnapshot : ModelSnapshot
     // If you encounter a merge conflict in the line below, it means you need to
     // discard one of the migration branches and recreate its migrations on top of
     // the other branch. See https://aka.ms/efcore-docs-migrations-conflicts for more info.
-    public override string LastMigrationId => "20261119004902_TombstonesAndStaffCreatedAt";
+    public override string LastMigrationId => "20261119140000_WriteIssueFifoAndDemoIndexes";
 
     protected override void BuildModel(ModelBuilder modelBuilder)
     {
@@ -200,6 +200,11 @@ partial class LifestreamDbContextModelSnapshot : ModelSnapshot
                 b.HasIndex("DonationReceiptId");
 
                 b.HasIndex("IssueReceiptId");
+
+                var index = b.HasIndex("BloodType", "ExpiresOn")
+                    .HasFilter("[Status] = 'Available'");
+
+                SqlServerIndexBuilderExtensions.IncludeProperties(index, new[] { "CollectedAtUtc" });
 
                 b.HasIndex("ExpiresOn", "BloodType")
                     .HasFilter("[Status] = 'Available'");
@@ -742,6 +747,11 @@ partial class LifestreamDbContextModelSnapshot : ModelSnapshot
                 b.HasKey("Id");
 
                 b.HasIndex("DisplayName");
+
+                var index = b.HasIndex("IsDemo")
+                    .HasFilter("[IsDemo] = 1");
+
+                SqlServerIndexBuilderExtensions.IncludeProperties(index, new[] { "DisplayName" });
 
                 b.HasIndex("Username")
                     .IsUnique();
