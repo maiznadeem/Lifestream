@@ -17,7 +17,7 @@ public partial class ListToolbar : UserControl
         DependencyProperty.Register(nameof(ShowBloodTypeFilter), typeof(bool), typeof(ListToolbar), new PropertyMetadata(true));
 
     public static readonly DependencyProperty FiltersProperty =
-        DependencyProperty.Register(nameof(Filters), typeof(object), typeof(ListToolbar), new PropertyMetadata(null));
+        DependencyProperty.Register(nameof(Filters), typeof(object), typeof(ListToolbar), new PropertyMetadata(null, (d, e) => ((ListToolbar)d).PlaceFilters(e.NewValue)));
 
     public static readonly DependencyProperty TrailingProperty =
         DependencyProperty.Register(nameof(Trailing), typeof(object), typeof(ListToolbar), new PropertyMetadata(null));
@@ -25,6 +25,7 @@ public partial class ListToolbar : UserControl
     public static readonly DependencyProperty ShowAddButtonProperty =
         DependencyProperty.Register(nameof(ShowAddButton), typeof(bool), typeof(ListToolbar), new PropertyMetadata(false));
 
+    private readonly List<UIElement> _screenChips = [];
     private ViewModelBase? _model;
 
     public ListToolbar()
@@ -43,8 +44,55 @@ public partial class ListToolbar : UserControl
     /// <summary>Shows the "+ Blood group" chip (bound to the list's BloodTypeFilter); true by default.</summary>
     public bool ShowBloodTypeFilter { get => (bool)GetValue(ShowBloodTypeFilterProperty); set => SetValue(ShowBloodTypeFilterProperty, value); }
 
-    /// <summary>The screen's own filter chips, after the blood group chip.</summary>
+    /// <summary>
+    /// The screen's own filter chips, after the blood group chip: one chip, or a panel of chips. They are moved into the toolbar's own chip row, so each chip
+    /// wraps on its own when the list is narrow (a panel of chips kept whole would move to the next line all together, or run off the edge).
+    /// </summary>
     public object? Filters { get => GetValue(FiltersProperty); set => SetValue(FiltersProperty, value); }
+
+    private void PlaceFilters(object? filters)
+    {
+        foreach (var chip in _screenChips)
+        {
+            ChipRow.Children.Remove(chip);
+        }
+
+        _screenChips.Clear();
+        switch (filters)
+        {
+            case Panel { IsInitialized: false } pending:
+                // XAML hands the panel over before its chips are in it: take them once it is complete.
+                pending.Initialized += (_, _) =>
+                {
+                    if (ReferenceEquals(Filters, pending))
+                    {
+                        PlaceFilters(pending);
+                    }
+                };
+                return;
+            case Panel panel:
+                _screenChips.AddRange(panel.Children.Cast<UIElement>());
+                panel.Children.Clear();
+                break;
+            case UIElement chip:
+                _screenChips.Add(chip);
+                break;
+            case not null:
+                _screenChips.Add(new ContentControl { Content = filters, Focusable = false, IsTabStop = false });
+                break;
+        }
+
+        var at = ChipRow.Children.IndexOf(ClearButton);
+        foreach (var chip in _screenChips)
+        {
+            if (chip is FrameworkElement element)
+            {
+                element.VerticalAlignment = VerticalAlignment.Center; // in its slot of the row, like the toolbar's own chip
+            }
+
+            ChipRow.Children.Insert(at++, chip);
+        }
+    }
 
     /// <summary>Content at the right end of the bar.</summary>
     public object? Trailing { get => GetValue(TrailingProperty); set => SetValue(TrailingProperty, value); }

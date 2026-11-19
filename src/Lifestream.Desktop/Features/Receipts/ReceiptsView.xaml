@@ -218,7 +218,18 @@
                       AutomationProperties.Name="{Binding SourceActionText}">
                 <StackPanel Orientation="Horizontal">
                   <TextBlock Text="{Binding SourceActionText}" VerticalAlignment="Center" />
-                  <controls:Icon Kind="Arrowright" Size="16" VerticalAlignment="Center" feat:Edge.Left="{DynamicResource Space.8}" />
+                  <controls:Icon Kind="Arrowright" Size="16" VerticalAlignment="Center" feat:Edge.Left="{DynamicResource Space.8}">
+                    <controls:Icon.Style>
+                      <Style TargetType="controls:Icon">
+                        <Style.Triggers>
+                          <!-- A compact window's panel is 352 wide: the arrow goes, so Print keeps its whole label. -->
+                          <DataTrigger Binding="{Binding (controls:Responsive.Breakpoint), RelativeSource={RelativeSource Self}}" Value="{x:Static controls:Breakpoint.Compact}">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                          </DataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </controls:Icon.Style>
+                  </controls:Icon>
                 </StackPanel>
               </Button>
               <lists:MenuButton x:Name="MoreButton" Grid.Column="2" Style="{DynamicResource Button.Icon}" feat:Edge.Left="{DynamicResource Space.8}" AutomationProperties.Name="More actions" ToolTip="More actions">

@@ -74,6 +74,17 @@ public sealed class ListScreenRenderTests
             var primaries = host.All<Button>().Count(b => b.IsVisible && ReferenceEquals(b.Style, b.TryFindResource("Button.Primary")));
             var texts = host.All<TextBlock>().Where(t => t.IsVisible).Select(t => t.Text).ToList();
             var badges = host.All<Badge>().Where(b => b.IsVisible).Select(b => (b.Text, b.Kind, b.Icon)).ToList();
+            if (!badges.Any(b => b.Text == "First-time"))
+            {
+                // In a compact window with the panel open the toolbar's chips take a second line, and the first-time donor's row is below the fold: bring it
+                // into view to read its pill, then go back to the top for the states that follow.
+                grid.ScrollIntoView(vm.Items.First(d => d.Name == "Elio Bergström"));
+                host.Settle(250);
+                badges.AddRange(host.All<Badge>().Where(b => b.IsVisible).Select(b => (b.Text, b.Kind, b.Icon)));
+                grid.ScrollIntoView(vm.Items[0]);
+                host.Settle(250);
+            }
+
             var facts = (Png: png, PanelWidth: panel.ActualWidth, Panel: Hosted.BoundsOf(panel, host.Element), Book: Hosted.BoundsOf(book, host.Element), area,
                 Columns: grid.Columns.Where(c => c.Visibility == Visibility.Visible).Select(c => c.Header as string).ToList(), Texts: texts, Card: vm.EligibilityCard,
                 Name: grid.Columns.First(c => (c.Header as string) == "Name").ActualWidth, AddIsSecondary: ReferenceEquals(add.Style, add.TryFindResource("Button.Secondary")),
@@ -505,6 +516,14 @@ public sealed class ListScreenRenderTests
     private static byte[] Save(Hosted host, string name)
     {
         RenderChecks.Check(host, name);
+        if (name.StartsWith("donors-", StringComparison.Ordinal) && !name.Contains("error", StringComparison.Ordinal))
+        {
+            // The screen's own chips are in the toolbar at every size (in a compact window with the panel open they wrap onto a second line).
+            var chips = host.All<Lifestream.Desktop.Features.ListScreens.FilterChip>().Where(c => c.IsVisible).Select(c => AutomationProperties.GetName(c)).ToList();
+            Assert.Contains("Eligibility filter", chips);
+            Assert.Contains("Last donated filter", chips);
+        }
+
         var png = host.Capture();
         System.IO.Directory.CreateDirectory(Directory);
         File.WriteAllBytes(Path.Combine(Directory, name), png);

@@ -7,37 +7,46 @@
              Focusable="False" IsTabStop="False">
   <!-- The command bar of a list (direction A): the search field (Ctrl+F), the filter chips ("+ Blood group", then the screen's own in Filters), "Clear filters" while a filter
        is set, and the screen's trailing content on the right. The primary "Add" action lives in the page header; set ShowAddButton for a screen that has no header.
-       The data context is the list view model. -->
+       No chip runs off the list's edge when the list is narrow (a compact window with the side panel open): the search field and the row of chips wrap (Bar).
+       While the chips fit beside the field they stay there; when they do not, the whole row moves under the field, where it has the list's full width, and only
+       wraps again if even that is too little. Every line is one control and an 8 gap high: the field carries the gap as its bottom margin, a chip sits in a slot
+       of that height (Toolbar.ChipSlot, the row's margin moving the spare half gap from above the chips to below them), and the bar's own margin takes the last
+       gap back, so a toolbar on one line is exactly as high as the search field. The screen's own chips are moved into the same row (ListToolbar.Filters), so
+       every chip wraps on its own. The data context is the list view model. -->
   <UserControl.Resources>
     <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
     <Thickness x:Key="Toolbar.Gap">0,0,8,0</Thickness>
+    <Thickness x:Key="Toolbar.SearchGap">0,0,8,8</Thickness>
+    <sys:Double x:Key="Toolbar.ChipSlot" xmlns:sys="clr-namespace:System;assembly=mscorlib">42</sys:Double>
+    <Thickness x:Key="Toolbar.ChipRow">0,-4,0,4</Thickness>
+    <Thickness x:Key="Toolbar.Bar">0,0,0,-8</Thickness>
   </UserControl.Resources>
   <Grid KeyboardNavigation.TabNavigation="Local">
     <Grid.ColumnDefinitions>
-      <ColumnDefinition x:Name="SearchColumn" Width="Auto" />
-      <ColumnDefinition Width="Auto" />
       <ColumnDefinition Width="*" />
       <ColumnDefinition Width="Auto" />
       <ColumnDefinition Width="Auto" />
     </Grid.ColumnDefinitions>
+    <WrapPanel x:Name="Bar" Orientation="Horizontal" Margin="{StaticResource Toolbar.Bar}">
     <TextBox x:Name="SearchBox" Style="{DynamicResource TextBox.Search}" Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" MaxLength="100"
-             Width="{Binding SearchWidth, RelativeSource={RelativeSource AncestorType=lists:ListToolbar}}" Margin="{StaticResource Toolbar.Gap}"
+             Width="{Binding SearchWidth, RelativeSource={RelativeSource AncestorType=lists:ListToolbar}}" Margin="{StaticResource Toolbar.SearchGap}"
              controls:InputAssist.Placeholder="{Binding SearchPlaceholder, RelativeSource={RelativeSource AncestorType=lists:ListToolbar}}" controls:SearchAssist.Shortcut="Ctrl F"
-             AutomationProperties.Name="Search" ToolTip="Search (Ctrl+F)">
+             VerticalAlignment="Top" AutomationProperties.Name="Search" ToolTip="Search (Ctrl+F)">
       <TextBox.InputBindings>
         <KeyBinding Key="Enter" Command="{Binding SearchNowCommand}" />
       </TextBox.InputBindings>
     </TextBox>
-    <WrapPanel x:Name="ChipRow" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+    <WrapPanel x:Name="ChipRow" Orientation="Horizontal" VerticalAlignment="Top" ItemHeight="{StaticResource Toolbar.ChipSlot}" Margin="{StaticResource Toolbar.ChipRow}">
       <lists:FilterChip x:Name="BloodTypeChip" Label="Blood group" ItemsSource="{Binding BloodTypeOptions}" SelectedItem="{Binding BloodTypeFilter, Mode=TwoWay}" DisplayMemberPath="Display"
-                        Margin="{StaticResource Toolbar.Gap}"
+                        Margin="{StaticResource Toolbar.Gap}" VerticalAlignment="Center"
                         Visibility="{Binding ShowBloodTypeFilter, RelativeSource={RelativeSource AncestorType=lists:ListToolbar}, Converter={StaticResource BoolToVisibility}}" />
-      <ContentControl Focusable="False" IsTabStop="False" Content="{Binding Filters, RelativeSource={RelativeSource AncestorType=lists:ListToolbar}}" />
-      <Button x:Name="ClearButton" Style="{DynamicResource Button.Subtle}" Content="Clear filters" Command="{Binding ClearFiltersCommand}"
+      <!-- The screen's own chips are inserted here (before Clear filters) by the code-behind. -->
+      <Button x:Name="ClearButton" Style="{DynamicResource Button.Subtle}" Content="Clear filters" Command="{Binding ClearFiltersCommand}" VerticalAlignment="Center"
               Visibility="{Binding HasActiveFilters, Converter={StaticResource BoolToVisibility}}" AutomationProperties.Name="Clear filters" />
     </WrapPanel>
-    <ContentControl Grid.Column="3" Focusable="False" IsTabStop="False" VerticalAlignment="Center" Content="{Binding Trailing, RelativeSource={RelativeSource AncestorType=lists:ListToolbar}}" />
-    <Button x:Name="AddButton" Grid.Column="4" Style="{DynamicResource Button.Primary}" Command="{Binding AddCommand}" VerticalAlignment="Center" Margin="{DynamicResource Inset.L8}"
+    </WrapPanel>
+    <ContentControl Grid.Column="1" Focusable="False" IsTabStop="False" VerticalAlignment="Top" Content="{Binding Trailing, RelativeSource={RelativeSource AncestorType=lists:ListToolbar}}" />
+    <Button x:Name="AddButton" Grid.Column="2" Style="{DynamicResource Button.Primary}" Command="{Binding AddCommand}" VerticalAlignment="Top" Margin="{DynamicResource Inset.L8}"
             AutomationProperties.Name="{Binding NewActionLabel}" ToolTip="Ctrl+N"
             Visibility="{Binding ShowAddButton, RelativeSource={RelativeSource AncestorType=lists:ListToolbar}, Converter={StaticResource BoolToVisibility}}">
       <StackPanel Orientation="Horizontal">

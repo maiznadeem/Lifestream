@@ -11,6 +11,7 @@ namespace Lifestream.Desktop.Tests.RedesignA;
 /// save, so a rule is checked on all of them and not only where someone thought to look:
 /// a column header that sits over right-aligned or centred values is aligned with them (ColumnAssist.HeaderAlignment);
 /// everything in an open side panel stays inside the panel's 24 DIP padding, with or without a scroll bar;
+/// a button's label lies inside its button, and a toolbar's chips inside the toolbar (a control wider than its place is cut by it);
 /// and in a standard or wide window nothing in a table is cut off (a name gets the room it needs before the detail columns share the rest) and no badge is
 /// squeezed. A compact window may end a long value in an ellipsis; its full text is then in a tooltip, which other tests check.
 /// </summary>
@@ -31,6 +32,7 @@ internal static class RenderChecks
         var problems = new List<string>();
         HeadersOverTheirValues(host, problems);
         PanelPadding(host, problems);
+        LabelsInsideTheirButtons(host, problems);
         if (!name.Contains("narrow", StringComparison.Ordinal) && !name.Contains("1024x", StringComparison.Ordinal))
         {
             NothingCutOff(host, problems);
@@ -96,6 +98,34 @@ internal static class RenderChecks
                 if (bounds.Right > edge.Right - Pad + 0.5 || bounds.Left < edge.Left + Pad - 0.5)
                 {
                     problems.Add($"in the side panel, {Describe(element)} spans x {bounds.Left:0.#} to {bounds.Right:0.#}: outside the panel's {Pad} padding ({edge.Left + Pad:0.#} to {edge.Right - Pad:0.#})");
+                }
+            }
+        }
+    }
+
+    private static void LabelsInsideTheirButtons(Hosted host, List<string> problems)
+    {
+        foreach (var button in host.All<ButtonBase>().Where(b => b.IsVisible && b.ActualWidth > 0 && !IsInside<ScrollBar>(b, null) && !IsInside<DataGridColumnHeader>(b, null)))
+        {
+            foreach (var label in Descendants<TextBlock>(button).Where(t => t.IsVisible && t.ActualWidth > 0 && t.Text.Length > 0))
+            {
+                var inButton = label.TransformToAncestor(button).TransformBounds(new Rect(0, 0, label.ActualWidth, label.ActualHeight));
+                if (inButton.Left < -0.5 || inButton.Right > button.ActualWidth + 0.5)
+                {
+                    problems.Add($"the label \"{label.Text}\" spans x {inButton.Left:0.#} to {inButton.Right:0.#} in a button {button.ActualWidth:0.#} wide: it is cut");
+                }
+            }
+        }
+
+        // The chips of a list toolbar lie inside the toolbar: a chip past its edge is cut off by the list column.
+        foreach (var toolbar in host.All<Lifestream.Desktop.Features.ListScreens.ListToolbar>().Where(t => t.IsVisible && t.ActualWidth > 0))
+        {
+            foreach (var chip in Descendants<ButtonBase>(toolbar).Where(b => b.IsVisible && b.ActualWidth > 0))
+            {
+                var inToolbar = chip.TransformToAncestor(toolbar).TransformBounds(new Rect(0, 0, chip.ActualWidth, chip.ActualHeight));
+                if (inToolbar.Right > toolbar.ActualWidth + 0.5)
+                {
+                    problems.Add($"the toolbar's \"{System.Windows.Automation.AutomationProperties.GetName(chip)}\" ends at x {inToolbar.Right:0.#}, the toolbar at {toolbar.ActualWidth:0.#}: it runs off the list's edge");
                 }
             }
         }
