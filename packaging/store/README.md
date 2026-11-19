@@ -27,8 +27,8 @@ Store as an MSIX. Nothing here is submitted automatically; the Store listing nee
 
 ## Every release
 
-1. Push the tag (`git tag v2.0.2 && git push origin v2.0.2`). `release.yml` publishes the app, scans it, builds the GitHub release
-   and, when the variables above exist, the workflow artifact **store-msix** (`Lifestream-2.0.2-x64.msix`).
+1. Push the tag (`git tag v2.1.0 && git push origin v2.1.0`). `release.yml` publishes the app, scans it, builds the GitHub release
+   and, when the variables above exist, the workflow artifact **store-msix** (`Lifestream-2.1.0-x64.msix`).
 2. Download the artifact from the workflow run page (Actions > Release > the run > Artifacts).
 3. Generate screenshots: run the **Screenshots** workflow (Actions > Screenshots > Run workflow) and download its artifact.
 4. In Partner Center open the reserved app, choose **Start your submission**, then:

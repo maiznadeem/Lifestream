@@ -2,6 +2,40 @@
 
 All notable changes to Lifestream are listed here. The section of a version is also the text of its release on the GitHub Releases page.
 
+## [2.1.0] - In progress
+
+Lifestream 2.1 brings a new, calmer design built for the PC it runs on. This section grows as the release comes together.
+
+### Look and feel
+
+- A new light look, with a matching dark theme. Lifestream follows the Windows light or dark setting, or you can choose one from the account menu or the command palette.
+- A new typeface, Onest, tuned to line up with the screen's pixels so small text stays sharp.
+- On Windows 11 the window uses the Mica material, and its title bar holds the search field, notifications and your account.
+- Red is now kept for blood groups, the logo and real problems, so a group that is out of stock stands out. The main action on each screen is a dark button.
+- Scrollbars stay thin and out of the way until you move the pointer to them.
+- New icons and a new Lifestream mark.
+
+### Finding your way
+
+- The sidebar is grouped into Donations, Transfusions, Inventory and Administration, shows how many appointments are still to come today, how many requests are open, and marks stock that is below its minimum. Press Ctrl+B to shrink it to icons; in a small window it does this by itself.
+- Press Ctrl+K to search donors, patients and requests, go to any screen, or run an action such as Record donation, from the keyboard.
+- Ctrl+D records a donation for today's next appointment, Alt+1 to Alt+8 open the sidebar screens, and F6 moves between the title bar, the sidebar and the page.
+
+### Sign-in
+
+- A new sign-in screen with the red-cell compatibility chart, a clear Sign in button and Try the demo below it.
+- It tells you whether the server is ready before you sign in, and warns you when Caps Lock is on.
+- It can remember your user name on this PC (never your password).
+- While the server wakes up, the taskbar button shows progress, even when the window is minimized.
+
+### Dashboard
+
+- The dashboard now starts with what needs attention: requests that stock cannot cover, bags about to expire, groups below their minimum and requests due soon, each with the button that deals with it.
+- Today's appointments show who has donated, who is next and who is giving blood for the first time.
+- Stock by blood group shows each group's units, the share that expires within 7 days and the minimum.
+- Donations and issues over the last 12 months are a line chart, with the same numbers available as a table.
+- The taskbar button shows how many blood groups are below their minimum.
+
 ## [2.0.2] - 2026-11-19
 
 Lifestream 2.0.2 makes the new look sharper.
