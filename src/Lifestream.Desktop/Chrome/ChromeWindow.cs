@@ -3,6 +3,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Shell;
+using Lifestream.Desktop.Theme;
 
 namespace Lifestream.Desktop.Chrome;
 
@@ -54,8 +55,8 @@ public class ChromeWindow : Window
         WindowChrome.SetWindowChrome(this, new WindowChrome
         {
             CaptionHeight = CaptionHeight,
-            ResizeBorderThickness = new Thickness(6),
-            GlassFrameThickness = new Thickness(0, 0, 0, 1),
+            ResizeBorderThickness = ThemeTokens.Inset("Chrome.ResizeBorder"),
+            GlassFrameThickness = ThemeTokens.Inset("Chrome.GlassFrame"),
             UseAeroCaptionButtons = false,
             CornerRadius = new CornerRadius(0),
             NonClientFrameEdges = NonClientFrameEdges.None,
@@ -111,7 +112,7 @@ public class ChromeWindow : Window
 
         // A maximized window extends past the screen by the resize border; pull the content back inside.
         var border = SystemParameters.WindowResizeBorderThickness;
-        _root.Padding = WindowState == WindowState.Maximized ? new Thickness(border.Left, border.Top + 1, border.Right, border.Bottom) : new Thickness(0);
+        _root.Padding = WindowState == WindowState.Maximized ? new Thickness(border.Left, border.Top + ThemeTokens.Space("Chrome.MaximizedTopOffset"), border.Right, border.Bottom) : new Thickness(0);
     }
 
     private IntPtr WindowProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)

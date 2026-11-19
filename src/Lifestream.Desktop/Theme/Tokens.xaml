@@ -96,6 +96,16 @@
   <Thickness x:Key="Gap.Field">0,0,0,16</Thickness>
 
   <!-- Insets and radii used by the views: the name says which sides (H = left and right, V = top and bottom, L T R B = one side) -->
+  <Thickness x:Key="Inset.B16">0,0,0,16</Thickness>
+  <Thickness x:Key="Inset.B24">0,0,0,24</Thickness>
+  <Thickness x:Key="Inset.R16B16">0,0,16,16</Thickness>
+  <Thickness x:Key="Inset.R24B24">0,0,24,24</Thickness>
+  <Thickness x:Key="Inset.T44">0,44,0,0</Thickness>
+  <Thickness x:Key="Chrome.ResizeBorder">6</Thickness>
+  <Thickness x:Key="Chrome.GlassFrame">0,0,0,1</Thickness>
+  <sys:Double x:Key="Chrome.MaximizedTopOffset">1</sys:Double>
+  <CornerRadius x:Key="Radius.Avatar">36</CornerRadius>
+  <CornerRadius x:Key="Radius.AvatarLarge">48</CornerRadius>
   <Thickness x:Key="Inset.B12">0,0,0,12</Thickness>
   <Thickness x:Key="Inset.B4">0,0,0,4</Thickness>
   <Thickness x:Key="Inset.H12">12,0,12,0</Thickness>
