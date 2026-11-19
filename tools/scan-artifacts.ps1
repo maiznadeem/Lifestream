@@ -36,6 +36,7 @@
 .PARAMETER Allowlist     Reviewed allow-list of test-only values (default: tools/secret-scan-allowlist.txt next to this script).
 .PARAMETER RepoRoot      What the allow-list paths are relative to (default: the folder above tools/).
 .PARAMETER MaxArchiveDepth  How deep to open archives inside archives (default 3).
+.PARAMETER SkipBuildOutput  When scanning a source tree, skip files under bin, obj and TestResults folders (below each -Path folder), so a local run sees what a CI checkout has.
 #>
 [CmdletBinding()]
 param(
@@ -43,7 +44,8 @@ param(
     [string]$ReportPath,
     [string]$Allowlist,
     [string]$RepoRoot,
-    [int]$MaxArchiveDepth = 3
+    [int]$MaxArchiveDepth = 3,
+    [switch]$SkipBuildOutput
 )
 
 Set-StrictMode -Version Latest
@@ -240,7 +242,16 @@ $expanded = foreach ($p in $Path) { if (Test-Path -LiteralPath $p) { $p } else {
 foreach ($p in $expanded) {
     if (-not (Test-Path -LiteralPath $p)) { Write-Host "ERROR: path not found: $p"; exit 2 }
     $item = Get-Item -LiteralPath $p -Force
-    if ($item.PSIsContainer) { Get-ChildItem -LiteralPath $p -Recurse -File -Force | ForEach-Object { $files.Add($_) } } else { $files.Add($item) }
+    if ($item.PSIsContainer) {
+        $top = $item.FullName.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+        foreach ($f in Get-ChildItem -LiteralPath $p -Recurse -File -Force) {
+            if ($SkipBuildOutput) {
+                $segments = $f.DirectoryName.Substring([Math]::Min($top.Length, $f.DirectoryName.Length)).Split([char[]]@([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar), [StringSplitOptions]::RemoveEmptyEntries)
+                if ($segments | Where-Object { $_ -in 'bin', 'obj', 'TestResults' }) { continue }
+            }
+            $files.Add($f)
+        }
+    } else { $files.Add($item) }
 }
 if ($files.Count -eq 0) { Write-Host "ERROR: no files found under: $($Path -join ', ')"; exit 2 }
 
