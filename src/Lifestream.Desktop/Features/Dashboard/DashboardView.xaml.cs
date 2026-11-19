@@ -174,14 +174,14 @@ public partial class DashboardView : UserControl
 
         if (_model is not null)
         {
-            _model.AttentionLimit = compact || viewport <= 0 ? int.MaxValue : AttentionRowsThatFit(viewport);
+            _model.AttentionLimit = compact || viewport <= 0 ? 0 : AttentionRowsThatFit(viewport); // 0: no limit
         }
 
         if (!compact)
         {
             // Beside "Needs attention" the appointments list asks for about the height that panel has (eight rows at most, three at least), so a short
             // window's top row is as tall as the attention rows it has room for, and the appointments scroll inside their panel.
-            var rows = _model is null ? 0 : _model.IsAttentionExpanded ? _model.Attention.Count : Math.Min(_model.Attention.Count, _model.AttentionLimit);
+            var rows = _model?.VisibleAttention.Count ?? 0;
             TodayBox.Cap = rows == 0 ? TodayRowsCap : Math.Clamp((rows * AttentionRowHeight) + AttentionChrome - TodayChrome, TodayRowsFloor, TodayRowsCap);
         }
     }

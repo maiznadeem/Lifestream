@@ -237,20 +237,23 @@ public sealed partial class DashboardViewModel : ViewModelBase
     /// <summary>The rows of <see cref="Attention"/> that are on screen: all of them, or the first <see cref="AttentionLimit"/> until "View all" is pressed.</summary>
     public ObservableCollection<AttentionItem> VisibleAttention { get; } = [];
 
-    /// <summary>How many rows the panel has room for (the view sets it from the window's height). The most urgent rows come first, so those are the ones kept.</summary>
+    /// <summary>
+    /// How many rows the panel has room for (the view sets it from the window's height); zero or less means no limit. The most urgent rows come
+    /// first, so those are the ones kept.
+    /// </summary>
     public int AttentionLimit
     {
         get;
         set
         {
-            var limit = Math.Max(1, value);
-            if (field != limit)
+            if (field != value)
             {
-                field = limit;
+                field = value;
+                OnPropertyChanged();
                 ApplyAttentionLimit();
             }
         }
-    } = int.MaxValue;
+    }
 
     /// <summary>True after "View all": every row is shown, whatever the limit (the page scrolls if it has to).</summary>
     [ObservableProperty]
@@ -275,8 +278,9 @@ public sealed partial class DashboardViewModel : ViewModelBase
     private void ApplyAttentionLimit()
     {
         var total = Attention.Count;
-        var canToggle = total > AttentionLimit;
-        var shown = canToggle && !IsAttentionExpanded ? AttentionLimit : total;
+        var limit = AttentionLimit <= 0 ? int.MaxValue : AttentionLimit;
+        var canToggle = total > limit;
+        var shown = canToggle && !IsAttentionExpanded ? limit : total;
         while (VisibleAttention.Count > shown)
         {
             VisibleAttention.RemoveAt(VisibleAttention.Count - 1);

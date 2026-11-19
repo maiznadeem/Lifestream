@@ -1,4 +1,4 @@
-# Lifestream 2.0
+# Lifestream 2.1
 
 Lifestream is a blood-bank management desktop app: donors, patients, appointments, blood requests, stock and receipts,
 with a dashboard. Version **2.1.0** is a ground-up rewrite of the original course project on .NET 11.
