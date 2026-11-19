@@ -18,7 +18,10 @@ mkdir -p "$state"
 case "$1" in
   image)
     [ "$2" = "inspect" ] || { echo "fake-docker: unsupported: $*" >&2; exit 1; }
-    printf '['; tar -xOf "$archive" config.json; printf ']\n'
+    # A legacy docker-archive has config.json; an OCI layout (what a containerd-backed docker save writes) names it in manifest.json.
+    cfg=config.json
+    tar -tf "$archive" config.json >/dev/null 2>&1 || cfg="$(tar -xOf "$archive" manifest.json | sed -E 's/.*"Config" *: *"([^"]+)".*/\1/')"
+    printf '['; tar -xOf "$archive" "$cfg"; printf ']\n'
     ;;
   history)
     echo "fake-docker history for $archive"

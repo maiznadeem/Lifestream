@@ -34,13 +34,21 @@ jobs:
 
       # The API tests need a Linux SQL Server container, which a Windows runner cannot start; they run in ci.yml on Ubuntu
       # for the same commit. This gate builds everything and runs the tests that ship in the installer.
+      # Build and test output goes to a file, is scanned (both scanners) and is printed to the job log only after a clean scan
+      # (tools/run-logged.ps1); on a finding only a redacted summary is printed. The exit code is the command's own, or 1 on a finding.
       - name: Build (whole solution, warnings are errors)
-        run: dotnet build Lifestream.slnx -c Release
+        shell: pwsh
+        run: ./tools/run-logged.ps1 -Log "$env:RUNNER_TEMP/gate-logs/build.log" -Command "dotnet build Lifestream.slnx -c Release"
 
       - name: Test (Client and Desktop, off-screen renders)
+        shell: pwsh
         run: |
-          dotnet test tests/Lifestream.Client.Tests -c Release --no-build
-          dotnet test tests/Lifestream.Desktop.Tests -c Release --no-build
+          $failed = 0
+          ./tools/run-logged.ps1 -Log "$env:RUNNER_TEMP/gate-logs/client.log" -Command "dotnet test tests/Lifestream.Client.Tests -c Release --no-build"
+          if ($LASTEXITCODE -ne 0) { $failed++ }
+          ./tools/run-logged.ps1 -Log "$env:RUNNER_TEMP/gate-logs/desktop.log" -Command "dotnet test tests/Lifestream.Desktop.Tests -c Release --no-build"
+          if ($LASTEXITCODE -ne 0) { $failed++ }
+          if ($failed -gt 0) { exit 1 }
 
   release:
     name: release (publish, scan, pack, upload)
@@ -73,8 +81,9 @@ jobs:
       - name: Publish the desktop app (self-contained, win-x64, ReadyToRun)
         shell: pwsh
         run: >
-          dotnet publish src/Lifestream.Desktop -c Release -r win-x64 --self-contained -p:PublishReadyToRun=true
-          -p:Version=${{ steps.version.outputs.version }} -o "$env:RUNNER_TEMP/publish" 2>&1 | Tee-Object "$env:RUNNER_TEMP/publish.log"
+          ./tools/run-logged.ps1 -Log "$env:RUNNER_TEMP/publish.log" -Command
+          'dotnet publish src/Lifestream.Desktop -c Release -r win-x64 --self-contained -p:PublishReadyToRun=true
+          -p:Version=${{ steps.version.outputs.version }} -o "$env:RUNNER_TEMP/publish"'
 
       # Binaries, configs and the build log, before anything is packed or uploaded.
       - name: Scan the publish folder and the publish log for credentials
@@ -107,7 +116,9 @@ jobs:
           if ('${{ steps.signing.outputs.enabled }}' -eq 'true') {
             $vpkArgs += @('--signParams', "/f `"${{ steps.signing.outputs.pfx }}`" /p `"$env:WINDOWS_SIGNING_PFX_PASSWORD`" /fd sha256 /tr http://timestamp.digicert.com /td sha256")
           }
-          vpk @vpkArgs 2>&1 | Tee-Object "$env:RUNNER_TEMP/vpk.log"
+          # The wrapper builds the command in its own scope: the argument array is passed as a global variable.
+          $global:vpkArgs = $vpkArgs
+          ./tools/run-logged.ps1 -Log "$env:RUNNER_TEMP/vpk.log" -Command 'vpk @global:vpkArgs'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Verify the signature when signing is configured
@@ -133,9 +144,10 @@ jobs:
       - name: Upload to the GitHub Release (installer, update packages, update feed)
         shell: pwsh
         run: >
-          vpk upload github --repoUrl "$env:REPO_URL" --outputDir "$env:RUNNER_TEMP/Releases" --token "$env:GH_TOKEN"
+          ./tools/run-logged.ps1 -Log "$env:RUNNER_TEMP/vpk-upload.log" -Command
+          'vpk upload github --repoUrl "$env:REPO_URL" --outputDir "$env:RUNNER_TEMP/Releases" --token "$env:GH_TOKEN"
           --tag "${{ steps.version.outputs.tag }}" --releaseName "Lifestream ${{ steps.version.outputs.version }}"
-          --publish ${{ steps.version.outputs.prerelease == 'true' && '--pre' || '' }}
+          --publish ${{ steps.version.outputs.prerelease == 'true' && '--pre' || '' }}'
 
       - name: Attach the checksum file
         shell: pwsh
