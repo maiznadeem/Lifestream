@@ -16,7 +16,7 @@ namespace Lifestream.Api.Features;
 /// </summary>
 internal static class Tombstones
 {
-    /// <summary>How long after the delete a restore is accepted: the shared <see cref="UndoWindow"/>, which the client reads too.</summary>
+    /// <summary>How long after the delete a restore is accepted: the shared <see cref="Lifestream.Contracts.UndoWindow"/>, which the client reads too.</summary>
     public static readonly TimeSpan Window = Lifestream.Contracts.UndoWindow.Duration;
 
     // Only the columns a restore needs: everything the row holds except the row version, which the database makes anew.
