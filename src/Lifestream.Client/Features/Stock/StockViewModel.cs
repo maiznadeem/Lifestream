@@ -78,10 +78,10 @@ public sealed record StockTile(BloodType BloodType, int Available, int ExpiringS
     public double MinimumFraction => Scale <= 0 ? -1 : Math.Min(1, Threshold / Scale);
 
     /// <summary>The groups whose patients can be given this group's red cells.</summary>
-    public string GivesToText => string.Join(", ", BloodTypeExtensions.All.Where(t => BloodType.CanGiveTo(t)).Select(t => t.ToTypographic()));
+    public string GivesToText => string.Join(", ", SharedLists.BloodTypes.Select(c => c.Value).Where(t => BloodType.CanGiveTo(t)).Select(t => t.ToTypographic()));
 
     /// <summary>The groups whose red cells patients of this group can be given.</summary>
-    public string ReceivesFromText => string.Join(", ", BloodTypeExtensions.All.Where(t => t.CanGiveTo(BloodType)).Select(t => t.ToTypographic()));
+    public string ReceivesFromText => string.Join(", ", SharedLists.BloodTypes.Select(c => c.Value).Where(t => t.CanGiveTo(BloodType)).Select(t => t.ToTypographic()));
 
     /// <summary>One sentence on where the group stands against its minimum.</summary>
     public string MinimumSentence => IsOut
@@ -194,6 +194,10 @@ public sealed partial class StockViewModel : ViewModelBase, INavigationParameter
             {
                 ViewFilter = ViewOptions[0];
             }
+            else
+            {
+                OnPropertyChanged(nameof(IsAllView)); // a tab unchecked by its group: re-read which view is shown
+            }
         }
     }
 
@@ -207,6 +211,10 @@ public sealed partial class StockViewModel : ViewModelBase, INavigationParameter
             {
                 ViewFilter = ViewOptions.First(o => o.Value == StockFilter.BelowThreshold);
             }
+            else
+            {
+                OnPropertyChanged(nameof(IsLowView)); // a tab unchecked by its group: re-read which view is shown
+            }
         }
     }
 
@@ -219,6 +227,10 @@ public sealed partial class StockViewModel : ViewModelBase, INavigationParameter
             if (value)
             {
                 ViewFilter = ViewOptions.First(o => o.Value == StockFilter.ExpiringSoon);
+            }
+            else
+            {
+                OnPropertyChanged(nameof(IsExpiringView)); // a tab unchecked by its group: re-read which view is shown
             }
         }
     }

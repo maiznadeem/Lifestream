@@ -113,7 +113,7 @@ public sealed class ReceiptsViewModel : SortedRecordListViewModel<ReceiptRow, Re
         {
             if (e.PropertyName == nameof(Detail))
             {
-                Preview = Detail is { } receipt ? ReceiptDocument.From(receipt, isDuplicate: false, Clock, Zone) : null;
+                Preview = Detail is { BagIds: not null } receipt ? ReceiptDocument.From(receipt, isDuplicate: false, Clock, Zone) : null;
                 PrintCommand.RaiseCanExecuteChanged();
                 SavePdfCommand.RaiseCanExecuteChanged();
                 OnPropertyChanged(nameof(PanelOverline));
@@ -314,28 +314,32 @@ public sealed class ReceiptsViewModel : SortedRecordListViewModel<ReceiptRow, Re
     public bool IsAllKinds
     {
         get => _kindFilter.Value is null;
-        set => ChooseKind(value, null);
+        set => ChooseKind(value, null, nameof(IsAllKinds));
     }
 
     /// <summary>The Donations tab.</summary>
     public bool IsDonationKind
     {
         get => _kindFilter.Value == ReceiptKind.Donation;
-        set => ChooseKind(value, ReceiptKind.Donation);
+        set => ChooseKind(value, ReceiptKind.Donation, nameof(IsDonationKind));
     }
 
     /// <summary>The Blood issues tab.</summary>
     public bool IsIssueKind
     {
         get => _kindFilter.Value == ReceiptKind.Issue;
-        set => ChooseKind(value, ReceiptKind.Issue);
+        set => ChooseKind(value, ReceiptKind.Issue, nameof(IsIssueKind));
     }
 
-    private void ChooseKind(bool chosen, ReceiptKind? kind)
+    private void ChooseKind(bool chosen, ReceiptKind? kind, string tab)
     {
         if (chosen && _kindFilter.Value != kind)
         {
             KindFilter = KindOptions.First(o => o.Value == kind);
+        }
+        else
+        {
+            OnPropertyChanged(tab); // unchecked by its group, or already chosen: re-read
         }
     }
 

@@ -171,28 +171,32 @@ public sealed partial class ProfileViewModel : FormViewModelBase, INavigationPar
     public bool IsLightTheme
     {
         get => _preferences?.Theme == ThemeMode.Light;
-        set => SetTheme(value, ThemeMode.Light);
+        set => SetTheme(value, ThemeMode.Light, nameof(IsLightTheme));
     }
 
     /// <summary>The dark theme.</summary>
     public bool IsDarkTheme
     {
         get => _preferences?.Theme == ThemeMode.Dark;
-        set => SetTheme(value, ThemeMode.Dark);
+        set => SetTheme(value, ThemeMode.Dark, nameof(IsDarkTheme));
     }
 
     /// <summary>Follow the Windows app mode (the default).</summary>
     public bool IsSystemTheme
     {
         get => _preferences is null || _preferences.Theme == ThemeMode.System;
-        set => SetTheme(value, ThemeMode.System);
+        set => SetTheme(value, ThemeMode.System, nameof(IsSystemTheme));
     }
 
-    private void SetTheme(bool chosen, ThemeMode mode)
+    private void SetTheme(bool chosen, ThemeMode mode, string option)
     {
         if (chosen && _preferences is not null && _preferences.Theme != mode)
         {
             _preferences.Theme = mode; // saved at once; the app swaps the colours of every open window
+        }
+        else
+        {
+            OnPropertyChanged(option); // unchecked by its group, or nothing to change: re-read
         }
     }
 
