@@ -2,6 +2,7 @@ using Lifestream.Client.Api;
 using Lifestream.Client.Common;
 using Lifestream.Client.Features.ListScreens;
 using Lifestream.Client.Features.Requests;
+using Lifestream.Client.Tests.Fakes;
 using Lifestream.Contracts;
 using Lifestream.Contracts.Patients;
 using Lifestream.Contracts.Requests;
@@ -43,26 +44,22 @@ public sealed class NoStockFulfilTests
     }
 
     [Fact]
-    public async Task Requests_AFulfilAskedForByAnotherScreen_IsDropped_WhenThereIsNoStock()
+    public Task Requests_AFulfilAskedForByAnotherScreen_IsDropped_WhenThereIsNoStock() => UiThread.RunAsync(async () =>
     {
         var rig = new Part2Rig();
         rig.Fake.On("GetRequestsAsync", ApiResult<PagedResult<RequestListItem>>.Ok(new([Samples2.RequestRow(7, 3, "Omar Haddad")], 1, 1, 50)));
         rig.Fake.On("GetRequestAsync", ApiResult<RequestDetail>.Ok(Samples2.Request(7)));
         rig.Fake.On("GetStockAsync", ApiResult<IReadOnlyList<StockItem>>.Ok([new StockItem(BloodType.ANeg, 0, 0, 10, true)]));
-        var vm = rig.Requests();
+        var vm = rig.Requests(); // on the UI thread, as navigation makes it
         ((INavigationParameterReceiver)vm).ReceiveParameter(new RelatedRecord(RecordKind.Request, 7, "Omar Haddad"));
         await vm.LoadAsync();
-        await vm.PendingDetail;
-        for (var i = 0; i < 20; i++)
-        {
-            await Task.Yield();
-        }
+        await vm.PendingFulfil; // the screen has decided: here, to drop the wish
 
         Assert.Equal(7, vm.Detail?.Id);
         Assert.Null(vm.Fulfilment); // nothing to fulfil with: the step does not open
         Assert.Equal(0, rig.Recorder.CountOf("GetFulfilPreviewAsync"));
         Assert.NotNull(vm.FulfilHoldReason);
-    }
+    });
 
     [Fact]
     public async Task Patients_ARequestWithNoStock_HasItsFulfilDisabled_WithTheReason_AndOneWithStockKeepsIt()
