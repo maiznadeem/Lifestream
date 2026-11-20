@@ -72,14 +72,23 @@ public sealed class OperationRunner : IDisposable
     }
 
     /// <summary><see cref="RunAsync{T}"/> for work with no result.</summary>
-    public Task RunAsync(Func<CancellationToken, Task> work, CancellationToken ct = default)
+    public Task RunAsync(Func<CancellationToken, Task> work, CancellationToken ct = default) => RunAsync(work, ct, out _);
+
+    /// <summary>
+    /// <see cref="RunAsync(Func{CancellationToken, Task}, CancellationToken)"/> that also hands back the operation's scope, so the caller can ask
+    /// whether a call of this very operation is waiting on the server right now (<see cref="OperationScope.HasCallInFlight"/>).
+    /// </summary>
+    internal Task RunAsync(Func<CancellationToken, Task> work, CancellationToken ct, out OperationScope scope)
     {
         ArgumentNullException.ThrowIfNull(work);
-        return Start(async scope =>
-        {
-            await Task.Run(() => work(scope.Token), scope.Token).ConfigureAwait(false);
-            return true;
-        }, ct);
+        return Start(
+            async s =>
+            {
+                await Task.Run(() => work(s.Token), s.Token).ConfigureAwait(false);
+                return true;
+            },
+            ct,
+            out scope);
     }
 
     /// <summary>
@@ -151,11 +160,14 @@ public sealed class OperationRunner : IDisposable
         Recompute();
     }
 
-    private Task<T> Start<T>(Func<OperationScope, Task<T>> run, CancellationToken ct)
+    private Task<T> Start<T>(Func<OperationScope, Task<T>> run, CancellationToken ct) => Start(run, ct, out _);
+
+    private Task<T> Start<T>(Func<OperationScope, Task<T>> run, CancellationToken ct, out OperationScope started)
     {
         var parent = OperationScope.Current is { } current && ReferenceEquals(current.Runner, this) ? current : null;
         var cts = CancellationTokenSource.CreateLinkedTokenSource(ct, parent?.Token ?? CancellationToken.None);
-        var scope = new OperationScope(this, cts.Token);
+        var scope = new OperationScope(this, cts.Token, parent);
+        started = scope;
         lock (_gate)
         {
             _active.Add(cts);
@@ -255,10 +267,14 @@ public sealed class OperationScope
 {
     private static readonly AsyncLocal<OperationScope?> Ambient = new();
 
-    internal OperationScope(OperationRunner runner, CancellationToken token)
+    private readonly OperationScope? _parent;
+    private int _callsInFlight;
+
+    internal OperationScope(OperationRunner runner, CancellationToken token, OperationScope? parent = null)
     {
         Runner = runner;
         Token = token;
+        _parent = parent;
     }
 
     /// <summary>The scope the current code runs in, or null when it runs outside any operation.</summary>
@@ -268,6 +284,29 @@ public sealed class OperationScope
 
     /// <summary>Cancelled by <see cref="OperationRunner.Cancel"/>, by the caller's token and by the enclosing scope.</summary>
     public CancellationToken Token { get; }
+
+    /// <summary>
+    /// True while an API call made inside this operation (or an operation nested in it) is waiting on the server: the request is out and the
+    /// answer has not come back. False while the operation does its own work (before its first call, between calls, after the last one).
+    /// </summary>
+    public bool HasCallInFlight => Volatile.Read(ref _callsInFlight) > 0;
+
+    /// <summary>Notes that an API call of this operation started; balanced by <see cref="CallEnded"/>.</summary>
+    internal void CallStarted()
+    {
+        for (var scope = this; scope is not null; scope = scope._parent)
+        {
+            Interlocked.Increment(ref scope._callsInFlight);
+        }
+    }
+
+    internal void CallEnded()
+    {
+        for (var scope = this; scope is not null; scope = scope._parent)
+        {
+            Interlocked.Decrement(ref scope._callsInFlight);
+        }
+    }
 
     internal static OperationScope? Swap(OperationScope? next)
     {

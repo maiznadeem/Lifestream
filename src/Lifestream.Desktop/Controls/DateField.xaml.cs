@@ -51,33 +51,53 @@ public partial class DateField : UserControl
         var text = Box.Text.Trim();
         if (text.Length == 0)
         {
-            ParseError = null;
+            Report(null);
             SelectedDate = null;
             return true;
         }
 
         if (!Formatting.TryParseDate(text, out var date))
         {
-            ParseError = $"Use the format {Formatting.Date(new DateOnly(2022, 3, 5))}.";
+            // Text in the right format that names a day that does not exist (31 Feb) is told apart from text in another format.
+            Report(InDateFormat().IsMatch(text)
+                ? $"{text} is not a date. Check the day and the month."
+                : $"Use the format {Formatting.Date(new DateOnly(2022, 3, 5))}.");
             return false;
         }
 
         if (MinDate is { } min && date < min)
         {
-            ParseError = $"The date can't be before {Formatting.Date(min)}.";
+            Report($"The date can't be before {Formatting.Date(min)}.");
             return false;
         }
 
         if (MaxDate is { } max && date > max)
         {
-            ParseError = $"The date can't be after {Formatting.Date(max)}.";
+            Report($"The date can't be after {Formatting.Date(max)}.");
             return false;
         }
 
-        ParseError = null;
+        Report(null);
         SelectedDate = date;
         ShowDate();
         return true;
+    }
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"^\d{1,2} [A-Za-z]{3} \d{4}$")]
+    private static partial System.Text.RegularExpressions.Regex InDateFormat();
+
+    /// <summary>
+    /// Sets <see cref="ParseError"/> and tells the form the date is bound to (a <see cref="Lifestream.Client.Validation.FormViewModelBase"/>):
+    /// while the text is refused the bound date is still the previous one, so the form must not save. The form blocks its save on it and shows
+    /// the message; null takes it back.
+    /// </summary>
+    private void Report(string? error)
+    {
+        ParseError = error;
+        if (GetBindingExpression(SelectedDateProperty) is { ResolvedSource: Lifestream.Client.Validation.FormViewModelBase form, ResolvedSourcePropertyName: { } field })
+        {
+            form.SetInputError(field, error);
+        }
     }
 
     /// <summary>
@@ -179,7 +199,7 @@ public partial class DateField : UserControl
             return;
         }
 
-        ParseError = null;
+        Report(null);
         SelectedDate = date;
         ShowDate();
         CalendarPopup.IsOpen = false;
