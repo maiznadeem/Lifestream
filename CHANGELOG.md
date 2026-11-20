@@ -2,6 +2,20 @@
 
 All notable changes to Lifestream are listed here. The section of a version is also the text of its release on the GitHub Releases page.
 
+## [2.1.7] - 2026-11-21
+
+Lifestream 2.1.7 fixes the last items found by using the app end to end, and brings its libraries up to date.
+
+### Fixed
+
+- Recording a donation opens its dialog over the page it was started from, instead of switching pages first.
+- The command palette says when more results are below the ones shown, and keeps the selected result in view as you move through them.
+
+### Changed
+
+- The charts and the photo processing use SkiaSharp 4 and LiveCharts 2.2. The charts look the same; the shaded area under a line now fades evenly, as in the rest of the app.
+- The security policy (`docs/SECURITY.md`) says how to report a problem and how the repository is scanned for secrets.
+
 ## [2.1.6] - 2026-11-20
 
 Lifestream 2.1.6 makes search find what you type.

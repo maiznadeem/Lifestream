@@ -1,13 +1,13 @@
 # Lifestream 2.1
 
 Lifestream is a blood-bank management desktop app: donors, patients, appointments, blood requests, stock and receipts,
-with a dashboard. Version **2.1.6** is a ground-up rewrite of the original course project on .NET 11.
+with a dashboard. Version **2.1.7** is a ground-up rewrite of the original course project on .NET 11.
 
 What changed for users is in [CHANGELOG.md](CHANGELOG.md).
 
 ## Install
 
-1. Open the [v2.1.6 release](https://github.com/maiznadeem/lifestream/releases/tag/v2.1.6) and download `Lifestream-win-Setup.exe` (and `SHA256SUMS.txt`). Windows 10 or 11, 64-bit.
+1. Open the [v2.1.7 release](https://github.com/maiznadeem/lifestream/releases/tag/v2.1.7) and download `Lifestream-win-Setup.exe` (and `SHA256SUMS.txt`). Windows 10 or 11, 64-bit.
 2. Check the download. In PowerShell, in the folder you saved it to:
 
    ```powershell
