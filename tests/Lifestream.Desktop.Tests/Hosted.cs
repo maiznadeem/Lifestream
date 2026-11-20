@@ -174,6 +174,29 @@ public sealed class Hosted : IDisposable
     public static void RunDispatcherFor(int milliseconds) => StaHost.Settle(milliseconds);
 
     /// <summary>
+    /// Lets the work that is queued run: the dispatcher down to idle, then whatever had been queued to the thread pool by then, and both once more,
+    /// since either may queue to the other. For a test that is about to conclude that a command did NOT do something (made no API call): the
+    /// operation runner starts every API call on the thread pool (<c>Task.Run</c>), so a command reaches its call only when the pool gets a
+    /// processor. With processors to spare that is a millisecond; on a machine with none it takes as long as it takes, which a fixed wait cannot
+    /// know (commands were judged to make no API call because their process had been kept waiting). A marker queued to the pool after the
+    /// command's own work comes back only after that work has started.
+    /// </summary>
+    public static void RunQueuedWork()
+    {
+        for (var pass = 0; pass < 2; pass++)
+        {
+            StaHost.Drain();
+            var reached = Task.Run(() => { });
+            if (!SpinWait.SpinUntil(() => reached.IsCompleted, millisecondsTimeout: 2))
+            {
+                PumpUntil(() => reached.IsCompleted, 30_000);
+            }
+        }
+
+        StaHost.Drain();
+    }
+
+    /// <summary>
     /// Starts async work from the UI thread (so the dispatcher's synchronization context is in place, as it is for a click) and pumps
     /// the dispatcher without blocking it until the work finishes.
     /// </summary>

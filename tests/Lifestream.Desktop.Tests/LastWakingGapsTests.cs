@@ -334,6 +334,7 @@ public sealed class LastWakingGapsTests
                     return Task.CompletedTask;
                 });
                 Hosted.RunDispatcherFor(200);
+                Hosted.RunQueuedWork(); // the call is started on the thread pool: "no call" is only true once what was queued there has run
                 if (waiting.Count == 0)
                 {
                     found.Add($"{type.Name}: {blocker} made no API call, so nothing was waiting");

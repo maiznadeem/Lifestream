@@ -463,28 +463,6 @@ public sealed class WakingEveryOperationTests
         return op;
     }
 
-    /// <summary>
-    /// Lets the work that is queued run: the dispatcher down to idle, then whatever had been queued to the thread pool by then, and both once more,
-    /// since either may queue to the other. The operation runner starts every API call on the thread pool (<c>Task.Run</c>), so a command reaches its
-    /// call only when the pool gets a processor. With processors to spare that is a millisecond; on a machine with none it takes as long as it
-    /// takes, which a fixed 150 ms cannot know: four commands in a row were once judged to make no API call because their process had been kept
-    /// waiting. A marker queued to the pool after the command's own work comes back only after that work has started.
-    /// </summary>
-    private static void RunQueuedWork()
-    {
-        for (var pass = 0; pass < 2; pass++)
-        {
-            StaHost.Drain();
-            var reached = Task.Run(() => { });
-            if (!SpinWait.SpinUntil(() => reached.IsCompleted, millisecondsTimeout: 2))
-            {
-                Hosted.PumpUntil(() => reached.IsCompleted, 30_000);
-            }
-        }
-
-        StaHost.Drain();
-    }
-
     /// <summary>With the operation's screen opened (<paramref name="arranged"/>: and in its state), makes the server stop answering and runs the command.</summary>
     private static void Run(Operation op, bool arranged)
     {
@@ -522,9 +500,9 @@ public sealed class WakingEveryOperationTests
             return Task.CompletedTask;
         });
         // The command's first API call is the signal that it has started, so the wait ends there; only a command that makes none gets the whole
-        // 150 ms before that is concluded, and then only once the work it queued has run (see RunQueuedWork).
+        // 150 ms before that is concluded, and then only once the work it queued has run (see Hosted.RunQueuedWork).
         Hosted.PumpUntil(() => op.Server.Count > 0, 150);
-        RunQueuedWork();
+        Hosted.RunQueuedWork();
         host.Element.UpdateLayout();
         if (op.Server.Count == 0)
         {
