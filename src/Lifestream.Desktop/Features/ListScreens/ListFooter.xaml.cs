@@ -10,6 +10,9 @@ namespace Lifestream.Desktop.Features.ListScreens;
 /// </summary>
 public partial class ListFooter : UserControl
 {
+    /// <summary>How far the fade reaches up over the rows (its Height and Footer.FadeLift in the XAML): a revealed row stays above it (<see cref="ListReveal"/>).</summary>
+    internal const double FadeHeight = 20;
+
     private ScrollViewer? _rows;
 
     public ListFooter()
