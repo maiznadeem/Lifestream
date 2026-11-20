@@ -32,13 +32,16 @@ public sealed class RecordPickerCodeTests
             host.Settle(100);
             var vm = picker.ViewModel!;
             vm.SearchText = "sun";
-            Hosted.PumpUntil(() => !vm.IsSearching && vm.Options.Count == 2, 3000);
-            host.Settle(200);
-            var codes = host.All<TextBlock>().Where(t => t.IsVisible && t.Name == "OptionCode").Select(t => t.Text).ToList();
+            // Wait for what is looked at, not for a fixed time: on a busy machine the rows and the chip can take longer than any settle.
+            List<string> Codes() => [.. host.All<TextBlock>().Where(t => t.IsVisible && t.Name == "OptionCode" && t.Text.Length > 0).Select(t => t.Text)];
+            TextBlock? Chip() => host.All<TextBlock>().FirstOrDefault(t => t.IsVisible && t.Name != "OptionCode" && t.Text.StartsWith("Sunita Ndiaye ·", StringComparison.Ordinal));
+            Hosted.PumpUntil(() => !vm.IsSearching && vm.Options.Count == 2 && Codes().Count == 2, 10000);
+            var codes = Codes();
 
             vm.Select(vm.Options[0]);
-            host.Settle(150);
-            var chip = host.All<TextBlock>().First(t => t.IsVisible && t.Text.StartsWith("Sunita Ndiaye", StringComparison.Ordinal)).Text;
+            Hosted.PumpUntil(() => Chip() is not null, 10000);
+            host.Settle(100);
+            var chip = Chip()?.Text;
             var hashes = host.All<TextBlock>().Where(t => t.IsVisible && t.Text.Contains('#', StringComparison.Ordinal)).Select(t => t.Text).ToList();
             return (codes, chip, hashes);
         });
