@@ -15,7 +15,8 @@ public sealed record PaletteItem(string Group, string Title, string? Subtitle, s
 
 /// <summary>
 /// The command palette (Ctrl+K, docs/design-system.md "Command palette"): go to any screen, run the primary actions, change the theme, and find donors,
-/// patients and requests through the API's record search (debounced 150 ms). Results are grouped; Up and Down move, Enter runs, Esc closes. With an empty
+/// patients and requests through the API's record search (debounced 150 ms; it finds what the lists' search finds: a part of a name or of a phone number, a blood
+/// group, a record code). Results are grouped; Up and Down move, Enter runs, Esc closes. With an empty
 /// query it shows what was run recently, then the actions and screens. Each action shows its shortcut.
 /// </summary>
 public sealed partial class CommandPaletteViewModel : ObservableObject
@@ -236,8 +237,8 @@ public sealed partial class CommandPaletteViewModel : ObservableObject
 
     /// <summary>Whether every word of the query appears in the row's title or subtitle.</summary>
     /// <summary>
-    /// A blood group typed into the palette ("O-", "o−", "ab+") opens the lists on that group: the record search matches names and phone
-    /// numbers, and a blood group is the first thing a blood bank looks for.
+    /// A blood group typed into the palette ("O-", "o−", "ab+") opens the lists on that group: a blood group is the first thing a blood bank
+    /// looks for. (The record search finds donors, patients and requests of the group as well; it shows five of each, these rows open the lists.)
     /// </summary>
     private IEnumerable<PaletteItem> BloodGroupCommands(string query)
     {

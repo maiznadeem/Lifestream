@@ -2,6 +2,19 @@
 
 All notable changes to Lifestream are listed here. The section of a version is also the text of its release on the GitHub Releases page.
 
+## [2.1.6] - 2026-11-20
+
+Lifestream 2.1.6 makes search find what you type.
+
+### Fixed
+
+- Search finds a last name, a first name or any part of a name ("ali" finds Aaliyah), whatever the capitals or accents.
+- Search finds part of a phone number, however it is spaced, and a record code such as D-0041.
+- Several words can be typed in any order, and a blood group ("O-") narrows the lists that show one.
+- The search boxes say what they search, and the command palette and the record picker follow the same rule.
+- On Appointments and Requests, when the tab you are on has no match but another has, the screen says where the matches are and offers that tab.
+- The "Group" column header on Appointments is no longer cut off.
+
 ## [2.1.5] - 2026-11-20
 
 Lifestream 2.1.5 makes waiting for the server shorter where it can be, and honest where it cannot.

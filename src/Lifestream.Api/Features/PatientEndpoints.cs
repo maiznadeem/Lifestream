@@ -35,9 +35,9 @@ public static class PatientEndpoints
             patients = patients.Where(p => p.BloodType == type);
         }
 
-        if (Lists.CleanSearch(search) is { } term)
+        if (Lists.ParseSearch(search) is { } words)
         {
-            patients = patients.Matching(SearchQueries.ParseTerm(term));
+            patients = patients.Matching(words);
         }
 
         return patients;
@@ -49,7 +49,7 @@ public static class PatientEndpoints
         var filtered = Filter(db.Patients.AsNoTracking(), q.Search, q.BloodType);
         // The page of patients first, then the pending-request count of just those rows (joined back by id): a count written in the
         // same select would be worked out for every row the OFFSET skips as well.
-        var pageOfPatients = Sorts.Apply(filtered, q.Sort).Skip((page - 1) * size).Take(size).ForSearch(q.Search);
+        var pageOfPatients = Sorts.Apply(filtered, q.Sort).Skip((page - 1) * size).Take(size);
         var joined = db.Patients.AsNoTracking().Join(pageOfPatients, p => p.Id, k => k.Id, (p, _) => p);
         var total = Lists.Total(filtered);
         var rows = await (from p in Sorts.Apply(joined, q.Sort)

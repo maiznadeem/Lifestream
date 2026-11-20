@@ -101,7 +101,7 @@
           </Border>
         </controls:PageHeader.Tabs>
       </controls:PageHeader>
-      <lists:ListToolbar x:Name="Toolbar" Grid.Row="1" Margin="{StaticResource Appts.ToolbarGap}" SearchPlaceholder="Search donors" SearchWidth="280">
+      <lists:ListToolbar x:Name="Toolbar" Grid.Row="1" Margin="{StaticResource Appts.ToolbarGap}" SearchPlaceholder="Donor name, phone or ID" SearchWidth="280">
         <lists:ListToolbar.Filters>
           <StackPanel Orientation="Horizontal">
             <!-- One donor's appointments (also set by "Book appointment" on a donor): a chip that opens the donor search -->
@@ -235,9 +235,11 @@
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <!-- 60 wide (it was 68; the tag needs 36): the 8 DIP go to the donor's name, which is wider in Google Sans Flex, so that at 1440 with the
-                     side panel open the agenda still has room for "Next step". -->
-                <DataGridTemplateColumn Header="Group" Width="60" CanUserSort="False">
+                <!-- 64 wide: what the header needs ("Group" is 40 wide at 13 px Medium, between the header's 12 DIP paddings); the tag needs less (36).
+                     It was 60 for the tag alone, which cut the header to "Grou" at every width (2.1.5). Not wider than the header needs: the rest goes to
+                     the donor's name, which is wider in Google Sans Flex, so that at 1440 with the side panel open the agenda still has room for
+                     "Next step". RenderChecks fails a render whose column header is cut. -->
+                <DataGridTemplateColumn Header="Group" Width="64" CanUserSort="False">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
                       <controls:BloodGroupTag Text="{Binding DonorBloodType, Converter={StaticResource BloodGroup}}" HorizontalAlignment="Left" VerticalAlignment="Center" />

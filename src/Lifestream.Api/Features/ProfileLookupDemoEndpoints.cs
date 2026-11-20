@@ -137,7 +137,7 @@ public static class ProfileEndpoints
     }
 }
 
-/// <summary>Pickers: a short list of id + title + subtitle matched by a prefix of the name, the id or the contact. Never more than 20 rows.</summary>
+/// <summary>Pickers and the command palette: a short list of id + title + subtitle, found by the same rule as the lists (<see cref="SearchQueries"/>). Never more than 20 rows.</summary>
 public static class LookupEndpoints
 {
     private const int Take = 20;
@@ -169,11 +169,9 @@ public static class LookupEndpoints
     private static async Task<List<RecordOption>> StaffAsync([FromQuery] string? search, LifestreamDbContext db, CurrentUser user, CancellationToken ct)
     {
         var query = StaffEndpoints.Visible(db, user);
-        if (Lists.CleanSearch(search) is { } term)
+        if (Lists.ParseSearch(search) is { } words)
         {
-            var like = Lists.PrefixPattern(term);
-            var id = SearchQueries.ParseTerm(term).Id ?? -1;
-            query = query.Where(s => s.Id == id || EF.Functions.Like(s.DisplayName, like, "\\") || EF.Functions.Like(s.Username, like, "\\"));
+            query = query.Matching(words);
         }
 
         var rows = await query.OrderBy(s => s.DisplayName).ThenBy(s => s.Id).Take(Take).Select(s => new { s.Id, s.DisplayName, s.Designation }).ToListAsync(ct);
@@ -183,11 +181,9 @@ public static class LookupEndpoints
     private static async Task<List<RecordOption>> AppointmentsAsync([FromQuery] string? search, LifestreamDbContext db, CancellationToken ct)
     {
         var query = db.Appointments.AsNoTracking().Where(a => a.Status == AppointmentStatus.Pending);
-        if (Lists.CleanSearch(search) is { } term)
+        if (Lists.ParseSearch(search) is { } words)
         {
-            var parsed = SearchQueries.ParseTerm(term);
-            var donorIds = db.Donors.NameOrPhoneMatching(parsed).Select(d => d.Id);
-            query = parsed.Id is { } id ? query.Where(a => a.Id == id || donorIds.Contains(a.DonorId)) : query.Where(a => donorIds.Contains(a.DonorId));
+            query = query.Matching(db, words);
         }
 
         var rows = await query.OrderBy(a => a.SlotStartUtc).ThenBy(a => a.Id).Take(Take).Select(a => new { a.Id, Donor = a.Donor!.Name, a.SlotStartUtc }).ToListAsync(ct);
@@ -197,11 +193,9 @@ public static class LookupEndpoints
     private static async Task<List<RecordOption>> RequestsAsync([FromQuery] string? search, LifestreamDbContext db, CancellationToken ct)
     {
         var query = db.Requests.AsNoTracking().Where(r => r.Status == RequestStatus.Pending);
-        if (Lists.CleanSearch(search) is { } term)
+        if (Lists.ParseSearch(search) is { } words)
         {
-            var parsed = SearchQueries.ParseTerm(term);
-            var patientIds = db.Patients.NameOrPhoneMatching(parsed).Select(p => p.Id);
-            query = parsed.Id is { } id ? query.Where(r => r.Id == id || patientIds.Contains(r.PatientId)) : query.Where(r => patientIds.Contains(r.PatientId));
+            query = query.Matching(db, words);
         }
 
         var rows = await query.OrderBy(r => r.RequiredBy).ThenBy(r => r.Id).Take(Take).Select(r => new { r.Id, Patient = r.Patient!.Name, r.BloodType, r.Units }).ToListAsync(ct);

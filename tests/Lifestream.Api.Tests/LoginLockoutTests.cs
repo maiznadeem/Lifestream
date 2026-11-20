@@ -200,6 +200,28 @@ public sealed class LoginLockoutConcurrencyTests(ApiFixture fx) : IClassFixture<
     }
 
     [Fact]
+    public async Task Login_OneAddressSendingTwelveConcurrentGuesses_AtMostFiveAreChecked_WithTheShippedLimits()
+    {
+        await using var fixture = new DefaultLimitsFixture();
+        await fixture.InitializeAsync();
+        var user = await fixture.AddStaffAsync(Role.Staff);
+        var results = await BurstAsync(fixture, user.Username, [.. Enumerable.Range(0, 12).Select(i => "single-ip-guess-" + i)], _ => "203.0.113.77");
+
+        Assert.True(results.Count(r => r.Status == 401) <= 5, string.Join(",", results.Select(r => r.Status)));
+        Assert.Equal(12, results.Count(r => r.Status is 401 or 429));
+    }
+}
+
+/// <summary>
+/// API-03: a guess that queues for its account's lock longer than other locks wait is still counted. One request and 16 s of real waiting, which is
+/// what the test is about; it holds one account's lock and fires no burst, so it runs beside the other classes. In the one-at-a-time collection of
+/// <see cref="LoginLockoutConcurrencyTests"/>, where it used to be, every class behind it waited for those 16 s as well.
+/// </summary>
+public sealed class LoginAccountLockHeldTests(ApiFixture fx) : IClassFixture<ApiFixture>
+{
+    private static CancellationToken Ct => TestContext.Current.CancellationToken;
+
+    [Fact]
     public async Task Login_WhileTheAccountLockIsHeldLongerThanOtherLocksWait_TheGuessWaitsAndIsCounted()
     {
         // On a busy server the queue for one account's lock can take longer than any fixed wait; a guess in it is counted (401) or refused as
@@ -227,18 +249,6 @@ public sealed class LoginLockoutConcurrencyTests(ApiFixture fx) : IClassFixture<
         using var response = await guess;
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         Assert.Equal(1, await fx.Db.ScalarAsync<int>($"SELECT FailedCount FROM StaffCredential WHERE StaffId = {user.Id}", Ct));
-    }
-
-    [Fact]
-    public async Task Login_OneAddressSendingTwelveConcurrentGuesses_AtMostFiveAreChecked_WithTheShippedLimits()
-    {
-        await using var fixture = new DefaultLimitsFixture();
-        await fixture.InitializeAsync();
-        var user = await fixture.AddStaffAsync(Role.Staff);
-        var results = await BurstAsync(fixture, user.Username, [.. Enumerable.Range(0, 12).Select(i => "single-ip-guess-" + i)], _ => "203.0.113.77");
-
-        Assert.True(results.Count(r => r.Status == 401) <= 5, string.Join(",", results.Select(r => r.Status)));
-        Assert.Equal(12, results.Count(r => r.Status is 401 or 429));
     }
 }
 

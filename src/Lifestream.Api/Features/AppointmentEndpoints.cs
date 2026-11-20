@@ -56,7 +56,7 @@ public static class AppointmentEndpoints
         // Today's agenda and the upcoming appointments read in time order unless the caller sorts.
         var sort = q.Sort ?? (view is AppointmentView.Today or AppointmentView.Upcoming ? SortKeys.Slot : null);
         var total = Lists.Total(filtered);
-        var rows = await (from a in Sorts.Apply(filtered, sort).Skip((page - 1) * size).Take(size).ForSearch(q.Search)
+        var rows = await (from a in Sorts.Apply(filtered, sort).Skip((page - 1) * size).Take(size)
                           from t in total
                           select new ListRow<AppointmentListItem>(
                               new AppointmentListItem(a.Id, a.DonorId, a.Donor!.Name, a.Donor.BloodType, a.PlacedAtUtc, a.SlotStartUtc, a.Status)
@@ -83,14 +83,10 @@ public static class AppointmentEndpoints
             filtered = filtered.Where(a => a.DonorBloodType == type);
         }
 
-        if (Lists.CleanSearch(search) is { } term)
+        if (Lists.ParseSearch(search) is { } words)
         {
-            // Donor ids by name (and phone, for a term long enough to be one: prefix seeks), then the appointments of those donors; a term that is a whole number also matches the id.
-            var parsed = SearchQueries.ParseTerm(term);
-            var donorIds = db.Donors.NameOrPhoneMatching(parsed).Select(d => d.Id);
-            filtered = parsed.Id is { } id
-                ? filtered.Where(a => a.Id == id || donorIds.Contains(a.DonorId))
-                : filtered.Where(a => donorIds.Contains(a.DonorId));
+            // The donors found by name or phone, then the appointments of those donors; a number is also the appointment's own (SearchQueries).
+            filtered = filtered.Matching(db, words);
         }
 
         return filtered;

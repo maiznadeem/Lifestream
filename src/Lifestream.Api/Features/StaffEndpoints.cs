@@ -127,11 +127,9 @@ public static class StaffEndpoints
     {
         var (page, size) = Lists.Normalize(q.Page, q.PageSize);
         var filtered = Visible(db, user);
-        if (Lists.CleanSearch(q.Search) is { } term)
+        if (Lists.ParseSearch(q.Search) is { } words)
         {
-            var like = Lists.PrefixPattern(term);
-            var id = SearchQueries.ParseTerm(term).Id ?? -1;
-            filtered = filtered.Where(s => s.Id == id || EF.Functions.Like(s.DisplayName, like, "\\") || EF.Functions.Like(s.Username, like, "\\"));
+            filtered = filtered.Matching(words);
         }
 
         if (q.MinSalary is not null || q.MaxSalary is not null)

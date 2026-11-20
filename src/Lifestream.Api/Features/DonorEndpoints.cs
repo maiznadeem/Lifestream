@@ -37,9 +37,9 @@ public static class DonorEndpoints
             donors = donors.Where(d => d.BloodType == type);
         }
 
-        if (Lists.CleanSearch(search) is { } term)
+        if (Lists.ParseSearch(search) is { } words)
         {
-            donors = donors.Matching(SearchQueries.ParseTerm(term));
+            donors = donors.Matching(words);
         }
 
         return donors;
@@ -62,7 +62,7 @@ public static class DonorEndpoints
         }
 
         var total = Lists.Total(filtered);
-        var rows = await (from d in Sorts.Apply(filtered, q.Sort).Skip((page - 1) * size).Take(size).ForSearch(q.Search)
+        var rows = await (from d in Sorts.Apply(filtered, q.Sort).Skip((page - 1) * size).Take(size)
                           from t in total
                           select new ListRow<DonorListItem>(
                               new DonorListItem(d.Id, d.Name, d.DateOfBirth, d.Gender, d.BloodType, d.Phone, d.Frequency, d.LastDonated)

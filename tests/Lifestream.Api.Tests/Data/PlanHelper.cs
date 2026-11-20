@@ -48,7 +48,8 @@ internal static class PlanHelper
         CancellationToken ct)
     {
         var capture = new ParameterCapture();
-        await using (var db = fixture.NewContext(null, capture))
+        // The API's own interceptor first, so a statement tagged as a search is captured with the hint the API sends it with.
+        await using (var db = fixture.NewContext(null, new Lifestream.Api.Infrastructure.SearchPlanInterceptor(), capture))
         {
             await query(db);
         }

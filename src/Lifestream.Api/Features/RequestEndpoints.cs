@@ -64,7 +64,7 @@ public static class RequestEndpoints
         }
 
         var total = Lists.Total(filtered);
-        var rows = await (from r in Sorts.Apply(filtered, sort).Skip((page - 1) * size).Take(size).ForSearch(q.Search)
+        var rows = await (from r in Sorts.Apply(filtered, sort).Skip((page - 1) * size).Take(size)
                           from t in total
                           select new ListRow<RequestListItem>(
                               new RequestListItem(r.Id, r.PatientId, r.Patient!.Name, r.BloodType, r.Units, r.PlacedAtUtc, r.RequiredBy, r.Status),
@@ -87,14 +87,10 @@ public static class RequestEndpoints
             filtered = filtered.Where(r => r.BloodType == type);
         }
 
-        if (Lists.CleanSearch(search) is { } term)
+        if (Lists.ParseSearch(search) is { } words)
         {
-            // Patient ids by name (and phone, for a term long enough to be one: prefix seeks), then the requests of those patients; a term that is a whole number also matches the id.
-            var parsed = SearchQueries.ParseTerm(term);
-            var patientIds = db.Patients.NameOrPhoneMatching(parsed).Select(p => p.Id);
-            filtered = parsed.Id is { } id
-                ? filtered.Where(r => r.Id == id || patientIds.Contains(r.PatientId))
-                : filtered.Where(r => patientIds.Contains(r.PatientId));
+            // The patients found by name or phone, then the requests of those patients; a number is also the request's own (SearchQueries).
+            filtered = filtered.Matching(db, words);
         }
 
         return filtered;

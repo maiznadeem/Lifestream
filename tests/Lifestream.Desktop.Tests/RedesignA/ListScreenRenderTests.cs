@@ -387,6 +387,87 @@ public sealed class ListScreenRenderTests
         Assert.DoesNotContain("Urgency", facts.ClosedColumns);
     }
 
+    /// <summary>
+    /// A search that finds nothing on the open tab while other tabs hold the matches (2.1.5 said "No appointments match these filters. Try a different
+    /// search" over tabs that read Upcoming 1, Past 3, Cancelled 1): the empty state names the tab and the search, says where the matches are, and its
+    /// button opens the tab with the most.
+    /// </summary>
+    [Theory]
+    [InlineData("appointments", "light", "1440", 1440, 900)]
+    [InlineData("appointments", "dark", "1440", 1440, 900)]
+    [InlineData("appointments", "light", "narrow", 1024, 700)]
+    [InlineData("requests", "light", "1440", 1440, 900)]
+    [InlineData("requests", "light", "narrow", 1024, 700)]
+    public void AnEmptyTab_WithMatchesOnOtherTabs_SaysWhereTheyAre(string screen, string theme, string size, int width, int height)
+    {
+        var facts = StaHost.Run(() =>
+        {
+            ThemeService.Apply(theme == "dark" ? ThemeMode.Dark : ThemeMode.Light);
+            using var rig = new Rig(dispatcher: WpfTestUi.Dispatcher());
+            FrameworkElement view;
+            Func<Task> search;
+            Func<string> title;
+            if (screen == "appointments")
+            {
+                AppointmentDesignData.Configure(rig.Api);
+                rig.Api.On("GetAppointmentsAsync", Client.Api.ApiResult<Contracts.PagedResult<AppointmentListItem>>.Ok(new Contracts.PagedResult<AppointmentListItem>([], 0, 1, 50)));
+                rig.Api.On("GetAppointmentViewCountsAsync", Client.Api.ApiResult<AppointmentViewCounts>.Ok(new AppointmentViewCounts(0, 1, 3, 1)));
+                var vm = ActivatorUtilities.CreateInstance<AppointmentsViewModel>(rig.Provider);
+                vm.Attach(null, new ListScreensClock());
+                vm.Zone = TimeZoneInfo.Utc;
+                view = new AppointmentsView { DataContext = vm };
+                search = () =>
+                {
+                    vm.SearchText = "eastwood";
+                    return vm.SearchNowCommand.ExecuteAsync();
+                };
+                title = () => vm.EmptyTitle;
+            }
+            else
+            {
+                RequestDesignData.Configure(rig.Api);
+                rig.Api.On("GetRequestsAsync", Client.Api.ApiResult<Contracts.PagedResult<Contracts.Requests.RequestListItem>>.Ok(new Contracts.PagedResult<Contracts.Requests.RequestListItem>([], 0, 1, 50)));
+                rig.Api.On("GetRequestViewCountsAsync", Client.Api.ApiResult<Contracts.Requests.RequestViewCounts>.Ok(new Contracts.Requests.RequestViewCounts(0, 0, 3, 1)));
+                var vm = ActivatorUtilities.CreateInstance<RequestsViewModel>(rig.Provider);
+                vm.Attach(null, new ListScreensClock());
+                view = new RequestsView { DataContext = vm };
+                search = () =>
+                {
+                    vm.SearchText = "eastwood";
+                    return vm.SearchNowCommand.ExecuteAsync();
+                };
+                title = () => vm.EmptyTitle;
+            }
+
+            using var host = Hosted.Create(PageArea(view, width, height, out var area), area.Width, area.Height);
+            Hosted.Await(() => ((Client.Common.ViewModelBase)view.DataContext).LoadAsync());
+            Hosted.Await(search);
+            host.Settle(400);
+            Save(host, $"{screen}-empty-tab-{size}-{theme}.png");
+            var texts = host.All<TextBlock>().Where(t => t.IsVisible).ToList();
+            var cut = texts.Where(t => TruncationTooltip.IsTrimmed(t)).Select(t => t.Text).ToList();
+            var buttons = host.All<Button>().Where(b => b.IsVisible).Select(b => b.Content as string).Where(c => c is not null).ToList();
+            return (Texts: texts.Select(t => t.Text).ToList(), Cut: cut, Buttons: buttons, Title: title(), area);
+        });
+
+        if (screen == "appointments")
+        {
+            Assert.Equal("No appointments today match \u201Ceastwood\u201D", facts.Title);
+            Assert.Contains("3 in Past, 1 in Upcoming, 1 in Cancelled.", facts.Texts);
+            Assert.Contains("Show Past", facts.Buttons);
+        }
+        else
+        {
+            Assert.Equal("No open requests match \u201Ceastwood\u201D", facts.Title);
+            Assert.Contains("3 in Fulfilled, 1 in Cancelled.", facts.Texts);
+            Assert.Contains("Show Fulfilled", facts.Buttons);
+        }
+
+        Assert.Contains(facts.Title, facts.Texts); // the title is on the page as the view model words it
+        Assert.DoesNotContain("Try a different search, or clear the filters to see everyone.", facts.Texts);
+        Assert.True(facts.Cut.Count == 0, "cut off: " + string.Join(" | ", facts.Cut));
+    }
+
     /// <summary>The error state of a list (design-qa 21): the cause and the fix in plain words, Retry, and no count in the header while nothing is loaded.</summary>
     [Theory]
     [InlineData("light")]

@@ -79,38 +79,95 @@ public sealed class CommandLog : DbCommandInterceptor
 }
 
 /// <summary>
-/// Records every query the API sends (text and a copy of each parameter) while <see cref="Recording"/> is true, so a test can replay
-/// the exact statements under SET STATISTICS XML and read the actual execution plans.
+/// Records the queries ONE request makes the API send (text and a copy of each parameter), so a test can judge them or replay them under
+/// SET STATISTICS XML and read the actual execution plans.
+/// <para>
+/// A statement belongs to the request that ran it: <see cref="OfAsync"/> marks its request with a header, <see cref="StatementCaptureFilter"/>
+/// carries the mark through the request's own asynchronous flow, and only statements run inside that flow are kept. The host does other database
+/// work of its own (the sign-in warm-up after start-up, another request), and a capture that recorded "everything while a flag was up" took those
+/// for the request's statements.
+/// </para>
+/// <para>
+/// What a request runs is still more than its endpoint: the identity layer in front of every signed-in request checks the session (a refresh-token
+/// row, when the cached answer has expired) and, on the first signed-in request of a UTC day, whether the demo data is due for its daily reset
+/// (IdentityMiddleware, DemoDirectory.EnsureDailyResetAsync: a transaction, the lock, the DemoState row and the server's clock). Those are really
+/// sent inside the request, whichever endpoint it is for; <see cref="IsIdentityCheck"/> names them for a test that is about the endpoint's own
+/// statements.
+/// </para>
 /// </summary>
 public sealed class StatementCapture : DbCommandInterceptor
 {
-    private readonly ConcurrentQueue<(string Sql, List<SqlParameter> Parameters)> _statements = new();
+    /// <summary>The request header that marks a request whose statements are recorded; its value names the capture.</summary>
+    public const string Header = "X-Test-Capture";
 
-    public bool Recording { get; set; }
+    private static readonly AsyncLocal<string?> CurrentRequest = new();
+    private readonly ConcurrentDictionary<string, ConcurrentQueue<(string Sql, List<SqlParameter> Parameters)>> _captures = new();
 
-    /// <summary>Returns what was recorded since the last call and clears it.</summary>
-    public List<(string Sql, List<SqlParameter> Parameters)> Drain()
+    /// <summary>Called by <see cref="StatementCaptureFilter"/> at the start of a marked request, inside the request's asynchronous flow.</summary>
+    internal static void Enter(string capture) => CurrentRequest.Value = capture;
+
+    /// <summary>Sends one GET and returns its response with the statements that request ran, in the order they were sent.</summary>
+    public async Task<(HttpResponseMessage Response, List<(string Sql, List<SqlParameter> Parameters)> Statements)> OfAsync(HttpClient client, string url, CancellationToken ct)
     {
-        var list = new List<(string, List<SqlParameter>)>();
-        while (_statements.TryDequeue(out var item))
+        ArgumentNullException.ThrowIfNull(client);
+        var capture = Guid.NewGuid().ToString("N");
+        var statements = _captures[capture] = new();
+        try
         {
-            list.Add(item);
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.Add(Header, capture);
+            var response = await client.SendAsync(request, ct);
+            return (response, [.. statements]);
         }
+        finally
+        {
+            _captures.TryRemove(capture, out _);
+        }
+    }
 
-        return list;
+    /// <summary>
+    /// True for a statement of the identity layer in front of every signed-in request, which is not the endpoint's own: the session check
+    /// (<c>RefreshToken</c>) and the daily demo-reset check (<c>DemoState</c> and the server-clock query of DemoReset).
+    /// </summary>
+    public static bool IsIdentityCheck(string sql)
+    {
+        ArgumentNullException.ThrowIfNull(sql);
+        return sql.Contains("FROM [RefreshToken]", StringComparison.Ordinal) || sql.Contains("[DemoState]", StringComparison.Ordinal)
+            || sql.Contains("SELECT SYSUTCDATETIME() AS [Value]", StringComparison.Ordinal);
     }
 
     // Recorded after execution, so the text is what was really sent (interceptors that run later, such as the search-plan one, have
     // already rewritten it).
     public override ValueTask<System.Data.Common.DbDataReader> ReaderExecutedAsync(System.Data.Common.DbCommand command, CommandExecutedEventData eventData, System.Data.Common.DbDataReader result, CancellationToken cancellationToken = default)
     {
-        if (Recording)
+        if (CurrentRequest.Value is { } capture && _captures.TryGetValue(capture, out var statements))
         {
-            _statements.Enqueue((command.CommandText, [.. command.Parameters.Cast<SqlParameter>().Select(p => (SqlParameter)((ICloneable)p).Clone())]));
+            statements.Enqueue((command.CommandText, [.. command.Parameters.Cast<SqlParameter>().Select(p => (SqlParameter)((ICloneable)p).Clone())]));
         }
 
         return base.ReaderExecutedAsync(command, eventData, result, cancellationToken);
     }
+}
+
+/// <summary>
+/// Puts the mark of <see cref="StatementCapture.OfAsync"/> on the request's asynchronous flow, first in the pipeline, so every statement the request
+/// runs (authentication and the identity layer included) is recorded for it and nothing else is.
+/// </summary>
+public sealed class StatementCaptureFilter : Microsoft.AspNetCore.Hosting.IStartupFilter
+{
+    public Action<Microsoft.AspNetCore.Builder.IApplicationBuilder> Configure(Action<Microsoft.AspNetCore.Builder.IApplicationBuilder> next) => app =>
+    {
+        app.Use(async (context, nextMiddleware) =>
+        {
+            if (context.Request.Headers.TryGetValue(StatementCapture.Header, out var capture) && capture.ToString() is { Length: > 0 } name)
+            {
+                StatementCapture.Enter(name);
+            }
+
+            await nextMiddleware();
+        });
+        next(app);
+    };
 }
 
 /// <summary>
@@ -390,6 +447,7 @@ public class ApiFixture : IAsyncLifetime
                 services.AddSingleton<TimeProvider>(Clock);
                 services.AddSingleton<IInterceptor>(Commands);
                 services.AddSingleton<IInterceptor>(Statements);
+                services.AddSingleton<Microsoft.AspNetCore.Hosting.IStartupFilter, StatementCaptureFilter>(); // Statements.OfAsync: the statements of one request
                 services.AddSingleton<IInterceptor>(Faults);
                 services.AddSingleton<IInterceptor>(Connections);
                 if (UseFakeProbe)

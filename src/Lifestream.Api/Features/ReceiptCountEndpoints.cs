@@ -21,9 +21,9 @@ public static class ReceiptCountEndpoints
     {
         var (start, end) = Lists.DayRange(q.FromUtc, q.ToUtc);
         List<(ReceiptKind Kind, int Count)> counts;
-        if (Lists.CleanSearch(q.Search) is { } term)
+        if (Lists.ParseSearch(q.Search) is { } words)
         {
-            var hits = SearchQueries.ReceiptsMatching(db, SearchQueries.ParseTerm(term));
+            var hits = SearchQueries.ReceiptsMatching(db, words);
             if (q.BloodType is { } hitType)
             {
                 hits = hits.Where(h => h.BloodType == hitType);

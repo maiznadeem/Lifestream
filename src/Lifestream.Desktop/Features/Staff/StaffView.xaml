@@ -79,7 +79,7 @@
       <!-- Toolbar: search (Ctrl F, Enter searches at once) and the salary range. -->
       <WrapPanel Grid.Row="2" feat:Edge.Top="{DynamicResource Space.16}" feat:Edge.Bottom="{DynamicResource Space.12}">
         <TextBox x:Name="SearchBox" Style="{DynamicResource TextBox.Search}" Width="300" Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" MaxLength="100"
-                 controls:SearchAssist.Shortcut="Ctrl F" controls:InputAssist.Placeholder="Search name or username" feat:Edge.Right="{DynamicResource Space.8}" AutomationProperties.Name="Search staff">
+                 controls:SearchAssist.Shortcut="Ctrl F" controls:InputAssist.Placeholder="Name, username or staff ID" feat:Edge.Right="{DynamicResource Space.8}" AutomationProperties.Name="Search staff">
           <TextBox.InputBindings>
             <KeyBinding Key="Enter" Command="{Binding SearchNowCommand}" />
           </TextBox.InputBindings>
