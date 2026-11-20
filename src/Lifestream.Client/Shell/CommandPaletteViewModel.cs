@@ -226,7 +226,11 @@ public sealed partial class CommandPaletteViewModel : ObservableObject
         yield return new("Settings", "Theme: Dark", null, "Moon", null, () => _shell.SetThemeCommand.ExecuteAsync(ThemeMode.Dark));
         yield return new("Settings", "Theme: Match Windows", null, "Monitor", null, () => _shell.SetThemeCommand.ExecuteAsync(ThemeMode.System));
         yield return new("Settings", _shell.IsNavCollapsed ? "Expand the sidebar" : "Collapse the sidebar", null, "Sidebar", "Ctrl+B", () => _shell.ToggleNavCommand.ExecuteAsync());
-        yield return new("Settings", "Change password", null, "Key", null, () => _shell.ChangePasswordCommand.ExecuteAsync());
+        if (_shell.CanChangePassword)
+        {
+            yield return new("Settings", "Change password", null, "Key", null, () => _shell.ChangePasswordCommand.ExecuteAsync());
+        }
+
         yield return new("Settings", "Sign out", null, "Logout", null, () => _shell.SignOutCommand.ExecuteAsync());
     }
 

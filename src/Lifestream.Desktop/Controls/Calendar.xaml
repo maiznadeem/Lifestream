@@ -100,13 +100,13 @@
               <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Brush.Primary}" />
               <Setter Property="Foreground" Value="{DynamicResource Brush.OnPrimary}" />
             </Trigger>
-            <Trigger Property="IsKeyboardFocused" Value="True">
+            <Trigger Property="controls:FocusAssist.ShowRing" Value="True">
               <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Brush.Focus}" />
               <Setter TargetName="Bd" Property="BorderThickness" Value="2" />
             </Trigger>
             <MultiTrigger>
               <MultiTrigger.Conditions>
-                <Condition Property="IsKeyboardFocused" Value="True" />
+                <Condition Property="controls:FocusAssist.ShowRing" Value="True" />
                 <Condition Property="IsSelected" Value="True" />
               </MultiTrigger.Conditions>
               <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Brush.OnPrimary}" />
@@ -152,13 +152,13 @@
               <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Brush.Primary}" />
               <Setter Property="Foreground" Value="{DynamicResource Brush.OnPrimary}" />
             </Trigger>
-            <Trigger Property="IsKeyboardFocused" Value="True">
+            <Trigger Property="controls:FocusAssist.ShowRing" Value="True">
               <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Brush.Focus}" />
               <Setter TargetName="Bd" Property="BorderThickness" Value="2" />
             </Trigger>
             <MultiTrigger>
               <MultiTrigger.Conditions>
-                <Condition Property="IsKeyboardFocused" Value="True" />
+                <Condition Property="controls:FocusAssist.ShowRing" Value="True" />
                 <Condition Property="HasSelectedDays" Value="True" />
               </MultiTrigger.Conditions>
               <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Brush.OnPrimary}" />

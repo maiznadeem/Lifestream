@@ -12,8 +12,10 @@
     <ContextMenu x:Key="AccountMenu" Style="{DynamicResource ContextMenu.Lifestream}">
       <MenuItem Style="{DynamicResource MenuItem.Lifestream}" Header="Profile" AutomationProperties.Name="Profile"
                 Command="{Binding PlacementTarget.DataContext.ProfileCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+      <!-- Not offered to the demo account: the server does not change its password. -->
       <MenuItem Style="{DynamicResource MenuItem.Lifestream}" Header="Change password" AutomationProperties.Name="Change password"
-                Command="{Binding PlacementTarget.DataContext.ChangePasswordCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                Command="{Binding PlacementTarget.DataContext.ChangePasswordCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                Visibility="{Binding PlacementTarget.DataContext.CanChangePassword, RelativeSource={RelativeSource AncestorType=ContextMenu}, Converter={StaticResource BoolToVisibility}}" />
       <MenuItem Style="{DynamicResource MenuItem.Lifestream}" Header="Theme" AutomationProperties.Name="Theme">
         <MenuItem Style="{DynamicResource MenuItem.Lifestream}" Header="Light" AutomationProperties.Name="Light theme"
                   Command="{Binding PlacementTarget.DataContext.SetThemeCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" CommandParameter="{x:Static common:ThemeMode.Light}" />
@@ -81,13 +83,13 @@
             </Border>
           </StackPanel>
         </Button>
-        <Button x:Name="NotificationsButton" Style="{DynamicResource TitleBarButton}" Width="32" Padding="0" Click="OnNotificationsClick"
-                AutomationProperties.Name="{Binding NotificationsName, RelativeSource={RelativeSource AncestorType=shell:ShellView}}"
-                ToolTip="{Binding NotificationsName, RelativeSource={RelativeSource AncestorType=shell:ShellView}}">
+        <!-- The bell opens the notifications flyout under it (what needs attention, each item with its action); its name says how many items there are. -->
+        <Button x:Name="NotificationsButton" Style="{DynamicResource TitleBarButton}" Width="32" Padding="0" Command="{Binding Notifications.ToggleCommand}"
+                AutomationProperties.Name="{Binding NotificationsSummary}" AutomationProperties.HelpText="Shows what needs attention" ToolTip="{Binding NotificationsSummary}">
           <Grid>
             <controls:Icon Kind="Bell" Size="16" />
             <Ellipse x:Name="BellDot" Width="6" Height="6" Fill="{DynamicResource Brush.Critical}" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="{DynamicResource Inset.TN1RN1}"
-                     Visibility="{Binding HasAttention, RelativeSource={RelativeSource AncestorType=shell:ShellView}, Converter={StaticResource BoolToVisibility}}" />
+                     Visibility="{Binding HasNotifications, Converter={StaticResource BoolToVisibility}}" />
           </Grid>
         </Button>
         <Button x:Name="AvatarButton" Style="{DynamicResource TitleBarButton}" Width="40" Padding="0" Margin="{DynamicResource Inset.L4}" Click="OnAccountClick"
@@ -197,6 +199,9 @@
         <controls:ToastHost Grid.Row="3" DataContext="{Binding Toasts}" ItemsSource="{Binding Toasts}" />
       </Grid>
     </Border>
+
+    <!-- The notifications flyout: under the title bar (so the bell stays clickable and closes it), placed under the bell. -->
+    <shell:NotificationsFlyout x:Name="Notifications" Grid.Row="1" Grid.ColumnSpan="2" DataContext="{Binding Notifications}" />
 
     <!-- The command palette (Ctrl+K): over everything, 640 DIP wide, just under the title bar. -->
     <!-- The palette binds to its own view model, which the shell owns. -->

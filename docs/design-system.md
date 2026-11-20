@@ -220,6 +220,7 @@ All whole numbers so edges stay crisp at every scale.
 | `Radius.Panel` (`Radius.Card`) | 8 | Panels, menus, popups, toasts, the palette, banners, segmented well |
 | `Radius.Dialog` | 12 | Dialog surface |
 | `Radius.FocusRing` | 10 | Focus ring around a 6 radius control (control radius + 4) |
+| `Radius.FocusRingSmall` | 8 | Focus ring around a 4 radius control (the check box) |
 | `Radius.ContentCorner` | 8,0,0,0 | The page area's top-left corner against the sidebar and title bar |
 | `Radius.Underline` | 0,0,6,6 | The focus bar under a field |
 | `Radius.Pill` (4), `Radius.Round` (999), `Radius.Avatar` (36), `Radius.AvatarLarge` (48), `Radius.2`, `Radius.6`, `Radius.14`, `Radius.Left8` | | Legacy or specialised |
@@ -434,6 +435,14 @@ Styles in `Controls/Buttons.xaml`. A bare `Button` gets `Button.Secondary`. All 
 
 States: rest, hover (`Hover` or one step of the variant), pressed, keyboard focus (a 2 px `Focus` ring 2 px outside the control, drawn only when
 the last input was the keyboard, `FocusAssist`), disabled (`Layer2` fill, `Ink3` text), busy.
+
+**The focus ring, on every control.** One ring: 2 px of `Focus`, 2 px outside the control, with the control's corner radius plus 4
+(`Radius.FocusRing` for a 6 radius control, `Radius.FocusRingSmall` for a check box). It shows for keyboard focus only, never after a mouse
+click, a tap or a pen press. A template shows it with a trigger on `controls:FocusAssist.ShowRing` and never on `IsKeyboardFocused`, which is
+also true after a click (a test scans for it). `FocusAssist` decides like a browser's `:focus-visible`: a key that moves or acts (Tab, the
+arrows, Space, Enter, a letter) turns keyboard mode on; a modifier or system key on its own, or a key pressed with Alt or the Windows key
+(Alt+Tab, Win+Shift+S, Print Screen), does not; a press of the mouse, a finger or a pen turns it off and removes the ring that is showing,
+also when the focus stays where it was. A text field is the one exception by design: its focus bar shows whenever it has the caret.
 
 Busy: `controls:ButtonAssist.IsBusy="{Binding Cmd.IsRunning}"` and `controls:ButtonAssist.BusyText="Saving"`. A spinner and the progressive verb
 replace the label, the width does not change, further clicks are ignored (marked handled), UI Automation `ItemStatus` is `Busy`, and busy wins over
@@ -1048,7 +1057,9 @@ edges and `Radius.ContentCorner` at its top-left.
   with tabs, where red is used for selection). Group headers use `NavGroupHeader` (12 `Ink3`); the rail hides them and draws a 24 px `Stroke2` separator between groups.
 - A count is `NavItem.Badge`; the screen reader name is "Requests, 6 open" (`AutomationName` with `BadgeNoun`). Counts refresh through
   `ShellViewModel.RefreshCountsAsync` and are quiet on failure. The shell computes them itself, the same on every screen: Appointments counts today's
-  pending appointments, Requests the open requests (the Requests page's "Open" tab), Stock turns red (the rail's dot) when any group is below its minimum.
+  pending appointments, Requests the open requests (the Requests page's "Open" tab), Stock turns red when any group is below its minimum. On the rail the
+  count sits on a 16 DIP badge at the icon's top-right corner (`NavItem.RailBadge`: the number, "99+" from three digits; `CriticalSoft` with `Critical`
+  text when the destination needs attention), so collapsing the sidebar does not hide what is waiting.
 - The rail shows a tooltip "Donors  Alt+2" (title and shortcut). `NavItem.Shortcut` is "Alt+1" to "Alt+8" by position among the visible items.
 - The account button at the foot (avatar, name, "Doctor, morning shift"; `AccountButton` style, accessible name "Account menu") opens a menu: Profile,
   Change password, Theme (Light, Dark, Match Windows), Collapse the sidebar (Ctrl+B), Sign out.
@@ -1057,9 +1068,18 @@ edges and `Radius.ContentCorner` at its top-left.
 ### 6.3 Title bar content (main window)
 
 Logo and "Lifestream" at the left; the search button (`TitleSearch` style, "Search donors, patients, requests and bags", `Width.TitleSearch` 440, opens
-the palette) next; then the bell (`Bell`, a 6 px `Critical` dot while any blood group is below its minimum; opens the dashboard; its name says how many)
-and the avatar button (opens the account menu); then the caption buttons. In a Compact window the title bar is 40 DIP, the search becomes a
+the palette) next; then the bell (`Bell`, a 6 px `Critical` dot while anything needs attention; it opens the notifications flyout, below; its name says
+how many items, "Notifications, 4 items need attention") and the avatar button (opens the account menu); then the caption buttons. In a Compact window the title bar is 40 DIP, the search becomes a
 "Search" icon plus `Ctrl K` key caps button, and the bell and avatar are hidden. Text on Mica uses grayscale rendering.
+
+**Notifications flyout** (`Shell/NotificationsFlyout`, view model `NotificationsViewModel`). The bell opens it under itself, right edges aligned,
+420 DIP wide, an `ElevatedSurface` at the `Flyout` level inside the window (like the palette, not a popup). It lists what needs attention now, the same
+items as the dashboard's "Needs attention" (both come from `AttentionBuilder`): each with its tinted icon tile, title, why it matters and its one
+action, which closes the flyout and opens the screen on that record or filter. Below the list, "View all on the dashboard". States: the items; "Nothing
+needs attention" with a green check; "Checking what needs attention" while the first answer is on its way; the load's error with Retry (never the empty
+state when a call failed). It loads each time it opens; the dashboard also hands it its list whenever it loads, so the dot is right from the first
+screen. Opening it moves the focus to its first action, Tab stays inside, and Esc, a click outside, the bell again or going to another screen close
+it (focus returns to the bell). It is not shown in a Compact window, where the bell is hidden.
 
 ### 6.4 Command palette
 

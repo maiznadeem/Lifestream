@@ -36,8 +36,11 @@ public sealed partial class NavItem(Destination destination, int position) : Obs
 
     /// <summary>A count shown at the right of the item (appointments still to come today, open requests, groups below minimum); null hides it.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(AutomationName))]
+    [NotifyPropertyChangedFor(nameof(AutomationName), nameof(RailBadge))]
     public partial string? Badge { get; set; }
+
+    /// <summary>The count as the icon rail shows it, on a small badge at the icon's corner: the number, or "99+" for a count of three digits or more.</summary>
+    public string? RailBadge => Badge is { Length: > 2 } ? "99+" : Badge;
 
     /// <summary>Something here needs attention (stock below its minimum): the count turns red.</summary>
     [ObservableProperty]
@@ -110,11 +113,13 @@ public sealed partial class ShellViewModel : ViewModelBase
             .. allowed.GroupBy(d => d.Group).Select(g => new NavGroup(g.Key, [.. g.Select(d => new NavItem(d, allowed.IndexOf(d) + 1) { BadgeNoun = d.BadgeNoun })])),
         ];
         Palette = new CommandPaletteViewModel(this, api);
+        Notifications = new NotificationsViewModel(api, item => OpenByTitleAsync(item.Destination, item.Prefilter), () => OpenAsync(_catalog[0]));
+        Notifications.PropertyChanged += OnNotificationsChanged;
 
         // Concurrent on purpose: the sidebar stays usable while a screen loads, and the newer click supersedes the older one (SHELL-07).
         NavigateCommand = Command((parameter, _) => parameter is NavItem item ? OpenAsync(item.Destination) : Task.CompletedTask, allowConcurrent: true);
         ProfileCommand = Command(_ => NavigateToTypeAsync(NavigationCatalog.ProfileViewModelType, "profile"));
-        ChangePasswordCommand = Command(_ => NavigateToTypeAsync(NavigationCatalog.ProfileViewModelType, "change-password"));
+        ChangePasswordCommand = Command(_ => ChangePasswordAsync());
         SignOutCommand = Command(_ => _flow.SignOutAsync());
         ApplyUpdateCommand = Command(async ct =>
         {
@@ -203,6 +208,78 @@ public sealed partial class ShellViewModel : ViewModelBase
 
     /// <summary>The command palette (Ctrl+K).</summary>
     public CommandPaletteViewModel Palette { get; }
+
+    /// <summary>The bell's flyout: what needs attention now, each item with its action.</summary>
+    public NotificationsViewModel Notifications { get; }
+
+    /// <summary>
+    /// True when the bell shows its dot: something needs attention. Until the list is known (the dashboard has loaded, or the flyout was opened) it
+    /// goes by the one thing the shell counts itself, the blood groups below their minimum.
+    /// </summary>
+    public bool HasNotifications => Notifications.IsKnown ? Notifications.Count > 0 : LowStockGroups > 0;
+
+    /// <summary>The bell's name and tooltip: "Notifications, 4 items need attention".</summary>
+    public string NotificationsSummary => Notifications.IsKnown ? Notifications.Summary : LowStockGroups switch
+    {
+        0 => "Notifications",
+        1 => "Notifications, 1 blood group is below its minimum",
+        var low => $"Notifications, {low} blood groups are below their minimum",
+    };
+
+    partial void OnLowStockGroupsChanged(int value) => RaiseNotifications();
+
+    private void OnNotificationsChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(NotificationsViewModel.Summary) or nameof(NotificationsViewModel.Count) or nameof(NotificationsViewModel.IsKnown))
+        {
+            RaiseNotifications();
+        }
+        else if (e.PropertyName == nameof(NotificationsViewModel.IsOpen) && Notifications.IsOpen)
+        {
+            AttachChild(Notifications); // the flyout's load shows the waking state and uses the app clock, like every screen's
+        }
+    }
+
+    private void RaiseNotifications() =>
+        Post(() =>
+        {
+            OnPropertyChanged(nameof(HasNotifications));
+            OnPropertyChanged(nameof(NotificationsSummary));
+        });
+
+    private Features.Dashboard.DashboardViewModel? _dashboard;
+
+    /// <summary>The dashboard on screen hands its "Needs attention" list to the bell each time it has loaded, so the dot is right with no extra calls.</summary>
+    private void WatchDashboard()
+    {
+        if (_dashboard is not null)
+        {
+            _dashboard.PropertyChanged -= OnDashboardChanged;
+        }
+
+        _dashboard = Navigation.Current as Features.Dashboard.DashboardViewModel;
+        if (_dashboard is not null)
+        {
+            _dashboard.PropertyChanged += OnDashboardChanged;
+            PublishDashboardAttention();
+        }
+    }
+
+    private void OnDashboardChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(State))
+        {
+            PublishDashboardAttention();
+        }
+    }
+
+    private void PublishDashboardAttention()
+    {
+        if (_dashboard is { State: LoadState.Ready or LoadState.Empty } dashboard && dashboard.AttentionIsComplete)
+        {
+            Notifications.Publish([.. dashboard.Attention]);
+        }
+    }
 
     /// <summary>Ctrl+B: the sidebar becomes an icon rail, or a full sidebar again (remembered).</summary>
     [NoOperationRunner("It flips a local preference; it makes no API call.")]
@@ -303,6 +380,9 @@ public sealed partial class ShellViewModel : ViewModelBase
     }
 
     public bool IsDemo => _session.User?.IsDemo == true;
+
+    /// <summary>False for the demo account, whose password the server will not change: the account menu and the palette then do not offer "Change password".</summary>
+    public bool CanChangePassword => !IsDemo;
 
     public string? UpdatePrompt => Updates.IsUpdateReady ? Updates.Message : null;
 
@@ -520,6 +600,34 @@ public sealed partial class ShellViewModel : ViewModelBase
 
     private async Task NavigateToTypeAsync(Type type, object parameter) => await Navigation.NavigateTo(type, parameter).ConfigureAwait(true);
 
+    /// <summary>
+    /// "Change password" in the account menu and the palette. On the Profile screen it opens the dialog over the screen as it is: opening the screen again
+    /// would load the profile a second time and throw away what the person was doing there. From any other screen it opens the profile first, and the
+    /// dialog once the profile is on screen.
+    /// </summary>
+    private async Task ChangePasswordAsync()
+    {
+        if (!CanChangePassword)
+        {
+            // The demo account is never offered this (the menu and the palette leave it out). Asked anyway, it gets the profile, whose Security
+            // section says why the password cannot be changed, and no dialog.
+            await NavigateToTypeAsync(NavigationCatalog.ProfileViewModelType, "profile").ConfigureAwait(true);
+            return;
+        }
+
+        if (Navigation.Current is ProfileViewModel profile)
+        {
+            if (profile.ChangePasswordCommand.CanExecute(null))
+            {
+                await profile.ChangePasswordCommand.ExecuteAsync().ConfigureAwait(true);
+            }
+
+            return;
+        }
+
+        await NavigateToTypeAsync(NavigationCatalog.ProfileViewModelType, ProfileViewModel.ChangePasswordParameter).ConfigureAwait(true);
+    }
+
     private void OnServerStatusChanged(object? sender, EventArgs e) => Post(() => OnPropertyChanged(nameof(IsServerWaking)));
 
     private void OnToastActionsChanged(object? sender, EventArgs e) => Post(() => OnPropertyChanged(nameof(IsToastActionWaking)));
@@ -536,6 +644,8 @@ public sealed partial class ShellViewModel : ViewModelBase
         OnPropertyChanged(nameof(CurrentPage));
         OnPropertyChanged(nameof(PageTitle));
         OnPropertyChanged(nameof(WindowTitle));
+        Notifications.Close(); // a flyout never stays open over a screen it was not opened on
+        WatchDashboard();
         if (Clock.GetUtcNow() - _lastCounts >= CountsInterval)
         {
             _ = RefreshCountsAsync();
@@ -582,6 +692,14 @@ public sealed partial class ShellViewModel : ViewModelBase
         if (disposing)
         {
             Navigation.CurrentChanged -= OnCurrentChanged;
+            Notifications.PropertyChanged -= OnNotificationsChanged;
+            if (_dashboard is not null)
+            {
+                _dashboard.PropertyChanged -= OnDashboardChanged;
+                _dashboard = null;
+            }
+
+            Notifications.Dispose();
             Preferences.PropertyChanged -= OnPreferencesChanged;
             _serverStatus.Changed -= OnServerStatusChanged;
             Toasts.Actions.Changed -= OnToastActionsChanged;
