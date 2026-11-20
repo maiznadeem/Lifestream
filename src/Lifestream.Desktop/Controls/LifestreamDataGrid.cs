@@ -14,7 +14,7 @@ namespace Lifestream.Desktop.Controls;
 /// </summary>
 public sealed class LifestreamDataGrid : DataGrid
 {
-    /// <summary>The narrowest a column may get.</summary>
+    /// <summary>The narrowest a column that sizes to its content or shares the room may get. A column declared with a width in DIP has that width, also below this.</summary>
     public const double MinimumColumnWidth = 64;
 
     public static readonly DependencyProperty SortCommandProperty =
@@ -170,7 +170,9 @@ public sealed class LifestreamDataGrid : DataGrid
     {
         foreach (var column in Columns)
         {
-            if (column.Width.IsAbsolute && column.MinWidth < column.Width.Value && column.Width.Value <= column.MaxWidth)
+            // Set on the column itself, so it also holds below the grid's minimum (a 60 DIP column was shown at 64 while the layout counted it as 60).
+            if (column.Width.IsAbsolute && column.Width.Value <= column.MaxWidth
+                && (column.ReadLocalValue(DataGridColumn.MinWidthProperty) is not double set || set < column.Width.Value))
             {
                 column.MinWidth = column.Width.Value;
             }
@@ -187,7 +189,7 @@ public sealed class LifestreamDataGrid : DataGrid
         _defaultsApplied = Columns.Count > 0;
         foreach (var column in Columns)
         {
-            if (column.MinWidth < MinimumColumnWidth)
+            if (column.MinWidth < MinimumColumnWidth && !column.Width.IsAbsolute)
             {
                 column.MinWidth = MinimumColumnWidth;
             }

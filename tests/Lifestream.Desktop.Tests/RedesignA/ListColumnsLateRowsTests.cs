@@ -114,7 +114,17 @@ public sealed class ListColumnsLateRowsTests
             var grid = host.Find<LifestreamDataGrid>("Grid");
             var columns = grid.Columns.Where(c => c.Visibility == Visibility.Visible)
                 .Select(c => (c.Header as string, c.ActualWidth, c.Width.IsAbsolute ? c.Width.Value : (double?)null)).ToList();
-            return (RenderChecks.Problems(host, $"{screen}-late-rows"), columns);
+            var problems = RenderChecks.Problems(host, $"{screen}-late-rows");
+            // A blood group tag has the room it asks for: WPF clips an element that was given less, and a clipped tag loses its right edge.
+            foreach (var tag in host.All<BloodGroupTag>().Where(t => t.IsVisible && host.All<DataGridCell>().Any(c => c.IsAncestorOf(t))))
+            {
+                if (System.Windows.Controls.Primitives.LayoutInformation.GetLayoutClip(tag) is not null)
+                {
+                    problems.Add($"the blood group tag \"{tag.Text}\" is clipped by its column ({tag.ActualWidth} wide)");
+                }
+            }
+
+            return (problems, columns);
         });
 
     /// <summary>The queued work runs to the end, with the layout it asks for (no time has to pass: nothing here waits on a clock).</summary>
