@@ -223,17 +223,26 @@ public static class TruncationTooltip
             return false;
         }
 
-        var formatted = new System.Windows.Media.FormattedText(
-            block.Text,
-            System.Globalization.CultureInfo.CurrentUICulture,
-            block.FlowDirection,
-            new System.Windows.Media.Typeface(block.FontFamily, block.FontStyle, block.FontWeight, block.FontStretch),
-            block.FontSize,
-            System.Windows.Media.Brushes.Black,
-            null,
-            System.Windows.Media.TextOptions.GetTextFormattingMode(block), // as the block itself is drawn: Display in the app's windows
-            System.Windows.Media.VisualTreeHelper.GetDpi(block).PixelsPerDip);
-        return formatted.WidthIncludingTrailingWhitespace > block.ActualWidth + 0.5;
+        // The same text in a block of its own, with all the width it wants and everything that decides its width taken from the block: the font, the
+        // formatting mode, and the typography (kerning is off in the app, Theme/TextDefaults.cs; a numeric column has tabular figures). FormattedText
+        // cannot be given a typography, so it measured kerned text against a block that draws it unkerned.
+        var whole = new TextBlock
+        {
+            Text = block.Text,
+            FontFamily = block.FontFamily,
+            FontStyle = block.FontStyle,
+            FontWeight = block.FontWeight,
+            FontStretch = block.FontStretch,
+            FontSize = block.FontSize,
+            FlowDirection = block.FlowDirection,
+            TextWrapping = TextWrapping.NoWrap,
+        };
+        System.Windows.Media.TextOptions.SetTextFormattingMode(whole, System.Windows.Media.TextOptions.GetTextFormattingMode(block));
+        System.Windows.Documents.Typography.SetKerning(whole, System.Windows.Documents.Typography.GetKerning(block));
+        System.Windows.Documents.Typography.SetNumeralAlignment(whole, System.Windows.Documents.Typography.GetNumeralAlignment(block));
+        System.Windows.Media.VisualTreeHelper.SetRootDpi(whole, System.Windows.Media.VisualTreeHelper.GetDpi(block));
+        whole.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        return whole.DesiredSize.Width > block.ActualWidth + 0.5;
     }
 
     /// <summary>The whole text of a block, also when it sits in inlines (a Hyperlink in a name cell), which the Text property does not report to a binding.</summary>

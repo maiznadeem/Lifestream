@@ -36,6 +36,11 @@ public sealed class Hosted : IDisposable
         }
 
         element.UseLayoutRounding = true; // as every window of the app (Chrome.xaml): edges land on whole device pixels
+        if (withTheme)
+        {
+            TextDefaults.ApplyTo(element); // and its text is laid out and drawn as in every window (Theme/TextDefaults.cs), so widths are the app's
+        }
+
         var parameters = new HwndSourceParameters("LifestreamHosted", (int)Math.Ceiling(width), (int)Math.Ceiling(height))
         {
             ParentWindow = new IntPtr(-3),

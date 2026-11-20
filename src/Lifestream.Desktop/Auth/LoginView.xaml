@@ -38,8 +38,7 @@
 
           <StackPanel Orientation="Horizontal">
             <controls:LogoMark Width="34" Height="34" />
-            <TextBlock Text="Lifestream" FontSize="{DynamicResource FontSize.Section}" FontWeight="SemiBold" Foreground="{DynamicResource Brush.Ink}" VerticalAlignment="Center" Margin="{DynamicResource Inset.L12}"
-                       TextOptions.TextFormattingMode="Ideal" />
+            <TextBlock Text="Lifestream" FontSize="{DynamicResource FontSize.Section}" FontWeight="SemiBold" Foreground="{DynamicResource Brush.Ink}" VerticalAlignment="Center" Margin="{DynamicResource Inset.L12}" />
           </StackPanel>
 
           <StackPanel Grid.Row="2" MaxWidth="416">
@@ -145,7 +144,7 @@
     </Border>
 
     <!-- The Mica side: one line of context and the ABO/RhD compatibility matrix (donor rows, patient columns), drawn from the domain rule. -->
-    <Grid x:Name="Hero" Grid.Column="1" Margin="{DynamicResource Pad.24}" TextOptions.TextRenderingMode="Grayscale">
+    <Grid x:Name="Hero" Grid.Column="1" Margin="{DynamicResource Pad.24}">
       <StackPanel x:Name="HeroBlock" HorizontalAlignment="Center" VerticalAlignment="Center">
         <TextBlock x:Name="HeroOverline" Text="Red cell compatibility" FontSize="{DynamicResource FontSize.Label}" FontWeight="SemiBold" Foreground="{DynamicResource Brush.Blood}" />
         <TextBlock x:Name="HeroTitle" Style="{DynamicResource Text.Hero}" Text="Who can give to whom, at a glance." MaxWidth="330" HorizontalAlignment="Left" Margin="{DynamicResource Inset.T6B28}" />

@@ -58,11 +58,11 @@
     </Grid.ColumnDefinitions>
 
     <!-- Title bar: the mark and name over the sidebar, then the search field (it opens the palette), notifications and the account. -->
-    <StackPanel x:Name="TitleMark" Grid.ColumnSpan="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="{DynamicResource Inset.L16}" TextOptions.TextRenderingMode="Grayscale">
+    <StackPanel x:Name="TitleMark" Grid.ColumnSpan="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="{DynamicResource Inset.L16}">
       <controls:LogoMark Width="20" Height="20" Margin="{DynamicResource Inset.R10}" />
       <TextBlock x:Name="Wordmark" Text="Lifestream" FontSize="{DynamicResource FontSize.Body}" FontWeight="SemiBold" Foreground="{DynamicResource Brush.Ink}" VerticalAlignment="Center" />
     </StackPanel>
-    <Grid Grid.Column="1" Margin="{DynamicResource Inset.L14}" TextOptions.TextRenderingMode="Grayscale">
+    <Grid Grid.Column="1" Margin="{DynamicResource Inset.L14}">
       <Grid.ColumnDefinitions>
         <ColumnDefinition Width="*" />
         <ColumnDefinition Width="Auto" />
@@ -98,7 +98,7 @@
     </Grid>
 
     <!-- Sidebar: the groups (scrolling only when the window is very short), then the account card at the foot. -->
-    <DockPanel x:Name="Nav" Grid.Row="1" Margin="{DynamicResource Inset.L8T6R8B12}" KeyboardNavigation.TabNavigation="Local" AutomationProperties.Name="Navigation" TextOptions.TextRenderingMode="Grayscale">
+    <DockPanel x:Name="Nav" Grid.Row="1" Margin="{DynamicResource Inset.L8T6R8B12}" KeyboardNavigation.TabNavigation="Local" AutomationProperties.Name="Navigation">
       <Button x:Name="AccountButton" DockPanel.Dock="Bottom" Style="{DynamicResource AccountButton}" Click="OnAccountClick" HorizontalAlignment="Stretch"
               AutomationProperties.Name="Account menu" AutomationProperties.HelpText="{Binding DisplayName}" ToolTip="Account menu">
         <StackPanel Orientation="Horizontal">
