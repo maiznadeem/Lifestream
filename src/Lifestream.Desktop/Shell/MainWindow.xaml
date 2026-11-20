@@ -3,6 +3,7 @@
                      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                      xmlns:chrome="clr-namespace:Lifestream.Desktop.Chrome"
                      xmlns:shell="clr-namespace:Lifestream.Desktop.Shell"
+                     xmlns:theme="clr-namespace:Lifestream.Desktop.Theme" theme:TextDefaults.Apply="True"
                      Title="{Binding WindowTitle}" MinWidth="1024" MinHeight="640" Width="1440" Height="900" WindowStartupLocation="CenterScreen"
                      ExtendsContentIntoTitleBar="True">
   <chrome:ChromeWindow.TaskbarItemInfo>

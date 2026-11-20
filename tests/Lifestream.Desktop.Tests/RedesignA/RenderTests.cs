@@ -296,12 +296,12 @@ public sealed class RenderTests
     /// </summary>
     public static FrameworkElement Frame(FrameworkElement view, bool maximized, double titleHeight)
     {
-        // The text defaults every ChromeWindow gives its content (Chrome/Chrome.xaml): Onest 14, ink, whole-pixel layout.
+        // The text defaults every window gives its content: the bundled font at 14, ink, and the app's text rendering (Theme/TextDefaults.cs).
         var grid = new Grid { UseLayoutRounding = true, SnapsToDevicePixels = true };
         grid.SetResourceReference(TextElement.FontFamilyProperty, "Font.Family");
         grid.SetResourceReference(TextElement.FontSizeProperty, "FontSize.Body");
         grid.SetResourceReference(TextElement.ForegroundProperty, "Brush.Ink");
-        TextOptions.SetTextFormattingMode(grid, TextFormattingMode.Display);
+        TextDefaults.ApplyTo(grid);
         grid.Children.Add(view);
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top };
         foreach (var glyph in new[] { "\uE921", maximized ? "\uE923" : "\uE922", "\uE8BB" })
@@ -318,6 +318,7 @@ public sealed class RenderTests
 
     private static byte[] Save(Hosted host, string name)
     {
+        TextChecks.Check(host, name); // one typeface, drawn one way, on every render
         var png = host.Capture();
         System.IO.Directory.CreateDirectory(Directory);
         File.WriteAllBytes(Path.Combine(Directory, name), png);

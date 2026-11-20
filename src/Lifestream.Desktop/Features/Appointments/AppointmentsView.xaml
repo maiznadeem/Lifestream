@@ -235,7 +235,9 @@
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="Group" Width="68" CanUserSort="False">
+                <!-- 60 wide (it was 68; the tag needs 36): the 8 DIP go to the donor's name, which is wider in Google Sans Flex, so that at 1440 with the
+                     side panel open the agenda still has room for "Next step". -->
+                <DataGridTemplateColumn Header="Group" Width="60" CanUserSort="False">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
                       <controls:BloodGroupTag Text="{Binding DonorBloodType, Converter={StaticResource BloodGroup}}" HorizontalAlignment="Left" VerticalAlignment="Center" />

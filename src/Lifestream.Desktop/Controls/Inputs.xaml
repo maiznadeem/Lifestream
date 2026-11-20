@@ -1,6 +1,7 @@
 <ResourceDictionary xmlns:controls="clr-namespace:Lifestream.Desktop.Controls" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                    xmlns:assist="clr-namespace:Lifestream.Desktop.Controls">
+                    xmlns:assist="clr-namespace:Lifestream.Desktop.Controls"
+                    xmlns:theme="clr-namespace:Lifestream.Desktop.Theme">
   <ResourceDictionary.MergedDictionaries>
     <ResourceDictionary Source="/Lifestream;component/Theme/Tokens.xaml" />
     <ResourceDictionary Source="/Lifestream;component/Theme/Motion.xaml" />
@@ -262,6 +263,9 @@
   </Style>
 
   <Style x:Key="PasswordBox.Lifestream" TargetType="PasswordBox" BasedOn="{StaticResource Input.Base}">
+    <!-- The dot that hides each character is the bullet (U+2022), which the app's font has. WPF's default, the black circle (U+25CF), is in neither
+         Google Sans Flex nor Onest, so the dots were drawn in Segoe UI: the one piece of text that fell back to a system font. -->
+    <Setter Property="PasswordChar" Value="&#x2022;" />
     <Setter Property="CaretBrush" Value="{DynamicResource Brush.Ink}" />
     <Setter Property="SelectionBrush" Value="{DynamicResource Brush.Primary}" />
     <Setter Property="SelectionTextBrush" Value="{DynamicResource Brush.OnPrimary}" />
@@ -585,6 +589,8 @@
 
   <!-- Tooltip: the menu surface with padding 6 10 and 13 Medium text. A shortcut hint goes after the text as a TextBlock in Ink3 (or Kbd keys). -->
   <Style x:Key="ToolTip.Lifestream" TargetType="ToolTip">
+    <!-- A tool tip opens in a tree of its own and inherits nothing from the window: it takes the app's text rendering here (Theme/TextDefaults.cs). -->
+    <Setter Property="theme:TextDefaults.Apply" Value="True" />
     <Setter Property="FontFamily" Value="{DynamicResource Font.Family}" />
     <Setter Property="FontSize" Value="{StaticResource FontSize.Label}" />
     <Setter Property="FontWeight" Value="Medium" />

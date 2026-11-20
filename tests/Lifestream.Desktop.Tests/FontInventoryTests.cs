@@ -11,16 +11,16 @@ using Lifestream.Desktop.Theme;
 namespace Lifestream.Desktop.Tests;
 
 /// <summary>
-/// SHELL-26 inventory: every text surface of the app uses the bundled Onest, including FlowDocuments and the printed receipt. The tests walk every view
+/// SHELL-26 inventory: every text surface of the app uses the bundled font, including FlowDocuments and the printed receipt. The tests walk every view
 /// type of the Desktop assembly, every method that builds a document, and every C# file, so a new surface cannot use another font unseen.
 /// </summary>
 [Collection("Wpf")]
 public sealed partial class FontInventoryTests
 {
-    private const string Family = "Onest"; // the Win32 family of the static files: "Onest", "Onest Medium", "Onest SemiBold"...
+    private const string Family = "Google Sans Flex"; // the Win32 family of the static files: "Google Sans Flex", "Google Sans Flex Medium"...
 
-    private static bool IsBundledOnest(string face) =>
-        face.StartsWith(Family, StringComparison.Ordinal) && System.Text.RegularExpressions.Regex.IsMatch(face, @"/Lifestream;component/Fonts/onest-(regular|medium|semibold|bold)\.ttf$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+    private static bool IsBundledFont(string face) =>
+        face.StartsWith(Family, StringComparison.Ordinal) && System.Text.RegularExpressions.Regex.IsMatch(face, @"/Lifestream;component/Fonts/googlesansflex-(regular|medium|semibold|bold)\.ttf$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
     private static string Resolved(FontFamily family, FontStyle style, FontWeight weight, FontStretch stretch)
     {
@@ -43,7 +43,7 @@ public sealed partial class FontInventoryTests
             .Where(t => t.GetConstructor(Type.EmptyTypes) is not null);
 
     [Fact]
-    public void EveryViewOfTheApp_RendersItsTextInTheBundledOnest()
+    public void EveryViewOfTheApp_RendersItsTextInTheBundledFont()
     {
         var (viewed, problems) = StaHost.Run(() =>
         {
@@ -66,7 +66,7 @@ public sealed partial class FontInventoryTests
                     }
 
                     var face = ResolvedOf(node);
-                    if (!IsBundledOnest(face))
+                    if (!IsBundledFont(face))
                     {
                         problems.Add($"{type.Name} > {node.GetType().Name} uses {face}");
                     }
@@ -84,7 +84,7 @@ public sealed partial class FontInventoryTests
 
     // ---- documents: the receipt on screen, printed and saved as PDF -------------------------------------------------------
 
-    /// <summary>Every method of the Desktop assembly that builds a document or a drawing for output. A new one must be added here, with a test that its text is Onest.</summary>
+    /// <summary>Every method of the Desktop assembly that builds a document or a drawing for output. A new one must be added here, with a test that its text is the bundled font.</summary>
     private static readonly string[] KnownDocumentBuilders = ["ReceiptDocumentBuilder.Build"];
 
     [Fact]
@@ -123,7 +123,7 @@ public sealed partial class FontInventoryTests
     }
 
     [Fact]
-    public void TheReceiptDocument_EveryRunBlockAndTableCell_IsSetInTheBundledOnest()
+    public void TheReceiptDocument_EveryRunBlockAndTableCell_IsSetInTheBundledFont()
     {
         var (count, faces) = StaHost.Run(() =>
         {
@@ -135,7 +135,7 @@ public sealed partial class FontInventoryTests
         });
 
         Assert.True(count > 10, "the walk found no text in the receipt");
-        Assert.All(faces, face => Assert.True(IsBundledOnest(face), $"the receipt uses {face}"));
+        Assert.All(faces, face => Assert.True(IsBundledFont(face), $"the receipt uses {face}"));
     }
 
     [Fact]

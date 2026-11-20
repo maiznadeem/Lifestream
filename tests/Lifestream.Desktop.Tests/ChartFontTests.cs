@@ -9,7 +9,7 @@ using SkiaSharp;
 
 namespace Lifestream.Desktop.Tests;
 
-/// <summary>SHELL-26: chart text (axis labels, axis names, legend) is drawn with the bundled Onest, not the system font. Real Dashboard view, fake API, off-screen render.</summary>
+/// <summary>SHELL-26: chart text (axis labels, axis names, legend) is drawn with the bundled font, not the system font. Real Dashboard view, fake API, off-screen render.</summary>
 [Collection("Wpf")]
 public sealed class ChartFontTests
 {
@@ -30,9 +30,9 @@ public sealed class ChartFontTests
     }
 
     [Fact]
-    public void DashboardCharts_RenderTheirTextInTheBundledOnest_NotSegoeUi_FakeApi()
+    public void DashboardCharts_RenderTheirTextInTheBundledFont_NotSegoeUi_FakeApi()
     {
-        var (asShipped, explicitOnest, explicitSegoe, defaultFamily, bundledFamily) = StaHost.Run(() =>
+        var (asShipped, explicitBundled, explicitSegoe, defaultFamily, bundledFamily) = StaHost.Run(() =>
         {
             using var rig = FeatureHarness.NewRig();
             var vm = FeatureHarness.Create<DashboardViewModel>(rig);
@@ -42,24 +42,24 @@ public sealed class ChartFontTests
             host.Settle(600);
             var chart = view.DonationChart;
             var shipped = host.Pixels();
-            _ = host.Capture("Dashboard_ChartText_Onest.png");
+            _ = host.Capture("Dashboard_ChartText_Font.png");
 
             Restyle(chart, ChartFont.Typeface);
             host.Settle(600);
-            var onest = host.Pixels();
+            var bundled = host.Pixels();
 
             Restyle(chart, SKTypeface.FromFamilyName("Segoe UI"));
             host.Settle(600);
             var segoe = host.Pixels();
             _ = host.Capture("Dashboard_ChartText_SegoeUi_control.png");
             ChartFont.Apply();
-            return (shipped, onest, segoe, SKTypeface.Default.FamilyName, ChartFont.Typeface.FamilyName);
+            return (shipped, bundled, segoe, SKTypeface.Default.FamilyName, ChartFont.Typeface.FamilyName);
         });
 
-        var againstOnest = Hosted.Differences(asShipped, explicitOnest);
+        var againstBundled = Hosted.Differences(asShipped, explicitBundled);
         var againstSegoe = Hosted.Differences(asShipped, explicitSegoe);
-        Assert.Contains("Onest", bundledFamily, StringComparison.Ordinal);
+        Assert.Contains("Google Sans Flex", bundledFamily, StringComparison.Ordinal);
         Assert.True(againstSegoe > 200, $"control: Segoe UI must render visibly different glyphs ({againstSegoe} pixels differ; the Skia default is {defaultFamily})");
-        Assert.True(againstOnest == 0, $"the chart as shipped differs from an explicit Onest render by {againstOnest} pixels (and from Segoe UI by {againstSegoe}): its text is not drawn in the bundled Onest");
+        Assert.True(againstBundled == 0, $"the chart as shipped differs from an explicit render in the bundled font by {againstBundled} pixels (and from Segoe UI by {againstSegoe}): its text is not drawn in the bundled font");
     }
 }
