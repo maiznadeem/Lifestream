@@ -73,7 +73,7 @@ public sealed partial class ProfileViewModel : FormViewModelBase, INavigationPar
         _photos = photos;
         _passwords = passwords;
         DeclareFields(nameof(DisplayName), nameof(Phone));
-        SaveCommand = Command(SaveAsync, () => HasUnsavedChanges && !IsBusy);
+        SaveCommand = Command(SaveAsync, () => CanEditProfile && HasUnsavedChanges && !IsBusy);
         DiscardCommand = Command(_ =>
         {
             DisplayName = _baselineName;
@@ -83,7 +83,7 @@ public sealed partial class ProfileViewModel : FormViewModelBase, INavigationPar
             ChangesChanged();
             return Task.CompletedTask;
         }, () => HasUnsavedChanges && !IsBusy);
-        PickPhotoCommand = Command(PickPhotoAsync, () => !IsBusy, opensModal: true);
+        PickPhotoCommand = Command(PickPhotoAsync, () => CanEditProfile && !IsBusy, opensModal: true);
         ChangePasswordCommand = Command(_ => _passwords.PromptAsync(), () => CanChangePassword && !IsBusy, opensModal: true);
         RetryCommand = Command(ct => LoadAsync(ct));
         ReloadCommand = Command(ct => LoadAsync(ct));
@@ -105,6 +105,21 @@ public sealed partial class ProfileViewModel : FormViewModelBase, INavigationPar
     /// instead of offering a dialog that could only fail.
     /// </summary>
     public bool CanChangePassword => _session?.User?.IsDemo != true;
+
+    /// <summary>
+    /// False for the demo account: it is shared, and the server refuses a change to its name, phone or photo. The screen is then read-only (the
+    /// name and phone cannot be typed in, there is no "Change photo", nothing is ever unsaved) and says why in one line, instead of letting the
+    /// person edit and then fail on Save.
+    /// </summary>
+    public bool CanEditProfile => _session?.User?.IsDemo != true;
+
+    /// <summary>True for the demo account: the name and phone boxes are read-only.</summary>
+    public bool IsProfileReadOnly => !CanEditProfile;
+
+    /// <summary>The line under "Your details": who sees them, or why they cannot be changed.</summary>
+    public string DetailsSectionText => CanEditProfile
+        ? "Your name and phone show to the rest of the team."
+        : "The demo account is shared by everyone who tries Lifestream, so its name, phone and photo can't be changed.";
 
     /// <summary>What the Security section says instead of offering the button when the password cannot be changed.</summary>
     public string PasswordUnavailableText => "The demo account is shared by everyone who tries Lifestream, so its password can't be changed.";
@@ -239,7 +254,7 @@ public sealed partial class ProfileViewModel : FormViewModelBase, INavigationPar
 
     public override bool HasUnsavedChanges => IsDirty;
 
-    private bool IsDirty => State == LoadState.Ready && (DisplayName.Trim() != _baselineName || NormalisePhone(Phone) != _baselinePhone || _replacedPhoto is not null);
+    private bool IsDirty => CanEditProfile && State == LoadState.Ready && (DisplayName.Trim() != _baselineName || NormalisePhone(Phone) != _baselinePhone || _replacedPhoto is not null);
 
     private static string NormalisePhone(string phone) => phone.Trim();
 
