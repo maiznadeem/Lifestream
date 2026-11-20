@@ -1502,3 +1502,232 @@ END;
 COMMIT;
 GO
 
+BEGIN TRANSACTION;
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261120204230_ReceiptParty'
+)
+BEGIN
+    ALTER TABLE [Receipt] DROP CONSTRAINT [FK_Receipt_Appointment_AppointmentId];
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261120204230_ReceiptParty'
+)
+BEGIN
+    ALTER TABLE [Receipt] DROP CONSTRAINT [FK_Receipt_Request_RequestId];
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261120204230_ReceiptParty'
+)
+BEGIN
+    DROP INDEX [IX_Receipt_AppointmentId] ON [Receipt];
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261120204230_ReceiptParty'
+)
+BEGIN
+    DROP INDEX [IX_Receipt_BloodType_CreatedAtUtc] ON [Receipt];
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261120204230_ReceiptParty'
+)
+BEGIN
+    DROP INDEX [IX_Receipt_CreatedAtUtc] ON [Receipt];
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261120204230_ReceiptParty'
+)
+BEGIN
+    DROP INDEX [IX_Receipt_Kind_BloodType_CreatedAtUtc] ON [Receipt];
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261120204230_ReceiptParty'
+)
+BEGIN
+    DROP INDEX [IX_Receipt_Kind_CreatedAtUtc] ON [Receipt];
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261120204230_ReceiptParty'
+)
+BEGIN
+    DROP INDEX [IX_Receipt_RequestId] ON [Receipt];
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261120204230_ReceiptParty'
+)
+BEGIN
+    DROP INDEX [IX_Receipt_StaffId_CreatedAtUtc] ON [Receipt];
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261120204230_ReceiptParty'
+)
+BEGIN
+    ALTER TABLE [Receipt] ADD [DonorId] int NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261120204230_ReceiptParty'
+)
+BEGIN
+    ALTER TABLE [Receipt] ADD [PatientId] int NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261120204230_ReceiptParty'
+)
+BEGIN
+    EXEC(N'UPDATE r SET r.DonorId = a.DonorId FROM Receipt r JOIN Appointment a ON a.Id = r.AppointmentId WHERE r.DonorId IS NULL')
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261120204230_ReceiptParty'
+)
+BEGIN
+    EXEC(N'UPDATE r SET r.PatientId = q.PatientId FROM Receipt r JOIN Request q ON q.Id = r.RequestId WHERE r.PatientId IS NULL')
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261120204230_ReceiptParty'
+)
+BEGIN
+    ALTER TABLE [Request] ADD CONSTRAINT [AK_Request_Id_PatientId] UNIQUE ([Id], [PatientId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261120204230_ReceiptParty'
+)
+BEGIN
+    ALTER TABLE [Appointment] ADD CONSTRAINT [AK_Appointment_Id_DonorId] UNIQUE ([Id], [DonorId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261120204230_ReceiptParty'
+)
+BEGIN
+    EXEC(N'CREATE UNIQUE INDEX [IX_Receipt_AppointmentId_DonorId] ON [Receipt] ([AppointmentId], [DonorId]) INCLUDE ([CreatedAtUtc], [Kind], [BloodType]) WHERE [AppointmentId] IS NOT NULL');
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261120204230_ReceiptParty'
+)
+BEGIN
+    CREATE INDEX [IX_Receipt_BloodType_CreatedAtUtc] ON [Receipt] ([BloodType], [CreatedAtUtc]) INCLUDE ([Kind], [Units], [StaffId], [AppointmentId], [RequestId], [DonorId], [PatientId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261120204230_ReceiptParty'
+)
+BEGIN
+    CREATE INDEX [IX_Receipt_CreatedAtUtc] ON [Receipt] ([CreatedAtUtc]) INCLUDE ([Kind], [BloodType], [Units], [StaffId], [AppointmentId], [RequestId], [DonorId], [PatientId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261120204230_ReceiptParty'
+)
+BEGIN
+    EXEC(N'CREATE INDEX [IX_Receipt_DonorId_CreatedAtUtc] ON [Receipt] ([DonorId], [CreatedAtUtc]) INCLUDE ([Kind], [BloodType], [StaffId]) WHERE [DonorId] IS NOT NULL');
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261120204230_ReceiptParty'
+)
+BEGIN
+    CREATE INDEX [IX_Receipt_Kind_BloodType_CreatedAtUtc] ON [Receipt] ([Kind], [BloodType], [CreatedAtUtc]) INCLUDE ([Units], [StaffId], [AppointmentId], [RequestId], [DonorId], [PatientId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261120204230_ReceiptParty'
+)
+BEGIN
+    CREATE INDEX [IX_Receipt_Kind_CreatedAtUtc] ON [Receipt] ([Kind], [CreatedAtUtc]) INCLUDE ([BloodType], [Units], [StaffId], [AppointmentId], [RequestId], [DonorId], [PatientId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261120204230_ReceiptParty'
+)
+BEGIN
+    EXEC(N'CREATE INDEX [IX_Receipt_PatientId_CreatedAtUtc] ON [Receipt] ([PatientId], [CreatedAtUtc]) INCLUDE ([Kind], [BloodType], [StaffId]) WHERE [PatientId] IS NOT NULL');
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261120204230_ReceiptParty'
+)
+BEGIN
+    EXEC(N'CREATE INDEX [IX_Receipt_RequestId_PatientId] ON [Receipt] ([RequestId], [PatientId]) INCLUDE ([CreatedAtUtc], [Kind], [BloodType]) WHERE [RequestId] IS NOT NULL');
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261120204230_ReceiptParty'
+)
+BEGIN
+    CREATE INDEX [IX_Receipt_StaffId_CreatedAtUtc] ON [Receipt] ([StaffId], [CreatedAtUtc]) INCLUDE ([Kind], [BloodType], [DonorId], [PatientId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261120204230_ReceiptParty'
+)
+BEGIN
+    EXEC(N'ALTER TABLE [Receipt] ADD CONSTRAINT [CK_Receipt_Party] CHECK (([Kind] = ''Donation'' AND [DonorId] IS NOT NULL AND [PatientId] IS NULL) OR ([Kind] = ''Issue'' AND [PatientId] IS NOT NULL AND [DonorId] IS NULL))');
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261120204230_ReceiptParty'
+)
+BEGIN
+    ALTER TABLE [Receipt] ADD CONSTRAINT [FK_Receipt_Appointment_AppointmentId_DonorId] FOREIGN KEY ([AppointmentId], [DonorId]) REFERENCES [Appointment] ([Id], [DonorId]) ON DELETE NO ACTION;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261120204230_ReceiptParty'
+)
+BEGIN
+    ALTER TABLE [Receipt] ADD CONSTRAINT [FK_Receipt_Request_RequestId_PatientId] FOREIGN KEY ([RequestId], [PatientId]) REFERENCES [Request] ([Id], [PatientId]) ON DELETE NO ACTION;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261120204230_ReceiptParty'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20261120204230_ReceiptParty', N'11.0.0');
+END;
+
+COMMIT;
+GO
+

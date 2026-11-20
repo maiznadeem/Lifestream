@@ -71,25 +71,47 @@ internal sealed class ReceiptConfiguration : IEntityTypeConfiguration<Receipt>
             (
                 "Links",
                 "([Kind] = 'Donation' AND [AppointmentId] IS NOT NULL AND [RequestId] IS NULL) " +
-                "OR ([Kind] = 'Issue' AND [RequestId] IS NOT NULL AND [AppointmentId] IS NULL)"));
+                "OR ([Kind] = 'Issue' AND [RequestId] IS NOT NULL AND [AppointmentId] IS NULL)"),
+            (
+                // The party of the receipt (the donor of a donation, the patient of an issue) is stored on it and is never missing.
+                "Party",
+                "([Kind] = 'Donation' AND [DonorId] IS NOT NULL AND [PatientId] IS NULL) " +
+                "OR ([Kind] = 'Issue' AND [PatientId] IS NOT NULL AND [DonorId] IS NULL)"));
         b.Property(x => x.CreatedAtUtc).HasDefaultValueSql(UtcNow);
         b.Property(x => x.Notes).HasMaxLength(500);
         b.HasOne(x => x.Staff).WithMany().HasForeignKey(x => x.StaffId).OnDelete(DeleteBehavior.Restrict);
-        b.HasOne(x => x.Appointment).WithMany().HasForeignKey(x => x.AppointmentId).OnDelete(DeleteBehavior.Restrict);
-        b.HasOne(x => x.Request).WithMany().HasForeignKey(x => x.RequestId).OnDelete(DeleteBehavior.Restrict);
 
-        // An appointment can be receipted once. The filtered unique index also supports the foreign key.
-        // The three foreign keys also carry date, kind and blood type: the receipt search finds, filters and orders its matches from them.
-        b.HasIndex(x => x.AppointmentId).IsUnique().HasFilter("[AppointmentId] IS NOT NULL").IncludeProperties(x => new { x.CreatedAtUtc, x.Kind, x.BloodType });
-        b.HasIndex(x => x.RequestId).HasFilter("[RequestId] IS NOT NULL").IncludeProperties(x => new { x.CreatedAtUtc, x.Kind, x.BloodType });
+        // The foreign keys to the appointment and to the request carry the party: (AppointmentId, DonorId) must be an appointment WITH its donor,
+        // (RequestId, PatientId) a request with its patient. So the DonorId or PatientId stored on a receipt cannot differ from the one its
+        // appointment or request has, whichever code wrote the row, and the copy needs no code to keep it in step (an appointment's donor and a
+        // request's patient never change: they are part of the key these reference).
+        b.HasOne(x => x.Appointment).WithMany().HasForeignKey(x => new { x.AppointmentId, x.DonorId }).HasPrincipalKey(a => new { a.Id, a.DonorId })
+            .OnDelete(DeleteBehavior.Restrict);
+        b.HasOne(x => x.Request).WithMany().HasForeignKey(x => new { x.RequestId, x.PatientId }).HasPrincipalKey(r => new { r.Id, r.PatientId })
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // An appointment can be receipted once: its donor is fixed by the foreign key, so one (AppointmentId, DonorId) is one appointment. The
+        // filtered unique index also supports the foreign key.
+        // The foreign keys also carry date, kind and blood type: the receipt search finds, filters and orders its matches from them.
+        b.HasIndex(x => new { x.AppointmentId, x.DonorId }).IsUnique().HasFilter("[AppointmentId] IS NOT NULL").IncludeProperties(x => new { x.CreatedAtUtc, x.Kind, x.BloodType });
+        b.HasIndex(x => new { x.RequestId, x.PatientId }).HasFilter("[RequestId] IS NOT NULL").IncludeProperties(x => new { x.CreatedAtUtc, x.Kind, x.BloodType });
+
+        // The receipt search: the receipts of the donors (or patients) a word finds, by a seek per person, in date order, with what the list
+        // filters on. Before these the search joined every appointment and every request to reach the person.
+        b.HasIndex(x => new { x.DonorId, x.CreatedAtUtc }).HasFilter("[DonorId] IS NOT NULL").IncludeProperties(x => new { x.Kind, x.BloodType, x.StaffId });
+        b.HasIndex(x => new { x.PatientId, x.CreatedAtUtc }).HasFilter("[PatientId] IS NOT NULL").IncludeProperties(x => new { x.Kind, x.BloodType, x.StaffId });
         b.HasIndex(x => x.StaffId); // the narrowest index of the table: COUNT(*) reads this
-        b.HasIndex(x => new { x.StaffId, x.CreatedAtUtc }).IncludeProperties(x => new { x.Kind, x.BloodType });
+        // With the party: the search takes the receipts of the staff a word finds from here and has to know whether the same word already found
+        // their donor or patient (without the two columns it read the whole table for that).
+        b.HasIndex(x => new { x.StaffId, x.CreatedAtUtc }).IncludeProperties(x => new { x.Kind, x.BloodType, x.DonorId, x.PatientId });
 
-        // Receipt list (and the dashboard series, which reads kind, blood type, units and date): narrow, ordered, covering.
-        b.HasIndex(x => new { x.Kind, x.CreatedAtUtc }).IncludeProperties(x => new { x.BloodType, x.Units, x.StaffId, x.AppointmentId, x.RequestId });
-        b.HasIndex(x => x.CreatedAtUtc).IncludeProperties(x => new { x.Kind, x.BloodType, x.Units, x.StaffId, x.AppointmentId, x.RequestId });
-        b.HasIndex(x => new { x.BloodType, x.CreatedAtUtc }).IncludeProperties(x => new { x.Kind, x.Units, x.StaffId, x.AppointmentId, x.RequestId });
-        b.HasIndex(x => new { x.Kind, x.BloodType, x.CreatedAtUtc }).IncludeProperties(x => new { x.Units, x.StaffId, x.AppointmentId, x.RequestId });
+        // Receipt list (and the dashboard series, which reads kind, blood type, units and date): narrow, ordered, covering. The party is in
+        // them because the list reaches the donor's or patient's name through the appointment or request, and that key now includes it: without
+        // the two columns a deep page went to the table for them (a scan at 100x; the plan matrix fails on it).
+        b.HasIndex(x => new { x.Kind, x.CreatedAtUtc }).IncludeProperties(x => new { x.BloodType, x.Units, x.StaffId, x.AppointmentId, x.RequestId, x.DonorId, x.PatientId });
+        b.HasIndex(x => x.CreatedAtUtc).IncludeProperties(x => new { x.Kind, x.BloodType, x.Units, x.StaffId, x.AppointmentId, x.RequestId, x.DonorId, x.PatientId });
+        b.HasIndex(x => new { x.BloodType, x.CreatedAtUtc }).IncludeProperties(x => new { x.Kind, x.Units, x.StaffId, x.AppointmentId, x.RequestId, x.DonorId, x.PatientId });
+        b.HasIndex(x => new { x.Kind, x.BloodType, x.CreatedAtUtc }).IncludeProperties(x => new { x.Units, x.StaffId, x.AppointmentId, x.RequestId, x.DonorId, x.PatientId });
     }
 }
 
