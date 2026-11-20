@@ -2,7 +2,23 @@
 
 All notable changes to Lifestream are listed here. The section of a version is also the text of its release on the GitHub Releases page.
 
-## [Unreleased]
+## [2.1.4] - 2026-11-20
+
+Lifestream 2.1.4 fixes the rest of what using the app end to end against a real server turned up in the shell, the forms and the dashboard.
+
+### Fixed
+
+- When the server cannot be reached the app says so ("Can't reach the server") in one notice, instead of two notices saying it is waking up.
+- A screen reader reads list items, table rows and cells by what they show, not as program text.
+- A date typed into a form is saved even when you press Save straight away, and an impossible date ("31 Feb") blocks the save with a short message.
+- Error and hint texts under a form field wrap instead of being cut off.
+- After a password reset, the way out of the Change password prompt is labelled "Sign out", which is what it does.
+- The record picker shows record codes (D-0041), like the rest of the app.
+- The sidebar counts update as soon as a record is added or changed.
+- The bell stays in the title bar at the smallest window size, and its description counts everything that needs attention.
+- The command palette says when nothing matches, and finds a blood group ("O-").
+- The dashboard and the Requests screen agree on whether stock can cover a request.
+- The demo account's Profile is read-only and says why.
 
 ### Demo
 

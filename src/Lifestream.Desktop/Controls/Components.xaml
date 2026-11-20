@@ -544,4 +544,11 @@
       </Setter.Value>
     </Setter>
   </Style>
+
+  <!-- The item of a templated list (an ItemsControl) as a screen reader hears it. WPF names an item after its container, and failing that after
+       the item's ToString(), which for a record is its C# text ("NavGroup { Title = ... }"). A name set on an element inside the item template
+       does not count. So every ItemsControl over view-model items takes this container style, and the item says what it is in AutomationName. -->
+  <Style x:Key="ListItem.Named" TargetType="ContentPresenter">
+    <Setter Property="AutomationProperties.Name" Value="{Binding AutomationName}" />
+  </Style>
 </ResourceDictionary>

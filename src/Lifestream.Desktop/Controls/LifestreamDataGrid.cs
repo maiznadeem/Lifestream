@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 using Lifestream.Client.Common;
 
 namespace Lifestream.Desktop.Controls;
@@ -90,6 +91,97 @@ public sealed class LifestreamDataGrid : DataGrid
         if (!_defaultsApplied)
         {
             ApplyColumnDefaults();
+        }
+
+        // Once the row has built and laid out its cells: say what is in them (a recycled row comes through here again with its new record).
+        var row = e.Row;
+        _ = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () => NameForScreenReaders(row));
+    }
+
+    /// <summary>
+    /// Gives a row and its cells the names a screen reader reads. WPF names a row after its record's ToString() ("DonorListItem { Id = 29, ... }")
+    /// and a templated cell "Item: (that text), Column Display Index: 3". The name of a cell is the text it shows (its column heading when it
+    /// shows none), and the name of the row is its cells' text in order. A name a screen has set itself is left alone.
+    /// </summary>
+    private static void NameForScreenReaders(DataGridRow row)
+    {
+        if (row.Item is null || !row.IsLoaded)
+        {
+            return;
+        }
+
+        var parts = new List<string>();
+        foreach (var cell in Descendants<DataGridCell>(row).OrderBy(c => c.Column?.DisplayIndex ?? 0))
+        {
+            var text = string.Join(", ", ShownText(cell));
+            if (text.Length > 0)
+            {
+                parts.Add(text);
+            }
+
+            SetOurName(cell, text.Length > 0 ? text : cell.Column?.Header as string ?? "Empty");
+        }
+
+        if (parts.Count > 0)
+        {
+            SetOurName(row, string.Join(", ", parts));
+        }
+    }
+
+    private static readonly DependencyProperty NamedByGridProperty = DependencyProperty.RegisterAttached("NamedByGrid", typeof(bool), typeof(LifestreamDataGrid), new PropertyMetadata(false));
+
+    private static void SetOurName(DependencyObject element, string name)
+    {
+        if ((bool)element.GetValue(NamedByGridProperty) || string.IsNullOrEmpty(System.Windows.Automation.AutomationProperties.GetName(element)))
+        {
+            element.SetValue(NamedByGridProperty, true);
+            System.Windows.Automation.AutomationProperties.SetName(element, name);
+        }
+    }
+
+    /// <summary>The text a cell shows, in order. An avatar's initials are a picture of the name beside them, not text to read.</summary>
+    private static IEnumerable<string> ShownText(DependencyObject root)
+    {
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is Avatar or UIElement { IsVisible: false })
+            {
+                continue;
+            }
+
+            if (child is TextBlock text)
+            {
+                if (!string.IsNullOrWhiteSpace(text.Text))
+                {
+                    yield return text.Text.Trim();
+                }
+
+                continue;
+            }
+
+            foreach (var inner in ShownText(child))
+            {
+                yield return inner;
+            }
+        }
+    }
+
+    private static IEnumerable<T> Descendants<T>(DependencyObject root)
+        where T : DependencyObject
+    {
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is T match)
+            {
+                yield return match;
+            }
+
+            foreach (var inner in Descendants<T>(child))
+            {
+                yield return inner;
+            }
         }
     }
 

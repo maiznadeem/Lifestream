@@ -189,12 +189,18 @@
           <StackPanel>
             <TextBlock x:Name="PART_Label" Style="{StaticResource Text.Label}" Text="{TemplateBinding Label}" Margin="{StaticResource Surfaces.Gap.Label}" />
             <ContentPresenter />
-            <TextBlock x:Name="HintText" Style="{StaticResource Text.Caption}" Text="{TemplateBinding Hint}" Margin="{StaticResource Surfaces.Gap.Help}" />
-            <StackPanel x:Name="ErrorRow" Orientation="Horizontal" Margin="{StaticResource Surfaces.Gap.Help}">
-              <controls:Icon Kind="Alert" Size="14" Foreground="{DynamicResource Brush.Critical}" VerticalAlignment="Center" Margin="{StaticResource Inset.R6}" />
-              <TextBlock x:Name="PART_Error" Style="{StaticResource Text.Caption}" Foreground="{DynamicResource Brush.Critical}" Text="{TemplateBinding Error}"
-                         VerticalAlignment="Center" AutomationProperties.LiveSetting="Assertive" />
-            </StackPanel>
+            <TextBlock x:Name="HintText" Style="{StaticResource Text.Caption}" Text="{TemplateBinding Hint}" Margin="{StaticResource Surfaces.Gap.Help}" TextWrapping="Wrap" />
+            <!-- The message takes the field's width and wraps: in a half-width column of the compact panel a sentence does not fit on one line, and a
+                 message cut off mid-word tells the person nothing. The icon stays on the first line. -->
+            <Grid x:Name="ErrorRow" Margin="{StaticResource Surfaces.Gap.Help}">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <controls:Icon Kind="Alert" Size="14" Foreground="{DynamicResource Brush.Critical}" VerticalAlignment="Top" Margin="{StaticResource Inset.R6}" />
+              <TextBlock x:Name="PART_Error" Grid.Column="1" Style="{StaticResource Text.Caption}" Foreground="{DynamicResource Brush.Critical}" Text="{TemplateBinding Error}"
+                         TextWrapping="Wrap" VerticalAlignment="Center" AutomationProperties.LiveSetting="Assertive" />
+            </Grid>
           </StackPanel>
           <ControlTemplate.Triggers>
             <Trigger Property="Hint" Value="{x:Null}">
