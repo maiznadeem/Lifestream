@@ -6,6 +6,7 @@ using Lifestream.Domain;
 namespace Lifestream.Desktop.Tests.Features;
 
 /// <summary>The Profile screen of the demo account on screen: its name and phone cannot be typed in, there is no "Change photo", and one line says why.</summary>
+[Collection("Wpf")] // the list screens set the record picker's process-wide test hooks: one such class at a time
 public sealed class DemoProfileViewTests
 {
     private static (bool NameLocked, bool PhoneLocked, bool PhotoButton, List<string> Texts, bool SaveBar) Show(bool demo, string capture) => StaHost.Run(() =>

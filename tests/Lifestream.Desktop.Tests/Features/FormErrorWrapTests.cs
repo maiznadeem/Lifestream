@@ -19,6 +19,7 @@ namespace Lifestream.Desktop.Tests.Features;
 /// Real-app walk 15: "Use 5 to 20 characters: digit" ended mid-word under the phone box. The form field's error row was a horizontal stack, so
 /// the message was laid out on one line however narrow the field. A field's hint and error take the field's width and wrap, in every form.
 /// </summary>
+[Collection("Wpf")] // the list screens set the record picker's process-wide test hooks: one such class at a time
 public sealed class FormErrorWrapTests
 {
     private const string Sentence = "Use 5 to 20 characters: digits, spaces and the signs + - ( ).";
