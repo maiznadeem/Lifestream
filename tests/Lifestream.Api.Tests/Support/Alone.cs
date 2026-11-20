@@ -18,6 +18,12 @@ namespace Lifestream.Api.Tests.Support;
 /// clock is on a later day (the daily-reset tests move theirs) clears every earlier day's counts, this class's among them, and its fourth
 /// write was then answered 201 instead of 429: seen in 3 of about 25 runs on Linux.
 /// </para>
+/// <para>
+/// A limit on a real clock. <c>FreeAllowanceUsedUpTests</c> starts a new host and requires its first request to be answered within 1.5 s (a
+/// retry would be seen as a wait: the product's retry pace is 2 s). That first request also loads the host for the first time, and beside
+/// fifteen other classes in the process, in a full run of every project at once, it took 1.70 s and 1.76 s (one run in five). The limit is
+/// what the test proves, so it stays; the class runs here, where the process is its own.
+/// </para>
 /// </summary>
 [CollectionDefinition(Name, DisableParallelization = true)]
 public sealed class Alone

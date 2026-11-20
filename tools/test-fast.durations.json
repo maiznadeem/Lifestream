@@ -19,6 +19,7 @@
     "Lifestream.Api.Tests.AdminRuleConcurrencyTests",
     "Lifestream.Api.Tests.Data.DemoResetTests",
     "Lifestream.Api.Tests.DemoCapTests",
+    "Lifestream.Api.Tests.FreeAllowanceUsedUpTests",
     "Lifestream.Api.Tests.LoginLockoutConcurrencyTests"
   ],
   "seconds": {

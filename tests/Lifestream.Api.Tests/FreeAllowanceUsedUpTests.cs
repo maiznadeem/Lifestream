@@ -14,6 +14,7 @@ namespace Lifestream.Api.Tests;
 /// errors (41400 to 49999)"). That is not a wake: waiting does not end it. The API must say so at once and plainly, and must not knock on the
 /// database again. The error is simulated here with its real number, severity and text; the product's own retry settings are used.
 /// </summary>
+[Collection(Alone.Name)] // answers are timed on a real clock against 1.5 s: runs after the parallel classes, alone
 public sealed class FreeAllowanceUsedUpTests(ApiFixture fx) : IClassFixture<ApiFixture>
 {
     /// <summary>The message as Microsoft Learn documents it, with the two placeholders filled in.</summary>
