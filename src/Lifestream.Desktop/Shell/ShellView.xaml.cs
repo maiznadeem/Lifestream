@@ -40,6 +40,7 @@ public partial class ShellView : UserControl
         Nav.AddHandler(System.Windows.Controls.Primitives.ToggleButton.CheckedEvent, new RoutedEventHandler(OnNavItemChecked));
         Nav.AddHandler(System.Windows.Controls.Primitives.ButtonBase.ClickEvent, new RoutedEventHandler(OnNavItemClicked));
         Unloaded += (_, _) => BreakpointDescriptor.RemoveValueChanged(Root, OnBreakpointChanged);
+        CloseAccountMenuWithItsItems();
         Apply();
     }
 
@@ -126,6 +127,20 @@ public partial class ShellView : UserControl
             : null;
 
     /// <summary>The account menu opens on click and on Enter or Space (the buttons are focusable), so it is reachable by keyboard.</summary>
+    /// <summary>
+    /// The account menu closes when one of its items runs, however it was run: a mouse click closes it on its own, but an item invoked through UI
+    /// Automation (a screen reader's way) left it open, and after "Sign out" its popup stayed over the sign-in window and the next session's
+    /// main window (night-iso's isolated real-app walk). It also closes with the shell, whatever closes the window while it is open.
+    /// </summary>
+    private void CloseAccountMenuWithItsItems()
+    {
+        if (Resources["AccountMenu"] is ContextMenu menu)
+        {
+            menu.AddHandler(MenuItem.ClickEvent, new RoutedEventHandler((_, _) => menu.IsOpen = false));
+            Unloaded += (_, _) => menu.IsOpen = false;
+        }
+    }
+
     private void OnAccountClick(object sender, RoutedEventArgs e)
     {
         if (sender is Button button && Resources["AccountMenu"] is ContextMenu menu)
