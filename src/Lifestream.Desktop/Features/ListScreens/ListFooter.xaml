@@ -4,15 +4,16 @@
              xmlns:controls="clr-namespace:Lifestream.Desktop.Controls"
              Focusable="False" IsTabStop="False">
   <!-- The foot of a list's panel (direction A): "Showing 1–50 of 1,230" on the left, "< Page 1 of 3 >" on the right (whenever the list has rows, also on its only page),
-       under a 1 px line with a soft 8 px fade above it, so a row the list scrolls under reads as scrolled, not cut. The data context is the list view model. -->
+       under a 1 px line with a soft 20 px fade above it while more rows lie below the view, so a row the list scrolls under reads as scrolled, not cut (design-qa-2
+       N19: 8 px still read as a cut). The data context is the list view model. -->
   <UserControl.Resources>
     <Thickness x:Key="Footer.Pad">16,8,10,8</Thickness>
     <Thickness x:Key="Footer.PageGap">6,0,6,0</Thickness>
-    <Thickness x:Key="Footer.FadeLift">0,-8,0,0</Thickness>
+    <Thickness x:Key="Footer.FadeLift">0,-20,0,0</Thickness>
   </UserControl.Resources>
   <Grid>
-  <!-- The fade: the panel's own colour, from clear to solid, over the last 8 px of the rows. It takes no clicks. -->
-  <Rectangle x:Name="Fade" Height="8" VerticalAlignment="Top" Margin="{StaticResource Footer.FadeLift}" Fill="{DynamicResource Brush.Layer}" IsHitTestVisible="False">
+  <!-- The fade: the panel's own colour, from clear to solid, over the last 20 px of the rows; shown by the code-behind while rows continue below. No clicks. -->
+  <Rectangle x:Name="Fade" Height="20" VerticalAlignment="Top" Margin="{StaticResource Footer.FadeLift}" Fill="{DynamicResource Brush.Layer}" IsHitTestVisible="False">
     <Rectangle.OpacityMask>
       <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
         <GradientStop Color="Transparent" Offset="0" />

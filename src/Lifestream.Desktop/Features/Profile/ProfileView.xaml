@@ -26,7 +26,9 @@
 
     <controls:LoadSurface Grid.Row="1" State="{Binding State}" SkeletonKind="Profile" ErrorMessage="{Binding ErrorMessage}" ErrorDetail="{Binding ErrorDetail}" RetryCommand="{Binding RetryCommand}"
                           feat:Edge.Top="{DynamicResource Space.24}">
-      <ScrollViewer VerticalScrollBarVisibility="Auto" Focusable="False">
+      <!-- The viewer reaches 14 into the page's right padding and its content keeps that strip free, so the scroll bar lies beside the cards, never over them (5.27) -->
+      <ScrollViewer x:Name="PageScroll" VerticalScrollBarVisibility="Auto" Focusable="False" Margin="{DynamicResource Inset.RN14}">
+        <Border Padding="{DynamicResource Inset.R14}">
         <StackPanel x:Name="Sections" MaxWidth="{DynamicResource MaxWidth.Settings}" HorizontalAlignment="Stretch" KeyboardNavigation.TabNavigation="Local" AutomationProperties.Name="Your profile"
                     feat:Edge.Bottom="{DynamicResource Space.24}">
           <controls:WakingNotice x:Name="Waking" IsActive="{Binding IsOperationWaking}" CancelCommand="{Binding CancelOperationCommand}" feat:Edge.Bottom="{DynamicResource Space.16}" />
@@ -43,7 +45,7 @@
                 <controls:Avatar x:Name="ProfileAvatar" Size="72" Initials="{Binding Initials}" Source="{Binding PhotoBytes, Converter={StaticResource Photo}}"
                                  AutomationProperties.Name="Your photo" VerticalAlignment="Center" feat:Edge.Right="{DynamicResource Space.20}" />
                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                  <TextBlock Style="{DynamicResource Text.Section}" Text="{Binding DisplayName}" TextWrapping="Wrap" AutomationProperties.HeadingLevel="Level2" />
+                  <TextBlock Style="{DynamicResource Text.Section}" Text="{Binding SavedName}" TextWrapping="Wrap" AutomationProperties.HeadingLevel="Level2" />
                   <TextBlock Style="{DynamicResource Text.Secondary}" TextWrapping="Wrap" feat:Edge.Top="{DynamicResource Space.4}">
                     <Run Text="{Binding DesignationText, Mode=OneWay}" /><Run Text=", " /><Run Text="{Binding ShiftText, Mode=OneWay}" />
                   </TextBlock>
@@ -222,6 +224,7 @@
             </ItemsControl>
           </controls:Section>
         </StackPanel>
+        </Border>
       </ScrollViewer>
     </controls:LoadSurface>
 

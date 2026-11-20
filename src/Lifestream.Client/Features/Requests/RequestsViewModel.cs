@@ -501,11 +501,11 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
         var facts = new List<DetailFact>
         {
             new("Patient", RecordFormatting.NameWithCode(r.PatientName, RecordCodes.Patient(r.PatientId))),
-            new("Blood type", r.BloodType.ToDisplay()),
+            new("Blood group", r.BloodType.ToDisplay()),
             new("Units", RecordFormatting.Units(r.Units)),
             new("Needed by", Formatting.Date(r.RequiredBy)),
             new("Status", StatusText(r.Status)),
-            new("Requested on", RecordFormatting.When(r.PlacedAtUtc)),
+            new("Requested on", RecordFormatting.Stamp(r.PlacedAtUtc)),
         };
         if (r.ReceiptId is { } receipt)
         {

@@ -21,6 +21,13 @@ public static class RecordFormatting
         return local.TimeOfDay == TimeSpan.Zero ? Formatting.Date(DateOnly.FromDateTime(local)) : Formatting.DateTime(value, zone);
     }
 
+    /// <summary>"13 Nov 2026, 11:00": <see cref="When"/> with a comma between the date and the time, as the panels' headers write it (a detail line).</summary>
+    public static string Stamp(DateTime utc, TimeZoneInfo? zone = null)
+    {
+        var local = TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utc, DateTimeKind.Utc), zone ?? TimeZoneInfo.Local);
+        return local.TimeOfDay == TimeSpan.Zero ? Formatting.Date(DateOnly.FromDateTime(local)) : $"{Formatting.Date(DateOnly.FromDateTime(local))}, {local.ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture)}";
+    }
+
     /// <summary>"Thu 19 Nov at 11:00": a UTC instant as a day and a time of the local calendar, for a sentence (a confirmation's body).</summary>
     public static string DayAndTime(DateTime utc, TimeZoneInfo? zone = null)
     {

@@ -96,9 +96,12 @@ public sealed partial class StaffViewModel : SortedRecordListViewModel<StaffRow,
     /// <summary>True when the side panel is open: a person is selected or opened by id, or the add or edit form is open.</summary>
     public bool IsPanelOpen => SelectedItem is not null || Detail is not null || DetailState != LoadState.Ready || Editor is not null;
 
-    /// <summary>The panel's header line: "Staff member S-0012", or what the form is doing.</summary>
-    public string PanelOverline => Editor is not null
-        ? (Detail is { } editing && IsEditing ? $"Editing {Receipts.RecordCodes.Staff(editing.Id)}" : "New staff member")
+    /// <summary>
+    /// The panel's header line: "Staff member S-0012", or the record being edited. None for a new person: the form's own title already says "New staff member"
+    /// (design-qa-2 N17), as the other screens' new-record forms have no overline.
+    /// </summary>
+    public string? PanelOverline => Editor is not null
+        ? (Detail is { } editing && IsEditing ? $"Editing {Receipts.RecordCodes.Staff(editing.Id)}" : null)
         : Detail is { } staff ? $"Staff member {Receipts.RecordCodes.Staff(staff.Id)}" : "Staff member";
 
     /// <summary>The selected person's initials, for the panel's avatar.</summary>

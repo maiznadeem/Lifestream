@@ -113,12 +113,13 @@
         </lists:ListToolbar.Filters>
       </lists:ListToolbar>
       <lists:ScreenWakingNotice Grid.Row="2" />
-      <Border x:Name="TablePanel" Grid.Row="3" Background="{DynamicResource Brush.Layer}" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="1"
-              CornerRadius="{DynamicResource Radius.Panel}" SnapsToDevicePixels="True">
-        <controls:LoadSurface x:Name="ListSurface" State="{Binding State}" SkeletonKind="List" SkeletonColumns="80,2*,80,*,*"
-                              ErrorMessage="{Binding ErrorMessage}" ErrorDetail="{Binding ErrorDetail}" RetryCommand="{Binding RetryCommand}"
-                              EmptyGlyph="&#xE787;" EmptyTitle="{Binding EmptyTitle}" EmptyMessage="{Binding EmptyMessage}" EmptyActionText="{Binding EmptyActionText}"
-                              EmptyActionCommand="{Binding EmptyActionCommand}">
+      <!-- The table's frame is inside the load surface: an error or empty state stands alone as one card, not inside an empty framed panel -->
+      <controls:LoadSurface x:Name="ListSurface" Grid.Row="3" State="{Binding State}" SkeletonKind="List" SkeletonColumns="80,2*,80,*,*"
+                            ErrorMessage="{Binding ErrorMessage}" ErrorDetail="{Binding ErrorDetail}" RetryCommand="{Binding RetryCommand}"
+                            EmptyGlyph="&#xE787;" EmptyTitle="{Binding EmptyTitle}" EmptyMessage="{Binding EmptyMessage}" EmptyActionText="{Binding EmptyActionText}"
+                            EmptyActionCommand="{Binding EmptyActionCommand}">
+        <Border x:Name="TablePanel" Background="{DynamicResource Brush.Layer}" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="1"
+                CornerRadius="{DynamicResource Radius.Panel}" SnapsToDevicePixels="True">
           <Grid>
             <Grid.RowDefinitions>
               <RowDefinition Height="*" />
@@ -131,6 +132,21 @@
                                          AutomationProperties.Name="Appointments">
               <DataGrid.GroupStyle>
                 <GroupStyle>
+                  <!-- The day's rows run flush with the table's edges, like the header and the day row (WPF's own group item indents them by 5: design-qa-2 N7) -->
+                  <GroupStyle.ContainerStyle>
+                    <Style TargetType="GroupItem">
+                      <Setter Property="Template">
+                        <Setter.Value>
+                          <ControlTemplate TargetType="GroupItem">
+                            <StackPanel>
+                              <ContentPresenter />
+                              <ItemsPresenter />
+                            </StackPanel>
+                          </ControlTemplate>
+                        </Setter.Value>
+                      </Setter>
+                    </Style>
+                  </GroupStyle.ContainerStyle>
                   <GroupStyle.HeaderTemplate>
                     <DataTemplate>
                       <!-- One day, the same quiet header for every day ("Today, Thu 19 Nov" only in SemiBold Ink); the count at the right. -->
@@ -226,7 +242,7 @@
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="Status" Width="*" MinWidth="218" CanUserSort="False">
+                <DataGridTemplateColumn Header="Status" Width="*" MinWidth="218" MaxWidth="300" CanUserSort="False">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
                       <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
@@ -239,7 +255,7 @@
                 </DataGridTemplateColumn>
                 <!-- Today's agenda only: Record donation on every appointment still to come, emphasised (secondary) on the "Next" one and quiet on the later ones.
                      There is no "Check in": the API keeps no check-in state, so a button with that name could only open the appointment. -->
-                <DataGridTemplateColumn x:Name="AgendaColumn" Header="Next step" Width="*" MinWidth="170" CanUserSort="False" lists:ListColumns.HideBelow="700"
+                <DataGridTemplateColumn x:Name="AgendaColumn" Header="Next step" Width="*" MinWidth="170" MaxWidth="260" CanUserSort="False" lists:ListColumns.HideBelow="700"
                                         lists:ListColumns.IsShown="{Binding Data.IsAgenda, Source={StaticResource Model}}">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
@@ -278,7 +294,7 @@
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="Booked on" Width="*" MinWidth="120" CanUserSort="False" lists:ListColumns.HideBelow="760">
+                <DataGridTemplateColumn Header="Booked on" Width="*" MinWidth="120" MaxWidth="240" CanUserSort="False" lists:ListColumns.HideBelow="760">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
                       <TextBlock Style="{DynamicResource DataGrid.TextCell}" Foreground="{DynamicResource Brush.Ink2}">
@@ -296,8 +312,8 @@
             </controls:LifestreamDataGrid>
             <lists:ListFooter Grid.Row="1" />
           </Grid>
-        </controls:LoadSurface>
-      </Border>
+        </Border>
+      </controls:LoadSurface>
     </Grid>
 
     <!-- The gap before the side panel, only while it is open -->
@@ -351,7 +367,8 @@
               <Button AutomationProperties.AutomationId="RescheduleButton" Grid.Column="1" Style="{DynamicResource Button.Secondary}" Command="{Binding RescheduleCommand}" controls:ButtonAssist.BusyText=""
                       AutomationProperties.Name="Reschedule" ToolTip="Reschedule" Visibility="{Binding IsPendingDetail, Converter={StaticResource BoolToVisibility}}">
                 <StackPanel Orientation="Horizontal">
-                  <controls:Icon Kind="Cal" Size="16" VerticalAlignment="Center" />
+                  <!-- A clock (a new time), not the calendar of the header's "Book appointment": in a compact window both are icon-only (design-qa-2 N14) -->
+                  <controls:Icon Kind="Clock" Size="16" VerticalAlignment="Center" />
                   <TextBlock Text="Reschedule" VerticalAlignment="Center" Margin="{DynamicResource Inset.L8}"
                              Visibility="{Binding (controls:Responsive.Breakpoint), RelativeSource={RelativeSource Self}, Converter={StaticResource CompactCollapsed}}" />
                 </StackPanel>

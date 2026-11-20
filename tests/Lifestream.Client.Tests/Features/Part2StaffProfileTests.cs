@@ -444,6 +444,22 @@ public sealed class Part2StaffProfileTests
     }
 
     [Fact]
+    public async Task Profile_TheAccountHeaderShowsTheSavedName_UntilSave()
+    {
+        var (rig, vm) = await LoadedProfileAsync();
+        rig.Fake.On("UpdateProfileAsync", ApiResult<ProfileResponse>.Ok(Samples2.Profile() with { DisplayName = "Dr. Test Admin", RowVersion = "rv-p2" }));
+        Assert.Equal(("Test Admin", "TA"), (vm.SavedName, vm.Initials));
+
+        vm.DisplayName = "Dr. Test Admin"; // typed, not saved: the header and its avatar keep the saved name
+        Assert.True(vm.HasUnsavedChanges);
+        Assert.Equal(("Test Admin", "TA"), (vm.SavedName, vm.Initials));
+
+        await vm.SaveCommand.ExecuteAsync();
+        Assert.False(vm.HasUnsavedChanges);
+        Assert.Equal("Dr. Test Admin", vm.SavedName);
+    }
+
+    [Fact]
     public async Task Profile_SendsPhotoOnlyWhenReplaced()
     {
         var picker = new FakePhotoPicker([7, 7, 7]);

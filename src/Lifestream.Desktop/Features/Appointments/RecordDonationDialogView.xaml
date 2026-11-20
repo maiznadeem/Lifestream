@@ -24,7 +24,7 @@
             <TextBlock Style="{DynamicResource Text.Body}" Text="{Binding DonorName}" TextWrapping="Wrap" />
           </StackPanel>
           <StackPanel Grid.Column="1" feat:Edge.Left="{DynamicResource Space.24}">
-            <TextBlock Style="{DynamicResource Text.Caption}" Foreground="{DynamicResource Brush.TextMuted}" Text="Blood type" />
+            <TextBlock Style="{DynamicResource Text.Caption}" Foreground="{DynamicResource Brush.TextMuted}" Text="Blood group" />
             <TextBlock Style="{DynamicResource Text.Body}" Text="{Binding BloodTypeText}" />
           </StackPanel>
           <StackPanel Grid.Column="2" feat:Edge.Left="{DynamicResource Space.24}">

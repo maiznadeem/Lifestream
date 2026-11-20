@@ -137,7 +137,7 @@
                 Visibility="{Binding HasBloodTypeFilter, Converter={StaticResource BoolToVisibility}}">
           <StackPanel Orientation="Horizontal">
             <TextBlock Text="{Binding BloodTypeChipText}" VerticalAlignment="Center" />
-            <controls:Icon Kind="Chevd" Size="14" VerticalAlignment="Center" feat:Edge.Left="{DynamicResource Space.8}" Foreground="{DynamicResource Brush.Ink3}" />
+            <controls:Icon Kind="Chevd" Size="14" VerticalAlignment="Center" Margin="{DynamicResource Inset.L6}" />
           </StackPanel>
           <Button.ContextMenu>
             <ContextMenu x:Name="BloodTypeMenu" ItemsSource="{Binding BloodTypeOptions}" MenuItem.Click="OnBloodTypeChosen">

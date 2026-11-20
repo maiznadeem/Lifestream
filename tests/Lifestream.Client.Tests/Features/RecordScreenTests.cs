@@ -69,7 +69,7 @@ public sealed class RecordScreenTests
         Assert.True(vm.HasDetail);
         Assert.True(hasDetailSeen[^1]); // the view is told when the pane becomes ready, after the state and the record are both set
         Assert.Equal("Donor 001", vm.DetailTitle);
-        Assert.Contains(vm.DetailFacts, f => f.Label == "Blood type" && f.Value == "O+");
+        Assert.Contains(vm.DetailFacts, f => f.Label == "Blood group" && f.Value == "O+");
         Assert.Contains(vm.DetailFacts, f => f.Label == "Eligibility" && f.Value == "Eligible to donate");
         Assert.True(vm.EditCommand.CanExecute(null));
         Assert.True(vm.DeleteCommand.CanExecute(null));

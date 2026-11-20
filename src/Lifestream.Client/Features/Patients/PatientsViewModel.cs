@@ -161,8 +161,8 @@ public sealed class PatientsViewModel : SortedRecordListViewModel<PatientListIte
 
     /// <summary>The facts under "Details" in the side panel, without the blood group (it is in the header), and the groups the patient can receive red cells from.</summary>
     public IReadOnlyList<DetailFact> PanelFacts => Detail is { } patient
-        ? [.. DetailFacts.Where(f => f.Label != "Blood type"), new DetailFact("Can receive", CanReceiveText(patient.BloodType))]
-        : [.. DetailFacts.Where(f => f.Label != "Blood type")];
+        ? [.. DetailFacts.Where(f => f.Label != "Blood group"), new DetailFact("Can receive", CanReceiveText(patient.BloodType))]
+        : [.. DetailFacts.Where(f => f.Label != "Blood group")];
 
     /// <summary>"O−, O+, A−, A+": the groups whose red cells a patient of this group can be given.</summary>
     public static string CanReceiveText(BloodType group) =>
@@ -194,7 +194,7 @@ public sealed class PatientsViewModel : SortedRecordListViewModel<PatientListIte
     [
         new("Date of birth", $"{Formatting.Date(patient.DateOfBirth)} (age {Eligibility.AgeOn(patient.DateOfBirth, DateOnly.FromDateTime(Clock.GetLocalNow().DateTime))})"),
         new("Gender", patient.Gender.ToString()),
-        new("Blood type", patient.BloodType.ToDisplay()),
+        new("Blood group", patient.BloodType.ToDisplay()),
         new("Phone", string.IsNullOrEmpty(patient.Phone) ? "Not given" : patient.Phone),
         new("Address", string.IsNullOrEmpty(patient.Address) ? "Not given" : patient.Address),
     ];

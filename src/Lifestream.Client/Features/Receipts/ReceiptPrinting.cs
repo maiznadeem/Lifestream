@@ -49,7 +49,7 @@ public sealed record ReceiptDocument(string Title, string Number, IReadOnlyList<
             new("Receipt", RecordCodes.Receipt(receipt.Id)),
             new("Date", RecordFormatting.When(receipt.CreatedAtUtc, zone)),
             new(donation ? "Donor" : "Patient", receipt.PartyName),
-            new("Blood type", receipt.BloodType.ToDisplay()),
+            new("Blood group", receipt.BloodType.ToDisplay()),
             new("Units", receipt.Units.ToString(System.Globalization.CultureInfo.InvariantCulture)),
         };
         if (receipt.AppointmentId is { } appointment)

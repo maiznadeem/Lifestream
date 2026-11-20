@@ -87,12 +87,13 @@
         <Grid feat:Edge.Right="{DynamicResource Space.8}">
           <Button x:Name="SalaryChip" Style="{DynamicResource Button.Chip}" Click="OnSalaryChipClick" AutomationProperties.Name="Salary filter" ToolTip="Filter by a salary range">
             <StackPanel Orientation="Horizontal">
-              <controls:Icon x:Name="SalaryPlus" Kind="Plus" Size="14" VerticalAlignment="Center" feat:Edge.Right="{DynamicResource Space.8}"
+              <!-- The one chip pattern (FilterChip's): "+" while no range is set, a chevron once one is -->
+              <controls:Icon x:Name="SalaryPlus" Kind="Plus" Size="14" VerticalAlignment="Center" Margin="{DynamicResource Inset.R6}"
                              Visibility="{Binding HasSalaryRange, Converter={StaticResource NotVisible}}" />
               <TextBlock x:Name="SalaryChipText" Text="{Binding SalaryChipText}" VerticalAlignment="Center" />
               <controls:Icon Kind="Alert" Size="14" Foreground="{DynamicResource Brush.Critical}" VerticalAlignment="Center" feat:Edge.Left="{DynamicResource Space.8}"
                              Visibility="{Binding HasSalaryRangeError, Converter={StaticResource BoolToVisibility}}" />
-              <controls:Icon Kind="Chevd" Size="14" VerticalAlignment="Center" feat:Edge.Left="{DynamicResource Space.8}" Foreground="{DynamicResource Brush.Ink3}" />
+              <controls:Icon Kind="Chevd" Size="14" VerticalAlignment="Center" Margin="{DynamicResource Inset.L6}" Visibility="{Binding HasSalaryRange, Converter={StaticResource BoolToVisibility}}" />
             </StackPanel>
           </Button>
           <!-- The range: two digit-only boxes. The list follows as you type (after the usual pause); Done closes, Clear empties both. -->
@@ -163,7 +164,7 @@
                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
                           <TextBlock Style="{DynamicResource DataGrid.PrimaryLine}" Text="{Binding DisplayName}" />
                           <TextBlock Style="{DynamicResource DataGrid.SecondaryLine}" Foreground="{DynamicResource Brush.Ink3}">
-                            <Run Text="{Binding CodeText, Mode=OneWay}" /><Run Text="  " /><Run Text="{Binding Username, Mode=OneWay}" />
+                            <Run Text="{Binding CodeText, Mode=OneWay}" /><Run Text=" · " /><Run Text="{Binding Username, Mode=OneWay}" />
                           </TextBlock>
                         </StackPanel>
                       </Grid>

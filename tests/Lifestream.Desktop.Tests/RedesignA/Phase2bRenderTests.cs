@@ -70,6 +70,13 @@ public sealed class Phase2bRenderTests
 
         rig.Api.On("GetStockBagsAsync", Client.Api.ApiResult<Contracts.Stock.StockBagList>.Ok(new(bagsOf, bags, false)));
         rig.Api.On("GetReceiptCountsAsync", Client.Api.ApiResult<Contracts.Receipts.ReceiptCounts>.Ok(new(120, 84, 36)));
+
+        // Nobody in the design clinic has uploaded a photo, so every person shows their initials, as the app does without one (design-qa-2 N8: the test's drawn
+        // stand-in portrait read as a cartoon figure in the release renders).
+        rig.Api.On("GetStaffAsync", Client.Api.ApiResult<Contracts.PagedResult<Contracts.Staff.StaffListItem>>.Ok(new([.. Enumerable.Range(1, 50).Select(i => Features.DemoData2.StaffRow(i) with { HasPhoto = false })], 110, 1, 50)));
+        rig.Api.On("GetStaffMemberAsync", Client.Api.ApiResult<Contracts.Staff.StaffDetail>.Ok(Features.DemoData2.StaffDetail() with { HasPhoto = false }));
+        rig.Api.On("GetStaffPhotoAsync", Client.Tests.Fakes.FakeApiClient.Fail<byte[]>(404, "not_found"));
+        rig.Api.On("GetMyPhotoAsync", Client.Tests.Fakes.FakeApiClient.Fail<byte[]>(404, "not_found"));
     }
 
     public static TheoryData<string, string, string> Screens()
@@ -439,7 +446,7 @@ public sealed class Phase2bRenderTests
                 Assert.True(facts.Rows > 0, "the filtered staff list shows no rows");
                 break;
             case "staff-editor":
-                Assert.Contains("New staff member", facts.Texts);
+                Assert.Single(facts.Texts, t => t == "New staff member"); // the form's title, not repeated by the panel's overline
                 break;
             default:
                 Assert.Contains("You have unsaved changes.", facts.Texts);
