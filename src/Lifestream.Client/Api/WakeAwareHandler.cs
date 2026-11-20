@@ -12,10 +12,13 @@ public sealed record WakePolicy
 
     /// <summary>
     /// The longest a call keeps retrying while no connection can be made at all (refused, no network, no such host). That is not a server
-    /// waking up: a waking server accepts the connection and answers late or with 502/503/504. It is retried quietly for this long, in case
-    /// the network or the server is back in a moment, and then reported as unreachable.
+    /// waking up: a waking server accepts the connection and answers late or with 502/503/504. It is retried quietly, every
+    /// <see cref="FirstBackoff"/>, for this long from the start of the first attempt that could not connect, in case the network or the
+    /// server is back in a moment, and then reported as unreachable. It is well under the 10 s a screen load waits for an answer
+    /// (ViewModelBase.LoadTimeout), and a refused connection can take 2 s to fail on Windows: the screen must end on "Can't reach the
+    /// server", never on "The server is taking too long to answer".
     /// </summary>
-    public TimeSpan UnreachableBudget { get; init; } = TimeSpan.FromSeconds(10);
+    public TimeSpan UnreachableBudget { get; init; } = TimeSpan.FromSeconds(6);
 
     /// <summary>How long a call may be slow, or be retried, before the "waking up the server" state is shown.</summary>
     public TimeSpan ShowWakingAfter { get; init; } = TimeSpan.FromSeconds(3);
@@ -65,6 +68,7 @@ public sealed class WakeAwareHandler(WakePolicy policy, ServerStatus status, Htt
             {
                 HttpResponseMessage? response = null;
                 Exception? failure = null;
+                var attemptStarted = clock.GetTimestamp();
                 using var attemptTimeout = new CancellationTokenSource(policy.AttemptTimeout, clock);
                 using var attempt = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, attemptTimeout.Token);
                 try
@@ -97,11 +101,11 @@ public sealed class WakeAwareHandler(WakePolicy policy, ServerStatus status, Htt
 
                 // No connection at all (refused, no network) is not "waking": no waking state while it lasts, and a short budget of its own.
                 var unreachable = failure is HttpRequestException;
-                unreachableSince = unreachable ? unreachableSince ?? clock.GetTimestamp() : null;
+                unreachableSince = unreachable ? unreachableSince ?? attemptStarted : null;
                 call.Unreachable(unreachable);
 
                 var elapsed = clock.GetElapsedTime(started);
-                var delay = RetryAfter(response) ?? backoff;
+                var delay = RetryAfter(response) ?? (unreachable ? policy.FirstBackoff : backoff);
                 if (elapsed + delay >= policy.Budget || (unreachableSince is { } since && clock.GetElapsedTime(since) + delay >= unreachableBudget))
                 {
                     if (response is not null)
@@ -114,7 +118,10 @@ public sealed class WakeAwareHandler(WakePolicy policy, ServerStatus status, Htt
 
                 response?.Dispose();
                 await Task.Delay(delay, clock, cancellationToken).ConfigureAwait(false);
-                backoff = TimeSpan.FromTicks(Math.Min(backoff.Ticks * 2, policy.MaxBackoff.Ticks));
+                if (!unreachable)
+                {
+                    backoff = TimeSpan.FromTicks(Math.Min(backoff.Ticks * 2, policy.MaxBackoff.Ticks));
+                }
             }
         }
         finally

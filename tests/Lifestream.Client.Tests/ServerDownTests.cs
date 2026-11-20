@@ -57,7 +57,7 @@ public sealed class ServerDownTests
 
         Assert.True(result.Problem!.IsUnreachable, result.Problem.Code);
         Assert.Empty(states); // released 2.1.2: Waking from the third second, for two minutes
-        Assert.InRange(clock.Elapsed.TotalSeconds, 3, 10); // released 2.1.2: about 120 s
+        Assert.InRange(clock.Elapsed.TotalSeconds, 3, 6.5); // released 2.1.2: about 120 s
         Assert.True(handler.Requests.Count > 3, "a connection failure is still tried again a few times: the network may be back in a moment");
     }
 
@@ -125,7 +125,59 @@ public sealed class ServerDownTests
         Assert.False(waking, "the sign-in screen said the server was waking while the connection was refused");
         Assert.DoesNotContain("Waking the server", pill);
         Assert.Equal("Can't reach the server", vm.ServerText);
-        Assert.InRange(clock.Elapsed.TotalSeconds, 3, 10);
+        Assert.InRange(clock.Elapsed.TotalSeconds, 3, 6.5);
+    }
+
+    /// <summary>
+    /// Found in the real app: on Windows a refused connection takes about 2 s to fail, so retrying it for 10 s ran into the 10 s a screen load
+    /// waits for an answer, and the screen said "The server is taking too long to answer" instead of "Can't reach the server".
+    /// </summary>
+    [Fact]
+    public async Task Screen_WhoseServerRefusesEveryConnectionAfterSeconds_EndsOnCantReachTheServer_NotOnTheServerIsTakingTooLong()
+    {
+        var clock = new ManualTimeProvider();
+        var status = new ServerStatus();
+        var policy = new WakePolicy { Clock = clock };
+        var attempts = 0;
+        var handler = new SlowRefusal(clock, () => Interlocked.Increment(ref attempts));
+        using var http = new HttpClient(new WakeAwareHandler(policy, status, handler)) { BaseAddress = new Uri("https://api.test/"), Timeout = Timeout.InfiniteTimeSpan };
+        var session = new SessionService();
+        session.Establish(FakeApiClient.Tokens());
+        using var inner = new LifestreamApiClient(http, session);
+        var api = ScopedApiClient.Wrap(inner, policy, strict: true);
+        using var screen = new DonorScreen(api);
+        screen.Attach(status, clock);
+
+        var load = screen.LoadAsync();
+        for (var i = 0; i < 400 && !load.IsCompleted; i++)
+        {
+            clock.Advance(TimeSpan.FromMilliseconds(250));
+            await Task.Delay(2);
+        }
+
+        await load.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Equal(LoadState.Error, screen.State);
+        Assert.Equal(ViewModelBase.UnreachableMessage, screen.ErrorMessage);
+        Assert.Equal("Can't reach the server. Check your internet connection, then retry.", screen.ErrorMessage);
+        Assert.InRange(attempts, 2, 4);
+        Assert.Equal(ServerState.Online, status.State);
+    }
+
+    /// <summary>A connection that is refused, as Windows refuses one: after two seconds and more.</summary>
+    private sealed class SlowRefusal(ManualTimeProvider clock, Action attempted) : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            attempted();
+            await Task.Delay(TimeSpan.FromSeconds(2.5), clock, cancellationToken);
+            throw Refused();
+        }
+    }
+
+    private sealed class DonorScreen(ILifestreamApiClient api) : ViewModelBase
+    {
+        protected override async Task FetchAsync(CancellationToken ct) => (await api.GetDonorAsync(7, ct).ConfigureAwait(false)).Unwrap();
     }
 
     [Fact]
