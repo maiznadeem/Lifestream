@@ -254,7 +254,7 @@ internal static class SyntheticDataBuilder
                 Donor = donor,
                 DonorBloodType = donor.BloodType,
                 SlotStartUtc = SlotTime(todayStart.AddDays(2), futureSlots[i]),
-                PlacedAtUtc = NotAfter(todayStart.AddDays(-rng.Between(0, 6)).AddMinutes(rng.Between(0, 59)), nowUtc),
+                PlacedAtUtc = NotAfter(DuringTheWorkingDay(todayStart.AddDays(-rng.Between(0, 6)), rng.Between(0, WorkingMinutes - 1)), nowUtc),
                 Status = AppointmentStatus.Pending,
             });
         }
@@ -324,6 +324,11 @@ internal static class SyntheticDataBuilder
             return new DonorRoles(firstTime, today, [.. all.Where(d => !taken.Contains(d))], [.. all.Where(d => !firstTime.Contains(d))]);
         }
     }
+
+    /// <summary>The clinic's working day in minutes (09:00 to 17:00 UTC): bookings and requests are made in it, not in the night.</summary>
+    private const int WorkingMinutes = SlotsPerDay * 30;
+
+    private static DateTime DuringTheWorkingDay(DateTime day, int minute) => day.AddHours(OpeningHourUtc).AddMinutes(minute);
 
     /// <summary>The time itself, or the same time a day earlier when it would be after the reset: nothing in the dataset is stamped in the future.</summary>
     private static DateTime NotAfter(DateTime time, DateTime nowUtc) => time <= nowUtc ? time : time.AddDays(-1);
@@ -445,12 +450,12 @@ internal static class SyntheticDataBuilder
 
         for (var i = 0; i < SeedSizes.PendingRequests * factor; i++)
         {
-            set.Requests.Add(NewRequest(rng, rng.Pick(set.Patients), NotAfter(todayStart.AddDays(-rng.Between(0, 10)).AddMinutes(rng.Between(0, 59)), nowUtc), RequestStatus.Pending, today));
+            set.Requests.Add(NewRequest(rng, rng.Pick(set.Patients), NotAfter(DuringTheWorkingDay(todayStart.AddDays(-rng.Between(0, 10)), rng.Between(0, WorkingMinutes - 1)), nowUtc), RequestStatus.Pending, today));
         }
 
         for (var i = 0; i < SeedSizes.CancelledRequests * factor; i++)
         {
-            set.Requests.Add(NewRequest(rng, rng.Pick(set.Patients), todayStart.AddDays(-rng.Between(5, pastDays - IssueFreeDays)), RequestStatus.Cancelled));
+            set.Requests.Add(NewRequest(rng, rng.Pick(set.Patients), DuringTheWorkingDay(todayStart.AddDays(-rng.Between(5, pastDays - IssueFreeDays)), i * 37 % WorkingMinutes), RequestStatus.Cancelled));
         }
     }
 

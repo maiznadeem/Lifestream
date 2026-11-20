@@ -122,6 +122,10 @@ public sealed class SeedTodayTests
                 Assert.All(set.Receipts, r => Assert.True(r.CreatedAtUtc <= resetAt, $"{resetAt:O}: a receipt is stamped {r.CreatedAtUtc:O}"));
                 Assert.All(set.BloodBags, b => Assert.True(b.CollectedAtUtc <= resetAt, $"{resetAt:O}: a bag was collected at {b.CollectedAtUtc:O}"));
 
+                // Bookings and requests are made while people are at work, not in the night (07:00 to 19:00 UTC: the clinic's day with two hours either side).
+                Assert.All(set.Appointments.Select(a => a.PlacedAtUtc).Concat(set.Requests.Select(r => r.PlacedAtUtc)), t =>
+                    Assert.True(t.TimeOfDay >= TimeSpan.FromHours(7) && t.TimeOfDay < TimeSpan.FromHours(19), $"{resetAt:O}: something was booked or requested at {t:O}"));
+
                 // Completed and no-show: the slot started a donation's length or more before the reset. Pending: it had not.
                 Assert.All(set.Appointments.Where(a => a.Status is AppointmentStatus.Completed or AppointmentStatus.NoShow), a =>
                     Assert.True(a.SlotStartUtc + Donation <= resetAt, $"{resetAt:O}: the {a.SlotStartUtc:O} appointment is {a.Status}"));
