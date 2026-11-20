@@ -79,6 +79,7 @@ public sealed class RealAppWalkMajorTests
         await vm.PendingDetail;
         Assert.True(vm.DeleteCommand.CanExecute(null));
 
+        rig.Fake.On("GetAppointmentsAsync", Page<AppointmentListItem>(4)); // readable again by the time the server has refused
         await vm.DeleteCommand.ExecuteAsync();
 
         var toast = rig.Toasts.Toasts.Single();
@@ -86,6 +87,62 @@ public sealed class RealAppWalkMajorTests
         Assert.Equal("Donor 'Alma Sandoval' can't be deleted: they have appointments or donations on record, and that history is kept. Nothing was changed.", toast.Message);
         Assert.Equal(2, vm.Detail?.Id); // the donor is still in the panel and in the list
         Assert.Single(vm.Items);
+
+        // The donor and the count are read again after the refusal: Delete is no longer offered, and the reason is under it. The list is not reloaded.
+        Assert.False(vm.DeleteCommand.CanExecute(null));
+        Assert.Equal("A donor with appointments or donations on record can't be deleted: their history is kept.", vm.DeleteBlockedReason);
+        Assert.Equal(2, rig.Recorder.CountOf("GetDonorAsync"));
+        Assert.Equal(1, rig.Recorder.CountOf("GetDonorsAsync"));
+    }
+
+    [Fact]
+    public async Task Donors_WithAServerThatNeverAnswersTheCountOfAppointments_ThePanelWaits_AndCancelStopsThatCallToo()
+    {
+        var rig = DonorRig(Page<AppointmentListItem>(0));
+        CancellationToken seen = default;
+        var asked = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        rig.Fake.On<PagedResult<AppointmentListItem>>("GetAppointmentsAsync", async ct =>
+        {
+            seen = ct;
+            asked.TrySetResult();
+            await Task.Delay(Timeout.Infinite, ct);
+            throw new InvalidOperationException("unreachable");
+        });
+        var vm = rig.Donors();
+        await vm.LoadAsync();
+        vm.SelectedItem = vm.Items[0];
+        await asked.Task;
+
+        Assert.True(vm.ShowDetailSkeleton); // the panel is still loading: the count is part of the record's load, inside its operation
+        Assert.False(vm.DeleteCommand.CanExecute(null)); // nothing to delete until the record is in the panel
+        vm.CancelDetailCommand.Execute(null);
+        await vm.PendingDetail;
+
+        Assert.True(seen.IsCancellationRequested, "Cancel did not stop the call that counts the donor's appointments");
+        Assert.True(vm.HasDetailError);
+        Assert.Equal("The request was cancelled.", vm.DetailError);
+    }
+
+    [Fact]
+    public async Task AScreenWithoutADeleteRule_KeepsItsOwnRefusal_AndMakesNoCallForIt()
+    {
+        // Requests: its inherited Delete is the cancel call; a refused one (409) is not "records refer to it", and nothing is read again because of it.
+        var rig = new Part2Rig();
+        rig.Fake.On("GetRequestsAsync", Page(1, Samples2.RequestRow(7, 3, "Omar Haddad")));
+        rig.Fake.On("GetRequestAsync", ApiResult<RequestDetail>.Ok(Samples2.Request(7)));
+        rig.Fake.On("GetStockAsync", ApiResult<IReadOnlyList<StockItem>>.Ok([]));
+        rig.Fake.Handlers["CancelRequestAsync"] = _ => Task.FromResult<object>(ApiResult.Fail(new ApiProblem(409, ProblemCodes.Conflict, "Only a pending request can be cancelled.")));
+        var vm = rig.Requests();
+        await vm.LoadAsync();
+        vm.SelectedItem = vm.Items[0];
+        await vm.PendingDetail;
+        var before = rig.Recorder.Calls.Count;
+
+        await vm.DeleteCommand.ExecuteAsync();
+
+        Assert.Equal(["CancelRequestAsync"], rig.Recorder.Calls.Skip(before).Select(c => c.Name)); // released in 98f5b1a: it also read the request again
+        Assert.Null(vm.DeleteBlockedReason);
+        Assert.True(vm.DeleteCommand.CanExecute(null));
     }
 
     [Fact]

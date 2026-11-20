@@ -330,10 +330,12 @@ public sealed class DonorsViewModel : SortedRecordListViewModel<DonorListItem, D
     /// </summary>
     protected override string? DeleteBlockOf(DonorDetail donor) =>
         _fetchedAppointments is { } fetched && fetched.DonorId == donor.Id && fetched.Appointments is > 0
-            ? "A donor with appointments or donations on record can't be deleted: their history is kept."
+            ? HistoryKept
             : null;
 
-    protected override string DeleteRefusedText(string name) =>
+    private const string HistoryKept = "A donor with appointments or donations on record can't be deleted: their history is kept.";
+
+    protected override string? DeleteRefusedText(string name) =>
         $"Donor '{name}' can't be deleted: they have appointments or donations on record, and that history is kept. Nothing was changed.";
 
     // The API keeps the deleted donor for a few seconds and puts it back as it was (same id, last-donation date, medical hold), so Undo restores rather than re-creates.

@@ -277,10 +277,11 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
     public string? DeleteBlockedReason => Detail is { } record ? DeleteBlockOf(record) : null;
 
     /// <summary>
-    /// What to say when the server refuses a delete because other records point at the record (409): the screen could not know beforehand, or it changed since.
-    /// It says "deleted", why, and that the record is kept.
+    /// What to say when the server refuses a delete because other records point at the record (409 conflict): the screen could not know beforehand (the count of
+    /// those records could not be read), or it changed since. It says "deleted", why, and that nothing was changed. Null (the default) for a screen whose records
+    /// have no such rule (a receipt, a request): its refusals keep the general message, and nothing is read again because of them.
     /// </summary>
-    protected virtual string DeleteRefusedText(string name) => $"{Capitalise(RecordType)} '{name}' can't be deleted because other records refer to it. Nothing was changed.";
+    protected virtual string? DeleteRefusedText(string name) => null;
 
     /// <summary>Call when what <see cref="DeleteBlockOf"/> answers may have changed (the record's history has loaded).</summary>
     protected void RaiseDeleteBlockChanged()
@@ -573,10 +574,11 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
         if (!result.IsOk)
         {
             // The list stays exactly as it was; only a message says why.
-            if (result.Problem!.Code == ProblemCodes.Conflict)
+            if (result.Problem!.Code == ProblemCodes.Conflict && DeleteRefusedText(name) is { } refused)
             {
-                // Other records point at it (the screen did not know, or it changed since): say so, and read the record again so Delete is no longer offered.
-                Toasts.Show(ToastKind.Error, DeleteRefusedText(name));
+                // Other records point at it (the screen did not know, or it changed since): say so, and read the record and its counts again, so that Delete is
+                // offered or not by what the server says now.
+                Toasts.Show(ToastKind.Error, refused);
                 await LoadDetailAsync(id).ConfigureAwait(true);
                 return;
             }

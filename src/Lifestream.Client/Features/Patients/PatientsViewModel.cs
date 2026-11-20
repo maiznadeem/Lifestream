@@ -212,10 +212,12 @@ public sealed class PatientsViewModel : SortedRecordListViewModel<PatientListIte
     /// </summary>
     protected override string? DeleteBlockOf(PatientDetail patient) =>
         _fetchedRequests is { } fetched && fetched.PatientId == patient.Id && fetched.Requests is > 0
-            ? "A patient with requests on record can't be deleted: their history is kept."
+            ? HistoryKept
             : null;
 
-    protected override string DeleteRefusedText(string name) =>
+    private const string HistoryKept = "A patient with requests on record can't be deleted: their history is kept.";
+
+    protected override string? DeleteRefusedText(string name) =>
         $"Patient '{name}' can't be deleted: they have requests on record, and that history is kept. Nothing was changed.";
 
     protected override Task<ApiResult<PatientDetail>> RestoreAsync(PatientDetail d, CancellationToken ct) =>
