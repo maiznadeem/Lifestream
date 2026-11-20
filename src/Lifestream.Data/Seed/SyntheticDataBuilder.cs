@@ -390,30 +390,49 @@ internal static class SyntheticDataBuilder
             .Order()
             .ToList();
 
-        foreach (var issuedAt in issueDays)
+        // The stock as it stands at a moment: every bag collected by then, less the ones that have expired.
+        List<BloodType> InStockAt(DateTime moment)
         {
-            while (next < bags.Count && bags[next].CollectedAtUtc <= issuedAt)
+            while (next < bags.Count && bags[next].CollectedAtUtc <= moment)
             {
                 queues[bags[next].BloodType].Enqueue(bags[next]);
                 next++;
             }
 
-            var issueDate = DateOnly.FromDateTime(issuedAt);
+            var date = DateOnly.FromDateTime(moment);
             foreach (var queue in queues.Values)
             {
-                while (queue.Count > 0 && queue.Peek().ExpiresOn < issueDate)
+                while (queue.Count > 0 && queue.Peek().ExpiresOn < date)
                 {
                     queue.Dequeue();
                 }
             }
 
-            var candidates = queues.Where(q => q.Value.Count > 0).Select(q => q.Key).ToList();
+            return [.. queues.Where(q => q.Value.Count > 0).Select(q => q.Key)];
+        }
+
+        var lastIssue = DateTime.MinValue;
+        foreach (var planned in issueDays)
+        {
+            // Issues stay in time order (one that had to wait pushes the ones planned before its new time back to it).
+            var issuedAt = planned < lastIssue ? lastIssue : planned;
+            var candidates = InStockAt(issuedAt);
+            if (candidates.Count == 0 && next < bags.Count && bags[next].CollectedAtUtc.AddMinutes(30) <= nowUtc)
+            {
+                // No stock at all at that moment (it happens on a few dates a year): the request is fulfilled half an hour after the next donation comes in,
+                // as a clinic would do it. Without this the row would stay a pending request, and the dataset would hold a receipt fewer than it says.
+                issuedAt = bags[next].CollectedAtUtc.AddMinutes(30);
+                candidates = InStockAt(issuedAt);
+            }
+
             if (candidates.Count == 0)
             {
-                // No stock at all on that day: the request stays Pending and never reaches the receipt count.
+                // No stock and no donation left to wait for: the request stays Pending and never reaches the receipt count.
                 set.Requests.Add(NewRequest(rng, rng.Pick(set.Patients), issuedAt.AddDays(-1), RequestStatus.Pending));
                 continue;
             }
+
+            lastIssue = issuedAt;
 
             var type = PickWeighted(rng, candidates);
             var units = Math.Min(rng.Chance(0.75) ? 1 : 2, queues[type].Count);

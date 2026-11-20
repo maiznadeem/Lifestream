@@ -291,6 +291,44 @@ public sealed class SeedTodayTests
     }
 
     [Fact]
+    public void EveryDayOfTheComingYear_AtFourTimesOfDay_HasTheDocumentedCounts_AndAClinicDay()
+    {
+        // The migrate job and the daily reset build the demo at whatever moment they run: 400 consecutive days from the release, each before the clinic opens,
+        // in its morning, in its afternoon and at the day's end. A day on which stock ran out would have a receipt fewer (the request would stay pending).
+        TimeSpan[] times = [new(0, 0, 5), new(10, 45, 0), new(13, 0, 0), new(23, 59, 30)];
+        var problems = new List<string>();
+        for (var day = new DateOnly(2026, 11, 15); day < new DateOnly(2027, 12, 20); day = day.AddDays(1))
+        {
+            foreach (var time in times)
+            {
+                var resetAt = At(day, time);
+                var set = new DemoDataGenerator().Generate(resetAt);
+                var counts = (set.Appointments.Count, set.Appointments.Count(a => a.Status == AppointmentStatus.Completed), set.Appointments.Count(a => a.Status == AppointmentStatus.Pending),
+                    set.Receipts.Count, set.Requests.Count, set.Requests.Count(r => r.Status == RequestStatus.Pending));
+                if (counts != (SeedSizes.Appointments, SeedSizes.CompletedAppointments, SeedSizes.PendingAppointments, SeedSizes.Receipts, SeedSizes.Requests, SeedSizes.PendingRequests))
+                {
+                    problems.Add($"{resetAt:O}: appointments, completed, pending, receipts, requests, pending requests = {counts}");
+                }
+
+                var today = set.Appointments.Count(a => DateOnly.FromDateTime(a.SlotStartUtc) == day && a.Status != AppointmentStatus.Cancelled);
+                if (today != DemoClinicDay.Appointments)
+                {
+                    problems.Add($"{resetAt:O}: {today} appointments today");
+                }
+
+                // Stock never goes below zero and nothing is stamped after the reset, on the dates where an issue had to wait for a donation too.
+                problems.AddRange(set.BloodBags.Where(b => b.IssueReceipt is { } issue && (issue.CreatedAtUtc < b.CollectedAtUtc || DateOnly.FromDateTime(issue.CreatedAtUtc) > b.ExpiresOn))
+                    .Select(b => $"{resetAt:O}: a bag collected {b.CollectedAtUtc:O} was issued {b.IssueReceipt!.CreatedAtUtc:O}"));
+                problems.AddRange(set.Receipts.Where(r => r.CreatedAtUtc > resetAt).Select(r => $"{resetAt:O}: a receipt is stamped {r.CreatedAtUtc:O}"));
+                problems.AddRange(set.Receipts.Where(r => r.Kind == ReceiptKind.Issue).Where(r => r.Units != set.BloodBags.Count(b => b.IssueReceipt == r))
+                    .Select(r => $"{resetAt:O}: an issue of {r.Units} units holds another number of bags"));
+            }
+        }
+
+        Assert.True(problems.Count == 0, $"{problems.Count} problems, first: {string.Join("; ", problems.Take(6))}");
+    }
+
+    [Fact]
     public void TheDataset_IsDeterministicForAResetTime_AndADateMeansMidnight()
     {
         var morning = At(Day, new TimeSpan(10, 45, 0));
