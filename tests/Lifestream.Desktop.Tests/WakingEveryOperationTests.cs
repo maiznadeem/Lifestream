@@ -293,6 +293,9 @@ public sealed class WakingEveryOperationTests
         /// <summary>When the server went into the waking state for this operation (the wake-aware handler does it once a call has waited 3 s).</summary>
         public long WakingSince { get; set; }
 
+        /// <summary>When the test pressed the waking notice's Cancel: whether the requests stopped is read 250 ms after this.</summary>
+        public long CancelPressed { get; set; }
+
         public void Dispose()
         {
             Dialogs.Dispose();
@@ -301,46 +304,116 @@ public sealed class WakingEveryOperationTests
         }
     }
 
-    /// <summary>Puts a loaded screen into <paramref name="op"/>'s state. False when the screen has no such state (nothing to select, or no editor opens).</summary>
-    private static bool ArrangeState(Operation op, ViewModelBase vm, Hosted host)
+    /// <summary>
+    /// Creates each operation's rig, view model and rendered screen, loads it and puts it in the operation's state; for each, whether the screen has
+    /// that state (false: nothing to select, or no editor opens). The operations are of one screen in one state, each on its own instance. Every
+    /// step is done for all of them before the wait that follows it, so that wait, as long as it is for one operation alone, is shared by them
+    /// instead of being spent once for each.
+    /// </summary>
+    private static bool[] OpenAll(IReadOnlyList<Operation> operations)
     {
-        var screen = op.Screen;
-        var state = op.State;
-        var type = vm.GetType();
+        var arranged = new bool[operations.Count];
+        if (operations.Count == 0)
+        {
+            return arranged;
+        }
+
+        var screen = operations[0].Screen;
+        var state = operations[0].State;
+        foreach (var op in operations)
+        {
+            var rig = op.Rig = Part2Harness.NewRig(clock: op.Manual);
+            rig.Get<DialogService>().Presenter = new Yes();
+            rig.Get<FormDialogService>().Presenter = op.Dialogs;
+            var vm = op.Vm = (ViewModelBase)Create(rig, screen.ViewModel);
+            vm.Attach(rig.Get<ServerStatus>(), op.Clock);
+            op.Host = Hosted.Create(screen.View(vm), Width, Height);
+            Hosted.Await(() => vm.LoadAsync());
+        }
+
+        SettleAll(operations, 100);
         if (state == ScreenState.NoSelection && !screen.SelectFirst)
         {
-            return false; // a screen without a selection is always in this state: RecordSelected covers it
+            return arranged; // a screen without a selection is always in this state: RecordSelected covers it
         }
 
         if (state is ScreenState.RecordSelected or ScreenState.EditEditor or ScreenState.DialogOpen && screen.SelectFirst)
         {
-            SelectRow(vm, screen.SelectIndex);
-            host.Settle(100);
+            foreach (var op in operations)
+            {
+                SelectRow(op.Vm!, screen.SelectIndex);
+            }
+
+            SettleAll(operations, 100);
         }
 
         switch (state)
         {
             case ScreenState.NewEditor:
             case ScreenState.EditEditor:
-                if (type.GetProperty(state == ScreenState.NewEditor ? "AddCommand" : "EditCommand")?.GetValue(vm) is not AsyncRelayCommand open || !open.CanExecute(null))
+                var opened = new List<Operation>();
+                foreach (var op in operations)
                 {
-                    return false;
+                    var vm = op.Vm!;
+                    var type = vm.GetType();
+                    if (type.GetProperty(state == ScreenState.NewEditor ? "AddCommand" : "EditCommand")?.GetValue(vm) is not AsyncRelayCommand open || !open.CanExecute(null))
+                    {
+                        continue;
+                    }
+
+                    Hosted.Await(() =>
+                    {
+                        open.Execute(null);
+                        return Task.CompletedTask;
+                    });
+                    Hosted.PumpUntil(() => type.GetProperty("Editor")?.GetValue(vm) is not null, 5000);
+                    opened.Add(op);
                 }
 
-                Hosted.Await(() =>
+                SettleAll(opened, 150);
+                for (var i = 0; i < operations.Count; i++)
                 {
-                    open.Execute(null);
-                    return Task.CompletedTask;
-                });
-                Hosted.PumpUntil(() => type.GetProperty("Editor")?.GetValue(vm) is not null, 5000);
-                host.Settle(150);
-                return type.GetProperty("Editor")?.GetValue(vm) is not null;
+                    arranged[i] = opened.Contains(operations[i]) && operations[i].Vm!.GetType().GetProperty("Editor")?.GetValue(operations[i].Vm) is not null;
+                }
+
+                break;
             case ScreenState.DialogOpen:
-                _ = op.Dialogs.ShowAsync(new ChangePasswordDialogViewModel(op.Rig!.Api));
-                host.Settle(100);
-                return true;
+                foreach (var op in operations)
+                {
+                    _ = op.Dialogs.ShowAsync(new ChangePasswordDialogViewModel(op.Rig!.Api));
+                }
+
+                SettleAll(operations, 100);
+                Array.Fill(arranged, true);
+                break;
             default:
-                return true;
+                Array.Fill(arranged, true);
+                break;
+        }
+
+        for (var i = 0; i < operations.Count; i++)
+        {
+            if (arranged[i])
+            {
+                screen.Prepare?.Invoke(operations[i].Vm!);
+            }
+        }
+
+        return arranged;
+    }
+
+    /// <summary>One wait for all the given operations' screens (they share the dispatcher that is pumped meanwhile), then each screen's layout is brought up to date: for one operation, what <see cref="Hosted.Settle"/> does.</summary>
+    private static void SettleAll(IReadOnlyCollection<Operation> operations, int milliseconds)
+    {
+        if (operations.Count == 0)
+        {
+            return;
+        }
+
+        StaHost.Settle(milliseconds);
+        foreach (var op in operations)
+        {
+            op.Host!.Element.UpdateLayout();
         }
     }
 
@@ -353,25 +426,7 @@ public sealed class WakingEveryOperationTests
         });
 
     /// <summary>Creates the rig, the view model and the rendered screen, loads it and puts it in the operation's state. False when the screen has no such state.</summary>
-    private static bool Open(Operation op)
-    {
-        var screen = op.Screen;
-        var rig = op.Rig = Part2Harness.NewRig(clock: op.Manual);
-        rig.Get<DialogService>().Presenter = new Yes();
-        rig.Get<FormDialogService>().Presenter = op.Dialogs;
-        var vm = op.Vm = (ViewModelBase)Create(rig, screen.ViewModel);
-        vm.Attach(rig.Get<ServerStatus>(), op.Clock);
-        var host = op.Host = Hosted.Create(screen.View(vm), Width, Height);
-        Hosted.Await(() => vm.LoadAsync());
-        host.Settle(100);
-        if (!ArrangeState(op, vm, host))
-        {
-            return false;
-        }
-
-        screen.Prepare?.Invoke(vm);
-        return true;
-    }
+    private static bool Open(Operation op) => OpenAll([op])[0];
 
     /// <summary>The commands a user could press with the screen in this state (the others are disabled there), found on one throwaway instance so the walk does not build a screen for each disabled command.</summary>
     private static HashSet<string> Runnable(Screen screen, ScreenState state)
@@ -398,8 +453,15 @@ public sealed class WakingEveryOperationTests
     private static Operation Start(Screen screen, string commandName, ScreenState state = ScreenState.RecordSelected, bool realTime = false)
     {
         var op = new Operation(screen, commandName, state, realTime);
+        Run(op, Open(op));
+        return op;
+    }
+
+    /// <summary>With the operation's screen opened (<paramref name="arranged"/>: and in its state), makes the server stop answering and runs the command.</summary>
+    private static void Run(Operation op, bool arranged)
+    {
+        var (screen, commandName, state) = (op.Screen, op.CommandName, op.State);
         var strict = state == ScreenState.RecordSelected; // the reviewed lists describe the selected-record state; elsewhere a disabled or silent command is simply not applicable
-        var arranged = Open(op);
         var rig = op.Rig!;
         var vm = op.Vm!;
         var host = op.Host!;
@@ -407,14 +469,14 @@ public sealed class WakingEveryOperationTests
         {
             op.Finished = true; // this screen has no such state (no selection, no editor)
             op.NotApplicable = true;
-            return op;
+            return;
         }
 
         op.Server.Install(rig.Api);
         if (vm.GetType().GetProperty(commandName)!.GetValue(vm) is not AsyncRelayCommand command)
         {
             op.Finished = true; // this screen does not offer the command (the property is null)
-            return op;
+            return;
         }
 
         var parameter = screen.Parameters.TryGetValue(commandName, out var pick) ? pick(vm) : new[] { Selected(vm), null }.FirstOrDefault(p => command.CanExecute(p));
@@ -423,7 +485,7 @@ public sealed class WakingEveryOperationTests
             op.Finished = true;
             op.NotApplicable = !strict;
             op.Problem = !strict || NotRunnable.ContainsKey(commandName) ? null : $"{screen.Name}.{commandName} cannot run on a loaded screen with a selected record: it needs a reviewed entry";
-            return op;
+            return;
         }
 
         Hosted.Await(() =>
@@ -431,7 +493,11 @@ public sealed class WakingEveryOperationTests
             command.Execute(parameter); // started from the dispatcher, as a click is, so its continuations come back to the UI thread
             return Task.CompletedTask;
         });
-        host.Settle(150);
+        // The command's first API call is the signal that it has started, so the wait ends there; only a command that makes none gets the whole
+        // 150 ms before that is concluded. Then the dispatcher runs down to idle, so what the command queued with the call has run as well.
+        Hosted.PumpUntil(() => op.Server.Count > 0, 150);
+        StaHost.Drain();
+        host.Element.UpdateLayout();
         if (op.Server.Count == 0)
         {
             op.Finished = true;
@@ -449,8 +515,6 @@ public sealed class WakingEveryOperationTests
             rig.Get<ServerStatus>().Enter();
             op.WakingSince = System.Diagnostics.Stopwatch.GetTimestamp();
         }
-
-        return op;
     }
 
     /// <summary>Steps the operation's clock 3.6 s past the start of its call (the waking threshold is 3 s), then <see cref="Inspect"/>.</summary>
@@ -461,13 +525,28 @@ public sealed class WakingEveryOperationTests
     }
 
     /// <summary>After the 3.6 s: what the user sees, then Cancel, then whether the HTTP requests stopped.</summary>
-    private static string? Inspect(Operation op, string capture)
+    private static string? Inspect(Operation op, string capture) => ShowsWakingThenCancel(op, capture) ?? RequestsStopped(op);
+
+    /// <summary>After the 3.6 s: what the user sees, then Cancel is pressed. Null when the waking notice and its Cancel were there.</summary>
+    private static string? ShowsWakingThenCancel(Operation op, string capture)
     {
         var (screen, commandName, server) = (op.Screen, op.CommandName, op.Server);
         List<Hosted> surfaces = [op.Host!, .. op.Dialogs.Hosts];
+
+        // The notice with its Cancel is the signal that the screen has reached the waking state, so the wait ends there; a screen that does not show
+        // it gets the same 100 ms per surface as before. The verdict below is read after the dispatcher has run down to idle and the layout is
+        // up to date, so it is the settled screen that is judged (a notice that ends up clipped still counts as not shown).
+        Hosted.PumpUntil(
+            () =>
+            {
+                var seen = surfaces.Select(WakingSurface).ToList();
+                return seen.Any(w => w.Texts.Count > 0) && seen.Any(w => w.Cancel is not null);
+            },
+            100 * surfaces.Count);
+        StaHost.Drain();
         foreach (var surface in surfaces)
         {
-            surface.Settle(100);
+            surface.Element.UpdateLayout();
         }
 
         Directory.CreateDirectory(Path.GetDirectoryName(capture)!);
@@ -488,7 +567,18 @@ public sealed class WakingEveryOperationTests
             cancel.Command?.Execute(null);
         }
 
-        op.Host.Settle(250);
+        op.CancelPressed = System.Diagnostics.Stopwatch.GetTimestamp();
+        return null;
+    }
+
+    /// <summary>
+    /// Whether the HTTP requests stopped, read 250 ms after Cancel was pressed, as before: what is left of the 250 ms is waited out here. When several
+    /// operations had their Cancel pressed one after the other, their 250 ms run at the same time (the dispatcher is pumped throughout).
+    /// </summary>
+    private static string? RequestsStopped(Operation op)
+    {
+        var (screen, commandName, server) = (op.Screen, op.CommandName, op.Server);
+        op.Host!.Settle(Math.Max(0, 250 - (int)System.Diagnostics.Stopwatch.GetElapsedTime(op.CancelPressed).TotalMilliseconds));
         List<(string Method, CancellationToken Token)> waiting;
         lock (server.Waiting)
         {
@@ -632,20 +722,38 @@ public sealed class WakingEveryOperationTests
         var found = new List<string>();
         var exercised = Enum.GetValues<ScreenState>().ToDictionary(s => s, _ => 0);
         var withCalls = Enum.GetValues<ScreenState>().ToDictionary(s => s, _ => 0);
-        foreach (var (screen, state) in groups)
+        var todo = groups.ToList();
+
+        // The commands a user could press in a state are found on a throwaway screen. The first group's is built now, each later group's while the
+        // group before it waits out its 3.6 s: time that otherwise passes with nothing to do.
+        HashSet<string>? Probe(int group) => todo[group].State == ScreenState.RecordSelected ? null : Runnable(todo[group].Screen, todo[group].State); // with a record selected every command is walked, so a disabled one needs a reviewed entry
+        var next = todo.Count > 0 ? Probe(0) : null;
+        for (var group = 0; group < todo.Count; group++)
         {
+            var (screen, state) = todo[group];
+            var runnable = next;
+
             // All commands of a screen in one state are started together, each on its own screen instance and silent server, so the real 3.6 s of waiting are shared.
             var operations = new List<Operation>();
             try
             {
-                var runnable = state == ScreenState.RecordSelected ? null : Runnable(screen, state); // with a record selected every command is walked, so a disabled one needs a reviewed entry
                 foreach (var command in CommandsOf(screen.ViewModel).Where(p => !p.IsDefined(typeof(NoOperationRunnerAttribute), false) || IsNoCall(screen.Name, p.Name)))
                 {
                     if (runnable is null || runnable.Contains(command.Name))
                     {
-                        operations.Add(Start(screen, command.Name, state, realTime: true));
+                        operations.Add(new Operation(screen, command.Name, state, realTime: true));
                     }
                 }
+
+                // The screens are opened first, all of them (their waits shared), then the commands run one after the other: each operation's
+                // 3 s starts with its own command, as before, and none of them waits while another one's screen is still being built.
+                var arranged = OpenAll(operations);
+                for (var i = 0; i < operations.Count; i++)
+                {
+                    Run(operations[i], arranged[i]);
+                }
+
+                next = group + 1 < todo.Count ? Probe(group + 1) : null;
 
                 // Every operation has now been waking for at least 3.6 s: wait out what is left for the one that went last.
                 var lastWaking = operations.Where(o => !o.Finished).Select(o => o.WakingSince).DefaultIfEmpty(System.Diagnostics.Stopwatch.GetTimestamp()).Max();
@@ -655,6 +763,9 @@ public sealed class WakingEveryOperationTests
                     Hosted.RunDispatcherFor(left);
                 }
 
+                // What every operation shows, and Cancel; then, for each, whether its requests stopped 250 ms after its Cancel. Those 250 ms are the
+                // same for every operation as before, but they run side by side instead of one after the other.
+                var cancelled = new List<Operation>();
                 foreach (var op in operations)
                 {
                     if (op.NotApplicable)
@@ -668,8 +779,20 @@ public sealed class WakingEveryOperationTests
                         withCalls[state]++;
                     }
 
-                    var problem = op.Finished ? op.Problem : Inspect(op, Path.Combine(capturesDirectory, "waking", $"{screen.Name}_{state}_{op.CommandName}.png"));
+                    var problem = op.Finished ? op.Problem : ShowsWakingThenCancel(op, Path.Combine(capturesDirectory, "waking", $"{screen.Name}_{state}_{op.CommandName}.png"));
                     if (problem is not null)
+                    {
+                        found.Add($"[{state}] {problem}");
+                    }
+                    else if (!op.Finished)
+                    {
+                        cancelled.Add(op);
+                    }
+                }
+
+                foreach (var op in cancelled)
+                {
+                    if (RequestsStopped(op) is { } problem)
                     {
                         found.Add($"[{state}] {problem}");
                     }
