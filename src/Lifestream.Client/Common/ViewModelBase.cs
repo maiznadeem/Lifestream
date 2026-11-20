@@ -19,10 +19,10 @@ public abstract partial class ViewModelBase : ObservableObject, IDisposable
 
     protected ViewModelBase(LoadState initialState = LoadState.Loading)
     {
-        State = initialState;
         _context = SynchronizationContext.Current;
         Operations = new OperationRunner(() => _serverStatus, () => Clock, () => WakingAfter);
         Operations.Changed += OnOperationsChanged;
+        State = initialState; // after the runner exists: a change of state looks at it (IsOperationWaking)
     }
 
     /// <summary>
@@ -31,8 +31,12 @@ public abstract partial class ViewModelBase : ObservableObject, IDisposable
     /// </summary>
     public OperationRunner Operations { get; }
 
-    /// <summary>True while a call of this view model is waiting on a waking server for more than 3 s: the view shows "Waking up the server" with Cancel.</summary>
-    public bool IsOperationWaking => Operations.IsWaking;
+    /// <summary>
+    /// True while a call of this view model is waiting on a waking server for more than 3 s: the view shows "Waking up the server" with Cancel.
+    /// False while the screen's own load is in the waking state: the load surface then shows that notice (with Retry and Cancel) over the
+    /// skeleton, and a screen never shows two notices for one waking server.
+    /// </summary>
+    public bool IsOperationWaking => Operations.IsWaking && State != LoadState.Waking;
 
     /// <summary>The text of the waking state (the same on every screen, dialog and editor).</summary>
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "Bound from XAML, which needs instance properties.")]
@@ -129,16 +133,23 @@ public abstract partial class ViewModelBase : ObservableObject, IDisposable
                 }
             }
 
-            var waking = Operations.IsWaking;
-            if (waking == _operationWaking)
-            {
-                return;
-            }
-
-            _operationWaking = waking;
-            OnPropertyChanged(nameof(IsOperationWaking));
-            OnOperationWakingChanged(waking);
+            RaiseOperationWaking();
         });
+
+    private void RaiseOperationWaking()
+    {
+        var waking = IsOperationWaking;
+        if (waking == _operationWaking)
+        {
+            return;
+        }
+
+        _operationWaking = waking;
+        OnPropertyChanged(nameof(IsOperationWaking));
+        OnOperationWakingChanged(waking);
+    }
+
+    partial void OnStateChanged(LoadState value) => RaiseOperationWaking(); // the load took the waking notice over, or gave it back
 
     /// <summary>The server status this view model was attached to (null before it is attached).</summary>
     protected IServerStatus? CurrentServerStatus => _serverStatus;
@@ -454,7 +465,7 @@ public abstract partial class ViewModelBase : ObservableObject, IDisposable
 
     private void OnServerStatusChanged(object? sender, EventArgs e)
     {
-        Operations.StatusChanged(); // a call of this view model may now be waiting on a waking server
+        // The load's state first: a waking load shows the notice of the load surface, and the operation notice must not show beside it.
         Post(() =>
         {
             if (_serverStatus?.State == ServerState.Waking && State == LoadState.Loading)
@@ -466,6 +477,7 @@ public abstract partial class ViewModelBase : ObservableObject, IDisposable
                 State = LoadState.Loading;
             }
         });
+        Operations.StatusChanged(); // a call of this view model may now be waiting on a waking server
     }
 
     protected void Post(Action action)

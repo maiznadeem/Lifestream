@@ -30,7 +30,7 @@ public sealed class DateFieldBlocksSaveTests
     }
 
     [Theory]
-    [InlineData("31 Feb 2030", "31 Feb 2030 is not a date. Check the day and the month.")]
+    [InlineData("31 Feb 2030", "There is no 31 Feb 2030.")]
     [InlineData("03/05/2022", "Use the format 05 Mar 2022.")]
     public void Save_IsBlocked_WhileTheDateFieldHoldsTextThatIsNotADate_AndGoesThroughOnceItIs(string typed, string message)
     {
@@ -59,5 +59,47 @@ public sealed class DateFieldBlocksSaveTests
         Assert.Equal((message, "1 field needs attention.", "DateOfBirth", new DateOnly(1990, 3, 5)), f.shown);
         Assert.True(f.SavedAfter);
         Assert.Equal((null, new DateOnly(1991, 1, 2), null), f.After);
+    }
+
+    /// <summary>
+    /// A save that does not take the focus out of the date box (Ctrl+S, Enter on the default button of a dialog, a screen reader's Invoke on
+    /// Save) never ran the box's blur or Enter handling in 2.1.2, so the form saved the date from before, whatever was typed.
+    /// </summary>
+    [Fact]
+    public void Save_WithTheCaretStillInTheDateBox_SavesTheDateThatWasTyped_OrIsRefused_NeverTheDateFromBefore()
+    {
+        var f = StaHost.Run(() =>
+        {
+            var form = new DonorForm();
+            var field = new DateField { DataContext = form };
+            field.SetBinding(DateField.SelectedDateProperty, new Binding(nameof(DonorForm.DateOfBirth)) { Mode = BindingMode.TwoWay });
+            using var host = Hosted.Create(new StackPanel { Children = { field } }, 500, 200);
+            host.Settle(100);
+
+            // Typed, and nothing else: no Enter, no blur.
+            field.TextBox.Text = "02 Jan 1991";
+            var typedDate = (form.TrySave(), form.DateOfBirth, field.TextBox.Text);
+
+            field.TextBox.Text = "31 Feb 2030";
+            var whileTyping = (form.GetError(nameof(DonorForm.DateOfBirth)), field.ParseError); // no message while the person is still typing
+            var impossible = (form.TrySave(), form.GetError(nameof(DonorForm.DateOfBirth)), form.DateOfBirth);
+
+            field.TextBox.Text = "02 Jan 199";
+            var halfTyped = (form.TrySave(), form.GetError(nameof(DonorForm.DateOfBirth)));
+
+            field.TextBox.Text = "03 Jan 1991";
+            var corrected = (form.TrySave(), form.GetError(nameof(DonorForm.DateOfBirth)), form.DateOfBirth);
+
+            field.TextBox.Text = string.Empty;
+            var cleared = (form.TrySave(), form.DateOfBirth);
+            return (typedDate, whileTyping, impossible, halfTyped, corrected, cleared);
+        });
+
+        Assert.Equal((true, new DateOnly(1991, 1, 2), "02 Jan 1991"), f.typedDate); // released 2.1.2: saved 05 Mar 1990, the date from before
+        Assert.Equal((null, null), f.whileTyping);
+        Assert.Equal((false, "There is no 31 Feb 2030.", new DateOnly(1991, 1, 2)), f.impossible); // released 2.1.2: saved, with the date from before
+        Assert.Equal((false, "Use the format 05 Mar 2022."), f.halfTyped);
+        Assert.Equal((true, null, new DateOnly(1991, 1, 3)), f.corrected);
+        Assert.Equal((true, null), f.cleared);
     }
 }

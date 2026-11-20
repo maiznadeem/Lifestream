@@ -48,39 +48,78 @@ public partial class DateField : UserControl
     /// <summary>Applies what is typed, as on blur or Enter: valid text sets the date, anything else sets <see cref="ParseError"/>.</summary>
     public bool CommitText()
     {
-        var text = Box.Text.Trim();
-        if (text.Length == 0)
+        var error = Read(Box.Text, out var date);
+        Report(error);
+        if (error is not null)
         {
-            Report(null);
-            SelectedDate = null;
-            return true;
-        }
-
-        if (!Formatting.TryParseDate(text, out var date))
-        {
-            // Text in the right format that names a day that does not exist (31 Feb) is told apart from text in another format.
-            Report(InDateFormat().IsMatch(text)
-                ? $"{text} is not a date. Check the day and the month."
-                : $"Use the format {Formatting.Date(new DateOnly(2022, 3, 5))}.");
             return false;
         }
 
-        if (MinDate is { } min && date < min)
-        {
-            Report($"The date can't be before {Formatting.Date(min)}.");
-            return false;
-        }
-
-        if (MaxDate is { } max && date > max)
-        {
-            Report($"The date can't be after {Formatting.Date(max)}.");
-            return false;
-        }
-
-        Report(null);
         SelectedDate = date;
         ShowDate();
         return true;
+    }
+
+    /// <summary>What the text means: a date (or none, for empty text), or the reason it is refused.</summary>
+    private string? Read(string typed, out DateOnly? date)
+    {
+        date = null;
+        var text = typed.Trim();
+        if (text.Length == 0)
+        {
+            return null;
+        }
+
+        if (!Formatting.TryParseDate(text, out var parsed))
+        {
+            // Text in the right format that names a day that does not exist (31 Feb) is told apart from text in another format.
+            return InDateFormat().IsMatch(text) ? $"There is no {text}." : $"Use the format {Formatting.Date(new DateOnly(2022, 3, 5))}.";
+        }
+
+        if (MinDate is { } min && parsed < min)
+        {
+            return $"The date can't be before {Formatting.Date(min)}.";
+        }
+
+        if (MaxDate is { } max && parsed > max)
+        {
+            return $"The date can't be after {Formatting.Date(max)}.";
+        }
+
+        date = parsed;
+        return null;
+    }
+
+    /// <summary>
+    /// While the person types, the date follows the text: text that is a date sets it at once, and text that is not is reported to the form
+    /// without a message yet. So a save started with the caret still in the box (Ctrl+S, the default button, a screen reader's Invoke: none
+    /// of them moves the focus) saves the date that is on screen, or is refused with the reason; it can never save the date from before.
+    /// </summary>
+    private void OnBoxTextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_syncing)
+        {
+            return;
+        }
+
+        var error = Read(Box.Text, out var date);
+        if (error is not null)
+        {
+            Report(error, show: false);
+            return;
+        }
+
+        Report(null);
+        _syncing = true; // the text stays as typed: it is put into the app format on blur or Enter, not under the caret
+        try
+        {
+            SelectedDate = date;
+            ShowInCalendar();
+        }
+        finally
+        {
+            _syncing = false;
+        }
     }
 
     [System.Text.RegularExpressions.GeneratedRegex(@"^\d{1,2} [A-Za-z]{3} \d{4}$")]
@@ -91,12 +130,18 @@ public partial class DateField : UserControl
     /// while the text is refused the bound date is still the previous one, so the form must not save. The form blocks its save on it and shows
     /// the message; null takes it back.
     /// </summary>
-    private void Report(string? error)
+    /// <param name="error">Why the text is refused, or null when it is a date (or empty).</param>
+    /// <param name="show">False while the person is still typing: the form holds the reason back until the field is validated.</param>
+    private void Report(string? error, bool show = true)
     {
-        ParseError = error;
+        if (show || error is null)
+        {
+            ParseError = error;
+        }
+
         if (GetBindingExpression(SelectedDateProperty) is { ResolvedSource: Lifestream.Client.Validation.FormViewModelBase form, ResolvedSourcePropertyName: { } field })
         {
-            form.SetInputError(field, error);
+            form.SetInputError(field, error, show);
         }
     }
 
@@ -163,14 +208,19 @@ public partial class DateField : UserControl
         try
         {
             Box.Text = Formatting.Date(SelectedDate);
-            Picker.BlackoutDates.Clear(); // a chosen date may not be inside a blackout range, so the ranges are rebuilt around it
-            Picker.SelectedDate = SelectedDate?.ToDateTime(TimeOnly.MinValue);
-            ApplyLimits();
+            ShowInCalendar();
         }
         finally
         {
             _syncing = false;
         }
+    }
+
+    private void ShowInCalendar()
+    {
+        Picker.BlackoutDates.Clear(); // a chosen date may not be inside a blackout range, so the ranges are rebuilt around it
+        Picker.SelectedDate = SelectedDate?.ToDateTime(TimeOnly.MinValue);
+        ApplyLimits();
     }
 
     private void OnBoxLostFocus(object sender, RoutedEventArgs e) => CommitText();

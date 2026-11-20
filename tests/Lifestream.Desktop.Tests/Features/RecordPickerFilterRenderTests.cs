@@ -72,7 +72,7 @@ public sealed class RecordPickerFilterRenderTests
         Assert.Contains("Change", facts.chosenButtons);
         Assert.Contains("Clear selection", facts.chosenButtons);
         Assert.DoesNotContain("Choose", facts.chosenButtons);
-        Assert.Contains("Jane Q. Public · #42 · B-", facts.chosenTexts);
+        Assert.Contains("Jane Q. Public · D-0042 · B-", facts.chosenTexts); // "#42" until 2.1.3 (real-app walk 22)
         Assert.DoesNotContain("Any donor", facts.chosenTexts);
         Assert.Contains("Any donor", facts.After);
         Assert.Contains("Choose", facts.AfterButtons);

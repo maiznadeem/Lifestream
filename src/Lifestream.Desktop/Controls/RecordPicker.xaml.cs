@@ -264,3 +264,14 @@ public sealed class ZeroToVisibleConverter : IValueConverter
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => throw new NotSupportedException();
 }
+
+/// <summary>The code of a record offered by a picker ("D-0041"): values are the record's id and the picker's view model, which knows the kind.</summary>
+public sealed class RecordCodeConverter : System.Windows.Data.IMultiValueConverter
+{
+    public static RecordCodeConverter Instance { get; } = new();
+
+    public object Convert(object[] values, Type targetType, object parameter, System.Globalization.CultureInfo culture) =>
+        values is [int id, Lifestream.Client.Lookups.RecordPickerViewModel picker, ..] ? picker.CodeOf(id) : string.Empty;
+
+    public object[] ConvertBack(object value, Type[] targetTypes, object parameter, System.Globalization.CultureInfo culture) => throw new NotSupportedException();
+}
