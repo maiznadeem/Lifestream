@@ -328,6 +328,110 @@ public sealed class SeedTodayTests
         Assert.True(problems.Count == 0, $"{problems.Count} problems, first: {string.Join("; ", problems.Take(6))}");
     }
 
+    [Theory]
+    [InlineData(1)]
+    [InlineData(3)]
+    public void EveryDayOfTheComingYear_AtFourTimesOfDay_NobodyBreaksTheDonationRule_AndTheApisCheckAgreesForEveryOpenBooking(int factor)
+    {
+        // The rule the app enforces and shows ("At least 90 days are needed between donations"), read from the domain. 400 consecutive days from the release
+        // (40 at three times the size), each before the clinic opens, in its morning, in its afternoon and at the day's end.
+        var gap = Eligibility.MinDaysBetweenDonations;
+        TimeSpan[] times = [new(0, 0, 5), new(10, 45, 0), new(13, 0, 0), new(23, 59, 30)];
+        var first = new DateOnly(2026, 11, 15);
+        var days = factor == 1 ? 400 : 40;
+        var problems = new List<string>();
+        var donations = 0;
+        var bookings = 0;
+        for (var day = first; day < first.AddDays(days); day = day.AddDays(1))
+        {
+            foreach (var time in times)
+            {
+                var resetAt = At(day, time);
+                var set = ScaleDataGenerator.Generate(factor, resetAt);
+                var donated = set.Receipts.Where(r => r.Kind == ReceiptKind.Donation).GroupBy(r => r.Appointment!.Donor!)
+                    .ToDictionary(g => g.Key, g => g.Select(r => DateOnly.FromDateTime(r.CreatedAtUtc)).Order().ToList());
+
+                // No donor gives blood twice within the gap, and the donor's own row agrees with the receipts.
+                foreach (var (donor, on) in donated)
+                {
+                    donations += on.Count;
+                    for (var i = 0; i < on.Count; i++)
+                    {
+                        if (i > 0 && on[i].DayNumber - on[i - 1].DayNumber < gap)
+                        {
+                            problems.Add($"{resetAt:O}: {donor.Name} donated on {on[i - 1]:yyyy-MM-dd} and on {on[i]:yyyy-MM-dd}");
+                        }
+
+                        // As the API judges a donation (RecordDonationAsync): on its day, from the donation before it; the age limits are part of that rule.
+                        var donation = Eligibility.Evaluate(donor.DateOfBirth, i > 0 ? on[i - 1] : null, on[i], donor.MedicalHold);
+                        if (!donation.IsEligible)
+                        {
+                            problems.Add($"{resetAt:O}: {donor.Name} donated on {on[i]:yyyy-MM-dd}: {string.Join(' ', donation.Reasons)}");
+                        }
+                    }
+
+                    if (donor.LastDonated != on[^1])
+                    {
+                        problems.Add($"{resetAt:O}: {donor.Name} last donated {donor.LastDonated:yyyy-MM-dd}, the receipts say {on[^1]:yyyy-MM-dd}");
+                    }
+                }
+
+                foreach (var appointment in set.Appointments)
+                {
+                    var donor = appointment.Donor!;
+                    var on = DateOnly.FromDateTime(appointment.SlotStartUtc);
+                    if (appointment.OverrideReason is not null)
+                    {
+                        problems.Add($"{resetAt:O}: the {appointment.SlotStartUtc:O} appointment of {donor.Name} needed an override: {appointment.OverrideReason}");
+                    }
+
+                    if (appointment.Status == AppointmentStatus.Pending)
+                    {
+                        // As the API judges a booking (AppointmentEndpoints.BookAsync): on the appointment's day, from the donor's row.
+                        bookings++;
+                        var booking = Eligibility.Evaluate(donor.DateOfBirth, donor.LastDonated, on, donor.MedicalHold);
+                        if (!booking.IsEligible)
+                        {
+                            problems.Add($"{resetAt:O}: {donor.Name} is booked for {on:yyyy-MM-dd}: {string.Join(' ', booking.Reasons)}");
+                        }
+
+                        // As the API judges the donation itself (RecordDonationAsync): on the day it is recorded, which for today's appointments is today.
+                        if (on == day && !Eligibility.Evaluate(donor.DateOfBirth, donor.LastDonated, day, donor.MedicalHold).IsEligible)
+                        {
+                            problems.Add($"{resetAt:O}: {donor.Name} comes in today and may not donate today");
+                        }
+                    }
+                    else if (appointment.Status != AppointmentStatus.Completed)
+                    {
+                        // Cancelled or missed: it was booked by a donor who was eligible on its day, from the donations up to it.
+                        var before = donated.GetValueOrDefault(donor)?.Where(d => d <= on).Select(d => (DateOnly?)d).LastOrDefault();
+                        if (!Eligibility.Evaluate(donor.DateOfBirth, before, on).IsEligible)
+                        {
+                            problems.Add($"{resetAt:O}: {donor.Name} had a {appointment.Status} appointment on {on:yyyy-MM-dd} and had donated on {before:yyyy-MM-dd}");
+                        }
+                    }
+                }
+
+                // Donations and open bookings together: recording a booked donation on its day never puts another booking of that donor inside the gap.
+                foreach (var events in set.Appointments.Where(a => a.Status is AppointmentStatus.Completed or AppointmentStatus.Pending).GroupBy(a => a.Donor!))
+                {
+                    var on = events.Select(a => DateOnly.FromDateTime(a.SlotStartUtc)).Order().ToList();
+                    for (var i = 1; i < on.Count; i++)
+                    {
+                        if (on[i].DayNumber - on[i - 1].DayNumber < gap)
+                        {
+                            problems.Add($"{resetAt:O}: {events.Key.Name} has appointments on {on[i - 1]:yyyy-MM-dd} and on {on[i]:yyyy-MM-dd}");
+                        }
+                    }
+                }
+            }
+        }
+
+        Assert.True(problems.Count == 0, $"{problems.Count} problems, first: {string.Join("; ", problems.Take(6))}");
+        Assert.Equal(days * times.Length * factor * SeedSizes.CompletedAppointments, donations);
+        Assert.Equal(days * times.Length * factor * SeedSizes.PendingAppointments, bookings);
+    }
+
     [Fact]
     public void TheDataset_IsDeterministicForAResetTime_AndADateMeansMidnight()
     {
