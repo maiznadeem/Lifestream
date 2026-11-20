@@ -82,10 +82,12 @@ public class ScopedApiClient : DispatchProxy
         var ceiling = new CancellationTokenSource(_ceiling, _clock);
         var cts = CancellationTokenSource.CreateLinkedTokenSource(scope.Token, (CancellationToken)args[tokenIndex]!, ceiling.Token);
         args[tokenIndex] = cts.Token;
+        scope.CallStarted();
         var started = scope.Runner.CallStarted();
         void Done()
         {
             scope.Runner.CallEnded(started);
+            scope.CallEnded();
             cts.Dispose();
             ceiling.Dispose();
         }

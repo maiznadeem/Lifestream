@@ -1,0 +1,4 @@
+<Project>
+  <!-- The real-app driver is a plain console program, not a test project: it takes the repository defaults and skips tests/Directory.Build.props. -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../../'))" />
+</Project>
