@@ -42,7 +42,7 @@ public sealed partial class ChangePasswordDialogViewModel : DialogViewModel
     private readonly ILifestreamApiClient _api;
 
     public ChangePasswordDialogViewModel(ILifestreamApiClient api, bool required = false)
-        : base("Change password", "Change password", "Changing...", required ? "Not now" : "Cancel")
+        : base("Change password", "Change password", "Changing...", required ? SignOutText : "Cancel")
     {
         _api = api;
         IsRequired = required;
@@ -52,9 +52,18 @@ public sealed partial class ChangePasswordDialogViewModel : DialogViewModel
     /// <summary>True when an admin reset the password: the dialog says why it appeared.</summary>
     public bool IsRequired { get; }
 
+    /// <summary>
+    /// The second button of the required dialog. Leaving it signs the person out (the server lets a reset account do nothing else until the
+    /// password is changed), so the button says so. It used to say "Not now", which promised a way in.
+    /// </summary>
+    public const string SignOutText = "Sign out";
+
     public string Explanation => IsRequired
-        ? "An administrator reset your password. Enter the temporary password you were given, then choose a new one."
+        ? "An administrator reset your password. Enter the temporary password you were given, then choose a new one. Until you do, you can only sign out."
         : "Enter your current password, then choose a new one.";
+
+    /// <summary>What the first box asks for: after a reset it is the temporary password the person has just signed in with, and the label says so.</summary>
+    public string CurrentPasswordLabel => IsRequired ? "Temporary password" : "Current password";
 
     public string SuccessMessage => "Your password was changed.";
 
@@ -76,7 +85,7 @@ public sealed partial class ChangePasswordDialogViewModel : DialogViewModel
         switch (field)
         {
             case nameof(CurrentPassword):
-                return CurrentPassword.Length == 0 ? "Enter your current password." : null;
+                return CurrentPassword.Length > 0 ? null : IsRequired ? "Enter the temporary password you were given." : "Enter your current password.";
             case nameof(NewPassword):
                 if (NewPassword.Length == 0)
                 {
@@ -123,7 +132,7 @@ public sealed partial class ChangePasswordDialogViewModel : DialogViewModel
         // The API says which field is wrong ("currentPassword is not correct"): put the message under that field.
         if (problem.ErrorsFor("currentPassword") is [_, ..])
         {
-            SetError(nameof(CurrentPassword), "Your current password isn't correct.");
+            SetError(nameof(CurrentPassword), IsRequired ? "The temporary password isn't correct." : "Your current password isn't correct.");
             return;
         }
 
