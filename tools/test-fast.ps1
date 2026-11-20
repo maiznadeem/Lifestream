@@ -23,10 +23,12 @@ have ended, so SQL Server is as quiet for them as in an unsharded run. That only
 The Api tests keep the backup of their 100x template database on the server between runs and say in the summary
 whether this run restored it or had to build it (a change in the generator, the seed code, the migrations or the day).
 
-The real-window tests of the Desktop project need the compositor drawing: with the display off (it turns off after some
-minutes without input, although the session is not locked) each of them fails after waiting 60 seconds for a drawn
-window. While it runs, this script asks Windows to keep the display on. It never sends input (no pointer movement, no
-keystrokes), so it cannot turn a display on that is already off: it says so when that is likely.
+The real-window tests of the Desktop project need the compositor drawing. While it runs, this script asks Windows to
+keep the display on; it never sends input (no pointer movement, no keystrokes), so it cannot turn on a display that is
+already off. Those tests then skip at once ("display is off: real-window checks not run"), as they do when the session
+is locked. The summary says on a line of its own how many real-window checks did not run, and names them with the
+reason; because a release gate must not lose those checks silently, the run then ends FAILED unless
+-AllowRealWindowSkip says that a run without them is acceptable.
 
 Every test process runs with DOTNET_TieredPGO=0: the same tests and results for about 30 % less processor time (the
 JIT does not instrument code for a profile that a process this short never gets to use).
@@ -65,6 +67,9 @@ param(
     [string]$Out,
     # The class durations file (default: tools/test-fast.durations.json of the checkout, else the one beside this script).
     [string]$Durations,
+    # Accept a run in which real-window checks did not run (display off, session locked): they are still counted and named, but the
+    # run is not failed for them.
+    [switch]$AllowRealWindowSkip,
     # Run Domain and Client by themselves first; Api and the Desktop tests start when both have ended.
     [switch]$DomainAndClientFirst,
     # Skip the build (the Release output must be up to date).
@@ -237,6 +242,7 @@ function Read-Results([string]$file) {
                 Class = $test.GetAttribute('type')
                 Collection = $collectionName
                 Result = $test.GetAttribute('result')
+                Reason = $(if ($test.SelectSingleNode('reason')) { $test.SelectSingleNode('reason').InnerText.Trim() } else { '' })
                 Seconds = [double]::Parse($test.GetAttribute('time'), [System.Globalization.CultureInfo]::InvariantCulture)
             })
         }
@@ -423,6 +429,7 @@ $before = @{ Affinity = $self.ProcessorAffinity; Priority = $self.PriorityClass;
 $mutex = New-Object System.Threading.Mutex($false, 'Global\Lifestream.TestFast')
 $held = $false
 $displayHeld = $false
+$poolBefore = $null
 $exitCode = 1
 try {
     try {
@@ -483,31 +490,25 @@ try {
         }
     }
 
-    # The display: kept on while this runs (the request ends in the finally block below), and a word when it is probably off already.
+    # The display is kept on while this runs (the request ends in the finally block below). Nothing here sends input.
     try {
-        Add-Type -Namespace LifestreamTestFast -Name Desktop -MemberDefinition @'
-[System.Runtime.InteropServices.DllImport("kernel32.dll")] public static extern uint SetThreadExecutionState(uint flags);
-[System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)] public struct LastInput { public uint Size; public uint Time; }
-[System.Runtime.InteropServices.DllImport("user32.dll")] public static extern bool GetLastInputInfo(ref LastInput info);
-public static double IdleSeconds() { var info = new LastInput(); info.Size = (uint)System.Runtime.InteropServices.Marshal.SizeOf(info); GetLastInputInfo(ref info); return unchecked((uint)System.Environment.TickCount - info.Time) / 1000.0; }
-'@
-        $idle = [LifestreamTestFast.Desktop]::IdleSeconds()
-        $timeout = 0
-        $setting = & powercfg.exe /q SCHEME_CURRENT SUB_VIDEO VIDEOIDLE 2>$null | Select-String 'Current AC Power Setting Index:\s*0x([0-9a-fA-F]+)'
-        if ($setting) {
-            $timeout = [Convert]::ToInt32($setting.Matches[0].Groups[1].Value, 16)
-        }
-
-        if ($timeout -gt 0 -and $idle -ge $timeout) {
-            Write-Host ('  display: no input for {0:N0} s and it turns off after {1} s, so it is probably off: the real-window tests need it on' -f $idle, $timeout)
-        }
-
-        [void][LifestreamTestFast.Desktop]::SetThreadExecutionState([uint32]2147483651) # continuous + system required + display required
+        Add-Type -Namespace LifestreamTestFast -Name Power -MemberDefinition '[System.Runtime.InteropServices.DllImport("kernel32.dll")] public static extern uint SetThreadExecutionState(uint flags);'
+        [void][LifestreamTestFast.Power]::SetThreadExecutionState([uint32]2147483651) # continuous + system required + display required
         $displayHeld = $true
     }
     catch {
-        Write-Verbose "The display state could not be read or held: $_"
+        Write-Verbose "Windows could not be asked to keep the display on: $_"
     }
+
+    # Every child's output is read through a pipe, and each pending read holds a thread of the thread pool. With some twenty children started
+    # together the pool's ready threads (one per processor) run out, and a child that prints more than its pipe holds (the Client tests log
+    # about 15 KB from a real server) then waits in its own write until the pool grows: measured, a child printing 68 KB beside 30 silent
+    # ones took 24.9 s to exit instead of 0.1 s, and a Client run stayed 51 s after its last test. Enough ready threads for every read.
+    $workers = 0
+    $ports = 0
+    [System.Threading.ThreadPool]::GetMinThreads([ref]$workers, [ref]$ports)
+    $poolBefore = @($workers, $ports)
+    [void][System.Threading.ThreadPool]::SetMinThreads([Math]::Max($workers, 256), [Math]::Max($ports, 256))
 
     $buildSeconds = 0.0
     if (-not $NoBuild) {
@@ -697,6 +698,7 @@ public static double IdleSeconds() { var info = new LastInput(); info.Size = (ui
     $problems = New-Object System.Collections.ArrayList
     $rows = New-Object System.Collections.ArrayList
     $failed = New-Object System.Collections.ArrayList
+    $realWindowSkips = New-Object System.Collections.ArrayList
     $ran = @{}
     $seenIn = @{ Domain = @{}; Client = @{}; Api = @{}; Desktop = @{} }
     $collections = @{}
@@ -710,6 +712,10 @@ public static double IdleSeconds() { var info = new LastInput(); info.Size = (ui
             $counts[$test.Result]++
             if ($test.Result -eq 'Fail') {
                 [void]$failed.Add("$($run.Name): $(Get-NameKey $test.Name)")
+            }
+            elseif ($test.Result -eq 'Skip' -and ($test.Reason -like 'display is off: real-window checks not run*' -or $test.Reason -like 'Real-window tests *')) {
+                # What the real-window tests skip with when they cannot see a window (RealWindow.Unavailable in the Desktop tests).
+                [void]$realWindowSkips.Add([pscustomobject]@{ Name = (Get-NameKey $test.Name); Reason = $test.Reason })
             }
 
             if (-not $seenIn[$run.Project].ContainsKey($test.Class)) { $seenIn[$run.Project][$test.Class] = @{} }
@@ -827,6 +833,21 @@ public static double IdleSeconds() { var info = new LastInput(); info.Size = (ui
         Get-Content -LiteralPath $templateLog | Sort-Object -Unique | ForEach-Object { Write-Host "Api $_" }
     }
 
+    Write-Host "Real-window checks not run: $($realWindowSkips.Count)"
+    if ($realWindowSkips.Count -gt 0) {
+        foreach ($group in ($realWindowSkips | Group-Object Reason)) {
+            Write-Host "  why: $($group.Name)"
+            $group.Group | Sort-Object Name | ForEach-Object { Write-Host "    $($_.Name)" }
+        }
+
+        if ($AllowRealWindowSkip) {
+            Write-Host '  accepted for this run (-AllowRealWindowSkip)'
+        }
+        else {
+            [void]$problems.Add("$($realWindowSkips.Count) real-window check(s) did not run ($((@($realWindowSkips | ForEach-Object { $_.Reason } | Sort-Object -Unique)) -join '; ')): they are named above. A release gate must not lose them: run again with the display on and the session unlocked, or pass -AllowRealWindowSkip to accept a run without them.")
+        }
+    }
+
     if ($failed.Count -gt 0) {
         Write-Host ''
         Write-Host "Failed tests ($($failed.Count)):"
@@ -864,7 +885,11 @@ finally {
     $env:MSBUILDDISABLENODEREUSE = $before.Reuse
     $env:DOTNET_CLI_USE_MSBUILD_SERVER = $before.Server
     if ($displayHeld) {
-        [void][LifestreamTestFast.Desktop]::SetThreadExecutionState([uint32]2147483648) # continuous only: the display may turn off again
+        [void][LifestreamTestFast.Power]::SetThreadExecutionState([uint32]2147483648) # continuous only: the display may turn off again
+    }
+
+    if ($poolBefore) {
+        [void][System.Threading.ThreadPool]::SetMinThreads($poolBefore[0], $poolBefore[1])
     }
 
     if ($held) {
