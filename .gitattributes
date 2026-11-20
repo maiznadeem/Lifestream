@@ -4,6 +4,30 @@
 * text=auto
 
 ###############################################################################
+# Byte-exact files: the same bytes in every checkout, on every machine.
+#
+# With core.autocrlf=true (the default of Git for Windows, and what GitHub's
+# Windows runners use) the rule above writes every text file with CRLF. That
+# is wrong for a file whose hash is recorded, or that is shipped or run exactly
+# as it is:
+#   - the font licence: Fonts/README.md records its SHA-256 and FontTests
+#     compares it (a fresh Windows checkout failed that test; a worktree where
+#     the file had been created with LF did not);
+#   - fonts, icons and images, whose hashes are recorded too (never text,
+#     whatever their first bytes look like);
+#   - shell scripts, which run on Linux and inside Git Bash.
+###############################################################################
+src/Lifestream.Desktop/Fonts/OFL.txt -text
+*.ttf  binary
+*.otf  binary
+*.ico  binary
+*.png  binary
+*.jpg  binary
+*.gif  binary
+*.pyc  binary
+*.sh   text eol=lf
+
+###############################################################################
 # Set default behavior for command prompt diff.
 #
 # This is need for earlier builds of msysgit that does not have it on by

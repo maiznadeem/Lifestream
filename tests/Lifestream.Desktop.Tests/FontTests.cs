@@ -35,6 +35,14 @@ public sealed class FontTests
         Assert.Contains("Onest Project Authors", File.ReadAllText(Path.Combine(folder, "OFL.txt")), StringComparison.Ordinal);
         Assert.Contains(Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(Path.Combine(folder, "OFL.txt")))), record, StringComparison.OrdinalIgnoreCase); // the licence is the one recorded
 
+        // The hash above is of the file's bytes, so git must hand out the same bytes everywhere: with core.autocrlf=true a text file is checked out
+        // with CRLF (a fresh Windows checkout failed this test while a long-lived worktree passed). .gitattributes pins the licence and the binary assets.
+        var attributes = File.ReadAllLines(RepoPaths.Find(".gitattributes")).Select(line => string.Join(' ', line.Split(' ', StringSplitOptions.RemoveEmptyEntries))).ToList();
+        Assert.Contains("src/Lifestream.Desktop/Fonts/OFL.txt -text", attributes);
+        Assert.Contains("*.ttf binary", attributes);
+        Assert.Contains("*.ico binary", attributes);
+        Assert.Contains("*.png binary", attributes);
+
         // It ships inside the executable as a WPF resource, so the app needs no installed font.
         Assert.Contains("Fonts\\Onest-*.ttf", File.ReadAllText(Path.Combine(DesktopDir, "Lifestream.Desktop.csproj")), StringComparison.Ordinal);
         Assert.Contains("Resource Include", File.ReadAllText(Path.Combine(DesktopDir, "Lifestream.Desktop.csproj")), StringComparison.Ordinal);
