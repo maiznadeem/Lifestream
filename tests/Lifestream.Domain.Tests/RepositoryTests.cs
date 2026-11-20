@@ -217,12 +217,27 @@ public sealed partial class RepositoryTests
 
     // ---- INFRA-14: CI ----
 
+    // GitHub Actions minutes are limited: the whole build and every test are proven on the developer's PC before a push. What a pull
+    // request starts by itself is the `fast` job (Client and Domain, 2 minutes at most); the full jobs stay in ci.yml for manual runs.
     [Fact]
-    public void Ci_RunsBuildAndAllTests_OnPullRequests_AndNeverContinuesOnError()
+    public void Ci_RunsTheFastJobOnPullRequests_KeepsTheFullJobsForManualRuns_AndNeverContinuesOnError()
     {
         var ci = Read(".github/workflows/ci.yml");
 
         Assert.Matches(@"(?m)^\s*pull_request:", ci);
+        var fast = CiJob(ci, "fast");
+        Assert.Contains("if: github.event_name != 'workflow_dispatch'", fast, StringComparison.Ordinal);
+        Assert.Matches(@"(?m)^\s*timeout-minutes: 2\s*$", fast);
+        Assert.Contains("ubuntu-latest", fast, StringComparison.Ordinal);
+        Assert.Contains("foreach ($project in 'Client', 'Domain')", fast, StringComparison.Ordinal);
+        Assert.Contains("dotnet test tests/Lifestream.$project.Tests -c Release", fast, StringComparison.Ordinal);
+
+        // The full gate is still written down, command for command, and runs when the workflow is started by hand.
+        foreach (var job in new[] { "api", "desktop", "test-order" })
+        {
+            Assert.Contains("if: github.event_name == 'workflow_dispatch'", CiJob(ci, job), StringComparison.Ordinal);
+        }
+
         Assert.Contains("dotnet build", ci, StringComparison.Ordinal);
         Assert.Contains("dotnet test tests/Lifestream.Domain.Tests", ci, StringComparison.Ordinal);
         Assert.Contains("dotnet test tests/Lifestream.Client.Tests", ci, StringComparison.Ordinal);
@@ -235,11 +250,19 @@ public sealed partial class RepositoryTests
         Assert.DoesNotContain("continue-on-error: true", ci, StringComparison.Ordinal);
     }
 
+    private static string CiJob(string ci, string name)
+    {
+        var job = Regex.Match(ci, $@"(?ms)^  {Regex.Escape(name)}:\r?\n(?<body>.*?)(?=^  \S|\z)");
+        Assert.True(job.Success, $"ci.yml has no {name} job");
+        return job.Groups["body"].Value;
+    }
+
     [Fact]
-    public void Ci_RunsEveryTestProjectUnderTwoFixedSeeds_SoAnOrderDependenceFailsThePullRequest()
+    public void Ci_RunsEveryTestProjectUnderTwoFixedSeeds_SoAnOrderDependenceFailsTheRun()
     {
         // xUnit's default order is derived from the assembly path, so a test that leaks state passes in one checkout and fails in another.
-        // A seeded order is the same on every machine: CI runs each project under two fixed seeds and fails the job when either run fails.
+        // A seeded order is the same on every machine: the test-order job (started by hand; the same command is the local gate's) runs each
+        // project under two fixed seeds and fails when either run fails.
         var ci = Read(".github/workflows/ci.yml");
         var job = Regex.Match(ci, @"(?ms)^  test-order:\r?\n(?<body>.*?)(?=^  \S|\z)");
         Assert.True(job.Success, "ci.yml has no test-order job");

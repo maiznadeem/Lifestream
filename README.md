@@ -1,13 +1,13 @@
 # Lifestream 2.1
 
 Lifestream is a blood-bank management desktop app: donors, patients, appointments, blood requests, stock and receipts,
-with a dashboard. Version **2.1.1** is a ground-up rewrite of the original course project on .NET 11.
+with a dashboard. Version **2.1.2** is a ground-up rewrite of the original course project on .NET 11.
 
 What changed for users is in [CHANGELOG.md](CHANGELOG.md).
 
 ## Install
 
-1. Open the [v2.1.1 release](https://github.com/maiznadeem/lifestream/releases/tag/v2.1.1) and download `Lifestream-win-Setup.exe` (and `SHA256SUMS.txt`). Windows 10 or 11, 64-bit.
+1. Open the [v2.1.2 release](https://github.com/maiznadeem/lifestream/releases/tag/v2.1.2) and download `Lifestream-win-Setup.exe` (and `SHA256SUMS.txt`). Windows 10 or 11, 64-bit.
 2. Check the download. In PowerShell, in the folder you saved it to:
 
    ```powershell
@@ -93,7 +93,34 @@ dotnet run --project src/Lifestream.Desktop     # desktop client
 
 Installers are published on the [GitHub Releases page](https://github.com/maiznadeem/lifestream/releases) with SHA-256 checksums (see
 [Install](#install)). They are not code-signed, so Windows SmartScreen shows a "More info, Run anyway" prompt. The text of each release is its
-section of [CHANGELOG.md](CHANGELOG.md), attached by `release.yml`.
+section of [CHANGELOG.md](CHANGELOG.md).
+
+A release is made on the maintainer's PC, not in GitHub Actions (the minutes are limited). Once the version in `Directory.Build.props`
+and its `CHANGELOG.md` section are on `master`, and the build and the tests have passed locally:
+
+```
+pwsh tools/release-local.ps1 -Version <version> -DryRun   # publish, scan, pack, scan, checksums: nothing leaves the PC
+pwsh tools/release-local.ps1 -Version <version>           # the same, then the GitHub release and its tag
+```
+
+The script refuses unless the working tree is clean, `HEAD` is the commit `master` points at on GitHub, the version matches and the
+tag is not taken. It publishes the desktop app (self-contained, win-x64, ReadyToRun), scans the publish folder for credentials, packs
+the installer and the update packages with Velopack, scans those, writes `SHA256SUMS.txt`, creates the release as a draft at that
+commit, uploads the assets, compares them with what GitHub received, and only then publishes it, which creates the tag `v<version>`.
+A tag starts no workflow. `release.yml` does the same on a GitHub runner and is started by hand only, as a fallback (see its header).
+
+## Continuous integration
+
+What starts by itself is short, because the whole build and every test are run locally before a push:
+
+| Workflow | Starts on | Does | Time |
+|---|---|---|---|
+| `ci.yml` | pull request, push to `master` | job `fast`: builds Client and Domain with their tests and runs them | 90 second budget, checked by the job itself |
+| `secret-scan.yml` | pull request, push to `master` | job `repository`: credential scan of the source and of the new commits | about 20 seconds |
+| `deploy-api.yml` | push to `master` that changes the API, its libraries or `infra/` | builds and scans the image, migrates, updates the app, checks `/healthz` | about 5 minutes (the migration and the rollout are Azure's time) |
+
+Everything else runs only when started by hand (Actions > the workflow > Run workflow): the full `api`, `desktop` and `test-order`
+jobs of `ci.yml`, the `desktop` and `api-image` scans of `secret-scan.yml`, `release.yml`, `screenshots.yml` and `sync-sql-firewall.yml`.
 
 ## Repository rules
 
