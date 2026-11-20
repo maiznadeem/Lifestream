@@ -20,6 +20,9 @@ the 100x database stay in one process ("apiTogether": they share one template pe
 must run alone ("apiLast": the one-at-a-time collection) run in a process of their own once the other Api processes
 have ended, so SQL Server is as quiet for them as in an unsharded run. That only pays when processors are idle.
 
+The Api tests keep the backup of their 100x template database on the server between runs and say in the summary
+whether this run restored it or had to build it (a change in the generator, the seed code, the migrations or the day).
+
 Every test process runs with DOTNET_TieredPGO=0: the same tests and results for about 30 % less processor time (the
 JIT does not instrument code for a profile that a process this short never gets to use).
 
@@ -411,7 +414,7 @@ if (Test-Path -LiteralPath $Durations) {
 }
 
 $self = [System.Diagnostics.Process]::GetCurrentProcess()
-$before = @{ Affinity = $self.ProcessorAffinity; Priority = $self.PriorityClass; Root = $env:DOTNET_ROOT; HostPath = $env:DOTNET_HOST_PATH; Pgo = $env:DOTNET_TieredPGO; Reuse = $env:MSBUILDDISABLENODEREUSE; Server = $env:DOTNET_CLI_USE_MSBUILD_SERVER }
+$before = @{ Affinity = $self.ProcessorAffinity; Priority = $self.PriorityClass; Root = $env:DOTNET_ROOT; HostPath = $env:DOTNET_HOST_PATH; Pgo = $env:DOTNET_TieredPGO; TemplateLog = $env:LIFESTREAM_SCALE_TEMPLATE_LOG; Reuse = $env:MSBUILDDISABLENODEREUSE; Server = $env:DOTNET_CLI_USE_MSBUILD_SERVER }
 $mutex = New-Object System.Threading.Mutex($false, 'Global\Lifestream.TestFast')
 $held = $false
 $exitCode = 1
@@ -440,6 +443,8 @@ try {
     }
 
     [void](New-Item -ItemType Directory -Force -Path $Out)
+    $templateLog = Join-Path $Out 'scale-template.log'
+    $env:LIFESTREAM_SCALE_TEMPLATE_LOG = $templateLog # each Api process says here whether it restored the kept 100x template or built it
     Write-Host "test-fast: $($script:Checkout)"
     Write-Host "  logs and results: $Out"
 
@@ -786,6 +791,10 @@ try {
     Write-Host ''
     Write-Host ('Wall time by project: ' + (($projects.Keys | ForEach-Object { '{0} {1:N1} s' -f $_, ($span[$_].To - $span[$_].From).TotalSeconds }) -join ', ') + " (Api in $($plans.Api.Count) processes, Desktop in $($plans.Desktop.Count)).")
     Write-Host ('Counts: ' + (($projects.Keys | ForEach-Object { "$_ $([int]$ran[$_]) of $($expected[$_])" }) -join ', ') + "; $($classes.Api.Count) Api and $($classes.Desktop.Count) Desktop classes, each in one shard" + $(if ($split.Count -gt 0) { " ($($split.Count) Desktop classes split over shards of their own)" } else { '' }) + '.')
+    if (Test-Path -LiteralPath $templateLog) {
+        Get-Content -LiteralPath $templateLog | Sort-Object -Unique | ForEach-Object { Write-Host "Api $_" }
+    }
+
     if ($failed.Count -gt 0) {
         Write-Host ''
         Write-Host "Failed tests ($($failed.Count)):"
@@ -819,6 +828,7 @@ finally {
     $env:DOTNET_ROOT = $before.Root
     $env:DOTNET_HOST_PATH = $before.HostPath
     $env:DOTNET_TieredPGO = $before.Pgo
+    $env:LIFESTREAM_SCALE_TEMPLATE_LOG = $before.TemplateLog
     $env:MSBUILDDISABLENODEREUSE = $before.Reuse
     $env:DOTNET_CLI_USE_MSBUILD_SERVER = $before.Server
     if ($held) {
