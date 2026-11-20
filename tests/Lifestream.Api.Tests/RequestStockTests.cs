@@ -215,8 +215,11 @@ public sealed class RequestStockTests(ApiFixture fx) : IClassFixture<ApiFixture>
     {
         var staff = await fx.AddStaffAsync(Role.Staff);
         var receipt = await Seed.ReceiptAsync(fx, ReceiptKind.Donation, DateTime.UtcNow.AddMinutes(-5));
-        var page = await (await staff.Client.GetApi(ApiRoutes.Receipts, $"?search={receipt.Id}")).Read<PagedResult<ReceiptListItem>>();
+        // By its code, which names this receipt and nothing else. The number alone is ambiguous by the search rule: it is also a word of a name
+        // (another test's "Bag donor 7" when this receipt is number 7) and, from three digits, a part of a phone.
+        var page = await (await staff.Client.GetApi(ApiRoutes.Receipts, $"?search=RC-{receipt.Id}")).Read<PagedResult<ReceiptListItem>>();
         var item = Assert.Single(page.Items);
+        Assert.Equal(receipt.Id, item.Id);
         Assert.StartsWith("Receipt donor", item.PartyName, StringComparison.Ordinal);
         Assert.Equal("Test Staff", item.StaffName);
         var detail = await (await staff.Client.GetApi(ApiRoutes.ReceiptById, receipt.Id)).Read<ReceiptDetail>();

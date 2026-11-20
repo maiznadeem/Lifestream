@@ -222,20 +222,9 @@ public sealed class SearchTermApiTests(ApiFixture fx) : IClassFixture<ApiFixture
 
         foreach (var query in new[] { "?search=Receipt&page=100000", "?page=100000", "?search=%2B1-555-0101&page=100000&pageSize=200", "?search=nobodyhasthisname&page=100000" })
         {
-            fx.Statements.Drain();
-            fx.Statements.Recording = true;
-            HttpResponseMessage response;
-            try
-            {
-                response = await admin.Client.GetAsync(ApiRoutes.Path(ApiRoutes.Receipts) + query, Ct);
-            }
-            finally
-            {
-                fx.Statements.Recording = false;
-            }
-
+            var (response, sent) = await fx.Statements.OfAsync(admin.Client, ApiRoutes.Path(ApiRoutes.Receipts) + query, Ct);
             var json = JsonElement.Parse(await response.Content.ReadAsStringAsync(Ct));
-            var statements = fx.Statements.Drain().Where(s => s.Sql.Contains("[Receipt]", StringComparison.Ordinal)).ToList();
+            var statements = sent.Where(s => s.Sql.Contains("[Receipt]", StringComparison.Ordinal)).ToList(); // of this request only: the ones that read receipts
             Assert.Empty(json.GetProperty("items").EnumerateArray());
             Assert.Single(statements); // the total and the (empty) page come from the same statement: nothing counts the result again
             if (!query.Contains("nobodyhasthisname", StringComparison.Ordinal))

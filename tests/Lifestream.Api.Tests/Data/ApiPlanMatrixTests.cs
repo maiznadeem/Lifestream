@@ -317,23 +317,13 @@ public sealed class ApiPlanMatrixTests(ScaleApiFixture fx) : IClassFixture<Scale
             .ToDictionary(r => (string)r[0]!, r => Convert.ToInt64(r[1], CultureInfo.InvariantCulture));
         var url = await UrlAsync(fx, @case, admin.Client);
 
-        fx.Statements.Drain();
-        fx.Statements.Recording = true;
-        HttpResponseMessage response;
-        try
-        {
-            response = await admin.Client.GetAsync(url, Ct);
-        }
-        finally
-        {
-            fx.Statements.Recording = false;
-        }
-
+        var (response, sent) = await fx.Statements.OfAsync(admin.Client, url, Ct);
         var body = await response.Content.ReadAsStringAsync(Ct);
         Assert.True(response.IsSuccessStatusCode, $"{url}: {(int)response.StatusCode} {body}");
-        // The session check of a token that has just expired from the cache (refresh-token and demo-state rows, tiny tables) is not the
-        // data call of the click; every other statement is.
-        var statements = fx.Statements.Drain().Where(s => !s.Sql.Contains("FROM [RefreshToken]", StringComparison.Ordinal) && !s.Sql.Contains("[DemoState]", StringComparison.Ordinal)).ToList();
+        // Only this request's statements are here (StatementCapture). Of those, the identity layer's are not the data call of the click: the session
+        // check of a token whose cached answer has expired and, on the first signed-in request of a day, the demo-reset check (tiny tables and the
+        // server's clock). Every other statement is.
+        var statements = sent.Where(s => !StatementCapture.IsIdentityCheck(s.Sql)).ToList();
         Assert.NotEmpty(statements);
 
         var plans = new List<ExecutedPlan>();
