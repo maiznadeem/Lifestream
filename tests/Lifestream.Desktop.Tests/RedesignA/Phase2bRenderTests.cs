@@ -70,6 +70,13 @@ public sealed class Phase2bRenderTests
 
         rig.Api.On("GetStockBagsAsync", Client.Api.ApiResult<Contracts.Stock.StockBagList>.Ok(new(bagsOf, bags, false)));
         rig.Api.On("GetReceiptCountsAsync", Client.Api.ApiResult<Contracts.Receipts.ReceiptCounts>.Ok(new(120, 84, 36)));
+
+        // Nobody in the design clinic has uploaded a photo, so every person shows their initials, as the app does without one (design-qa-2 N8: the test's drawn
+        // stand-in portrait read as a cartoon figure in the release renders).
+        rig.Api.On("GetStaffAsync", Client.Api.ApiResult<Contracts.PagedResult<Contracts.Staff.StaffListItem>>.Ok(new([.. Enumerable.Range(1, 50).Select(i => Features.DemoData2.StaffRow(i) with { HasPhoto = false })], 110, 1, 50)));
+        rig.Api.On("GetStaffMemberAsync", Client.Api.ApiResult<Contracts.Staff.StaffDetail>.Ok(Features.DemoData2.StaffDetail() with { HasPhoto = false }));
+        rig.Api.On("GetStaffPhotoAsync", Client.Tests.Fakes.FakeApiClient.Fail<byte[]>(404, "not_found"));
+        rig.Api.On("GetMyPhotoAsync", Client.Tests.Fakes.FakeApiClient.Fail<byte[]>(404, "not_found"));
     }
 
     public static TheoryData<string, string, string> Screens()
@@ -230,7 +237,7 @@ public sealed class Phase2bRenderTests
     /// <summary>
     /// The confirmation of a destructive menu action (there is no inline confirm: "Delete staff member" and "Cancel appointment" ask in this dialog), as
     /// its window draws it: direction A's dialog surface with 32 DIP of shadow room, the record named in the body, and the full action on the danger button
-    /// with Cancel before it.
+    /// with the button that keeps the record before it ("Keep appointment", never a bare "Cancel" beside "Cancel appointment").
     /// </summary>
     [Theory]
     [InlineData("delete", "light")]
@@ -239,16 +246,16 @@ public sealed class Phase2bRenderTests
     [InlineData("cancel", "dark")]
     public void ConfirmDialog_IsOnTheDialogSurface_NamesTheRecord_AndItsButtonCarriesTheFullAction(string action, string theme)
     {
-        var (title, body, verb) = action == "delete"
-            ? ("Delete staff member?", "Staff member 'Sofia Sharma' will be removed from the list. You can undo this for a few seconds afterwards.", "Delete staff member")
-            : ("Cancel appointment?", "The appointment of 'Asher Devereux' on 19 Nov 2026 11:00 will be cancelled and the time becomes free for someone else.", "Cancel appointment");
+        var (title, body, verb, keep) = action == "delete"
+            ? ("Delete staff member?", "Sofia Sharma will be removed from the list. You can undo this for a few seconds afterwards.", "Delete staff member", "Keep staff member")
+            : ("Cancel appointment?", "Asher Devereux's appointment on Thu 19 Nov at 11:00 will be cancelled, and the slot becomes free.", "Cancel appointment", "Keep appointment");
         var facts = StaHost.Run(() =>
         {
             ThemeService.Apply(theme == "dark" ? ThemeMode.Dark : ThemeMode.Light);
             try
             {
                 // The dialog is a window; its content is drawn in the off-screen host (no window is shown).
-                var dialog = DialogWindow.CreateConfirm(title, body, verb);
+                var dialog = DialogWindow.CreateConfirm(title, body, verb, keep);
                 var content = (FrameworkElement)dialog.Content;
                 dialog.Content = null;
                 var canvas = new Grid();
@@ -283,7 +290,7 @@ public sealed class Phase2bRenderTests
         Assert.True(facts.Layer > 20000, "the dialog's layer colour is missing");
         Assert.Equal(title, facts.Title);
         Assert.Contains(body, facts.Texts); // names the record
-        Assert.Equal(["Cancel", verb], facts.Buttons); // the full action, never a bare "Delete" or "OK"
+        Assert.Equal([keep, verb], facts.Buttons); // the full action, never a bare "Delete" or "OK", and what the other button keeps, never a bare "Cancel"
         Assert.True(facts.Danger);
     }
 
@@ -439,7 +446,7 @@ public sealed class Phase2bRenderTests
                 Assert.True(facts.Rows > 0, "the filtered staff list shows no rows");
                 break;
             case "staff-editor":
-                Assert.Contains("New staff member", facts.Texts);
+                Assert.Single(facts.Texts, t => t == "New staff member"); // the form's title, not repeated by the panel's overline
                 break;
             default:
                 Assert.Contains("You have unsaved changes.", facts.Texts);

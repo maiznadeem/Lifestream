@@ -110,12 +110,13 @@
         </lists:ListToolbar.Filters>
       </lists:ListToolbar>
       <lists:ScreenWakingNotice Grid.Row="2" />
-      <Border x:Name="TablePanel" Grid.Row="3" Background="{DynamicResource Brush.Layer}" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="1"
-              CornerRadius="{DynamicResource Radius.Panel}" SnapsToDevicePixels="True">
-        <controls:LoadSurface x:Name="ListSurface" State="{Binding State}" SkeletonKind="List" SkeletonColumns="2*,80,70,*,*,*"
-                              ErrorMessage="{Binding ErrorMessage}" ErrorDetail="{Binding ErrorDetail}" RetryCommand="{Binding RetryCommand}"
-                              EmptyGlyph="&#xE9F9;" EmptyTitle="{Binding EmptyTitle}" EmptyMessage="{Binding EmptyMessage}" EmptyActionText="{Binding EmptyActionText}"
-                              EmptyActionCommand="{Binding EmptyActionCommand}">
+      <!-- The table's frame is inside the load surface: an error or empty state stands alone as one card, not inside an empty framed panel -->
+      <controls:LoadSurface x:Name="ListSurface" Grid.Row="3" State="{Binding State}" SkeletonKind="List" SkeletonColumns="2*,80,70,*,*,*"
+                            ErrorMessage="{Binding ErrorMessage}" ErrorDetail="{Binding ErrorDetail}" RetryCommand="{Binding RetryCommand}"
+                            EmptyGlyph="&#xE9F9;" EmptyTitle="{Binding EmptyTitle}" EmptyMessage="{Binding EmptyMessage}" EmptyActionText="{Binding EmptyActionText}"
+                            EmptyActionCommand="{Binding EmptyActionCommand}">
+        <Border x:Name="TablePanel" Background="{DynamicResource Brush.Layer}" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="1"
+                CornerRadius="{DynamicResource Radius.Panel}" SnapsToDevicePixels="True">
           <Grid>
             <Grid.RowDefinitions>
               <RowDefinition Height="*" />
@@ -255,8 +256,8 @@
             </controls:LifestreamDataGrid>
             <lists:ListFooter Grid.Row="1" />
           </Grid>
-        </controls:LoadSurface>
-      </Border>
+        </Border>
+      </controls:LoadSurface>
     </Grid>
 
     <!-- The gap before the side panel, only while it is open -->
@@ -266,7 +267,7 @@
     <controls:SidePanel x:Name="Panel" Grid.Column="2" IsOpen="{Binding IsDetailOpen, Mode=OneWay}" CloseCommand="{Binding CloseDetailCommand}" Overline="{Binding DetailCode}"
                         lists:PanelBleed.IsEnabled="True" lists:DetailPaneFrame.IsInPanel="True">
       <Grid>
-        <lists:ActionDetailPane x:Name="DetailPane" FactsSource="{Binding PanelFacts}" Visibility="{Binding Editor, Converter={StaticResource NullToVisible}}">
+        <lists:ActionDetailPane x:Name="DetailPane" FactsSource="{Binding PanelFacts}" Visibility="{Binding Editor, Converter={StaticResource NullToVisible}}" ActionsFill="{Binding IsFulfilling}">
           <lists:ActionDetailPane.Header>
             <Grid>
               <Grid.ColumnDefinitions>
@@ -283,9 +284,10 @@
             </Grid>
           </lists:ActionDetailPane.Header>
           <lists:ActionDetailPane.Actions>
-            <StackPanel>
+            <!-- A dock, not a stack: while fulfilling, the step below fills the rest of the panel (so its buttons stay in view) -->
+            <DockPanel LastChildFill="True">
               <!-- How urgent the request is and whether the stock covers it (pending); its status (closed) -->
-              <WrapPanel Orientation="Horizontal" Margin="{StaticResource Reqs.BadgeRow}">
+              <WrapPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="{StaticResource Reqs.BadgeRow}">
                 <controls:Badge DataContext="{Binding DetailUrgency}" Text="{Binding Text}" Kind="{Binding Kind, Converter={StaticResource UrgencyKind}}" Icon="{Binding Kind, Converter={StaticResource UrgencyIcon}}"
                                 Margin="{StaticResource Reqs.ChipGap}" Visibility="{Binding Kind, Converter={StaticResource EqualsToVisible}, ConverterParameter=Critical|Soon|Normal}" />
                 <controls:Badge Text="{Binding DetailCover, Converter={StaticResource Cover}, ConverterParameter=Text}" Kind="{Binding DetailCover, Converter={StaticResource Cover}, ConverterParameter=Kind}"
@@ -295,7 +297,7 @@
                                      Visibility="{Binding IsClosedDetail, Converter={StaticResource BoolToVisibility}}" />
               </WrapPanel>
               <!-- The action row (one layout on every screen): [Fulfil request] [Edit] [...]; the rare and destructive actions in the menu, with full labels -->
-              <Grid AutomationProperties.AutomationId="ActionsRow">
+              <Grid DockPanel.Dock="Top" AutomationProperties.AutomationId="ActionsRow">
                 <Grid.Style>
                   <Style TargetType="Grid">
                     <Style.Triggers>
@@ -312,6 +314,7 @@
                 </Grid.ColumnDefinitions>
                 <Grid Margin="{DynamicResource Inset.R8}">
                   <Button AutomationProperties.AutomationId="FulfilButton" Style="{DynamicResource Button.Primary}" Command="{Binding FulfilCommand}" HorizontalAlignment="Stretch" AutomationProperties.Name="Fulfil request"
+                          AutomationProperties.HelpText="{Binding FulfilHoldReason}"
                           Visibility="{Binding IsPendingDetail, Converter={StaticResource BoolToVisibility}}">
                     <StackPanel Orientation="Horizontal">
                       <controls:Icon Kind="Drop" Size="16" VerticalAlignment="Center" />
@@ -353,10 +356,13 @@
                   </lists:MenuButton.ContextMenu>
                 </lists:MenuButton>
               </Grid>
+              <!-- None of the group in stock: "Fulfil request" is disabled and this line says why (the request stays open) -->
+              <TextBlock DockPanel.Dock="Top" AutomationProperties.AutomationId="FulfilHoldReason" Style="{DynamicResource Text.Caption}" Foreground="{DynamicResource Brush.Ink2}" Text="{Binding FulfilHoldReason}"
+                         TextWrapping="Wrap" Margin="{DynamicResource Inset.T8}" Visibility="{Binding FulfilHoldReason, Converter={StaticResource NullToCollapsed}}" />
               <!-- The fulfil step, in place of the actions while it is open -->
               <ContentControl Content="{Binding Fulfilment}" ContentTemplateSelector="{x:Static services:ViewLocator.Instance}" IsTabStop="False" Focusable="False"
-                              HorizontalContentAlignment="Stretch" Visibility="{Binding Fulfilment, Converter={StaticResource NullToCollapsed}}" />
-            </StackPanel>
+                              HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" Visibility="{Binding Fulfilment, Converter={StaticResource NullToCollapsed}}" />
+            </DockPanel>
           </lists:ActionDetailPane.Actions>
         </lists:ActionDetailPane>
         <ContentControl x:Name="EditorHost" Content="{Binding Editor}" ContentTemplateSelector="{x:Static services:ViewLocator.Instance}" IsTabStop="False" Focusable="False"

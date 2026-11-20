@@ -184,7 +184,8 @@ public sealed class ListScreenRenderTests
             var texts = host.All<TextBlock>().Where(t => t.IsVisible).Select(t => t.Text).ToList();
             var badges = host.All<Badge>().Where(b => b.IsVisible).Select(b => (b.Text, b.Kind)).ToList();
             var fulfils = host.All<Button>().Count(b => b.IsVisible && AutomationProperties.GetName(b) == "Fulfil this request");
-            return (PanelWidth: panel.ActualWidth, Panel: Hosted.BoundsOf(panel, host.Element), area, Texts: texts, Badges: badges, Fulfils: fulfils,
+            var enabledFulfils = host.All<Button>().Count(b => b.IsVisible && b.IsEnabled && AutomationProperties.GetName(b) == "Fulfil this request");
+            return (PanelWidth: panel.ActualWidth, Panel: Hosted.BoundsOf(panel, host.Element), area, Texts: texts, Badges: badges, Fulfils: fulfils, EnabledFulfils: enabledFulfils, RowBorn: vm.Items[2].DateOfBirth, PanelBorn: vm.Detail?.DateOfBirth,
                 Columns: grid.Columns.Where(c => c.Visibility == Visibility.Visible).Select(c => c.Header as string).ToList(),
                 Name: grid.Columns.First(c => (c.Header as string) == "Name").ActualWidth);
         });
@@ -202,6 +203,9 @@ public sealed class ListScreenRenderTests
         Assert.Contains(("No stock", BadgeKind.Critical), facts.Badges);
         Assert.Contains(("In 3 days", BadgeKind.Warning), facts.Badges);
         Assert.Equal(2, facts.Fulfils);
+        Assert.Equal(0, facts.EnabledFulfils); // no O− in stock: nothing to fulfil with (design-qa-2 N13)
+        Assert.Contains("No O\u2212 in stock. The request stays open until stock arrives.", facts.Texts);
+        Assert.Equal(facts.RowBorn, facts.PanelBorn); // the row and the panel give the same date of birth (one record, design-qa-2 N3)
         Assert.Contains("Can receive", facts.Texts);
         Assert.Contains("O\u2212", facts.Texts);
         Assert.Contains("Page 1 of 1", facts.Texts);
@@ -273,15 +277,15 @@ public sealed class ListScreenRenderTests
         Assert.Equal("Eligible to donate", facts.Banner); // last donated 3 Aug: 108 days before the appointment
         Assert.Contains("Eligible to donate", facts.Texts);
         // Tabs with counts; the agenda's marks and inline actions.
-        Assert.Contains("Today 7", facts.Texts);
+        Assert.Contains("Today 8", facts.Texts);
         Assert.Contains("Upcoming 3", facts.Texts);
         Assert.Contains("Past 2", facts.Texts);
         Assert.Contains("Next", facts.Texts);
         Assert.Contains("First-time", facts.Badges);
         Assert.Equal(0, facts.CheckIns); // the API has no check-in state: no button or text says "Check in"
-        Assert.Equal(4, facts.Records); // Asher (Next), Gideon, Elio and Anders
+        Assert.Equal(5, facts.Records); // Asher (Next), Gideon, Elio, Anders and Hana
         Assert.True(facts.EmphasisedOnNext, "the Next row's Record donation is not the one emphasised (secondary) button");
-        Assert.Equal(3, facts.Quiet); // the later rows keep the quiet button
+        Assert.Equal(4, facts.Quiet); // the later rows keep the quiet button
         Assert.True(facts.UpcomingError is null, facts.UpcomingError);
         Assert.Contains("Tomorrow, Fri 20 Nov", facts.UpcomingTexts);
         Assert.DoesNotContain("Today, Thu 19 Nov", facts.UpcomingTexts);
@@ -327,6 +331,10 @@ public sealed class ListScreenRenderTests
             var panelBounds = Hosted.BoundsOf(panel, host.Element);
             var texts = host.All<TextBlock>().Where(t => t.IsVisible).Select(t => t.Text).ToList();
             var buttons = host.All<Button>().Where(b => b.IsVisible).Select(b => b.Content as string).ToList();
+            var step = host.All<FulfilRequestDialogView>().Single();
+            var footer = host.All<Button>().Where(b => b.IsVisible && step.IsAncestorOf(b) && b.Name is "PrimaryButton" or "CancelButton").Select(b => Hosted.BoundsOf(b, host.Element)).ToList();
+            var bagList = host.All<ItemsControl>().First(i => i.Name == "BagList");
+            var bagRows = Enumerable.Range(0, bagList.Items.Count).Select(i => ((FrameworkElement)bagList.ItemContainerGenerator.ContainerFromIndex(i)).ActualHeight).ToList();
             Hosted.Await(() => vm.Fulfilment!.CancelCommand.ExecuteAsync());
             host.Settle(100);
             var closed = vm.Fulfilment is null;
@@ -343,7 +351,7 @@ public sealed class ListScreenRenderTests
             Save(host, $"requests-fulfilled-{size}-{theme}.png");
             var closedColumns = grid.Columns.Where(c => c.Visibility == Visibility.Visible).Select(c => c.Header as string).ToList();
             return (PanelWidth: panelWidth, Panel: panelBounds, area, Texts: texts, ListTexts: listTexts, Badges: badges, Closed: closed, Order: order,
-                Columns: columns, ClosedColumns: closedColumns, Buttons: buttons);
+                Columns: columns, ClosedColumns: closedColumns, Buttons: buttons, Footer: footer, BagRows: bagRows);
         });
 
         Assert.Equal(width < Responsive.StandardWidth ? 352 : 420, facts.PanelWidth);
@@ -368,6 +376,12 @@ public sealed class ListScreenRenderTests
         Assert.Contains("Collected 14 Oct 2026 from Elio Bergstr\u00f6m", facts.Texts);
         Assert.Contains("Not now", facts.Buttons);
         Assert.DoesNotContain("Cancel", facts.Buttons);
+
+        // "Fulfil request" and "Not now" stay in view at every size (1024 x 700 included: the step's content scrolls above them), and a bag is two lines (design-qa-2 N4).
+        Assert.Equal(2, facts.Footer.Count);
+        Assert.All(facts.Footer, b => Assert.True(b.Top >= facts.Panel.Top && b.Bottom <= facts.Panel.Bottom - 16, $"a footer button at {b} is outside the panel {facts.Panel}"));
+        Assert.Equal(3, facts.BagRows.Count);
+        Assert.All(facts.BagRows, h => Assert.True(h <= 66, $"a bag row is {h} DIP tall: more than two lines"));
         Assert.True(facts.Closed);
         Assert.Contains("Status", facts.ClosedColumns);
         Assert.DoesNotContain("Cover", facts.ClosedColumns);

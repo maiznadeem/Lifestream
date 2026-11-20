@@ -26,9 +26,10 @@ public sealed class PatientsViewModel : SortedRecordListViewModel<PatientListIte
             _ => Detail is { } patient ? this.navigation.NavigateTo<RequestsViewModel>(new RelatedRecord(RecordKind.Patient, patient.Id, patient.Name)) : Task.CompletedTask,
             () => Detail is not null && !IsEditing);
         FulfilRequestCommand = Command(
-            (parameter, _) => parameter is PatientRequestRow row && Detail is { } patient
+            (parameter, _) => parameter is PatientRequestRow { CanFulfil: true } row && Detail is { } patient
                 ? this.navigation.NavigateTo<RequestsViewModel>(new RelatedRecord(RecordKind.Request, row.Id, patient.Name))
-                : Task.CompletedTask);
+                : Task.CompletedTask,
+            parameter => parameter is not PatientRequestRow { CanFulfil: false }); // no stock at all: nothing to fulfil with (the card says why)
         PropertyChanged += (_, e) =>
         {
             if (e.PropertyName is nameof(Detail) or nameof(Editor))
@@ -84,12 +85,19 @@ public sealed class PatientsViewModel : SortedRecordListViewModel<PatientListIte
             {
                 var stock = fetched.Stock?.ToDictionary(s => s.BloodType, s => s.Available);
                 var today = DateOnly.FromDateTime(Clock.GetLocalNow().DateTime);
-                WaitingRequests = [.. requests.Select(r => new PatientRequestRow(
-                    r.Id,
-                    $"{RecordFormatting.Units(r.Units)} of {r.BloodType.ToTypographic()}",
-                    "Needed by " + Formatting.Date(r.RequiredBy),
-                    RequestUrgency.Of(r.Status, r.RequiredBy, today),
-                    stock is null ? null : RequestCoverage.Of(r.Units, stock.GetValueOrDefault(r.BloodType))))];
+                WaitingRequests = [.. requests.Select(r =>
+                {
+                    var cover = stock is null ? null : RequestCoverage.Of(r.Units, stock.GetValueOrDefault(r.BloodType));
+                    return new PatientRequestRow(
+                        r.Id,
+                        $"{RecordFormatting.Units(r.Units)} of {r.BloodType.ToTypographic()}",
+                        "Needed by " + Formatting.Date(r.RequiredBy),
+                        RequestUrgency.Of(r.Status, r.RequiredBy, today),
+                        cover)
+                    {
+                        HoldReason = cover?.HoldReason(r.BloodType),
+                    };
+                })];
                 if (fetched.Total > requests.Count)
                 {
                     WaitingNote = $"The {requests.Count} needed first of {fetched.Total} are listed.";
@@ -153,8 +161,8 @@ public sealed class PatientsViewModel : SortedRecordListViewModel<PatientListIte
 
     /// <summary>The facts under "Details" in the side panel, without the blood group (it is in the header), and the groups the patient can receive red cells from.</summary>
     public IReadOnlyList<DetailFact> PanelFacts => Detail is { } patient
-        ? [.. DetailFacts.Where(f => f.Label != "Blood type"), new DetailFact("Can receive", CanReceiveText(patient.BloodType))]
-        : [.. DetailFacts.Where(f => f.Label != "Blood type")];
+        ? [.. DetailFacts.Where(f => f.Label != "Blood group"), new DetailFact("Can receive", CanReceiveText(patient.BloodType))]
+        : [.. DetailFacts.Where(f => f.Label != "Blood group")];
 
     /// <summary>"O−, O+, A−, A+": the groups whose red cells a patient of this group can be given.</summary>
     public static string CanReceiveText(BloodType group) =>
@@ -186,7 +194,7 @@ public sealed class PatientsViewModel : SortedRecordListViewModel<PatientListIte
     [
         new("Date of birth", $"{Formatting.Date(patient.DateOfBirth)} (age {Eligibility.AgeOn(patient.DateOfBirth, DateOnly.FromDateTime(Clock.GetLocalNow().DateTime))})"),
         new("Gender", patient.Gender.ToString()),
-        new("Blood type", patient.BloodType.ToDisplay()),
+        new("Blood group", patient.BloodType.ToDisplay()),
         new("Phone", string.IsNullOrEmpty(patient.Phone) ? "Not given" : patient.Phone),
         new("Address", string.IsNullOrEmpty(patient.Address) ? "Not given" : patient.Address),
     ];

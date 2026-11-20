@@ -163,8 +163,11 @@ public sealed partial class ProfileViewModel : FormViewModelBase, INavigationPar
 
     public bool PhotoWasReplaced => _replacedPhoto is not null;
 
-    /// <summary>The avatar's letters when there is no photo.</summary>
-    public string Initials => Staff.StaffText.Initials(DisplayName);
+    /// <summary>The account header's name: the saved one, so an unsaved edit of the name field does not show there before Save (design-qa-2 N18).</summary>
+    public string SavedName => _baselineName;
+
+    /// <summary>The avatar's letters when there is no photo, from the saved name like the header beside it.</summary>
+    public string Initials => Staff.StaffText.Initials(_baselineName);
 
     /// <summary>True when the avatar shows a photo (the stored one or a new one).</summary>
     public bool HasPhoto => PhotoBytes is { Length: > 0 };
@@ -260,6 +263,8 @@ public sealed partial class ProfileViewModel : FormViewModelBase, INavigationPar
         MemberSinceText = profile.MemberSinceUtc == default ? NotRecorded : Formatting.Date(DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(profile.MemberSinceUtc, DateTimeKind.Utc), TimeZoneInfo.Local)));
         _baselineName = profile.DisplayName.Trim();
         _baselinePhone = profile.Phone?.Trim() ?? string.Empty;
+        OnPropertyChanged(nameof(SavedName));
+        OnPropertyChanged(nameof(Initials));
         DisplayName = _baselineName;
         Phone = _baselinePhone;
         _replacedPhoto = null;
@@ -282,7 +287,6 @@ public sealed partial class ProfileViewModel : FormViewModelBase, INavigationPar
 
     partial void OnDisplayNameChanged(string value)
     {
-        OnPropertyChanged(nameof(Initials));
         ClearError(nameof(DisplayName));
         FormError = null;
         ChangesChanged();
@@ -437,6 +441,8 @@ public sealed partial class ProfileViewModel : FormViewModelBase, INavigationPar
             _rowVersion = profile.RowVersion;
             _baselineName = profile.DisplayName.Trim();
             _baselinePhone = profile.Phone?.Trim() ?? string.Empty;
+            OnPropertyChanged(nameof(SavedName));
+            OnPropertyChanged(nameof(Initials));
         }
 
         if (photoSaved)

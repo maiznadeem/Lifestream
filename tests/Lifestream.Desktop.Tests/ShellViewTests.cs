@@ -621,7 +621,7 @@ public sealed class ShellViewTests
                 Check(host, "shell");
             }
 
-            var dialog = DialogWindow.CreateConfirm("Delete donor 'X'?", "Body", "Delete donor");
+            var dialog = DialogWindow.CreateConfirm("Delete donor 'X'?", "Body", "Delete donor", "Keep donor");
             foreach (var button in new[] { dialog.Cancel, dialog.Primary })
             {
                 if (UIElementAutomationPeer.CreatePeerForElement(button)!.GetName().Length == 0)

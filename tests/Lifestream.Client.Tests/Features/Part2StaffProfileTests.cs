@@ -279,6 +279,7 @@ public sealed class Part2StaffProfileTests
         Assert.Equal(2, rig.Dialogs.Confirmations.Count);
         Assert.Contains("Selected", rig.Dialogs.Confirmations[1].Body, StringComparison.Ordinal);
         Assert.Contains("You can undo this for a few seconds afterwards", rig.Dialogs.Confirmations[1].Body, StringComparison.Ordinal);
+        Assert.Equal(("Delete staff member", "Keep staff member"), (rig.Dialogs.Confirmations[1].Verb, rig.Dialogs.Confirmations[1].Keep));
         Assert.Equal(1, rig.Recorder.CountOf("DeleteStaffAsync"));
         var toast = Assert.Single(rig.Toasts.Toasts);
         Assert.Equal("Undo", toast.ActionLabel); // FEAT-06: every delete offers a 10-second Undo, staff included
@@ -443,6 +444,22 @@ public sealed class Part2StaffProfileTests
     }
 
     [Fact]
+    public async Task Profile_TheAccountHeaderShowsTheSavedName_UntilSave()
+    {
+        var (rig, vm) = await LoadedProfileAsync();
+        rig.Fake.On("UpdateProfileAsync", ApiResult<ProfileResponse>.Ok(Samples2.Profile() with { DisplayName = "Dr. Test Admin", RowVersion = "rv-p2" }));
+        Assert.Equal(("Test Admin", "TA"), (vm.SavedName, vm.Initials));
+
+        vm.DisplayName = "Dr. Test Admin"; // typed, not saved: the header and its avatar keep the saved name
+        Assert.True(vm.HasUnsavedChanges);
+        Assert.Equal(("Test Admin", "TA"), (vm.SavedName, vm.Initials));
+
+        await vm.SaveCommand.ExecuteAsync();
+        Assert.False(vm.HasUnsavedChanges);
+        Assert.Equal("Dr. Test Admin", vm.SavedName);
+    }
+
+    [Fact]
     public async Task Profile_SendsPhotoOnlyWhenReplaced()
     {
         var picker = new FakePhotoPicker([7, 7, 7]);
@@ -561,7 +578,7 @@ public sealed class Part2StaffProfileTests
 
     private sealed class AskingPresenter(List<string> asked, bool answer) : IDialogPresenter
     {
-        public Task<bool> ConfirmAsync(string title, string body, string dangerVerb)
+        public Task<bool> ConfirmAsync(string title, string body, string dangerVerb, string keepVerb)
         {
             asked.Add(title);
             return Task.FromResult(answer);

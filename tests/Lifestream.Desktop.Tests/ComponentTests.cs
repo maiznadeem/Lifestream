@@ -333,16 +333,17 @@ public sealed class ComponentTests
     [Fact]
     public void ConfirmDialog_NamesTheRecord_FocusOnCancel_EscCancels_DangerButtonHasVerbAndObject()
     {
-        var (title, body, danger, cancelIsCancel, cancelDefaultFocus, dangerStyle) = StaHost.Run(() =>
+        var (title, body, danger, keep, cancelIsCancel, cancelDefaultFocus, dangerStyle) = StaHost.Run(() =>
         {
-            var dialog = DialogWindow.CreateConfirm("Delete donor 'Ayşe Öztürk'?", "This removes Ayşe Öztürk and their appointment history. It can't be undone.", "Delete donor");
+            var dialog = DialogWindow.CreateConfirm("Delete donor 'Ayşe Öztürk'?", "This removes Ayşe Öztürk and their appointment history. It can't be undone.", "Delete donor", "Keep donor");
             var focused = System.Windows.Input.FocusManager.GetFocusedElement(dialog);
-            return (dialog.Title, ((TextBlock)dialog.FindName("BodyText")).Text, dialog.Primary.Content, dialog.Cancel.IsCancel, ReferenceEquals(focused, dialog.Cancel), dialog.Primary.Style == dialog.FindResource("Button.Danger"));
+            return (dialog.Title, ((TextBlock)dialog.FindName("BodyText")).Text, dialog.Primary.Content, dialog.Cancel.Content, dialog.Cancel.IsCancel, ReferenceEquals(focused, dialog.Cancel), dialog.Primary.Style == dialog.FindResource("Button.Danger"));
         });
 
         Assert.Contains("Ayşe Öztürk", title);
         Assert.Contains("Ayşe Öztürk", body);
         Assert.Equal("Delete donor", danger);
+        Assert.Equal("Keep donor", keep); // the safe button says what it keeps
         Assert.True(cancelIsCancel); // Esc closes it
         Assert.True(cancelDefaultFocus, "initial focus is on Cancel");
         Assert.True(dangerStyle);

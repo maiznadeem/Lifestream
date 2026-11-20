@@ -110,7 +110,7 @@ public sealed class Part2ReceiptStaffProfileViewTests
                 Open: host.All<Button>().Any(b => b.IsVisible && AutomationProperties.GetName(b) == "Print a copy"));
         });
 
-        Assert.Equal(["Date", "Receipt", "Donor or patient", "Blood", "Units", "Issued by"], facts.Headers);
+        Assert.Equal(["Date", "Receipt", "Donor or patient", "Group", "Units", "Issued by"], facts.Headers); // "Group", as on every other list
         Assert.Equal(["date"], facts.Sortable);
         Assert.All(facts.Sortable, key => Assert.Contains(key, facts.Keys));
         Assert.True(facts.Staff > 3); // the staff name in full, with no id line

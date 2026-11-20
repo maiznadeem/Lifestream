@@ -15,6 +15,7 @@
        paper in either theme. Receipts are issued by recording a donation or fulfilling a request, so there is no add button. -->
   <UserControl.Resources>
     <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+    <lists:FalseToVisibleConverter x:Key="NotVisible" />
     <stock:GroupOptionTextConverter x:Key="GroupOptionText" />
   </UserControl.Resources>
 
@@ -70,9 +71,10 @@
         </TextBox>
         <Button x:Name="BloodTypeChip" Style="{DynamicResource Button.Chip}" Click="OnBloodTypeChipClick" feat:Edge.Right="{DynamicResource Space.8}" AutomationProperties.Name="Blood group filter">
           <StackPanel Orientation="Horizontal">
-            <controls:Icon Kind="Plus" Size="14" VerticalAlignment="Center" feat:Edge.Right="{DynamicResource Space.8}" />
+            <!-- The one chip pattern (FilterChip's): "+" while nothing is chosen, a chevron once a value is -->
+            <controls:Icon Kind="Plus" Size="14" VerticalAlignment="Center" Margin="{DynamicResource Inset.R6}" Visibility="{Binding HasBloodTypeFilter, Converter={StaticResource NotVisible}}" />
             <TextBlock Text="{Binding BloodTypeChipText}" VerticalAlignment="Center" />
-            <controls:Icon Kind="Chevd" Size="14" VerticalAlignment="Center" feat:Edge.Left="{DynamicResource Space.8}" Foreground="{DynamicResource Brush.Ink3}" />
+            <controls:Icon Kind="Chevd" Size="14" VerticalAlignment="Center" Margin="{DynamicResource Inset.L6}" Visibility="{Binding HasBloodTypeFilter, Converter={StaticResource BoolToVisibility}}" />
           </StackPanel>
           <Button.ContextMenu>
             <ContextMenu x:Name="BloodTypeMenu" ItemsSource="{Binding BloodTypeOptions}" MenuItem.Click="OnBloodTypeChosen">
@@ -105,7 +107,7 @@
                                          AutomationProperties.Name="Receipts" MouseDoubleClick="OnRowDoubleClick" KeyDown="OnGridKeyDown" lists:ListColumns.IsResponsive="True">
               <DataGrid.Columns>
                 <!-- The date over its time, so neither is ever cut: a fixed width that fits "18 Nov 2026", given back after the panel opens (ListColumns). -->
-                <DataGridTemplateColumn Header="Date" Width="120" MinWidth="120" SortMemberPath="date">
+                <DataGridTemplateColumn Header="Date" Width="*" MinWidth="120" MaxWidth="200" SortMemberPath="date">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate DataType="{x:Type vm:ReceiptRow}">
                       <StackPanel VerticalAlignment="Center" AutomationProperties.Name="{Binding WhenText}">
@@ -116,7 +118,7 @@
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
                 <!-- The kind as a pill over the receipt's code, in a column wide enough for the longer pill ("Donation"). Both kinds are neutral; the icon tells them apart. -->
-                <DataGridTemplateColumn Header="Receipt" Width="124" MinWidth="124" CanUserSort="False">
+                <DataGridTemplateColumn Header="Receipt" Width="*" MinWidth="124" MaxWidth="190" CanUserSort="False">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate DataType="{x:Type vm:ReceiptRow}">
                       <StackPanel VerticalAlignment="Center" HorizontalAlignment="Left">
@@ -146,7 +148,7 @@
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="Blood" Width="80" CanUserSort="False">
+                <DataGridTemplateColumn Header="Group" Width="*" MinWidth="80" MaxWidth="140" CanUserSort="False">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate DataType="{x:Type vm:ReceiptRow}">
                       <controls:BloodGroupTag Text="{Binding GroupText}" HorizontalAlignment="Left" VerticalAlignment="Center" />
@@ -160,7 +162,7 @@
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn x:Name="IssuedByColumn" Header="Issued by" Width="*" MinWidth="180" CanUserSort="False" lists:ListColumns.HideBelow="860">
+                <DataGridTemplateColumn x:Name="IssuedByColumn" Header="Issued by" Width="*" MinWidth="180" MaxWidth="360" CanUserSort="False" lists:ListColumns.HideBelow="860">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate DataType="{x:Type vm:ReceiptRow}">
                       <TextBlock Style="{DynamicResource DataGrid.TextCell}" Text="{Binding StaffName}" />

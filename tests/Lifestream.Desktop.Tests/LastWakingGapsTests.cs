@@ -31,7 +31,7 @@ public sealed class LastWakingGapsTests
     {
         public int Opened { get; private set; }
 
-        public Task<bool> ConfirmAsync(string title, string body, string dangerVerb)
+        public Task<bool> ConfirmAsync(string title, string body, string dangerVerb, string keepVerb)
         {
             Opened++;
             return Task.FromResult(true);

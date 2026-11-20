@@ -244,7 +244,7 @@ public sealed class DonorsViewModel : SortedRecordListViewModel<DonorListItem, D
     /// The facts under "Details" in the side panel: the detail lines without those the panel already shows (blood group and how often they donate in the header, eligibility
     /// and the last donation in its card).
     /// </summary>
-    public IReadOnlyList<DetailFact> PanelFacts => [.. DetailFacts.Where(f => f.Label is not (EligibilityLabel or "Blood type" or "Donates" or "Last donated"))];
+    public IReadOnlyList<DetailFact> PanelFacts => [.. DetailFacts.Where(f => f.Label is not (EligibilityLabel or "Blood group" or "Donates" or "Last donated"))];
 
     private const string EligibilityLabel = "Eligibility";
     private const string EligibleText = "Eligible to donate";
@@ -310,7 +310,7 @@ public sealed class DonorsViewModel : SortedRecordListViewModel<DonorListItem, D
     [
         new("Date of birth", $"{Formatting.Date(donor.DateOfBirth)} (age {Eligibility.AgeOn(donor.DateOfBirth, DateOnly.FromDateTime(Clock.GetLocalNow().DateTime))})"),
         new("Gender", donor.Gender.ToString()),
-        new("Blood type", donor.BloodType.ToDisplay()),
+        new("Blood group", donor.BloodType.ToDisplay()),
         new("Phone", string.IsNullOrEmpty(donor.Phone) ? "Not given" : donor.Phone),
         new("Address", string.IsNullOrEmpty(donor.Address) ? "Not given" : donor.Address),
         new("Donates", donor.Frequency.ToString()),

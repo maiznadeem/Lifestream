@@ -21,7 +21,7 @@ public sealed class MainWindowCloseTests
     {
         public int Asked { get; private set; }
 
-        public Task<bool> ConfirmAsync(string title, string body, string dangerVerb)
+        public Task<bool> ConfirmAsync(string title, string body, string dangerVerb, string keepVerb)
         {
             Asked++;
             return Task.FromResult(title == "Discard changes?" && confirm());

@@ -17,7 +17,8 @@
   </UserControl.Resources>
   <!-- A transparent layer over the window: a click outside the palette closes it. -->
   <Grid x:Name="Layer" Background="Transparent" MouseDown="OnLayerMouseDown">
-    <controls:ElevatedSurface x:Name="Surface" Level="Dialog" CornerRadius="{DynamicResource Radius.Panel}" Width="{DynamicResource Width.Palette}" Padding="0"
+    <!-- Edged in Stroke2 (not Stroke): over the dark page the shadow barely shows, and the edge is what sets the palette apart (design-qa-2 N16) -->
+    <controls:ElevatedSurface x:Name="Surface" Level="Dialog" CornerRadius="{DynamicResource Radius.Panel}" Width="{DynamicResource Width.Palette}" Padding="0" BorderBrush="{DynamicResource Brush.Stroke2}"
                               HorizontalAlignment="Center" VerticalAlignment="Top" Margin="{DynamicResource Inset.L16T52R16B16}" MouseDown="OnSurfaceMouseDown"
                               KeyboardNavigation.TabNavigation="Cycle" AutomationProperties.Name="Command palette">
       <controls:ElevatedSurface.RenderTransform>
@@ -34,8 +35,9 @@
             </Grid.ColumnDefinitions>
             <controls:Icon Kind="Search" Size="18" Foreground="{DynamicResource Brush.Ink3}" VerticalAlignment="Center" Margin="{DynamicResource Inset.R10}" />
             <Grid Grid.Column="1">
+              <!-- The hint starts where typed text starts (the field's own 2 DIP inset) plus 2, so the caret stands before it, not on its first letter -->
               <TextBlock x:Name="Hint" Text="Search donors, patients and requests, or type a command" FontSize="15" Foreground="{DynamicResource Brush.Ink3}" VerticalAlignment="Center"
-                         IsHitTestVisible="False" TextTrimming="CharacterEllipsis" />
+                         IsHitTestVisible="False" TextTrimming="CharacterEllipsis" Margin="{DynamicResource Inset.L4}" />
               <TextBox x:Name="QueryBox" Style="{x:Null}" Text="{Binding Query, UpdateSourceTrigger=PropertyChanged}" FontFamily="{DynamicResource Font.Family}" FontSize="15"
                        Foreground="{DynamicResource Brush.Ink}" CaretBrush="{DynamicResource Brush.Ink}" Background="Transparent" BorderThickness="0" Padding="0" VerticalAlignment="Center"
                        SelectionBrush="{DynamicResource Brush.Selected}" PreviewKeyDown="OnQueryKeyDown" TextChanged="OnQueryChanged"
@@ -51,7 +53,8 @@
         </Border>
         <TextBlock x:Name="Empty" DockPanel.Dock="Top" Text="{Binding EmptyText}" Style="{DynamicResource Text.Secondary}" Margin="{DynamicResource Inset.L16T14R16B16}"
                    Visibility="{Binding EmptyText, Converter={StaticResource HasTextConverter}}" AutomationProperties.LiveSetting="Polite" />
-        <ListBox x:Name="Results" ItemsSource="{Binding Source={StaticResource Grouped}}" SelectedIndex="{Binding SelectedIndex}" MaxHeight="420" Padding="{DynamicResource Pad.6}"
+        <!-- The list keeps 6 DIP below its viewport, so a row it scrolls under is cut above the palette's edge, not flush with it -->
+        <ListBox x:Name="Results" ItemsSource="{Binding Source={StaticResource Grouped}}" SelectedIndex="{Binding SelectedIndex}" MaxHeight="420" Padding="{DynamicResource Pad.6}" Margin="{DynamicResource Inset.B6}"
                  Background="Transparent" BorderThickness="0" ItemContainerStyle="{DynamicResource PaletteItem}" Focusable="False" KeyboardNavigation.TabNavigation="None"
                  ScrollViewer.HorizontalScrollBarVisibility="Disabled" MouseLeftButtonUp="OnResultClick" AutomationProperties.Name="Results">
           <ListBox.Template>

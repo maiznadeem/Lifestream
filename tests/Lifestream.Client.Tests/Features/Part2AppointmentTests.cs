@@ -606,8 +606,10 @@ public sealed class Part2AppointmentTests
         await vm.CancelAppointmentCommand.ExecuteAsync();
 
         Assert.Equal(2, rig.Dialogs.Confirmations.Count);
-        Assert.Contains("Omar Haddad", rig.Dialogs.Confirmations[1].Body, StringComparison.Ordinal);
+        Assert.StartsWith("Omar Haddad's appointment on ", rig.Dialogs.Confirmations[1].Body, StringComparison.Ordinal);
+        Assert.EndsWith(" will be cancelled, and the slot becomes free.", rig.Dialogs.Confirmations[1].Body, StringComparison.Ordinal);
         Assert.Equal("Cancel appointment", rig.Dialogs.Confirmations[1].Verb);
+        Assert.Equal("Keep appointment", rig.Dialogs.Confirmations[1].Keep); // never "Cancel" beside "Cancel appointment"
         Assert.Equal(1, rig.Recorder.CountOf("CancelAppointmentAsync"));
         Assert.Contains("Omar Haddad", Assert.Single(rig.Toasts.Toasts).Message, StringComparison.Ordinal);
     }

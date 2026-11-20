@@ -25,7 +25,7 @@ public sealed class UndoRetryTests
 {
     private sealed class Yes : IDialogPresenter
     {
-        public Task<bool> ConfirmAsync(string title, string body, string dangerVerb) => Task.FromResult(true);
+        public Task<bool> ConfirmAsync(string title, string body, string dangerVerb, string keepVerb) => Task.FromResult(true);
 
         public Task ShowErrorAsync(string title, string message, string? details) => Task.CompletedTask;
     }

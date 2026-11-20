@@ -297,7 +297,7 @@ public sealed class AppointmentsViewModel : SortedRecordListViewModel<Appointmen
     public bool IsPendingDetail => IsPending;
 
     /// <summary>The facts under "Details" in the side panel, without those its header already shows (donor, blood group, time).</summary>
-    public IReadOnlyList<DetailFact> PanelFacts => [.. DetailFacts.Where(f => f.Label is not ("Donor" or "Blood type" or "Appointment"))];
+    public IReadOnlyList<DetailFact> PanelFacts => [.. DetailFacts.Where(f => f.Label is not ("Donor" or "Blood group" or "Appointment"))];
 
     private (int AppointmentId, DonorDetail Donor)? _donorOfDetail;
 
@@ -486,10 +486,10 @@ public sealed class AppointmentsViewModel : SortedRecordListViewModel<Appointmen
         var facts = new List<DetailFact>
         {
             new("Donor", RecordFormatting.NameWithCode(a.DonorName, RecordCodes.Donor(a.DonorId))),
-            new("Blood type", a.DonorBloodType.ToDisplay()),
+            new("Blood group", a.DonorBloodType.ToDisplay()),
             new("Appointment", RecordFormatting.When(a.SlotStartUtc, Zone)),
             new("Status", StatusText(a.Status)),
-            new("Booked on", RecordFormatting.When(a.PlacedAtUtc, Zone)),
+            new("Booked on", RecordFormatting.Stamp(a.PlacedAtUtc, Zone)),
         };
         if (!string.IsNullOrWhiteSpace(a.OverrideReason))
         {
@@ -561,11 +561,11 @@ public sealed class AppointmentsViewModel : SortedRecordListViewModel<Appointmen
             return;
         }
 
-        var when = RecordFormatting.When(appointment.SlotStartUtc, Zone);
         var confirmed = await Dialogs.ConfirmAsync(
             "Cancel appointment?",
-            $"The appointment of '{appointment.DonorName}' on {when} will be cancelled and the time becomes free for someone else.",
-            "Cancel appointment").ConfigureAwait(true);
+            $"{appointment.DonorName}'s appointment on {RecordFormatting.DayAndTime(appointment.SlotStartUtc, Zone)} will be cancelled, and the slot becomes free.",
+            "Cancel appointment",
+            "Keep appointment").ConfigureAwait(true);
         if (!confirmed)
         {
             return;

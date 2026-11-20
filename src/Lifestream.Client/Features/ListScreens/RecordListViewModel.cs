@@ -38,8 +38,6 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
     private int? _selectedId;
     private int? _openedId; // a record another screen asked to open by id: kept selected while it is not on the loaded page
     private bool _applying;
-    private TDetail? _fetchedDetail;
-    private IReadOnlyList<DetailFact> _fetchedExtraFacts = [];
     private FilterOption<BloodType> _bloodTypeFilter;
 
     protected RecordListViewModel(IListViewStateStore states, string stateKey, IToastService toasts, IDialogService dialogs, IUiDispatcher ui)
@@ -382,19 +380,21 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
         WatchDetailWaking(cts);
         try
         {
-            await RunOperationAsync(async ct =>
+            // Each load keeps what it fetched to itself: a load replaced by a newer selection may still finish its call afterwards, and must never hand its
+            // record to the newer load (the panel would show another record than the selected row).
+            var (fetched, extraFacts) = await RunOperationAsync(async ct =>
             {
                 var result = await GetDetailAsync(recordId, ct).ConfigureAwait(false);
-                _fetchedDetail = result.Unwrap();
-                _fetchedExtraFacts = await GetExtraFactsAsync(recordId, ct).ConfigureAwait(false);
+                var record = result.Unwrap();
+                return (record, await GetExtraFactsAsync(recordId, ct).ConfigureAwait(false));
             }, cts.Token).ConfigureAwait(true);
-            if (cts.IsCancellationRequested || _fetchedDetail is not { } detail)
+            if (cts.IsCancellationRequested || fetched is not { } detail)
             {
                 return;
             }
 
             Detail = detail;
-            DetailFacts = [.. FactsOf(detail), .. _fetchedExtraFacts];
+            DetailFacts = [.. FactsOf(detail), .. extraFacts];
             DetailState = LoadState.Ready;
         }
         catch (OperationCanceledException)
@@ -464,7 +464,7 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
     private async Task AddAsync()
     {
         if (HasUnsavedChanges
-            && !await Dialogs.ConfirmAsync("Discard changes?", $"You have unsaved changes to this {RecordType}. If you start a new one now they will be lost.", "Discard changes").ConfigureAwait(true))
+            && !await Dialogs.ConfirmAsync("Discard changes?", $"You have unsaved changes to this {RecordType}. If you start a new one now they will be lost.", "Discard changes", "Keep editing").ConfigureAwait(true))
         {
             return;
         }
@@ -526,9 +526,10 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
         var confirmed = await Dialogs.ConfirmAsync(
             $"Delete {RecordType}?",
             SupportsUndo
-                ? $"{Capitalise(RecordType)} '{name}' will be removed from the list. You can undo this for a few seconds afterwards."
-                : $"{Capitalise(RecordType)} '{name}' will be removed. This can't be undone.",
-            $"Delete {RecordType}").ConfigureAwait(true);
+                ? $"{name} will be removed from the list. You can undo this for a few seconds afterwards."
+                : $"{name} will be removed. This can't be undone.",
+            $"Delete {RecordType}",
+            $"Keep {RecordType}").ConfigureAwait(true);
         if (!confirmed)
         {
             return;

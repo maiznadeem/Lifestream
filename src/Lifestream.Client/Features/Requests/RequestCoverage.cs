@@ -25,6 +25,12 @@ public sealed record RequestCoverage(CoverKind Kind, string Text, int Units, int
         : available <= 0 ? new(CoverKind.NoStock, "No stock", units, 0)
         : new(CoverKind.Partial, $"{units - available} short", units, available);
 
-    /// <summary>"4 units of AB+ in stock, 3 needed": the sentence of the side panel.</summary>
-    public string Sentence(BloodType group) => $"{RecordFormatting.Units(Available)} of {group.ToTypographic()} in stock, {Units} needed";
+    /// <summary>"4 units of AB+, 3 needed": the side panel's "In stock" line (its label already says "in stock").</summary>
+    public string Sentence(BloodType group) => $"{RecordFormatting.Units(Available)} of {group.ToTypographic()}, {Units} needed";
+
+    /// <summary>
+    /// Why Fulfil is not offered when there is none of the group at all: "No O− in stock. The request stays open until stock arrives." Null when some stock is there
+    /// (a short request can still be fulfilled in part by the server's rules, so it keeps its Fulfil).
+    /// </summary>
+    public string? HoldReason(BloodType group) => Kind == CoverKind.NoStock ? $"No {group.ToTypographic()} in stock. The request stays open until stock arrives." : null;
 }

@@ -23,7 +23,7 @@ public sealed class RuntimeTests
     {
         public List<(string Title, string Message, string? Details)> Errors { get; } = [];
 
-        public Task<bool> ConfirmAsync(string title, string body, string dangerVerb) => Task.FromResult(false);
+        public Task<bool> ConfirmAsync(string title, string body, string dangerVerb, string keepVerb) => Task.FromResult(false);
 
         public Task ShowErrorAsync(string title, string message, string? details)
         {

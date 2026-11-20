@@ -21,7 +21,7 @@ public sealed class DiscardChangesTests
     {
         public List<(string Title, string Verb)> Asked { get; } = [];
 
-        public Task<bool> ConfirmAsync(string title, string body, string dangerVerb)
+        public Task<bool> ConfirmAsync(string title, string body, string dangerVerb, string keepVerb)
         {
             Asked.Add((title, dangerVerb));
             return Task.FromResult(confirm(title));

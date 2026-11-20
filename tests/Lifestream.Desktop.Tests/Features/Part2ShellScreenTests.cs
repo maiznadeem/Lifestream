@@ -36,6 +36,9 @@ public sealed class Part2ShellScreenTests
 
     private static (Hosted Host, ShellViewModel Shell, Lifestream.Client.Tests.Fakes.Rig Rig) OpenShell()
     {
+        // The view models are built under the UI thread's synchronization context, as the app builds them on its running UI thread: without it their results are
+        // applied on a worker thread while the view is bound (the dashboard's attention list then failed now and then as "inconsistent with its items source").
+        SynchronizationContext.SetSynchronizationContext(new System.Windows.Threading.DispatcherSynchronizationContext());
         var rig = Part2Harness.NewRig();
         var shell = rig.Get<ShellViewModel>();
         var host = Hosted.Create(new ShellView { DataContext = shell }, Width, Height);

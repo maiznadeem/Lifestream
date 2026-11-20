@@ -81,12 +81,13 @@
         </lists:ListToolbar.Filters>
       </lists:ListToolbar>
       <lists:ScreenWakingNotice Grid.Row="2" />
-      <Border x:Name="TablePanel" Grid.Row="3" Background="{DynamicResource Brush.Layer}" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="1"
-              CornerRadius="{DynamicResource Radius.Panel}" SnapsToDevicePixels="True">
-        <controls:LoadSurface x:Name="ListSurface" State="{Binding State}" SkeletonKind="List" SkeletonColumns="2*,80,*,*,100,*"
-                              ErrorMessage="{Binding ErrorMessage}" ErrorDetail="{Binding ErrorDetail}" RetryCommand="{Binding RetryCommand}"
-                              EmptyGlyph="&#xE716;" EmptyTitle="{Binding EmptyTitle}" EmptyMessage="{Binding EmptyMessage}" EmptyActionText="{Binding EmptyActionText}"
-                              EmptyActionCommand="{Binding EmptyActionCommand}">
+      <!-- The table's frame is inside the load surface: an error or empty state stands alone as one card, not inside an empty framed panel -->
+      <controls:LoadSurface x:Name="ListSurface" Grid.Row="3" State="{Binding State}" SkeletonKind="List" SkeletonColumns="2*,80,*,*,100,*"
+                            ErrorMessage="{Binding ErrorMessage}" ErrorDetail="{Binding ErrorDetail}" RetryCommand="{Binding RetryCommand}"
+                            EmptyGlyph="&#xE716;" EmptyTitle="{Binding EmptyTitle}" EmptyMessage="{Binding EmptyMessage}" EmptyActionText="{Binding EmptyActionText}"
+                            EmptyActionCommand="{Binding EmptyActionCommand}">
+        <Border x:Name="TablePanel" Background="{DynamicResource Brush.Layer}" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="1"
+                CornerRadius="{DynamicResource Radius.Panel}" SnapsToDevicePixels="True">
           <Grid>
             <Grid.RowDefinitions>
               <RowDefinition Height="*" />
@@ -198,8 +199,8 @@
             </controls:LifestreamDataGrid>
             <lists:ListFooter Grid.Row="1" />
           </Grid>
-        </controls:LoadSurface>
-      </Border>
+        </Border>
+      </controls:LoadSurface>
     </Grid>
 
     <!-- The gap before the side panel, only while it is open -->
