@@ -46,21 +46,31 @@ public sealed class PerfDiagTests
         }
 
         var rounds = int.TryParse(Environment.GetEnvironmentVariable("LIFESTREAM_PERF_DIAG_ROUNDS"), CultureInfo.InvariantCulture, out var r) && r > 0 ? r : 3;
-        // LIFESTREAM_PERF_DIAG_PREWARM=1: every screen's view is first built and laid out once on another STA thread (its own theme), which is then gone.
-        // What that saves on this thread's first visits is the process-wide one-time cost (types, BAML, fonts), the part a background preload could take.
+        // LIFESTREAM_PERF_DIAG_PREWARM=1: every screen's view is first built and laid out on another STA thread (its own theme), which is then gone,
+        // LIFESTREAM_PERF_DIAG_PREWARM_ROUNDS times (default 1), then LIFESTREAM_PERF_DIAG_PREWARM_PAUSE ms pass (for the JIT's background tier-up).
+        // What that saves on this thread's first visits is process-wide (types, BAML, fonts, the JIT's tiers), the part a background preload could take.
         var prewarmMs = 0.0;
         if (Environment.GetEnvironmentVariable("LIFESTREAM_PERF_DIAG_PREWARM") == "1")
         {
             var clock = Stopwatch.StartNew();
+            var prewarmRounds = int.TryParse(Environment.GetEnvironmentVariable("LIFESTREAM_PERF_DIAG_PREWARM_ROUNDS"), CultureInfo.InvariantCulture, out var pr) && pr > 0 ? pr : 1;
             StaHost.Run(() =>
             {
-                foreach (var type in typeof(Lifestream.Desktop.Shell.ShellView).Assembly.GetTypes().Where(t => Screens.Any(s => t.Name == s + "View") && t.Namespace!.Contains(".Features.", StringComparison.Ordinal)))
+                for (var round = 0; round < prewarmRounds; round++)
                 {
-                    using var warm = Hosted.Create((System.Windows.FrameworkElement)Activator.CreateInstance(type)!, 1100, 680);
+                    foreach (var type in typeof(Lifestream.Desktop.Shell.ShellView).Assembly.GetTypes().Where(t => Screens.Any(s => t.Name == s + "View") && t.Namespace!.Contains(".Features.", StringComparison.Ordinal)))
+                    {
+                        using var warm = Hosted.Create((System.Windows.FrameworkElement)Activator.CreateInstance(type)!, 1100, 680);
+                    }
                 }
 
                 return 0;
             });
+            if (int.TryParse(Environment.GetEnvironmentVariable("LIFESTREAM_PERF_DIAG_PREWARM_PAUSE"), CultureInfo.InvariantCulture, out var pause) && pause > 0)
+            {
+                Thread.Sleep(pause);
+            }
+
             prewarmMs = clock.Elapsed.TotalMilliseconds;
         }
 
