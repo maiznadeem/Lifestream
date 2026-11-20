@@ -35,8 +35,12 @@ public sealed class Part2ReceiptStaffProfileViewTests
 
         public int Saved { get; private set; }
 
+        /// <summary>The copy notice of the last document that reached the printer.</summary>
+        public string? LastCopyNotice { get; private set; }
+
         public Task<PrintOutcome> PrintAsync(ReceiptDocument document, CancellationToken ct = default)
         {
+            LastCopyNotice = document.CopyNotice;
             Printed++;
             return Task.FromResult(PrintOutcome.Done);
         }
@@ -174,14 +178,17 @@ public sealed class Part2ReceiptStaffProfileViewTests
             var paginator = ((IDocumentPaginatorSource)flow).DocumentPaginator;
             paginator.PageSize = new Size(794, 1123);
             paginator.ComputePageCount();
-            return (skeletonWhileLoading, text, PrintEnabled: printButton.IsEnabled, PdfEnabled: pdfButton.IsEnabled, printer.Printed, printer.Saved, Pages: paginator.PageCount, Black: ((SolidColorBrush)flow.Foreground).Color, White: ((SolidColorBrush)flow.Background).Color);
+            return (skeletonWhileLoading, text, PrintEnabled: printButton.IsEnabled, PdfEnabled: pdfButton.IsEnabled, printer.Printed, printer.Saved, printer.LastCopyNotice, Pages: paginator.PageCount, Black: ((SolidColorBrush)flow.Foreground).Color, White: ((SolidColorBrush)flow.Background).Color);
         });
 
         Assert.True(facts.skeletonWhileLoading);
         Assert.Contains("Donation receipt RC-0001", facts.text, StringComparison.Ordinal);
         Assert.Contains(DemoData.Name(1), facts.text, StringComparison.Ordinal); // the donor's name
         Assert.Contains("Dr. ", facts.text, StringComparison.Ordinal); // the staff member's name
-        Assert.Contains("Duplicate copy printed", facts.text, StringComparison.Ordinal);
+        // The line belongs to the copy that is printed, not to the receipt on screen, which was only opened (real-app walk, item 24: until 2.1.2 the viewer itself
+        // said "Duplicate copy printed <now>" before anything was printed).
+        Assert.DoesNotContain("Duplicate copy printed", facts.text, StringComparison.Ordinal);
+        Assert.StartsWith("Duplicate copy printed", facts.LastCopyNotice, StringComparison.Ordinal);
         Assert.True(facts.PrintEnabled);
         Assert.True(facts.PdfEnabled);
         Assert.Equal((2, 1), (facts.Printed, facts.Saved)); // a duplicate can be produced again and again

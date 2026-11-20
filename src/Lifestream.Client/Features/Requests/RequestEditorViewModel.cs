@@ -47,6 +47,9 @@ public sealed partial class RequestEditorViewModel : RecordEditorViewModel
 
     public new string SaveText => IsNew ? "Add request" : "Save changes";
 
+    /// <summary>A request is the patient's: "Request for 'Omar Haddad' added."</summary>
+    protected override string SavedMessage => $"Request for '{RecordName}' {(IsNew ? "added" : "saved")}.";
+
     public bool ShowPatientPicker => IsNew;
 
     /// <summary>The earliest "required by" date: today.</summary>

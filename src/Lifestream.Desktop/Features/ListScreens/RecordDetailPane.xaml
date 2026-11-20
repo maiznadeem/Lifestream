@@ -4,6 +4,7 @@
              xmlns:controls="clr-namespace:Lifestream.Desktop.Controls"
              xmlns:feat="clr-namespace:Lifestream.Desktop.Features"
              xmlns:lists="clr-namespace:Lifestream.Desktop.Features.ListScreens"
+             xmlns:sys="clr-namespace:System;assembly=System.Runtime"
              Focusable="False" IsTabStop="False">
   <!-- The selected record in a side panel (direction A): the header (the screen's Header, or the record's name), one row of actions (the screen's primary RelatedActions,
        Edit, and a "..." menu with Delete), then the screen's Body (an eligibility card), the record's facts as a label/value grid under "Details", and the screen's Extra.
@@ -13,12 +14,31 @@
     <feat:NullToVisibleConverter x:Key="NullToVisible" />
     <feat:NullToCollapsedConverter x:Key="NullToCollapsed" />
     <Thickness x:Key="Pane.ActionsGap">0,16,0,20</Thickness>
+    <Thickness x:Key="Pane.ReasonGap">12,2,12,8</Thickness>
+    <sys:Double x:Key="Pane.ReasonWidth">236</sys:Double>
+    <!-- A destructive menu item: red while it can be chosen, the disabled grey while it can't (a local Foreground on the item would stay red when disabled) -->
+    <Style x:Key="Pane.DangerText" TargetType="TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource Brush.Critical}" />
+      <Style.Triggers>
+        <Trigger Property="IsEnabled" Value="False">
+          <Setter Property="Foreground" Value="{DynamicResource Brush.Ink3}" />
+        </Trigger>
+      </Style.Triggers>
+    </Style>
+    <Style x:Key="Pane.DangerIcon" TargetType="controls:Icon">
+      <Setter Property="Foreground" Value="{DynamicResource Brush.Critical}" />
+      <Style.Triggers>
+        <Trigger Property="IsEnabled" Value="False">
+          <Setter Property="Foreground" Value="{DynamicResource Brush.Ink3}" />
+        </Trigger>
+      </Style.Triggers>
+    </Style>
   </UserControl.Resources>
   <Border x:Name="Frame" SnapsToDevicePixels="True" AutomationProperties.Name="Details">
     <Grid>
-      <!-- Nothing selected -->
+      <!-- Nothing to show: no record, no skeleton and no error. Not "no selected row": the pane can show a record that is not in the list (real-app walk, item 18). -->
       <TextBlock x:Name="NoSelection" Style="{DynamicResource Text.Secondary}" Text="{Binding NoSelectionText}" TextWrapping="Wrap"
-                 VerticalAlignment="Top" Visibility="{Binding SelectedItem, Converter={StaticResource NullToVisible}}" />
+                 VerticalAlignment="Top" Visibility="{Binding ShowNoSelection, Converter={StaticResource BoolToVisibility}}" />
       <controls:Skeleton Kind="Detail" Visibility="{Binding ShowDetailSkeleton, Converter={StaticResource BoolToVisibility}}" />
       <controls:ErrorState Message="{Binding DetailError}" RetryCommand="{Binding RetryDetailCommand}" Visibility="{Binding HasDetailError, Converter={StaticResource BoolToVisibility}}" />
       <Grid x:Name="DetailBody" Visibility="{Binding HasDetail, Converter={StaticResource BoolToVisibility}}">
@@ -50,12 +70,26 @@
           <lists:MenuButton x:Name="MoreButton" Grid.Column="2" Style="{DynamicResource Button.Icon}" Margin="{DynamicResource Inset.L8}" AutomationProperties.Name="More actions" ToolTip="More actions">
             <controls:Icon Kind="More" Size="18" />
             <lists:MenuButton.ContextMenu>
+              <!-- A context menu is a tree of its own: nothing in it can bind to the pane as an ancestor. The item's text (DeleteText) is set from the code-behind,
+                   and the rest binds to the list view model, the menu's data context. While the record can't be deleted (DeleteBlockedReason) the item is disabled
+                   and grey, and the reason is the line under it. -->
               <ContextMenu>
-                <MenuItem x:Name="DeleteItem" Command="{Binding DeleteCommand}" Foreground="{DynamicResource Brush.Critical}"
-                          Header="{Binding DeleteText, RelativeSource={RelativeSource AncestorType=lists:RecordDetailPane}}">
+                <MenuItem x:Name="DeleteItem" Command="{Binding DeleteCommand}" AutomationProperties.HelpText="{Binding DeleteBlockedReason}">
+                  <MenuItem.Header>
+                    <TextBlock x:Name="DeleteLabel" Style="{StaticResource Pane.DangerText}" />
+                  </MenuItem.Header>
                   <MenuItem.Icon>
-                    <controls:Icon Kind="Trash" Size="16" />
+                    <controls:Icon Kind="Trash" Size="16" Style="{StaticResource Pane.DangerIcon}" />
                   </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem x:Name="DeleteReasonItem" Focusable="False" IsTabStop="False" IsHitTestVisible="False" AutomationProperties.Name="{Binding DeleteBlockedReason}"
+                          Visibility="{Binding DeleteBlockedReason, Converter={StaticResource NullToCollapsed}}">
+                  <MenuItem.Template>
+                    <ControlTemplate TargetType="MenuItem">
+                      <TextBlock x:Name="DeleteReason" Text="{Binding DeleteBlockedReason}" TextWrapping="Wrap" MaxWidth="{StaticResource Pane.ReasonWidth}" HorizontalAlignment="Left"
+                                 FontSize="{DynamicResource FontSize.Caption}" Foreground="{DynamicResource Brush.Ink2}" Margin="{StaticResource Pane.ReasonGap}" />
+                    </ControlTemplate>
+                  </MenuItem.Template>
                 </MenuItem>
               </ContextMenu>
             </lists:MenuButton.ContextMenu>

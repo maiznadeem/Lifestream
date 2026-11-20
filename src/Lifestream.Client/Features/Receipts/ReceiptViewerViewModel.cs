@@ -9,7 +9,7 @@ namespace Lifestream.Client.Features.Receipts;
 public interface IReceiptViewer
 {
     /// <param name="receiptId">The receipt to show.</param>
-    /// <param name="isDuplicate">True when it is opened again later, so a printed copy says "Duplicate copy".</param>
+    /// <param name="isDuplicate">True when it is opened again later, so a copy printed from it says "Duplicate copy printed" with the time of that print.</param>
     Task ShowAsync(int receiptId, bool isDuplicate);
 }
 
@@ -88,15 +88,18 @@ public sealed partial class ReceiptViewerViewModel : DialogViewModel
 
     protected override async Task FetchAsync(CancellationToken ct) => _fetched = (await _api.GetReceiptAsync(ReceiptId, ct).ConfigureAwait(false)).Unwrap();
 
-    protected override void Apply() => Document = _fetched is { } receipt ? ReceiptDocument.From(receipt, _isDuplicate, Clock) : null;
+    // What is shown is the receipt, not a print of it: it carries no "Duplicate copy printed" line (opening a receipt prints nothing).
+    protected override void Apply() => Document = _fetched is { } receipt ? ReceiptDocument.From(receipt, isDuplicate: false, Clock) : null;
 
     private async Task SendAsync(bool save)
     {
-        if (Document is not { } document)
+        if (_fetched is not { } receipt || Document is null)
         {
             return;
         }
 
+        // The copy for the printer: a receipt opened again later prints as a duplicate, stamped with the time of this print.
+        var document = ReceiptDocument.From(receipt, _isDuplicate, Clock);
         FormError = null;
         Notice = null;
         PrintOutcome outcome = PrintOutcome.Cancelled;
