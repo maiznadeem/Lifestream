@@ -71,6 +71,8 @@ public sealed partial class ShellViewModel : ViewModelBase
     private readonly IServerStatus _serverStatus;
     private readonly IChangePasswordPrompt _passwords;
     private readonly IReadOnlyList<Destination> _catalog;
+    private readonly IFormDialogService? _forms;
+    private readonly Features.Receipts.IReceiptViewer? _receipts;
     private readonly SynchronizationContext? _context = SynchronizationContext.Current;
 
     public ShellViewModel(
@@ -82,8 +84,10 @@ public sealed partial class ShellViewModel : ViewModelBase
         UpdateService updates,
         IChangePasswordPrompt passwords,
         ILifestreamApiClient? api = null,
-        UiPreferences? preferences = null)
-        : this(navigation, session, flow, toasts, serverStatus, updates, passwords, NavigationCatalog.Default, api, preferences)
+        UiPreferences? preferences = null,
+        IFormDialogService? forms = null,
+        Features.Receipts.IReceiptViewer? receipts = null)
+        : this(navigation, session, flow, toasts, serverStatus, updates, passwords, NavigationCatalog.Default, api, preferences, forms, receipts)
     {
     }
 
@@ -97,10 +101,14 @@ public sealed partial class ShellViewModel : ViewModelBase
         IChangePasswordPrompt passwords,
         IReadOnlyList<Destination> catalog,
         ILifestreamApiClient? api = null,
-        UiPreferences? preferences = null)
+        UiPreferences? preferences = null,
+        IFormDialogService? forms = null,
+        Features.Receipts.IReceiptViewer? receipts = null)
         : base(LoadState.Ready)
     {
         _api = api;
+        _forms = forms;
+        _receipts = receipts;
         Preferences = preferences ?? new UiPreferences(new MemoryPreferencesStore());
         Navigation = navigation;
         Toasts = toasts;
@@ -305,8 +313,9 @@ public sealed partial class ShellViewModel : ViewModelBase
     public AsyncRelayCommand BookAppointmentCommand { get; }
 
     /// <summary>
-    /// Ctrl+D, the dashboard's and the palette's "Record donation": opens today's next pending appointment on the Appointments screen and starts recording
-    /// the donation for it; when nobody is booked for the rest of today, it opens today's appointments and says so.
+    /// Ctrl+D, the dashboard's and the palette's "Record donation": opens the Record donation dialog for today's next pending appointment over the
+    /// current screen, which stays and is read again once the donation is recorded; when nobody is booked for the rest of today, it opens today's
+    /// appointments and says so.
     /// </summary>
     public AsyncRelayCommand RecordDonationCommand { get; }
 
@@ -549,15 +558,34 @@ public sealed partial class ShellViewModel : ViewModelBase
             return;
         }
 
-        if (await OpenByTitleAsync("Appointments", new Features.ListScreens.ListPrefilter(RecordId: next.Id)).ConfigureAwait(true)
-            && Navigation.Current is Features.Appointments.AppointmentsViewModel page)
+        // The dialog opens over the screen it was asked from, which stays: closing the dialog, cancelled or saved, leaves the person where they were
+        // (the walk: from the dashboard, the page behind the dialog had become Appointments). A saved donation changes that screen (the agenda row,
+        // the counts, the stock), so it is read again.
+        if (_forms is null || _receipts is null || await LoadAppointmentAsync(next).ConfigureAwait(true) is not { } appointment)
         {
-            await page.PendingDetail.ConfigureAwait(true);
-            if (page.RecordDonationCommand.CanExecute(null))
-            {
-                await page.RecordDonationCommand.ExecuteAsync().ConfigureAwait(true);
-            }
+            return;
         }
+
+        var page = Navigation.Current;
+        if (await Features.Appointments.DonationRecording.RecordAsync(_api!, _forms, _receipts, Toasts, appointment, Clock, Clock.LocalTimeZone).ConfigureAwait(true)
+            && page is not null && ReferenceEquals(page, Navigation.Current))
+        {
+            await page.RefreshAfterOutsideChangeAsync().ConfigureAwait(true);
+        }
+    }
+
+    /// <summary>The appointment Record donation is for, or null after an error toast (it was cancelled or deleted meanwhile, or the server failed).</summary>
+    [RunsInOperation("RecordDonationCommand runs RecordDonationAsync, which calls it, through the shell's operation runner.")]
+    private async Task<Contracts.Appointments.AppointmentDetail?> LoadAppointmentAsync(Contracts.Appointments.AppointmentListItem next)
+    {
+        var result = await _api!.GetAppointmentAsync(next.Id).ConfigureAwait(true);
+        if (result.IsOk)
+        {
+            return result.Value;
+        }
+
+        Toasts.Show(ToastKind.Error, Features.ListScreens.ProblemText.For(result.Problem!, "appointment", next.DonorName));
+        return null;
     }
 
     /// <summary>Today's next appointment (<see cref="Features.Dashboard.NextAppointment"/>, the one the dashboard marks "Next"), or null.</summary>

@@ -216,6 +216,12 @@ public abstract partial class ViewModelBase : ObservableObject, IDisposable
 
     internal TimeProvider Clock { get; set; } = TimeProvider.System;
 
+    /// <summary>
+    /// Something this screen shows was changed from outside it (a donation recorded from the shell over this screen): show it as it is now. The
+    /// screen loads again, unless the person has unsaved input on it, which a reload would throw away.
+    /// </summary>
+    public virtual Task RefreshAfterOutsideChangeAsync() => this is IHasUnsavedChanges { HasUnsavedChanges: true } ? Task.CompletedTask : LoadAsync();
+
     /// <summary>Runs on a thread-pool thread. Call the API and keep the results in fields; do not touch bound collections here.</summary>
     [RunsInOperation("LoadAsync calls it inside Operations.RunAsync.")]
     protected virtual Task FetchAsync(CancellationToken ct) => Task.CompletedTask;

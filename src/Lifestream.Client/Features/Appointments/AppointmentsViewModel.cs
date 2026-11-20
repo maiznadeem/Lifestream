@@ -586,29 +586,10 @@ public sealed class AppointmentsViewModel : SortedRecordListViewModel<Appointmen
             return;
         }
 
-        var dialog = new RecordDonationDialogViewModel(_api, appointment, Clock, Zone);
-        bool done;
-        try
+        if (await DonationRecording.RecordAsync(_api, _forms, _receipts, Toasts, appointment, Clock, Zone).ConfigureAwait(true))
         {
-            done = await _forms.ShowAsync(dialog).ConfigureAwait(true);
+            await RefreshAfterActionAsync(appointment.Id).ConfigureAwait(true);
         }
-        finally
-        {
-            dialog.Dispose();
-        }
-
-        if (!done)
-        {
-            return;
-        }
-
-        var receiptId = dialog.Receipt?.Id;
-        Toasts.Show(
-            ToastKind.Success,
-            receiptId is null ? $"Donation recorded for '{appointment.DonorName}'." : $"Donation recorded for '{appointment.DonorName}'. Receipt {ReceiptCode(receiptId.Value)} issued.",
-            receiptId is null ? null : "View receipt",
-            receiptId is null ? null : () => _receipts.ShowAsync(receiptId.Value, isDuplicate: false));
-        await RefreshAfterActionAsync(appointment.Id).ConfigureAwait(true);
     }
 
     private async Task CancelSelectedAsync()

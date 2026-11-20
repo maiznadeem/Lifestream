@@ -46,7 +46,7 @@ public sealed class ExitPathsGuardTests
         [nameof(ShellViewModel.BackToDashboardCommand)] = (true, "opens the dashboard"),
         [nameof(ShellViewModel.NavigateToIndexCommand)] = (true, "Alt+1 to Alt+8: opens the n-th sidebar screen"),
         [nameof(ShellViewModel.BookAppointmentCommand)] = (true, "opens the Appointments screen with its new-appointment form"),
-        [nameof(ShellViewModel.RecordDonationCommand)] = (true, "opens today's next appointment (or today's appointments) on the Appointments screen"),
+        [nameof(ShellViewModel.RecordDonationCommand)] = (true, "with nobody left to see today, opens today's appointments (otherwise its dialog opens over the current screen, which stays)"),
         [nameof(ShellViewModel.SearchCommand)] = (false, "moves the keyboard focus to the page's search box"),
         [nameof(ShellViewModel.NewRecordCommand)] = (false, "runs the page's own new-record command; a dirty form on that page has no such command, and a list page asks itself (NewWhileDirtyTests)"),
     };
