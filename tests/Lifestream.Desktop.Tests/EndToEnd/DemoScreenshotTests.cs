@@ -167,6 +167,12 @@ public sealed class DemoScreenshotTests
                     observed = dashboard.Cards.ToDictionary(c => c.Title, c => c.Value);
                     problems.AddRange(CardMismatches(dashboard.Cards, expected));
                     problems.AddRange(dashboard.Cards.Where(c => c.Title is "Units in stock").Where(c => c.Value <= 0).Select(c => "dashboard shows no units in stock"));
+
+                    // The demo has a today in every time zone (SeedTodayTests): an empty "Today's appointments" is the defect the 2.1.0 screenshots were blocked by.
+                    if (dashboard.Today.Count < Lifestream.Data.Seed.DemoClinicDay.Appointments - 1)
+                    {
+                        problems.Add($"Dashboard: 'Today's appointments' lists {dashboard.Today.Count}, the demo's clinic day has {Lifestream.Data.Seed.DemoClinicDay.Appointments}");
+                    }
                 }
                 else if (page is not Lifestream.Client.Features.Stock.StockViewModel)
                 {
@@ -176,6 +182,11 @@ public sealed class DemoScreenshotTests
                     {
                         problems.Add($"{screen}: the list has no rows");
                         continue;
+                    }
+
+                    if (page is Lifestream.Client.Features.Appointments.AppointmentsViewModel { IsAgenda: true } agenda && agenda.Items.Count < Lifestream.Data.Seed.DemoClinicDay.Appointments - 1)
+                    {
+                        problems.Add($"Appointments: today's agenda lists {agenda.Items.Count}, the demo's clinic day has {Lifestream.Data.Seed.DemoClinicDay.Appointments}");
                     }
 
                     PerfTests.Pump((Task)((Func<Task>)(() =>

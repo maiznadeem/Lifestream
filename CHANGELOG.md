@@ -101,6 +101,13 @@ donation went).
   at it, drag it, or move through a list with the keyboard.
 - Nothing is cut off: a value that does not fit gets a wider column, wraps, or shows its full text in a tooltip.
 
+### Demo
+
+- The demo clinic now has a day in progress. Today's appointments are in it: the ones that are over have donated, with their receipts and their
+  bags in stock, and the rest are still to come, one of them a first-time donor. Yesterday and tomorrow are full days too, so the Today tab, the
+  dashboard and the sidebar show a clinic day in any time zone.
+- The demo clinic keeps its hours in UTC (09:00 to 16:30), so its appointments appear at those hours in your own time.
+
 ### Server
 
 The desktop app and the server are released together. For anyone who uses the API directly, 2.1 only adds to it; nothing that existed has changed.

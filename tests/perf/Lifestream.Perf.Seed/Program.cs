@@ -8,8 +8,8 @@ using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 
 // The deterministic scale-data script (DB-06). Creates a uniquely named local SQL Server database, applies the EF migrations, loads
-// ScaleDataGenerator.Generate(factor, today) (factor 100: 27,000 receipts, 30,000 appointments, 15,000 requests, 3,500 donors, 3,500
-// patients, 1,100 staff; the same date and factor always give the same rows), rebuilds the indexes and reads the statistics in full
+// ScaleDataGenerator.Generate(factor, now) (factor 100: 27,000 receipts, 30,000 appointments, 15,000 requests, 3,500 donors, 3,500
+// patients, 1,100 staff; the same instant and factor always give the same rows; the time of day decides how much of today's clinic day is done), rebuilds the indexes and reads the statistics in full
 // (what a production database gets), and sets the password of the first generated administrator (printed as "admin") for the measuring session. Last line of output on success is
 // one JSON object with the database name and the row counts. The database is only ever dropped by the `drop` command.
 //
@@ -103,7 +103,10 @@ static async Task<int> RunAsync(string[] args)
                     await db.Database.MigrateAsync();
                     db.AuditEnabled = false;
                     db.ChangeTracker.AutoDetectChangesEnabled = false;
-                    var set = ScaleDataGenerator.Generate(factor, today);
+                    // As the demo reset does it: the clinic as it stands now (what is over today is completed, the rest of today is still to come). For another
+                    // date than today's, as it stands at 00:00 UTC of that date.
+                    var now = DateTime.UtcNow;
+                    var set = today == DateOnly.FromDateTime(now) ? ScaleDataGenerator.Generate(factor, now) : ScaleDataGenerator.Generate(factor, today);
                     // The measuring session signs in as the first generated administrator (its password is the only thing changed), so the
                     // staff count stays exactly the generator's (110 at factor 10, 1,100 at factor 100).
                     var sessionAdmin = set.Staff.First(s => s.Role == Role.Admin && !s.IsDemo);

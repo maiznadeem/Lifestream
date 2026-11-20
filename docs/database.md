@@ -187,8 +187,19 @@ erDiagram
 
 All data comes from code, never from a backup.
 
-- `DemoDataGenerator.Generate(today)`: 11 staff (one is the public `demo` account), 40 donors, 35 patients, 300 appointments,
-  150 requests, 270 receipts and their bags. Dates are relative to `today`. The same date always gives the same rows.
+- `DemoDataGenerator.Generate(nowUtc)`: 11 staff (one is the public `demo` account), 40 donors, 35 patients, 300 appointments,
+  150 requests, 270 receipts and their bags, as the clinic stands at that instant (the moment of the reset). Dates are relative to its UTC date,
+  and the same instant always gives the same rows. `Generate(today)` is the clinic at 00:00 UTC of that date.
+  - **The demo has a today.** Yesterday, today and tomorrow (UTC) each hold a clinic day: one appointment in every hour the clinic is open
+    (09 to 16 UTC), on the hour or the half hour. The data of a reset is seen while the UTC date is still the reset's, and a viewer's local day is
+    a 24-hour window around "now", so it lies inside those three days and holds one appointment per clinic hour (at least 7 of the 8: local midnight
+    can fall between an hour and its half hour). So the Today view, the dashboard's panel and the sidebar count have a clinic day in every time zone.
+  - **Done or still to come is decided against the instant.** An appointment whose slot started 45 minutes or more before the reset is over: completed,
+    with its receipt, its bags and the donor's last donation exactly as the API records a donation (or it is that day's one no-show). Every other
+    appointment is pending. Nothing is done before its time and no row carries a time after the reset, in any time zone. What can happen is the
+    reverse: an appointment whose time passes after the reset stays pending until someone records it, as in the app itself.
+  - The last appointment of today and of tomorrow belongs to a donor who has never donated; today's and tomorrow's other donors last donated more
+    than 90 days ago, so they are eligible. The totals do not depend on the time of day (`SeedSizes`): today's rows come out of the same counts.
   Names come from two lists in `SyntheticVocabulary`, phones are in the fictional range `+1-555-0100` to `+1-555-0199`,
   addresses are on "Sample" streets in "Demoville". Every staff row holds the hash of a random password that was thrown away, so no
   seeded account has a known password; the demo login issues a token without one.
@@ -196,7 +207,10 @@ All data comes from code, never from a backup.
   for performance tests. `ScaleDatabaseFixture` in the tests loads it into a throwaway database.
   `Generate(1)` is the 1x demo set; `DemoSizeDatabaseFixture` loads it. `PerformanceSmokeTests` (100x) and
   `PerformanceAtDemoSizeTests` (1x) run the same timings; results are in `docs/perf/api-results.md`.
-- `DemoReset.RunIfDueAsync` / `ForceAsync` rebuild every table from the generator, keeping protected staff (the owner admin).
+- `DemoReset.RunIfDueAsync` / `ForceAsync` rebuild every table from the generator for the caller's instant, keeping protected staff (the owner
+  admin). `RunIfTodayIsMissingAsync` is for the migrate job: a demo that was already reset today and holds no appointment today (written by a release
+  before 2.1) is rebuilt at the deploy instead of at the next UTC midnight; a database whose last reset was another day, or whose demo is switched
+  off, is left alone.
 
 ## Add a migration
 

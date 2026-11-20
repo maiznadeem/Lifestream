@@ -218,7 +218,7 @@ public static class DemoEndpoints
     private static async Task<NoContent> ResetAsync(LifestreamDbContext db, DemoDirectory demo, TimeProvider time, CancellationToken ct)
     {
         var now = time.GetUtcNow().UtcDateTime;
-        if (!await DemoReset.ForceAsync(db, DateOnly.FromDateTime(now), ct))
+        if (!await DemoReset.ForceAsync(db, now, ct))
         {
             // The reset time was stamped by the database's clock, so "how long is left" is measured with the same clock (DateTime.UtcNow is
             // SYSUTCDATETIME() inside the query); mixing it with this host's clock made the answer depend on the difference between them.
