@@ -59,9 +59,15 @@
                  ScrollViewer.HorizontalScrollBarVisibility="Disabled" MouseLeftButtonUp="OnResultClick" AutomationProperties.Name="Results">
           <ListBox.Template>
             <ControlTemplate TargetType="ListBox">
-              <ScrollViewer Padding="{TemplateBinding Padding}" Focusable="False">
-                <ItemsPresenter />
-              </ScrollViewer>
+              <!-- While more rows are below the viewport, its bottom 28 DIP fade into the surface (gone at the end): a list taller than the palette says it scrolls.
+                   It scrolls by pixels: by items, a grouped list scrolls a whole group at a time, and the row the keyboard moved to could stay out of view. -->
+              <Grid>
+                <ScrollViewer x:Name="Scroll" Padding="{TemplateBinding Padding}" Focusable="False" CanContentScroll="False" ScrollChanged="OnResultsScrolled">
+                  <ItemsPresenter />
+                </ScrollViewer>
+                <Border x:Name="MoreBelow" Height="28" VerticalAlignment="Bottom" Margin="{TemplateBinding Padding}" Background="{DynamicResource Brush.LayerFade}"
+                        IsHitTestVisible="False" Visibility="Collapsed" />
+              </Grid>
             </ControlTemplate>
           </ListBox.Template>
           <ListBox.GroupStyle>
