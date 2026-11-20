@@ -2,6 +2,12 @@
 
 All notable changes to Lifestream are listed here. The section of a version is also the text of its release on the GitHub Releases page.
 
+## [Unreleased]
+
+### Demo
+
+- The demo clinic keeps the rule the app enforces: no donor has two donations less than 90 days apart, and every open booking is on a day its donor may donate. The demo now has 100 donors.
+
 ## [2.1.3] - 2026-11-20
 
 Lifestream 2.1.3 fixes more of what using the app end to end against a real server turned up, on the list screens.
