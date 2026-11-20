@@ -32,6 +32,9 @@ public sealed record CompatibilityCell(BloodType Donor, BloodType Patient, bool 
 public sealed record CompatibilityRow(BloodType Donor, IReadOnlyList<CompatibilityCell> Cells)
 {
     public string Label => Donor.ToTypographic();
+
+    /// <summary>What a screen reader calls the row.</summary>
+    public string AutomationName => $"Donor {Label}";
 }
 
 /// <summary>What the login screen is telling the user about the last attempt.</summary>

@@ -192,7 +192,7 @@
 
           <!-- Shortcuts: the keys of the main window, in two columns of key caps and what they do. -->
           <controls:Section x:Name="ShortcutsSection" Header="Shortcuts" Subtitle="These work anywhere in the main window." feat:Edge.Top="{DynamicResource Space.16}">
-            <ItemsControl x:Name="ShortcutList" ItemsSource="{Binding Shortcuts}" Focusable="False" AutomationProperties.Name="Keyboard shortcuts">
+            <ItemsControl x:Name="ShortcutList" ItemsSource="{Binding Shortcuts}" Focusable="False" AutomationProperties.Name="Keyboard shortcuts" ItemContainerStyle="{DynamicResource ListItem.Named}">
               <ItemsControl.ItemsPanel>
                 <ItemsPanelTemplate>
                   <UniformGrid Columns="2" />

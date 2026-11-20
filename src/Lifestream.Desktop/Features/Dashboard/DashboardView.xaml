@@ -165,6 +165,7 @@
               <ItemsControl.ItemContainerStyle>
                 <Style TargetType="ContentPresenter">
                   <Setter Property="Margin" Value="0" />
+                  <Setter Property="AutomationProperties.Name" Value="{Binding AutomationName}" />
                 </Style>
               </ItemsControl.ItemContainerStyle>
               <ItemsControl.ItemTemplate>
@@ -196,7 +197,7 @@
                  the scroll viewer: the highlighted row reaches 10 past the text, and the scroll bar's strip lies in the right 18, beside the tags. -->
             <controls:CappedHeightBox x:Name="TodayBox" Cap="272">
               <ScrollViewer x:Name="TodayScroll" VerticalScrollBarVisibility="Auto" Focusable="False">
-                <ItemsControl x:Name="TodayList" ItemsSource="{Binding Today}" ItemTemplate="{StaticResource TodayRow}" Focusable="False" Margin="{DynamicResource Inset.H18}"
+                <ItemsControl x:Name="TodayList" ItemsSource="{Binding Today}" ItemTemplate="{StaticResource TodayRow}" Focusable="False" Margin="{DynamicResource Inset.H18}" ItemContainerStyle="{DynamicResource ListItem.Named}"
                               AutomationProperties.Name="Today's appointments" />
               </ScrollViewer>
             </controls:CappedHeightBox>
@@ -229,7 +230,7 @@
               </StackPanel>
             </controls:Section.HeaderActions>
             <!-- The eight meters share the panel's height (no empty band under them) and one tag column (every bar starts at the same x). -->
-            <ItemsControl x:Name="StockList" ItemsSource="{Binding StockMeters}" ItemTemplate="{StaticResource MeterRow}" Focusable="False" Grid.IsSharedSizeScope="True"
+            <ItemsControl x:Name="StockList" ItemsSource="{Binding StockMeters}" ItemTemplate="{StaticResource MeterRow}" Focusable="False" Grid.IsSharedSizeScope="True" ItemContainerStyle="{DynamicResource ListItem.Named}"
                           AutomationProperties.Name="Stock by blood group">
               <ItemsControl.ItemsPanel>
                 <ItemsPanelTemplate>

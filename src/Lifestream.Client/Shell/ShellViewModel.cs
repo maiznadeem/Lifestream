@@ -53,7 +53,11 @@ public sealed partial class NavItem(Destination destination, int position) : Obs
     public string BadgeNoun { get; init; } = string.Empty;
 }
 
-public sealed record NavGroup(string Title, IReadOnlyList<NavItem> Items);
+public sealed record NavGroup(string Title, IReadOnlyList<NavItem> Items)
+{
+    /// <summary>What a screen reader calls the group: its heading, or "Main" for the first group, which has none.</summary>
+    public string AutomationName => Title.Length == 0 ? "Main" : Title;
+}
 
 /// <summary>
 /// The main window's view model (SHELL-17..23): sidebar, account menu, window title, toasts, the "update ready" prompt, and
