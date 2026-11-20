@@ -174,10 +174,16 @@ public sealed partial class AppointmentEditorViewModel : RecordEditorViewModel
         _rowVersion = appointment.RowVersion;
         DonorOption = new RecordOption(appointment.DonorId, appointment.DonorName, null);
         DonorName = appointment.DonorName;
-        Date = RecordFormatting.LocalDate(appointment.SlotStartUtc, _zone);
-        SelectedTime = RecordFormatting.LocalTime(appointment.SlotStartUtc, _zone);
-        _baselineDate = Date;
-        _baselineTime = SelectedTime;
+
+        // The order matters. Setting the date asks for that day's times, and their answer runs ReconcileTime, which reads the baseline and the
+        // chosen time to tell the appointment's own time from a newly chosen one. So both are in place before the date is set: an answer that
+        // arrives at any moment (on another thread when there is no dispatcher) finds the form's own time, and never clears it as "past".
+        var date = RecordFormatting.LocalDate(appointment.SlotStartUtc, _zone);
+        var time = RecordFormatting.LocalTime(appointment.SlotStartUtc, _zone);
+        _baselineDate = date;
+        _baselineTime = time;
+        SelectedTime = time;
+        Date = date;
         OnPropertyChanged(nameof(HasUnsavedChanges));
     }
 
