@@ -55,8 +55,9 @@ public sealed class ApiPlanMatrixTests(ScaleApiFixture fx) : IClassFixture<Scale
             "", "bloodType=OPos", "bloodType=ONeg", .. Letters.Select(l => "search=" + l), "search=a&bloodType=OPos", "search=Al&bloodType=APos",
             "eligible=true", "eligible=false", "lastDonated=Within3Months", "lastDonated=Within12Months", "lastDonated=Over12Months", "lastDonated=Never",
             "eligible=true&bloodType=OPos", "search=a&eligible=true&lastDonated=Over12Months",
+            "search=eastwood", "search=0156", "search=ali&bloodType=OPos", "search=eastwood%20selim&eligible=true",
         ], 60),
-        ["patients"] = new(ApiRoutes.Patients, ["name", "-name"], ["", "bloodType=OPos", .. Letters.Select(l => "search=" + l), "search=a&bloodType=OPos"], 60),
+        ["patients"] = new(ApiRoutes.Patients, ["name", "-name"], ["", "bloodType=OPos", .. Letters.Select(l => "search=" + l), "search=a&bloodType=OPos", "search=eastwood", "search=0156&bloodType=OPos"], 60),
         ["appointments"] = new(
             ApiRoutes.Appointments,
             ["slot", "-slot", "placed", "-placed"],
@@ -88,6 +89,13 @@ public sealed class ApiPlanMatrixTests(ScaleApiFixture fx) : IClassFixture<Scale
                 "view=Past&bloodType=OPos",
                 "view=Upcoming&donorId={donor}",
                 "search=a&view=Past&utcOffsetMinutes=-300",
+                "search=eastwood",
+                "search=0156&status=Completed",
+                "search=ali&view=Past&utcOffsetMinutes=-300",
+                "search=eastwood%20selim&bloodType=OPos",
+                "search=O-&status=Completed",
+                "search=a%20e%20i%20o%20n",
+                "search=a%20selim%20eastwood",
             ],
             500),
         ["requests"] = new(
@@ -117,6 +125,10 @@ public sealed class ApiPlanMatrixTests(ScaleApiFixture fx) : IClassFixture<Scale
                 "view=Open&bloodType=OPos",
                 "view=DueSoon&patientId={patient}",
                 "search=a&view=Open",
+                "search=eastwood",
+                "search=0156&status=Fulfilled",
+                "search=ali&view=Fulfilled",
+                "search=O-&status=Fulfilled",
             ],
             250),
         ["receipts"] = new(
@@ -135,6 +147,13 @@ public sealed class ApiPlanMatrixTests(ScaleApiFixture fx) : IClassFixture<Scale
                 .. Letters.Select(l => "search=" + l),
                 "search=a&kind=Donation&bloodType=OPos",
                 "search=Al&fromUtc={from}&toUtc={to}",
+                "search=eastwood",
+                "search=0156&kind=Donation",
+                "search=ali&kind=Issue&bloodType=OPos",
+                "search=eastwood%20selim&fromUtc={from}&toUtc={to}",
+                "search=O-&kind=Donation",
+                "search=a%20e%20i%20o%20n", // the most words a search may have: the largest statement there is
+                "search=a%20selim%20eastwood",
             ],
             500),
     };
@@ -143,7 +162,14 @@ public sealed class ApiPlanMatrixTests(ScaleApiFixture fx) : IClassFixture<Scale
     /// The terms the verifier found scanning (a phone prefix every seeded phone starts with, and what int.TryParse reads as an id), single letters, a whole phone and a
     /// digit; each is sent at page 1, a mid page and a page past the end, at the default page size and at 200 (a past-end page is its own request path).
     /// </summary>
-    private static readonly string[] SearchTerms = ["+", "+1", "+1-555", "+1-555-0101", "a", "e", "o", "z", "1"];
+    private static readonly string[] SearchTerms =
+    [
+        "+", "+1", "+1-555", "+1-555-0101", "a", "e", "o", "z", "1",
+
+        // What a member of staff types: a last name, a part of a name, a part of a phone number (four digits, then three that every seeded phone has),
+        // two words in the other order, a blood group, record codes, and a text nobody has. "a" above matches a fifth of the names, "555" every phone.
+        "eastwood", "ali", "0156", "555", "eastwood selim", "O-", "D-0041", "RC-0041", "zzzz",
+    ];
 
     private static readonly string[] SearchVariants = ["p1", "mid", "past", "s200p1", "s200mid", "s200past"];
 
@@ -179,7 +205,7 @@ public sealed class ApiPlanMatrixTests(ScaleApiFixture fx) : IClassFixture<Scale
         data.Add("page-size-200|receipts");
         foreach (var lookup in new[] { "donors", "patients", "staff", "appointments", "requests" })
         {
-            foreach (var term in new[] { "a", "A", "Al", "1" })
+            foreach (var term in new[] { "a", "A", "Al", "1", "eastwood", "ali", "0156", "O-" })
             {
                 data.Add($"lookup|{lookup}|{term}");
             }
@@ -187,6 +213,9 @@ public sealed class ApiPlanMatrixTests(ScaleApiFixture fx) : IClassFixture<Scale
 
         data.Add("staff|none");
         data.Add("staff|search=a");
+        data.Add("staff|search=eastwood");
+        data.Add("staff|search=0156");
+        data.Add("staff|search=eastwood%20selim");
         data.Add("stock|none");
         data.Add("dashboard|default");
         data.Add("dashboard|36-months");
@@ -199,6 +228,9 @@ public sealed class ApiPlanMatrixTests(ScaleApiFixture fx) : IClassFixture<Scale
         data.Add("receipt-counts|bloodType=OPos");
         data.Add("receipt-counts|search=a");
         data.Add("receipt-counts|search=Al&bloodType=APos");
+        data.Add("receipt-counts|search=eastwood");
+        data.Add("receipt-counts|search=0156&bloodType=OPos");
+        data.Add("receipt-counts|search=555");
         data.Add("receipt-counts|fromUtc={from}&toUtc={to}");
 
         // A saved view opened without a sort (the open request views then list the request needed first), and the counts of the saved views.
@@ -212,12 +244,12 @@ public sealed class ApiPlanMatrixTests(ScaleApiFixture fx) : IClassFixture<Scale
             data.Add($"view-default|requests|view={view}&utcOffsetMinutes=-300");
         }
 
-        foreach (var filter in new[] { "", "utcOffsetMinutes=-300", "bloodType=OPos", "search=a", "search=Al&bloodType=APos", "donorId={donor}" })
+        foreach (var filter in new[] { "", "utcOffsetMinutes=-300", "bloodType=OPos", "search=a", "search=Al&bloodType=APos", "donorId={donor}", "search=eastwood", "search=0156", "search=555" })
         {
             data.Add("appointment-views|" + filter);
         }
 
-        foreach (var filter in new[] { "", "utcOffsetMinutes=-300", "bloodType=OPos", "search=a", "search=Al&bloodType=APos", "patientId={patient}" })
+        foreach (var filter in new[] { "", "utcOffsetMinutes=-300", "bloodType=OPos", "search=a", "search=Al&bloodType=APos", "patientId={patient}", "search=eastwood", "search=0156", "search=555" })
         {
             data.Add("request-views|" + filter);
         }
@@ -395,7 +427,7 @@ public sealed class ApiPlanMatrixTests(ScaleApiFixture fx) : IClassFixture<Scale
             case "page-size-200":
                 return ApiRoutes.Path(Lists[parts[1]].Route) + "?pageSize=200&page=2";
             case "lookup":
-                return ApiRoutes.Path("lookups/" + parts[1]) + "?search=" + parts[2];
+                return ApiRoutes.Path("lookups/" + parts[1]) + "?search=" + Uri.EscapeDataString(parts[2]);
             case "staff":
                 return ApiRoutes.Path(ApiRoutes.Staff) + (parts[1] == "none" ? "?pageSize=200" : "?pageSize=200&" + parts[1]);
             case "stock":

@@ -48,23 +48,29 @@ public sealed class ListQueryPlanTests(ScaleDatabaseFixture fixture) : IClassFix
         ["Staff"] = ["name", "username"],
     };
 
+    private static readonly string[] Typed = ["Search=LastName", "Search=InsideAWord", "Search=Phone", "Search=TwoWords"];
+
     private static readonly Dictionary<string, string[]> ListFilters = new()
     {
-        ["Donors"] = ["none", "Search", "BloodType", "Search+BloodType", "Eligible", "LastDonated", "Eligible+BloodType", "Search+Eligible+LastDonated"],
-        ["Patients"] = ["none", "Search", "BloodType", "Search+BloodType"],
+        // A search is written "Search" (the first three letters of a name, as before the search matched inside names) or "Search=<what is typed>":
+        // a last name, three letters from the middle of it, the last four digits of the phone, or the last and the first name in that order.
+        ["Donors"] = ["none", "Search", "BloodType", "Search+BloodType", "Eligible", "LastDonated", "Eligible+BloodType", "Search+Eligible+LastDonated", .. Typed],
+        ["Patients"] = ["none", "Search", "BloodType", "Search+BloodType", .. Typed],
         // A saved view is written "View=<name>"; with "UtcOffsetMinutes" the caller's day starts 5 hours after UTC's (the offset only moves the view's dates).
         ["Appointments"] =
         [
             "none", "Search", "DonorId", "Status", "BloodType", "FromUtc", "ToUtc", "FromUtc+ToUtc", "Status+BloodType",
             "View=Today", "View=Today+UtcOffsetMinutes", "View=Upcoming+UtcOffsetMinutes", "View=Past+UtcOffsetMinutes", "View=Cancelled", "View=Past+BloodType", "Search+View=Upcoming",
+            .. Typed, "Search=LastName+View=Past",
         ],
         ["Requests"] =
         [
             "none", "Search", "PatientId", "Status", "BloodType", "Status+BloodType",
             "View=Open", "View=DueSoon+UtcOffsetMinutes", "View=Fulfilled", "View=Cancelled", "View=DueSoon+BloodType", "Search+View=Open",
+            .. Typed, "Search=LastName+View=Fulfilled",
         ],
-        ["Receipts"] = ["none", "Search", "Kind", "BloodType", "FromUtc", "ToUtc", "FromUtc+ToUtc", "Kind+BloodType"],
-        ["Staff"] = ["none", "Search"],
+        ["Receipts"] = ["none", "Search", "Kind", "BloodType", "FromUtc", "ToUtc", "FromUtc+ToUtc", "Kind+BloodType", .. Typed, "Search=LastName+Kind", "Search=LastName+BloodType+FromUtc+ToUtc"],
+        ["Staff"] = ["none", "Search", .. Typed],
     };
 
     public static TheoryData<string> Cases()
@@ -161,7 +167,32 @@ public sealed class ListQueryPlanTests(ScaleDatabaseFixture fixture) : IClassFix
     }
 
     private sealed record Sample(
-        int DonorId, int PatientId, string DonorPrefix, string PatientPrefix, string StaffPrefix, BloodType BloodType, DateTime From, DateTime To);
+        int DonorId, int PatientId, Person Donor, Person Patient, Person Staff, BloodType BloodType, DateTime From, DateTime To);
+
+    /// <summary>A name and a phone of the dataset, to search for.</summary>
+    private sealed record Person(string Name, string Phone);
+
+    /// <summary>What a case searches for, or null when it does not search: a part of the name or phone of a person the list holds.</summary>
+    private static string? SearchOf(string list, string[] f, Sample s)
+    {
+        var search = f.FirstOrDefault(x => x == "Search" || x.StartsWith("Search=", StringComparison.Ordinal));
+        if (search is null)
+        {
+            return null;
+        }
+
+        var person = list switch { "Patients" or "Requests" => s.Patient, "Staff" => s.Staff, _ => s.Donor };
+        var words = person.Name.Split(' ');
+        return search switch
+        {
+            "Search" => person.Name[..3],
+            "Search=LastName" => words[^1],
+            "Search=InsideAWord" => words[^1][1..4],
+            "Search=Phone" => string.Concat(person.Phone.Where(char.IsAsciiDigit))[^4..],
+            "Search=TwoWords" => words[^1] + " " + words[0],
+            _ => throw new InvalidOperationException(search),
+        };
+    }
 
     private async Task<Sample> SampleAsync()
     {
@@ -170,7 +201,7 @@ public sealed class ListQueryPlanTests(ScaleDatabaseFixture fixture) : IClassFix
         var patient = await db.Patients.AsNoTracking().OrderBy(d => d.Id).Skip(50).FirstAsync(Ct);
         var staff = await db.Staff.AsNoTracking().OrderBy(s => s.Id).Skip(4).FirstAsync(Ct);
         var (from, to) = DateRanges.HalfOpen(fixture.Today.AddDays(-60), fixture.Today.AddDays(-30));
-        return new Sample(donor.Id, patient.Id, donor.Name[..3], patient.Name[..3], staff.DisplayName[..3], BloodType.ONeg, from, to);
+        return new Sample(donor.Id, patient.Id, new(donor.Name, donor.Phone!), new(patient.Name, patient.Phone!), new(staff.DisplayName, staff.Phone!), BloodType.ONeg, from, to);
     }
 
     private static Task RunAsync(string @case, LifestreamDbContext db, Sample s)
@@ -210,7 +241,7 @@ public sealed class ListQueryPlanTests(ScaleDatabaseFixture fixture) : IClassFix
 
     private static IQueryable<Donor> DonorFilter(IQueryable<Donor> q, string[] f, Sample s)
     {
-        if (f.Contains("Search")) { q = q.NameStartsWith(s.DonorPrefix); }
+        if (SearchOf("Donors", f, s) is { } search) { q = q.Matching(SearchQueries.Parse(search)); }
         if (f.Contains("BloodType")) { q = q.Where(d => d.BloodType == s.BloodType); }
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         if (f.Contains("Eligible"))
@@ -235,14 +266,14 @@ public sealed class ListQueryPlanTests(ScaleDatabaseFixture fixture) : IClassFix
 
     private static IQueryable<Patient> PatientFilter(IQueryable<Patient> q, string[] f, Sample s)
     {
-        if (f.Contains("Search")) { q = q.NameStartsWith(s.PatientPrefix); }
+        if (SearchOf("Patients", f, s) is { } search) { q = q.Matching(SearchQueries.Parse(search)); }
         if (f.Contains("BloodType")) { q = q.Where(d => d.BloodType == s.BloodType); }
         return q;
     }
 
-    private static IQueryable<Appointment> AppointmentFilter(IQueryable<Appointment> q, string[] f, List<int>? donorIds, Sample s)
+    private static IQueryable<Appointment> AppointmentFilter(IQueryable<Appointment> q, string[] f, LifestreamDbContext db, Sample s)
     {
-        if (donorIds is not null) { q = q.Where(a => donorIds.Contains(a.DonorId)); }
+        if (SearchOf("Appointments", f, s) is { } search) { q = q.Matching(db, SearchQueries.Parse(search)); }
         if (f.Contains("DonorId")) { q = q.Where(a => a.DonorId == s.DonorId); }
         if (f.Contains("Status")) { q = q.Where(a => a.Status == AppointmentStatus.Pending); }
         if (f.Contains("BloodType")) { q = q.Where(a => a.DonorBloodType == s.BloodType); }
@@ -267,9 +298,9 @@ public sealed class ListQueryPlanTests(ScaleDatabaseFixture fixture) : IClassFix
         return q;
     }
 
-    private static IQueryable<Request> RequestFilter(IQueryable<Request> q, string[] f, List<int>? patientIds, Sample s)
+    private static IQueryable<Request> RequestFilter(IQueryable<Request> q, string[] f, LifestreamDbContext db, Sample s)
     {
-        if (patientIds is not null) { q = q.Where(r => patientIds.Contains(r.PatientId)); }
+        if (SearchOf("Requests", f, s) is { } search) { q = q.Matching(db, SearchQueries.Parse(search)); }
         if (f.Contains("PatientId")) { q = q.Where(r => r.PatientId == s.PatientId); }
         if (f.Contains("Status")) { q = q.Where(r => r.Status == RequestStatus.Pending); }
         if (f.Contains("BloodType")) { q = q.Where(r => r.BloodType == s.BloodType); }
@@ -308,23 +339,20 @@ public sealed class ListQueryPlanTests(ScaleDatabaseFixture fixture) : IClassFix
         return q;
     }
 
-    private static async Task<List<int>?> DonorIds(LifestreamDbContext db, string[] f, Sample s) =>
-        f.Contains("Search") ? await SearchQueries.DonorIdsByNamePrefixAsync(db, s.DonorPrefix, Ct) : null;
-
-    private static async Task<List<int>?> PatientIds(LifestreamDbContext db, string[] f, Sample s) =>
-        f.Contains("Search") ? await SearchQueries.PatientIdsByNamePrefixAsync(db, s.PatientPrefix, Ct) : null;
+    private static IQueryable<Staff> StaffFilter(IQueryable<Staff> q, string[] f, Sample s) =>
+        SearchOf("Staff", f, s) is { } search ? q.Matching(SearchQueries.Parse(search)) : q;
 
     private static async Task Count(string list, string[] f, LifestreamDbContext db, Sample s) =>
         _ = await (list switch
     {
         "Donors" => DonorFilter(db.Donors, f, s).CountAsync(Ct),
         "Patients" => PatientFilter(db.Patients, f, s).CountAsync(Ct),
-        "Appointments" => AppointmentFilter(db.Appointments, f, await DonorIds(db, f, s), s).CountAsync(Ct),
-        "Requests" => RequestFilter(db.Requests, f, await PatientIds(db, f, s), s).CountAsync(Ct),
-        "Receipts" => f.Contains("Search")
-            ? HitFilter(SearchQueries.ReceiptsMatching(db, SearchQueries.ParseTerm(s.DonorPrefix) with { Id = null }), f, s).CountAsync(Ct)
+        "Appointments" => AppointmentFilter(db.Appointments, f, db, s).CountAsync(Ct),
+        "Requests" => RequestFilter(db.Requests, f, db, s).CountAsync(Ct),
+        "Receipts" => SearchOf("Receipts", f, s) is { } search
+            ? HitFilter(SearchQueries.ReceiptsMatching(db, SearchQueries.Parse(search)), f, s).CountAsync(Ct)
             : ReceiptFilter(db.Receipts, f, s).CountAsync(Ct),
-        "Staff" => (f.Contains("Search") ? db.Staff.NameStartsWith(s.StaffPrefix) : db.Staff).CountAsync(Ct),
+        "Staff" => StaffFilter(db.Staff, f, s).CountAsync(Ct),
         _ => throw new InvalidOperationException(list),
     });
 
@@ -359,7 +387,7 @@ public sealed class ListQueryPlanTests(ScaleDatabaseFixture fixture) : IClassFix
 
     private static async Task Appointments(string[] f, string sort, int page, LifestreamDbContext db, Sample s)
     {
-        var q = AppointmentFilter(db.Appointments.AsNoTracking(), f, await DonorIds(db, f, s), s);
+        var q = AppointmentFilter(db.Appointments.AsNoTracking(), f, db, s);
         var ordered = sort switch
         {
             "slot" => q.OrderBy(a => a.SlotStartUtc).ThenBy(a => a.Id),
@@ -375,7 +403,7 @@ public sealed class ListQueryPlanTests(ScaleDatabaseFixture fixture) : IClassFix
 
     private static async Task Requests(string[] f, string sort, int page, LifestreamDbContext db, Sample s)
     {
-        var q = RequestFilter(db.Requests.AsNoTracking(), f, await PatientIds(db, f, s), s);
+        var q = RequestFilter(db.Requests.AsNoTracking(), f, db, s);
         var ordered = sort switch
         {
             "placed" => q.OrderBy(r => r.PlacedAtUtc).ThenBy(r => r.Id),
@@ -392,9 +420,9 @@ public sealed class ListQueryPlanTests(ScaleDatabaseFixture fixture) : IClassFix
     private static async Task Receipts(string[] f, string sort, int page, LifestreamDbContext db, Sample s)
     {
         List<int> ids;
-        if (f.Contains("Search"))
+        if (SearchOf("Receipts", f, s) is { } search)
         {
-            var hits = HitFilter(SearchQueries.ReceiptsMatching(db, SearchQueries.ParseTerm(s.DonorPrefix) with { Id = null }), f, s);
+            var hits = HitFilter(SearchQueries.ReceiptsMatching(db, SearchQueries.Parse(search)), f, s);
             var orderedHits = sort == "date" ? hits.OrderBy(h => h.CreatedAtUtc).ThenBy(h => h.Id) : hits.OrderByDescending(h => h.CreatedAtUtc).ThenByDescending(h => h.Id);
             ids = await orderedHits.Select(h => h.Id).Skip((page - 1) * PageSize).Take(PageSize).ToListAsync(Ct);
         }
@@ -413,7 +441,7 @@ public sealed class ListQueryPlanTests(ScaleDatabaseFixture fixture) : IClassFix
 
     private static async Task StaffList(string[] f, string sort, int page, LifestreamDbContext db, Sample s)
     {
-        var q = f.Contains("Search") ? db.Staff.AsNoTracking().NameStartsWith(s.StaffPrefix) : db.Staff.AsNoTracking();
+        var q = StaffFilter(db.Staff.AsNoTracking(), f, s);
         var ordered = sort == "name" ? q.OrderBy(x => x.DisplayName).ThenBy(x => x.Id) : q.OrderBy(x => x.Username).ThenBy(x => x.Id);
         var ids = await ListPaging.PageIdsAsync(ordered, page, PageSize, Ct);
         _ = await db.Staff.AsNoTracking().WithIds(ids)

@@ -60,6 +60,12 @@ public sealed partial class RecordPickerViewModel : ObservableObject, IDisposabl
 
     public RecordKind Kind { get; }
 
+    /// <summary>
+    /// The search box's hint: what the search finds (SearchQueries, the same rule as the lists). A name, a part of a phone number or the record's
+    /// code; for a staff member the user name in place of the phone, which is private and not searched.
+    /// </summary>
+    public string SearchHint => Kind == RecordKind.Staff ? "Search by name, username or ID" : "Search by name, phone or ID";
+
     /// <summary>The runner of the search: it can be cancelled down to the HTTP request, like every operation (SHELL-07).</summary>
     public OperationRunner Operations { get; }
 

@@ -24,7 +24,7 @@
     <Grid x:Name="SearchMode" Visibility="{Binding ShowSearch, Converter={StaticResource BoolToVisibility}}">
       <TextBox x:Name="SearchBox" Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" Padding="{DynamicResource Inset.L12R36}"
                AutomationProperties.Name="{Binding Label}" PreviewKeyDown="OnSearchKeyDown" GotKeyboardFocus="OnSearchGotFocus" />
-      <TextBlock x:Name="HintText" Style="{DynamicResource Text.Body}" Foreground="{DynamicResource Brush.TextMuted}" Text="Search by name or ID" IsHitTestVisible="False"
+      <TextBlock x:Name="HintText" Style="{DynamicResource Text.Body}" Foreground="{DynamicResource Brush.TextMuted}" Text="{Binding SearchHint, FallbackValue='Search by name or ID'}" IsHitTestVisible="False"
                  VerticalAlignment="Center" Margin="{DynamicResource Inset.L13R36}" TextWrapping="NoWrap">
         <TextBlock.Visibility>
           <Binding ElementName="SearchBox" Path="Text.Length">

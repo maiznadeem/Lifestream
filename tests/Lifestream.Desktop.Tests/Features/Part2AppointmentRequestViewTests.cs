@@ -304,7 +304,7 @@ public sealed class Part2AppointmentRequestViewTests
         Assert.True(facts.Ids > 3);
         Assert.Contains("Fulfilled", facts.Chips.Chips); // the Fulfilled tab shows each request's status as a chip
         Assert.Contains("Status", facts.Chips.Columns);
-        Assert.Equal("Search patient or request ID", facts.SearchLabel); // the one search box says what it finds
+        Assert.Equal("Patient name, phone or ID", facts.SearchLabel); // the one search box says what it finds (the server's rule; SearchPlaceholderTests checks it fits)
         Assert.True(facts.Fulfil);
     }
 

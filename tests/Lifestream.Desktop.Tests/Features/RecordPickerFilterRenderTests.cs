@@ -91,7 +91,7 @@ public sealed class RecordPickerFilterRenderTests
             Named(host, "Choose record").Command!.Execute(null);
             host.Settle(300);
             var searchBoxes = host.All<TextBox>().Count(t => t.IsVisible);
-            var hint = VisibleTexts(host).Contains("Search by name or ID");
+            var hint = VisibleTexts(host).Contains("Search by name, phone or ID"); // a donor: name, phone or code, as the lists search
             return (searchBoxes, hint, Choosing: picker.ViewModel!.IsChoosing);
         });
 

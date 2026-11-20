@@ -30,16 +30,11 @@ public static class ReceiptEndpoints
         var (start, end) = Lists.DayRange(q.FromUtc, q.ToUtc);
         IQueryable<Receipt> pageOfReceipts;
         IQueryable<int> total;
-        if (Lists.CleanSearch(q.Search) is { } term)
+        if (Lists.ParseSearch(q.Search) is { } words)
         {
-            // A name search: the matches come from SearchQueries.ReceiptsMatching (index seeks that end in narrow indexes holding the
-            // date, kind and blood type), are filtered, counted and paged there, and only the page's receipts are then read by id.
-            var hits = SearchQueries.ReceiptsMatching(db, SearchQueries.ParseTerm(term));
-            if (q.Kind is { } hitKind)
-            {
-                hits = hits.Where(h => h.Kind == hitKind);
-            }
-
+            // A search: the matches come from SearchQueries.ReceiptsMatching as (id, date, kind, blood type) rows read from narrow indexes, are
+            // filtered, counted and paged here, and only the page's receipts are then read by id.
+            var hits = SearchQueries.ReceiptsMatching(db, words, q.Kind);
             if (q.BloodType is { } hitType)
             {
                 hits = hits.Where(h => h.BloodType == hitType);

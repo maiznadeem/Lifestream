@@ -33,6 +33,7 @@ internal static class RenderChecks
         ArgumentNullException.ThrowIfNull(name);
         var problems = new List<string>();
         HeadersOverTheirValues(host, problems);
+        HeadersNotCut(host, problems);
         PanelPadding(host, problems);
         LabelsInsideTheirButtons(host, problems);
         if (!name.Contains("narrow", StringComparison.Ordinal) && !name.Contains("1024x", StringComparison.Ordinal))
@@ -81,6 +82,56 @@ internal static class RenderChecks
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// A column header shows its whole title at every size, the compact window included: a header has no ellipsis and no tooltip, so a column narrower
+    /// than its title simply loses the end of the word ("Grou" over the appointments' blood groups, 2.1.5: the column had been set to 60 for its cells
+    /// alone). The title needs its own width plus the header's padding and, when sorted, the sort mark.
+    /// </summary>
+    private static void HeadersNotCut(Hosted host, List<string> problems)
+    {
+        foreach (var header in host.All<DataGridColumnHeader>().Where(h => h.IsVisible && h.Column is not null && h.ActualWidth > 0))
+        {
+            var title = Descendants<TextBlock>(header).FirstOrDefault(t => t.IsVisible && t.Text.Length > 0);
+            if (title is null)
+            {
+                continue;
+            }
+
+            // WPF does not shrink a text that gets less room than it asked for: the block keeps its width and is clipped where its place ends. So the
+            // title is measured against the room the header has for it: from its padding to its padding, less the sort mark when that is shown.
+            var mark = Descendants<FrameworkElement>(header).FirstOrDefault(e => e.Name == "SortGlyph" && e.IsVisible);
+            var room = header.ActualWidth - header.Padding.Right - (mark is null ? 0 : mark.ActualWidth + mark.Margin.Left + mark.Margin.Right);
+            var left = title.TransformToAncestor(header).Transform(new Point(0, 0)).X;
+            var right = left + Math.Max(title.ActualWidth, WholeWidth(title));
+            if (right > room + 0.5 || left < header.Padding.Left - 0.5)
+            {
+                problems.Add($"the column header \"{title.Text}\" is cut: it spans x {left:0.#} to {right:0.#} and the header has {header.Padding.Left:0.#} to {room:0.#} (column {header.ActualWidth:0.#} wide)");
+            }
+        }
+    }
+
+    /// <summary>The width the block's text takes on one line, with the block's own font and typography (as TruncationTooltip.IsTrimmed measures it).</summary>
+    private static double WholeWidth(TextBlock block)
+    {
+        var whole = new TextBlock
+        {
+            Text = block.Text,
+            FontFamily = block.FontFamily,
+            FontStyle = block.FontStyle,
+            FontWeight = block.FontWeight,
+            FontStretch = block.FontStretch,
+            FontSize = block.FontSize,
+            FlowDirection = block.FlowDirection,
+            TextWrapping = TextWrapping.NoWrap,
+        };
+        TextOptions.SetTextFormattingMode(whole, TextOptions.GetTextFormattingMode(block));
+        System.Windows.Documents.Typography.SetKerning(whole, System.Windows.Documents.Typography.GetKerning(block));
+        System.Windows.Documents.Typography.SetNumeralAlignment(whole, System.Windows.Documents.Typography.GetNumeralAlignment(block));
+        VisualTreeHelper.SetRootDpi(whole, VisualTreeHelper.GetDpi(block));
+        whole.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        return whole.DesiredSize.Width;
     }
 
     private static void PanelPadding(Hosted host, List<string> problems)

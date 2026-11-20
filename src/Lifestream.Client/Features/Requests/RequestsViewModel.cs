@@ -343,6 +343,38 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
         _ => "No requests yet",
     };
 
+    protected override string EmptyInThisViewTitle => _view switch
+    {
+        RequestView.Open => "No open requests match",
+        RequestView.DueSoon => "No requests due in 48 hours match",
+        RequestView.Fulfilled => "No fulfilled requests match",
+        RequestView.Cancelled => "No cancelled requests match",
+        _ => base.EmptyInThisViewTitle,
+    };
+
+    /// <summary>
+    /// The other tabs that hold matches, from the tabs' counts (the same search and filters as the list). "Due in 48 h" is never named: its requests
+    /// are open ones, already counted under Open.
+    /// </summary>
+    protected override IReadOnlyList<OtherViewMatch> MatchesInOtherViews
+    {
+        get
+        {
+            if (ViewCounts is not { } counts || _view is not { } here)
+            {
+                return [];
+            }
+
+            (RequestView View, string Tab, int Count)[] tabs =
+            [
+                (RequestView.Open, "Open", counts.Open),
+                (RequestView.Fulfilled, "Fulfilled", counts.Fulfilled),
+                (RequestView.Cancelled, "Cancelled", counts.Cancelled),
+            ];
+            return [.. tabs.Where(t => t.View != here && t.Count > 0).OrderByDescending(t => t.Count).Select(t => new OtherViewMatch(t.Tab, t.Count, () => View = t.View))];
+        }
+    }
+
     protected override string EmptyAddMessage => _view switch
     {
         RequestView.Open => "Every request has been fulfilled or cancelled.",
@@ -514,6 +546,7 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
         _available = _fetchedStock?.ToDictionary(s => s.BloodType, s => s.Available);
         _stockRead = true; // known, or failed to load (then the server checks the stock when fulfilling)
         ViewCounts = _fetchedCounts;
+        OnFiltersChanged(); // the empty state reads the tabs' counts: an empty tab says where the matches are
         base.Apply();
         OnPropertyChanged(nameof(ViewCounts));
         OnPropertyChanged(nameof(DetailCover));

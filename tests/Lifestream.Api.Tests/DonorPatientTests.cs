@@ -174,7 +174,7 @@ public sealed class DonorPatientTests(ApiFixture fx) : IClassFixture<ApiFixture>
     }
 
     [Fact]
-    public async Task Search_IsAccentAndCaseInsensitive_AndMatchesTheStartOfTheName_NotTheMiddle()
+    public async Task Search_IsAccentAndCaseInsensitive_AndMatchesTheStartOfTheName_AndTheMiddle()
     {
         var (admin, donor) = await NewDonorAsync();
         foreach (var term in new[] { "ayse", "AYŞE", "Ayşe Nur", "ayse nur ozturk" })
@@ -183,9 +183,10 @@ public sealed class DonorPatientTests(ApiFixture fx) : IClassFixture<ApiFixture>
             Assert.Contains(hits.Items, d => d.Id == donor.Id);
         }
 
-        // A prefix search: the middle of a name is not matched (no LIKE '%x%').
+        // The middle of a name is matched too. (Until 2.1.2 the search was a prefix of the full name and this asserted the opposite; a last name
+        // could not be found. SearchRuleApiTests has the rule in full.)
         var middle = await (await admin.Client.GetApi(ApiRoutes.Donors, "?search=" + Uri.EscapeDataString("nur"))).Read<PagedResult<DonorListItem>>();
-        Assert.DoesNotContain(middle.Items, d => d.Id == donor.Id);
+        Assert.Contains(middle.Items, d => d.Id == donor.Id);
 
         // The id and the contact number match too.
         var byId = await (await admin.Client.GetApi(ApiRoutes.Donors, "?search=" + donor.Id)).Read<PagedResult<DonorListItem>>();

@@ -629,7 +629,7 @@ public sealed class ComponentTests
             using var host = Hosted.Create(Canvas(500, 200, picker), 500, 200);
             host.Settle(100);
             var box = host.All<TextBox>().First();
-            var hint = host.All<TextBlock>().First(t => t.Text == "Search by name or ID");
+            var hint = host.All<TextBlock>().First(t => t.Text == "Search by name, phone or ID");
             return (box.Text, hint.IsVisible, AutomationProperties.GetName(box), picker.SelectedId);
         });
 
@@ -637,6 +637,38 @@ public sealed class ComponentTests
         Assert.True(hintVisible);
         Assert.Equal("Patient", name);
         Assert.Null(selected);
+    }
+
+    /// <summary>
+    /// The hint says what the picker's search finds (the lists' rule): a name, a part of a phone number or the record's code; for staff the user name
+    /// in place of the phone, which is not searched. It was "Search by name or ID" for every kind. It lies inside the box at the narrowest a picker is
+    /// used (the filter's 280), short of the search icon.
+    /// </summary>
+    [Theory]
+    [InlineData(RecordKind.Donor, "Search by name, phone or ID")]
+    [InlineData(RecordKind.Patient, "Search by name, phone or ID")]
+    [InlineData(RecordKind.Appointment, "Search by name, phone or ID")]
+    [InlineData(RecordKind.Request, "Search by name, phone or ID")]
+    [InlineData(RecordKind.Staff, "Search by name, username or ID")]
+    public void RecordPicker_Hint_SaysWhatTheSearchFinds_AndFitsTheBox(RecordKind kind, string expected)
+    {
+        var api = new FakeApiClient();
+        api.On("SearchRecordsAsync", ApiResult<IReadOnlyList<RecordOption>>.Ok([]));
+        UseFakeApiForPickers(api);
+        var (texts, right, boxWidth) = StaHost.Run(() =>
+        {
+            var picker = new RecordPicker { Kind = kind, Label = "Record", Width = 280 };
+            using var host = Hosted.Create(Canvas(500, 200, picker), 500, 200);
+            host.Settle(100);
+            var box = host.All<TextBox>().First();
+            var hint = host.All<TextBlock>().First(t => t.Name == "HintText");
+            var inBox = hint.TransformToVisual(box).TransformBounds(new Rect(0, 0, hint.ActualWidth, hint.ActualHeight));
+            return (host.All<TextBlock>().Where(t => t.IsVisible).Select(t => t.Text).ToList(), inBox.Right, box.ActualWidth);
+        });
+
+        Assert.Contains(expected, texts);
+        Assert.DoesNotContain("Search by name or ID", texts);
+        Assert.True(right <= boxWidth - 36 + 0.5, $"the hint ends at {right} in a box {boxWidth} wide: it runs under the search icon or out of the box");
     }
 
     [Fact]

@@ -108,6 +108,38 @@ internal static class PerfShapes
             ("GET appointments donor blood type", ApiRoutes.Appointments, "?bloodType=OPos"),
             ("GET staff pageSize=200", ApiRoutes.Staff, "?pageSize=200"),
             ("GET stock", ApiRoutes.Stock, ""),
+
+            // What a member of staff types (SearchQueries): a last name, a part of a name, a part of a phone number, two words in either order, a blood
+            // group, a code, and a text nobody has. "a" above now matches a fifth of the names (every word of a name that starts with it, where it
+            // was the 13 % whose full name does), "555" every phone.
+            ("GET donors search=eastwood (last name)", ApiRoutes.Donors, "?search=eastwood"),
+            ("GET donors search=ali (inside a name)", ApiRoutes.Donors, "?search=ali"),
+            ("GET donors search=0156 (part of a phone)", ApiRoutes.Donors, "?search=0156"),
+            ("GET donors search=eastwood selim (two words)", ApiRoutes.Donors, "?search=eastwood%20selim"),
+            ("GET donors search=O- (blood group)", ApiRoutes.Donors, "?search=O-"),
+            ("GET donors search=zzzz (nobody)", ApiRoutes.Donors, "?search=zzzz"),
+            ("GET patients search=eastwood (last name)", ApiRoutes.Patients, "?search=eastwood"),
+            ("GET patients search=0156 (part of a phone)", ApiRoutes.Patients, "?search=0156"),
+            ("GET appointments search=eastwood (last name)", ApiRoutes.Appointments, "?search=eastwood"),
+            ("GET appointments search=ali sort=slot (inside a name)", ApiRoutes.Appointments, "?search=ali&sort=slot"),
+            ("GET appointments search=0156 (part of a phone)", ApiRoutes.Appointments, "?search=0156"),
+            ("GET appointments search=eastwood selim (two words)", ApiRoutes.Appointments, "?search=eastwood%20selim"),
+            ("GET appointments search=555 (every phone)", ApiRoutes.Appointments, "?search=555"),
+            ("GET appointments search=zzzz (nobody)", ApiRoutes.Appointments, "?search=zzzz"),
+            ("GET requests search=eastwood (last name)", ApiRoutes.Requests, "?search=eastwood"),
+            ("GET requests search=0156 (part of a phone)", ApiRoutes.Requests, "?search=0156"),
+            ("GET requests search=555 (every phone)", ApiRoutes.Requests, "?search=555"),
+            ("GET requests search=zzzz (nobody)", ApiRoutes.Requests, "?search=zzzz"),
+            ("GET receipts search=eastwood (last name)", ApiRoutes.Receipts, "?search=eastwood"),
+            ("GET receipts search=ali (inside a name)", ApiRoutes.Receipts, "?search=ali"),
+            ("GET receipts search=0156 (part of a phone)", ApiRoutes.Receipts, "?search=0156"),
+            ("GET receipts search=eastwood selim (two words)", ApiRoutes.Receipts, "?search=eastwood%20selim"),
+            ("GET receipts search=555 (every phone)", ApiRoutes.Receipts, "?search=555"),
+            ("GET receipts search=zzzz (nobody)", ApiRoutes.Receipts, "?search=zzzz"),
+            ("GET receipts search=eastwood kind=Donation", ApiRoutes.Receipts, "?search=eastwood&kind=Donation"),
+            ("GET staff search=eastwood (last name)", ApiRoutes.Staff, "?search=eastwood"),
+            ("GET lookups/donors search=eastwood (palette)", ApiRoutes.LookupDonors, "?search=eastwood"),
+            ("GET lookups/requests search=eastwood (palette)", ApiRoutes.LookupRequests, "?search=eastwood"),
         };
 
         var timings = new List<Timing>();
