@@ -14,21 +14,24 @@ namespace Lifestream.Client.Tests.Features;
 
 /// <summary>
 /// The 2.1 client against a 2.0 server. The release order is server first, then the client, but a failed or rolled-back deploy can leave the 2.0
-/// server up while a 2.1 client runs. That server answers 404 to the six read-only endpoints 2.1 added and sends the 2.0 shape of everything else
-/// (no age bands, no donation count, no first-time mark). The fake API answers 404 "not found" to every call a test did not set up, which is that
-/// server. Each screen must stay usable: the list loads, and only the part that needs a new endpoint says it could not be had. Nothing throws.
+/// server up while a 2.1 client runs. That server does not have the six read-only endpoints 2.1 added, and sends the 2.0 shape of everything
+/// else (no age bands, no donation count, no first-time mark). What it answers was measured against a real 2.0.1 API: 404 "not found" to
+/// stock/bags, donors/{id}/donations and requests/{id}/bags, and 400 "validation" to receipts/counts, appointments/views and requests/views,
+/// which fall into its receipts/{id}, appointments/{id} and requests/{id} routes ("counts" and "views" are not ids). The fake API answers 404
+/// to every call a test did not set up; the three 400s are set up here. Each screen must stay usable: the list loads, and only the part that
+/// needs a new endpoint says it could not be had. Nothing throws.
 /// </summary>
 public sealed class OlderServerTests
 {
+    /// <summary>What a 2.0 server answers to a new route that its own {id} route catches.</summary>
+    private static ApiResult<T> NotAnId<T>() => FakeApiClient.Fail<T>(400, ProblemCodes.Validation);
+
     [Fact]
     public async Task TheFake_AnswersAnEndpointItDoesNotHave_LikeA20Server_404NotFound()
     {
         var rig = new FeatureRig();
         var answers = new ApiProblem?[]
         {
-            (await rig.Fake.GetAppointmentViewCountsAsync(new AppointmentQuery())).Problem,
-            (await rig.Fake.GetRequestViewCountsAsync(new RequestQuery())).Problem,
-            (await rig.Fake.GetReceiptCountsAsync(new ReceiptCountQuery(null, null))).Problem,
             (await rig.Fake.GetDonorDonationsAsync(7)).Problem,
             (await rig.Fake.GetStockBagsAsync(BloodType.OPos)).Problem,
             (await rig.Fake.GetFulfilPreviewAsync(7)).Problem,
@@ -39,6 +42,7 @@ public sealed class OlderServerTests
             Assert.Equal(404, problem.Status);
             Assert.Equal(ProblemCodes.NotFound, problem.Code);
         });
+        Assert.Equal(400, NotAnId<ReceiptCounts>().Problem!.Status);
     }
 
     [Fact]
@@ -46,6 +50,7 @@ public sealed class OlderServerTests
     {
         var rig = new Part2Rig();
         rig.Fake.On("GetAppointmentsAsync", ApiResult<PagedResult<AppointmentListItem>>.Ok(Samples2.AppointmentPage(Samples2.AppointmentRow(1, 41), Samples2.AppointmentRow(2, 42))));
+        rig.Fake.On("GetAppointmentViewCountsAsync", NotAnId<AppointmentViewCounts>());
         var vm = rig.Appointments();
         await vm.LoadAsync();
 
@@ -63,6 +68,7 @@ public sealed class OlderServerTests
         var rig = new Part2Rig();
         rig.Fake.On("GetRequestsAsync", ApiResult<PagedResult<RequestListItem>>.Ok(new([Samples2.RequestRow(7, 3)], 1, 1, 50)));
         rig.Fake.On("GetStockAsync", ApiResult<IReadOnlyList<StockItem>>.Ok(Samples.Stock()));
+        rig.Fake.On("GetRequestViewCountsAsync", NotAnId<RequestViewCounts>());
         var vm = rig.Requests();
         await vm.LoadAsync();
 
@@ -99,6 +105,7 @@ public sealed class OlderServerTests
     {
         var rig = new Part2Rig();
         rig.Fake.On("GetReceiptsAsync", ApiResult<PagedResult<ReceiptListItem>>.Ok(new([Samples2.ReceiptRow(90)], 1, 1, 50)));
+        rig.Fake.On("GetReceiptCountsAsync", NotAnId<ReceiptCounts>());
         var vm = rig.Receipts();
         await vm.LoadAsync();
 
