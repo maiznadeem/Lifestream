@@ -1,0 +1,50 @@
+# Reviewed findings of the full-history scan (gitleaks-action in .github/workflows/secret-scan.yml, job `history`). gitleaks reads
+# this file from the root of the repository it scans. Each entry is one finding's fingerprint, commit:file:rule:line: it matches
+# that one line of that one commit and nothing else. Commits never change, so an entry cannot hide anything added later; a new
+# finding anywhere, even on the same file and line, has another commit and still fails the scan.
+#
+# Add an entry only for a finding that is proven harmless, with the reason on the line above it. Never add a path, a rule or a bare
+# value here. tests/infra/ScanGitleaks.Tests.ps1 checks the shape of every entry and that the history scan still fails on a new one.
+# Reviewed 2026-11-21 (run/agents/night-history.md); docs/SECURITY.md says what was in the history.
+
+# 1.x SQL login (2023), server database-server-bds: deleted, the name no longer resolves; never in the current deployment.
+63542545e931870174a6f9081f46bd070913c86e:Repositories/RepositoryBase.cs:generic-api-key:15
+# 1.x SQL login (2023), server database-server-bds: deleted, the name no longer resolves; never in the current deployment.
+63542545e931870174a6f9081f46bd070913c86e:Views/ActivitiesView.xaml.cs:generic-api-key:270
+# 1.x SQL login (2023), server database-server-bds: deleted, the name no longer resolves; never in the current deployment.
+63542545e931870174a6f9081f46bd070913c86e:Views/ActivitiesView.xaml.cs:generic-api-key:318
+# 1.x SQL login (2023), server database-server-bds: deleted, the name no longer resolves; never in the current deployment.
+7055838d352c49f745e589d8a4577f67258955dc:ViewModels/StockViewModel.cs:generic-api-key:31
+# 1.x SQL login (2023), server database-server-bds: deleted, the name no longer resolves; never in the current deployment.
+871ab03cfc32b6f432275d8e36bce96213c02dee:Repositories/RepositoryBase.cs:generic-api-key:12
+
+# Scanner test: an image tag (lifestream-api:<commit sha>) in a fake build log, which the test expects to be clean.
+2bda4431c464d4904df2ce90875203457f07096b:tests/infra/ScanGitleaks.Tests.ps1:generic-api-key:113
+# Scanner test: the same image tag beside an invented key (vendor-api:<hex>) that the test expects to be flagged.
+2bda4431c464d4904df2ce90875203457f07096b:tests/infra/ScanGitleaks.Tests.ps1:generic-api-key:119
+
+# Client test: a made-up temporary password typed into the reset dialog and sent to a fake API.
+adbc59b0d0b68b6d4943cafc0e8db92c14311c5a:tests/Lifestream.Client.Tests/Features/Part2StaffProfileTests.cs:generic-api-key:309
+# Client test: the same made-up password, typed again to confirm it.
+adbc59b0d0b68b6d4943cafc0e8db92c14311c5a:tests/Lifestream.Client.Tests/Features/Part2StaffProfileTests.cs:generic-api-key:310
+# Client test: the same made-up password in the dialog's initializer (both fields).
+adbc59b0d0b68b6d4943cafc0e8db92c14311c5a:tests/Lifestream.Client.Tests/Features/Part2StaffProfileTests.cs:generic-api-key:332
+
+# Client test: TestSecrets.Old123 is the name of a test constant, not a value.
+ef80b6fe82b68272e8e357880de8947ddc6a7895:tests/Lifestream.Client.Tests/OperationRunnerTests.cs:generic-api-key:149
+# Client test: TestSecrets.New456 is the name of a test constant, not a value.
+ef80b6fe82b68272e8e357880de8947ddc6a7895:tests/Lifestream.Client.Tests/OperationRunnerTests.cs:generic-api-key:150
+# Client test: TestSecrets.New456 is the name of a test constant, not a value.
+ef80b6fe82b68272e8e357880de8947ddc6a7895:tests/Lifestream.Client.Tests/OperationRunnerTests.cs:generic-api-key:151
+# Client test: TestSecrets.Old123 is the name of a test constant, not a value.
+ef80b6fe82b68272e8e357880de8947ddc6a7895:tests/Lifestream.Client.Tests/OperationRunnerTests.cs:generic-api-key:176
+# Client test: TestSecrets.New456 is the name of a test constant, not a value.
+ef80b6fe82b68272e8e357880de8947ddc6a7895:tests/Lifestream.Client.Tests/OperationRunnerTests.cs:generic-api-key:177
+# Client test: TestSecrets.New456 is the name of a test constant, not a value.
+ef80b6fe82b68272e8e357880de8947ddc6a7895:tests/Lifestream.Client.Tests/OperationRunnerTests.cs:generic-api-key:178
+# Desktop test: TestSecrets.Old123 is the name of a test constant, not a value.
+ef80b6fe82b68272e8e357880de8947ddc6a7895:tests/Lifestream.Desktop.Tests/DialogAndFieldViewTests.cs:generic-api-key:154
+# Desktop test: TestSecrets.New456 is the name of a test constant, not a value.
+ef80b6fe82b68272e8e357880de8947ddc6a7895:tests/Lifestream.Desktop.Tests/DialogAndFieldViewTests.cs:generic-api-key:155
+# Desktop test: TestSecrets.New456 is the name of a test constant, not a value.
+ef80b6fe82b68272e8e357880de8947ddc6a7895:tests/Lifestream.Desktop.Tests/DialogAndFieldViewTests.cs:generic-api-key:156
