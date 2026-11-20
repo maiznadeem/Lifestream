@@ -86,4 +86,26 @@ public sealed class ShellBadgeTests
         Assert.False(items["Stock"].HasAlert);
         Assert.Equal(0, shell.LowStockGroups);
     }
+
+    [Fact]
+    public async Task Badges_FromTheCountsTheShellStartsWith_AreAllInPlace_WithoutAnotherRefresh()
+    {
+        using var rig = new Rig();
+        rig.SignIn(Role.Admin);
+        rig.Api.AppointmentsFor = q => q.PageSize == 1 ? ApiResult<PagedResult<AppointmentListItem>>.Ok(new([], 4, 1, 1)) : null;
+        rig.Api.RequestsFor = q => q.PageSize == 1 ? ApiResult<PagedResult<RequestListItem>>.Ok(new([], 6, 1, 1)) : null;
+        rig.Api.On("GetStockAsync", ApiResult<IReadOnlyList<StockItem>>.Ok([new StockItem(BloodType.ONeg, 0, 0, 10, true)]));
+        var shell = rig.Get<ShellViewModel>();
+        shell.Attach(null, new ClinicClock());
+        await shell.StartAsync();
+        var items = shell.Items.ToDictionary(i => i.Title);
+        for (var i = 0; i < 200 && items["Requests"].Badge is null; i++)
+        {
+            await Task.Delay(10, TestContext.Current.CancellationToken);
+        }
+
+        // The first counts, started with the shell: every badge, the Stock alert included (design-qa-2 N5: it showed only after a later refresh).
+        Assert.Equal(("4", "6", "1"), (items["Appointments"].Badge, items["Requests"].Badge, items["Stock"].Badge));
+        Assert.True(items["Stock"].HasAlert);
+    }
 }

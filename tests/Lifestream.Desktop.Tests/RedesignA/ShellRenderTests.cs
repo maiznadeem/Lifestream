@@ -104,6 +104,7 @@ public sealed class ShellRenderTests
         var facts = StaHost.Run(() =>
         {
             ThemeService.Apply(theme == "dark" ? ThemeMode.Dark : ThemeMode.Light);
+            UiContext();
             using var rig = Clinic(screen);
             var shell = rig.Get<ShellViewModel>();
             shell.Attach(null, new DesignClock()); // the clinic's day and zone (UTC), as the page-area renders use
@@ -198,12 +199,16 @@ public sealed class ShellRenderTests
         var facts = StaHost.Run(() =>
         {
             ThemeService.Apply(theme == "dark" ? ThemeMode.Dark : ThemeMode.Light);
+            UiContext();
             using var rig = Clinic("dashboard");
             var shell = rig.Get<ShellViewModel>();
+            shell.Attach(null, new DesignClock()); // the clinic's day, for the sidebar's counts
             var view = new ShellView { DataContext = shell };
             using var host = Hosted.Create(RenderTests.Frame(view, height == 1080, width < 1280 ? 40 : 44), width, height);
             Hosted.Await(() => shell.StartAsync());
             host.Settle(600);
+            var startBadges = shell.Items.Where(i => i.Badge is not null).Select(i => $"{i.Title} {i.Badge}").ToList(); // the counts the shell started with, no other refresh
+            var startAlert = shell.Items.Single(i => i.Title == "Stock").HasAlert;
             shell.OpenPaletteCommand.Execute(null);
             host.Settle(500);
             var png = host.Capture();
@@ -212,8 +217,11 @@ public sealed class ShellRenderTests
             var palette = (CommandPaletteView)view.FindName("Palette");
             var surface = (FrameworkElement)palette.FindName("Surface");
             var rows = host.All<ListBoxItem>().Where(i => i.IsVisible && palette.IsAncestorOf(i)).Select(i => Hosted.BoundsOf(i, host.Element)).ToList();
-            return (palette.IsOpen, Items: shell.Palette.Items.Count, Rows: rows, Surface: Hosted.BoundsOf(surface, host.Element));
+            return (palette.IsOpen, Items: shell.Palette.Items.Count, Rows: rows, Surface: Hosted.BoundsOf(surface, host.Element), StartBadges: startBadges, StartAlert: startAlert);
         });
+
+        Assert.Equal(["Appointments 5", "Requests 6", "Stock 6"], facts.StartBadges);
+        Assert.True(facts.StartAlert, "the Stock alert is missing from the counts the shell starts with");
 
         Assert.True(facts.IsOpen);
         Assert.True(facts.Items > 0 && facts.Rows.Count > 0, "the palette lists nothing");
@@ -222,6 +230,12 @@ public sealed class ShellRenderTests
         Assert.True(Math.Abs((facts.Surface.Left + facts.Surface.Right) - width) <= 1.5, $"the palette is not centred: {facts.Surface}");
         Assert.True(facts.Rows[0].Top >= facts.Surface.Top && facts.Rows[0].Bottom <= facts.Surface.Bottom && facts.Rows[0].Left >= facts.Surface.Left && facts.Rows[0].Right <= facts.Surface.Right, $"the first row {facts.Rows[0]} is outside the palette {facts.Surface}");
     }
+
+    /// <summary>
+    /// Creates the view models under the UI thread's synchronization context, as the app does (it builds the shell on its running UI thread). Without it the shell's
+    /// first counts are applied on a worker thread, where the sidebar's view throws on the Stock alert and the Stock count is lost (design-qa-2 N5's missing dot).
+    /// </summary>
+    private static void UiContext() => SynchronizationContext.SetSynchronizationContext(new System.Windows.Threading.DispatcherSynchronizationContext());
 
     /// <summary>The id of the selected row of a list screen; null for the other screens.</summary>
     private static int? SelectedRecord(object page) =>
