@@ -22,15 +22,22 @@ Store as an MSIX. Nothing here is submitted automatically; the Store listing nee
    - `Package/Properties/PublisherDisplayName`
 4. In the GitHub repository open **Settings > Secrets and variables > Actions > Variables** and add these three as
    repository **variables** (they are identifiers, not secrets): `STORE_IDENTITY_NAME`, `STORE_PUBLISHER`,
-   `STORE_PUBLISHER_DISPLAY_NAME`. Until they exist, `release.yml` skips the MSIX and says so in the run summary.
+   `STORE_PUBLISHER_DISPLAY_NAME`. Until they exist, `release.yml` skips the MSIX and says so in the run summary. To build the
+   package on your PC instead, set the same three as environment variables.
 5. The tile art in `packaging/store/Assets/` is the Lifestream mark. To change it, replace `Square44x44Logo.png`, `Square150x150Logo.png` and
    `StoreLogo.png` there (44x44, 150x150 and 50x50). Only when one of them is missing does `build-msix.ps1` draw a placeholder (a red square with a white dot).
 
 ## Every release
 
-1. Push the tag (`git tag v2.1.0 && git push origin v2.1.0`). `release.yml` publishes the app, scans it, builds the GitHub release
-   and, when the variables above exist, the workflow artifact **store-msix** (`Lifestream-2.1.0-x64.msix`).
-2. Download the artifact from the workflow run page (Actions > Release > the run > Artifacts).
+1. Make the release with `tools/release-local.ps1` (see the README, Releases). It does not build the Store package.
+2. Build the package, one of two ways:
+   - On your PC, from the publish folder the release script left in its work folder (needs `makeappx` from the Windows SDK):
+     `./packaging/store/build-msix.ps1 -PublishDir <work>/2.1.0/publish -Version 2.1.0 -OutputDir <folder>`, then scan it:
+     `./tools/scan-artifacts.ps1 -Path <folder>`.
+   - On GitHub, with the fallback workflow instead of the script: push the tag (`git tag v2.1.0 && git push origin v2.1.0`; a tag
+     starts nothing by itself), start **Release** by hand on that tag (Actions > Release > Run workflow > Use workflow from: Tags),
+     and download the artifact **store-msix** (`Lifestream-2.1.0-x64.msix`) from the run page. That run also makes the GitHub
+     release, so use it only when the release was not already made with the script.
 3. Screenshots: use the committed `packaging/store/screenshots/` (check `screenshots.json` and the images are from this
    release's look). To regenerate them, run `tools/generate-screenshots.ps1` on a machine with a local SQL Server (it needs
    one at `localhost`, which a GitHub-hosted runner does not have, so the **Screenshots** workflow runs only by hand) and commit the result.
