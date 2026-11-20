@@ -23,15 +23,17 @@ have ended, so SQL Server is as quiet for them as in an unsharded run. That only
 The Api tests keep the backup of their 100x template database on the server between runs and say in the summary
 whether this run restored it or had to build it (a change in the generator, the seed code, the migrations or the day).
 
-The real-window tests of the Desktop project create real windows, and real windows never go on the desktop of the
-person at the PC (2026-11-20: off-screen windows in the owner's session took their keyboard focus). They run only on an
-isolated desktop: with -IsolatedDesktop the script creates one (tests/isolated: a desktop that is never switched to and a
-job object for everything started on it) and runs the real-window classes there in a shard of their own, drawn in
-software, while a monitor watches the person's input desktop every 10 ms. Anything of the run reaching that desktop (a
-window, the foreground, the focus, the caret) ends everything on the isolated desktop at once and the run FAILED; the
-summary prints what the monitor saw. Without -IsolatedDesktop those tests skip ("Real-window tests run only on an
-isolated desktop ..."). The summary says on a line of its own how many real-window checks did not run, and names them
-with the reason; because a release gate must not lose those checks silently, the run then ends FAILED unless
+Every Desktop test process runs on an isolated desktop, never on the desktop of the person at the PC: a desktop of its
+own (tests/isolated: never switched to, a job object for everything started on it, the walk's worker processes
+included), while a monitor watches the person's input desktop every 10 ms. On 2026-11-20/21 Desktop test processes of
+ordinary runs became the foreground window, with the keyboard focus and the caret, for up to a second at a time while
+the owner typed; on another desktop they cannot. Every process this script starts is watched as its own: anything of the
+run reaching the person's desktop (a window, the foreground, the focus, the caret) ends everything on the isolated
+desktop at once and the run FAILED; the summary prints what the monitor saw. The real-window classes run there too, in
+a shard of their own, drawn in software. -InSession runs the Desktop tests on the person's desktop instead (no one should;
+it exists for a machine where no desktop can be created) and the real-window tests then skip ("Real-window tests run only
+on an isolated desktop ..."). The summary says on a line of its own how many real-window checks did not run, and names
+them with the reason; because a release gate must not lose those checks silently, the run then ends FAILED unless
 -AllowRealWindowSkip says that a run without them is acceptable. Nothing here sends input.
 
 Every test process runs with DOTNET_TieredPGO=0: the same tests and results for about 30 % less processor time (the
@@ -71,11 +73,14 @@ param(
     [string]$Out,
     # The class durations file (default: tools/test-fast.durations.json of the checkout, else the one beside this script).
     [string]$Durations,
-    # Accept a run in which real-window checks did not run (no -IsolatedDesktop): they are still counted and named, but the run is
-    # not failed for them.
+    # Accept a run in which real-window checks did not run (-InSession): they are still counted and named, but the run is not failed
+    # for them.
     [switch]$AllowRealWindowSkip,
-    # Run the real-window tests on an isolated desktop, with the person's desktop watched (see the description).
+    # The default, kept so older calls still work: the Desktop tests run on an isolated desktop (see the description).
     [switch]$IsolatedDesktop,
+    # Run the Desktop tests on the desktop of the person at the PC. Their windows can take that person's keyboard focus: do not use it on a
+    # PC someone is using.
+    [switch]$InSession,
     # Run Domain and Client by themselves first; Api and the Desktop tests start when both have ended.
     [switch]$DomainAndClientFirst,
     # Skip the build (the Release output must be up to date).
@@ -89,6 +94,7 @@ param(
 
 Set-StrictMode -Version 3
 $ErrorActionPreference = 'Stop'
+$isolate = -not $InSession
 
 function Resolve-Checkout([string]$path) {
     if (-not $path) {
@@ -122,6 +128,7 @@ function Join-Arguments([string[]]$arguments) {
 }
 
 $script:Started = New-Object System.Collections.ArrayList
+$script:WatchedBy = $null
 
 # Starts a process with no window, on the allowed processors at BelowNormal priority; its output is collected for the log.
 function Start-Hidden([string]$name, [string]$file, [string[]]$arguments, [hashtable]$environment = @{}, [string]$log) {
@@ -138,6 +145,11 @@ function Start-Hidden([string]$name, [string]$file, [string[]]$arguments, [hasht
     }
 
     $process = [System.Diagnostics.Process]::Start($info)
+    if ($script:WatchedBy) {
+        # The monitor of the isolated desktop treats this process as ours too: if it ever reaches the person's desktop, the run fails.
+        [void](New-Item -ItemType File -Force -Path (Join-Path $script:WatchedBy $process.Id))
+    }
+
     try {
         # Inherited from this script already; set again in case the caller's own limits were tighter or looser.
         $process.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::BelowNormal
@@ -268,7 +280,7 @@ function New-Shard([string]$note) {
     return [pscustomobject]@{ Classes = (New-Object System.Collections.ArrayList); Cases = (New-Object System.Collections.ArrayList); Seconds = 0.0; Note = $note; Last = $false; Whole = $false; Isolated = $false }
 }
 
-# The Desktop classes that create real windows: with -IsolatedDesktop they run on the isolated desktop, together in one shard.
+# The Desktop classes that create real windows: they run together in one shard (drawn in software there).
 function Test-RealWindowClass([string]$class) {
     return $class -like 'Lifestream.Desktop.Tests.RealWindows.*' -or $class -eq 'Lifestream.Desktop.Tests.EndToEnd.RealWindowTextTests'
 }
@@ -535,7 +547,7 @@ try {
         Write-Host ('  build: {0:N0} s' -f $buildSeconds)
     }
 
-    if ($IsolatedDesktop) {
+    if ($isolate) {
         # The isolated desktop and its monitor are up before any test starts, and stay until every test has ended.
         $toolProject = Join-Path $script:Checkout 'tests\isolated\Lifestream.Isolated\Lifestream.Isolated.csproj'
         $toolBuild = Start-Hidden 'build-isolated' $dotnetExe @('build', $toolProject, '-c', 'Release', '-nodeReuse:false', '-p:UseSharedCompilation=false', '-nologo', '-v:q') @{} (Join-Path $Out 'build-isolated.log')
@@ -558,7 +570,9 @@ try {
             Start-Sleep -Milliseconds 100
         }
 
-        Write-Host "  isolated desktop: $((Get-Content -LiteralPath (Join-Path $state 'desktop.txt') -Raw).Trim()), monitor log $(Join-Path $state 'monitor.log')"
+        $script:WatchedBy = Join-Path $state 'clients'
+        [void](New-Item -ItemType Directory -Force -Path $script:WatchedBy)
+        Write-Host "  isolated desktop: $((Get-Content -LiteralPath (Join-Path $state 'desktop.txt') -Raw).Trim()) (every Desktop test process runs there), monitor log $(Join-Path $state 'monitor.log')"
     }
 
     $projects = [ordered]@{}
@@ -589,7 +603,7 @@ try {
         Client = Start-Listing $projects['Client'] 'tests'
         Api = Start-Listing $projects['Api'] 'tests'
         ApiClasses = Start-Listing $projects['Api'] 'classes'
-        Desktop = Start-Listing $projects['Desktop'] 'full/json'
+        Desktop = if ($isolated) { Start-Hidden 'list full/json' $isolated.Exe @('exec', $isolated.State, '--', $projects['Desktop'], '-list', 'full/json', '-preEnumerateTheories', '-trait-', 'Category=Perf') } else { Start-Listing $projects['Desktop'] 'full/json' }
     }
     Wait-Runs @($listings.Values) 5
     $expected = @{}
@@ -615,7 +629,7 @@ try {
     $script:WalkerCount = $Walkers
     $plainCases = $cases
     $isolatedShards = @()
-    if ($IsolatedDesktop) {
+    if ($isolate) {
         $plainCases = @($cases | Where-Object { -not (Test-RealWindowClass $_.Class) })
         $isolatedShard = New-Shard 'the real-window classes, on the isolated desktop'
         $isolatedShard.Isolated = $true
@@ -723,12 +737,18 @@ try {
         $captures = Join-Path $Out ("captures\$label")
         [void](New-Item -ItemType Directory -Force -Path $captures)
         $environment = @{ LIFESTREAM_CAPTURE_DIR = $captures; LIFESTREAM_WAKING_WALKERS = $Walkers }
-        if ($shard.Isolated) {
-            # On the isolated desktop, through the tool: the process is in the job before it runs and has the desktop's name in its environment.
-            $text = Join-Path $captures 'text'
-            [void](New-Item -ItemType Directory -Force -Path $text)
+        if ($isolated) {
+            # On the isolated desktop, through the tool: the process is in the job before it runs (its children too: the walk's workers) and has
+            # the desktop's name in its environment.
+            if ($shard.Isolated) {
+                $text = Join-Path $captures 'text'
+                [void](New-Item -ItemType Directory -Force -Path $text)
+                $environment['LIFESTREAM_REALWINDOW_DIR'] = $text
+                $environment['LIFESTREAM_REAL_WINDOW_TESTS'] = '1'
+            }
+
             $result = Join-Path $Out "$label.xml"
-            $arguments = @('exec', $isolated.State, '--env', "LIFESTREAM_CAPTURE_DIR=$captures", '--env', "LIFESTREAM_REALWINDOW_DIR=$text", '--env', 'LIFESTREAM_REAL_WINDOW_TESTS=1', '--', $projects['Desktop']) + $common + $filter + @('-result-xml', $result)
+            $arguments = @('exec', $isolated.State) + @($environment.Keys | Sort-Object | ForEach-Object { '--env'; "$_=$($environment[$_])" }) + @('--', $projects['Desktop']) + $common + $filter + @('-result-xml', $result)
             $run = Start-Hidden $label $isolated.Exe $arguments @{} (Join-Path $Out "$label.log")
             $run.Result = $result
             $run.Project = 'Desktop'
@@ -773,7 +793,7 @@ try {
             [void]$problems.Add("VIOLATION: something of this run reached the person's desktop, and everything on the isolated desktop was ended at once: $((Get-Content -LiteralPath $violation -Raw).Trim())")
         }
         elseif ($holdExit -ne 0) {
-            [void]$problems.Add("The isolated desktop's monitor did not end cleanly (exit code $holdExit; see $(Join-Path $isolated.State 'monitor.log')): the real-window results of this run are not trusted.")
+            [void]$problems.Add("The isolated desktop's monitor did not end cleanly (exit code $holdExit; see $(Join-Path $isolated.State 'monitor.log')): the Desktop results of this run are not trusted.")
         }
 
         $isolated = $null
@@ -931,7 +951,7 @@ try {
             Write-Host '  accepted for this run (-AllowRealWindowSkip)'
         }
         else {
-            [void]$problems.Add("$($realWindowSkips.Count) real-window check(s) did not run ($((@($realWindowSkips | ForEach-Object { $_.Reason } | Sort-Object -Unique)) -join '; ')): they are named above. A release gate must not lose them: run again with -IsolatedDesktop, or pass -AllowRealWindowSkip to accept a run without them.")
+            [void]$problems.Add("$($realWindowSkips.Count) real-window check(s) did not run ($((@($realWindowSkips | ForEach-Object { $_.Reason } | Sort-Object -Unique)) -join '; ')): they are named above. A release gate must not lose them: run again without -InSession, or pass -AllowRealWindowSkip to accept a run without them.")
         }
     }
 

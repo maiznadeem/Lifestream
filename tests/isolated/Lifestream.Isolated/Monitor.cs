@@ -16,7 +16,7 @@ internal sealed unsafe class Monitor(IntPtr job, string isolatedDesktop, string 
 {
     private readonly object _gate = new();
     private readonly HashSet<uint> _everInJob = [];
-    private readonly HashSet<uint> _clients = [];
+    private readonly Dictionary<uint, long> _clients = []; // pid -> creation time: a pid is reused once its process has ended
     private readonly Dictionary<uint, string> _names = [];
     private readonly Dictionary<string, (long Total, long Ours)> _events = [];
     private readonly Stopwatch _clock = Stopwatch.StartNew();
@@ -65,18 +65,9 @@ internal sealed unsafe class Monitor(IntPtr job, string isolatedDesktop, string 
     /// <summary>For the self-test only: when the canary starts to count.</summary>
     public TimeSpan CanaryAfter { get; init; }
 
-    private string DescribeProcess(uint pid)
-    {
-        if (!_names.TryGetValue(pid, out var name))
-        {
-            name = ProcessName(pid);
-            _names[pid] = name;
-        }
+    private static string DescribeProcess(uint pid) => ProcessName(pid);
 
-        return name;
-    }
-
-    public string NameOf(uint pid) => _names.TryGetValue(pid, out var n) ? n : $"pid{pid}";
+    public string NameOf(uint pid) => _names.TryGetValue(pid, out var n) ? n : $"pid{pid}"; // for the summary of job processes only
 
     public void Stop()
     {
@@ -142,15 +133,20 @@ internal sealed unsafe class Monitor(IntPtr job, string isolatedDesktop, string 
         {
             foreach (var file in Directory.EnumerateFiles(clients))
             {
-                if (uint.TryParse(Path.GetFileName(file), out var pid) && _clients.Add(pid))
+                if (uint.TryParse(Path.GetFileName(file), out var pid) && !_clients.ContainsKey(pid))
                 {
-                    _names[pid] = ProcessName(pid);
+                    _clients[pid] = CreationTime(pid);
                 }
             }
         }
     }
 
-    /// <summary>True for the tool itself, its exec clients and every process that is or was in the job.</summary>
+    /// <summary>
+    /// True for the tool itself, its exec clients (the same process: same id and start time) and every live process of the job. Process ids are
+    /// reused soon after a process ends (2026-11-21: a console program of someone else got the id of a driver that had ended a minute before,
+    /// and its windows were taken for ours), so a remembered id alone never counts: a window or event of the person's desktop belongs to a live
+    /// process, which is asked whether it is in the job.
+    /// </summary>
     private bool IsOurs(uint pid)
     {
         lock (_gate)
@@ -166,7 +162,12 @@ internal sealed unsafe class Monitor(IntPtr job, string isolatedDesktop, string 
             return false;
         }
 
-        if (pid == (uint)Environment.ProcessId || _clients.Contains(pid) || _everInJob.Contains(pid))
+        if (pid == (uint)Environment.ProcessId)
+        {
+            return true;
+        }
+
+        if (_clients.TryGetValue(pid, out var started) && started != 0 && CreationTime(pid) == started)
         {
             return true;
         }
@@ -208,7 +209,7 @@ internal sealed unsafe class Monitor(IntPtr job, string isolatedDesktop, string 
         }
     }
 
-    private string DescribeLocked(IntPtr hwnd)
+    private static string DescribeLocked(IntPtr hwnd)
     {
         if (hwnd == IntPtr.Zero)
         {
@@ -216,13 +217,69 @@ internal sealed unsafe class Monitor(IntPtr job, string isolatedDesktop, string 
         }
 
         GetWindowThreadProcessId(hwnd, out var pid);
-        if (!_names.TryGetValue(pid, out var name))
+        return $"0x{hwnd:X}({ProcessName(pid)}:{pid} {ClassName(hwnd)})"; // the name now: a remembered one may be of an ended process
+    }
+
+    /// <summary>
+    /// A Lifestream process that is not ours (another run's tests or app on the person's desktop) is not killed, but what it does there is
+    /// written down with its window's title and place and counted, so that it is never taken for silence.
+    /// </summary>
+    private void NoteOutsider(string what, IntPtr hwnd, uint pid)
+    {
+        var name = ProcessName(pid);
+        if (!name.StartsWith("Lifestream", StringComparison.OrdinalIgnoreCase))
         {
-            name = ProcessName(pid);
-            _names[pid] = name;
+            return;
         }
 
-        return $"0x{hwnd:X}({name}:{pid} {ClassName(hwnd)})";
+        lock (_gate)
+        {
+            OutsideLifestream++;
+        }
+
+        var title = new System.Text.StringBuilder(256);
+        _ = GetWindowTextW(GetAncestor(hwnd, 2), title, title.Capacity);
+        GetWindowRect(GetAncestor(hwnd, 2), out var r);
+        Log($"OUTSIDE (a Lifestream process not on the isolated desktop): {what} {name}:{pid} hwnd 0x{hwnd:X} title \"{title}\" rect {r.Left},{r.Top},{r.Right},{r.Bottom} visible={IsWindowVisible(GetAncestor(hwnd, 2))}");
+    }
+
+    /// <summary>What Lifestream processes outside the isolation did on the person's desktop (foreground, focus, windows): not ours, but seen.</summary>
+    public long OutsideLifestream { get; private set; }
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetWindowTextW(IntPtr hwnd, System.Text.StringBuilder text, int max);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetAncestor(IntPtr hwnd, uint flags);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Rect32
+    {
+        public int Left, Top, Right, Bottom;
+    }
+
+    [DllImport("user32.dll")]
+    private static extern bool GetWindowRect(IntPtr hwnd, out Rect32 rect);
+
+    [DllImport("kernel32.dll")]
+    private static extern bool GetProcessTimes(IntPtr process, out long creation, out long exit, out long kernel, out long user);
+
+    private static long CreationTime(uint pid)
+    {
+        var process = OpenProcess(ProcessQueryLimitedInformation, false, pid);
+        if (process == IntPtr.Zero)
+        {
+            return 0;
+        }
+
+        try
+        {
+            return GetProcessTimes(process, out var creation, out _, out _, out _) ? creation : 0;
+        }
+        finally
+        {
+            CloseHandle(process);
+        }
     }
 
     private static uint PidOf(IntPtr hwnd)
@@ -344,6 +401,11 @@ internal sealed unsafe class Monitor(IntPtr job, string isolatedDesktop, string 
                     }
                 }
 
+                if (fg != previous.Fg && fg != IntPtr.Zero)
+                {
+                    NoteOutsider("took the foreground", fg, PidOf(fg));
+                }
+
                 previous = state;
             }
 
@@ -366,9 +428,14 @@ internal sealed unsafe class Monitor(IntPtr job, string isolatedDesktop, string 
                     {
                         Violate($"our window {Describe(hwnd)} visible={visible} is on the input desktop");
                     }
-                    else if (visible)
+                    else
                     {
-                        Log($"new visible window {Describe(hwnd)}");
+                        if (visible)
+                        {
+                            Log($"new visible window {Describe(hwnd)}");
+                        }
+
+                        NoteOutsider($"made a top-level window (visible={visible})", hwnd, pid);
                     }
                 }
             }

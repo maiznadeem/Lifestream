@@ -69,7 +69,7 @@ $Work = (Resolve-Path -LiteralPath $Work).ProviderPath
 $state = Join-Path $Work 'isolated'
 
 function Invoke-Exec([string[]]$arguments, [int]$timeout) {
-    & $tool exec $state --timeout "$timeout" -- @arguments
+    & $tool exec $state --timeout "$timeout" -- @arguments | Out-Host
     return $LASTEXITCODE
 }
 

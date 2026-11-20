@@ -212,6 +212,7 @@ internal static unsafe class Program
         text.AppendLine(CultureInfo.InvariantCulture, $"input desktop checks: {m.InputDesktopChecks} ({m.InputDesktopUnavailable} not available: locked or a UAC prompt)");
         text.AppendLine(CultureInfo.InvariantCulture, $"busy/app-starting cursor episodes on the input desktop: {m.BusyCursorEpisodes}");
         text.AppendLine(CultureInfo.InvariantCulture, $"input desktop events (total/ours): {string.Join(", ", m.Events.OrderBy(e => e.Key).Select(e => $"{e.Key} {e.Value.Total}/{e.Value.Ours}"))}");
+        text.AppendLine(CultureInfo.InvariantCulture, $"Lifestream processes OUTSIDE the isolation seen on the input desktop (not ours, not killed; see OUTSIDE in the log): {m.OutsideLifestream}");
         text.AppendLine(CultureInfo.InvariantCulture, $"processes that ran in the job: {m.JobProcesses.Count} ({string.Join(", ", m.JobProcesses.Select(m.NameOf).GroupBy(n => n).Select(g => $"{g.Key} x{g.Count()}"))})");
         return text.ToString();
     }
