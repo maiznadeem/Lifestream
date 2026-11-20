@@ -22,6 +22,7 @@
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="MenuItem">
+          <Grid>
           <Border x:Name="Bd" Background="Transparent" Padding="{TemplateBinding Padding}" CornerRadius="{StaticResource Radius.Small}"
                   MinHeight="{TemplateBinding MinHeight}" SnapsToDevicePixels="True">
             <Grid>
@@ -37,9 +38,36 @@
               <TextBlock x:Name="Gesture" Grid.Column="2" Text="{TemplateBinding InputGestureText}" FontFamily="{DynamicResource Font.Family}"
                          FontSize="{StaticResource FontSize.Caption}" Foreground="{DynamicResource Brush.Ink3}" VerticalAlignment="Center" Margin="{DynamicResource Inset.L24}" />
               <controls:Icon x:Name="Check" Grid.Column="3" Kind="Check" Size="15" Margin="{DynamicResource Inset.L12}" VerticalAlignment="Center" Visibility="Collapsed" />
+              <!-- An item with items of its own says so with a chevron, and opens them in the popup below. -->
+              <controls:Icon x:Name="SubmenuChevron" Grid.Column="3" Kind="Chevr" Size="15" Margin="{DynamicResource Inset.L12}" VerticalAlignment="Center" Visibility="Collapsed"
+                             Foreground="{DynamicResource Brush.Ink3}" />
             </Grid>
           </Border>
+          <!-- The submenu of an item that has items (the account menu's Theme). MenuItem opens and closes PART_Popup itself (pointer, Right and Left, Enter);
+               the surface is the context menu's, with the same room for its shadow. -->
+          <Popup x:Name="PART_Popup" Placement="Right" HorizontalOffset="-8" VerticalOffset="-10" AllowsTransparency="True" Focusable="False" PopupAnimation="None"
+                 IsOpen="{Binding IsSubmenuOpen, RelativeSource={RelativeSource TemplatedParent}}">
+            <Grid x:Name="SubmenuRoot" Margin="{DynamicResource Inset.L12T6R12B20}" SnapsToDevicePixels="True" theme:TextDefaults.Apply="True">
+              <Border Background="{DynamicResource Brush.Layer}" CornerRadius="{StaticResource Radius.Panel}" IsHitTestVisible="False">
+                <Border.Effect>
+                  <DropShadowEffect BlurRadius="{StaticResource Elevation.Flyout.Blur}" ShadowDepth="{StaticResource Elevation.Flyout.Offset}" Direction="270"
+                                    Opacity="{StaticResource Elevation.Flyout.Opacity}" Color="{DynamicResource Color.Shadow}" />
+                </Border.Effect>
+              </Border>
+              <controls:CrispBorder Background="{DynamicResource Brush.Layer}" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="1" Padding="{StaticResource Pad.4}"
+                      CornerRadius="{StaticResource Radius.Panel}" MinWidth="180">
+                <ItemsPresenter x:Name="SubmenuItems" KeyboardNavigation.DirectionalNavigation="Cycle" />
+              </controls:CrispBorder>
+            </Grid>
+          </Popup>
+          </Grid>
           <ControlTemplate.Triggers>
+            <Trigger Property="Role" Value="SubmenuHeader">
+              <Setter TargetName="SubmenuChevron" Property="Visibility" Value="Visible" />
+            </Trigger>
+            <Trigger Property="IsSubmenuOpen" Value="True">
+              <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Hover}" />
+            </Trigger>
             <Trigger Property="Icon" Value="{x:Null}">
               <Setter TargetName="IconHost" Property="Visibility" Value="Collapsed" />
             </Trigger>
