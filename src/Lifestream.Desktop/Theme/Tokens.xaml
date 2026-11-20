@@ -285,7 +285,7 @@
   <Thickness x:Key="Inset.L6T4R10B6">6,4,10,6</Thickness>
   <Thickness x:Key="Inset.R1">0,0,1,0</Thickness>
   <Thickness x:Key="Inset.L48T56R40B56">48,56,40,56</Thickness>
-  <Thickness x:Key="Chrome.GlassFrameMica">-1</Thickness>
+  <Thickness x:Key="Chrome.GlassFrameMica">0,0,0,10000</Thickness>
   <Thickness x:Key="Inset.T6B12">0,6,0,12</Thickness>
   <Thickness x:Key="Inset.L22T18R16">22,18,16,0</Thickness>
   <Thickness x:Key="Inset.L22T18R16B16">22,18,16,16</Thickness>
