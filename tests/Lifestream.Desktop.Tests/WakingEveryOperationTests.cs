@@ -320,15 +320,9 @@ public sealed class WakingEveryOperationTests
 
         var screen = operations[0].Screen;
         var state = operations[0].State;
-        foreach (var op in operations)
+        foreach (var op in operations.Where(o => o.Host is null))
         {
-            var rig = op.Rig = Part2Harness.NewRig(clock: op.Manual);
-            rig.Get<DialogService>().Presenter = new Yes();
-            rig.Get<FormDialogService>().Presenter = op.Dialogs;
-            var vm = op.Vm = (ViewModelBase)Create(rig, screen.ViewModel);
-            vm.Attach(rig.Get<ServerStatus>(), op.Clock);
-            op.Host = Hosted.Create(screen.View(vm), Width, Height);
-            Hosted.Await(() => vm.LoadAsync());
+            Build(op);
         }
 
         SettleAll(operations, 100);
@@ -402,6 +396,18 @@ public sealed class WakingEveryOperationTests
         return arranged;
     }
 
+    /// <summary>Creates the operation's rig, view model and rendered screen and loads it: the first step of <see cref="OpenAll"/>, which the walk also does ahead of time.</summary>
+    private static void Build(Operation op)
+    {
+        var rig = op.Rig = Part2Harness.NewRig(clock: op.Manual);
+        rig.Get<DialogService>().Presenter = new Yes();
+        rig.Get<FormDialogService>().Presenter = op.Dialogs;
+        var vm = op.Vm = (ViewModelBase)Create(rig, op.Screen.ViewModel);
+        vm.Attach(rig.Get<ServerStatus>(), op.Clock);
+        op.Host = Hosted.Create(op.Screen.View(vm), Width, Height);
+        Hosted.Await(() => vm.LoadAsync());
+    }
+
     /// <summary>One wait for all the given operations' screens (they share the dispatcher that is pumped meanwhile), then each screen's layout is brought up to date: for one operation, what <see cref="Hosted.Settle"/> does.</summary>
     private static void SettleAll(IReadOnlyCollection<Operation> operations, int milliseconds)
     {
@@ -457,6 +463,28 @@ public sealed class WakingEveryOperationTests
         return op;
     }
 
+    /// <summary>
+    /// Lets the work that is queued run: the dispatcher down to idle, then whatever had been queued to the thread pool by then, and both once more,
+    /// since either may queue to the other. The operation runner starts every API call on the thread pool (<c>Task.Run</c>), so a command reaches its
+    /// call only when the pool gets a processor. With processors to spare that is a millisecond; on a machine with none it takes as long as it
+    /// takes, which a fixed 150 ms cannot know: four commands in a row were once judged to make no API call because their process had been kept
+    /// waiting. A marker queued to the pool after the command's own work comes back only after that work has started.
+    /// </summary>
+    private static void RunQueuedWork()
+    {
+        for (var pass = 0; pass < 2; pass++)
+        {
+            StaHost.Drain();
+            var reached = Task.Run(() => { });
+            if (!SpinWait.SpinUntil(() => reached.IsCompleted, millisecondsTimeout: 2))
+            {
+                Hosted.PumpUntil(() => reached.IsCompleted, 30_000);
+            }
+        }
+
+        StaHost.Drain();
+    }
+
     /// <summary>With the operation's screen opened (<paramref name="arranged"/>: and in its state), makes the server stop answering and runs the command.</summary>
     private static void Run(Operation op, bool arranged)
     {
@@ -494,9 +522,9 @@ public sealed class WakingEveryOperationTests
             return Task.CompletedTask;
         });
         // The command's first API call is the signal that it has started, so the wait ends there; only a command that makes none gets the whole
-        // 150 ms before that is concluded. Then the dispatcher runs down to idle, so what the command queued with the call has run as well.
+        // 150 ms before that is concluded, and then only once the work it queued has run (see RunQueuedWork).
         Hosted.PumpUntil(() => op.Server.Count > 0, 150);
-        StaHost.Drain();
+        RunQueuedWork();
         host.Element.UpdateLayout();
         if (op.Server.Count == 0)
         {
@@ -724,43 +752,63 @@ public sealed class WakingEveryOperationTests
         var withCalls = Enum.GetValues<ScreenState>().ToDictionary(s => s, _ => 0);
         var todo = groups.ToList();
 
-        // The commands a user could press in a state are found on a throwaway screen. The first group's is built now, each later group's while the
-        // group before it waits out its 3.6 s: time that otherwise passes with nothing to do.
-        HashSet<string>? Probe(int group) => todo[group].State == ScreenState.RecordSelected ? null : Runnable(todo[group].Screen, todo[group].State); // with a record selected every command is walked, so a disabled one needs a reviewed entry
-        var next = todo.Count > 0 ? Probe(0) : null;
-        for (var group = 0; group < todo.Count; group++)
+        // A group's operations: one for each command a user could press with the screen in that state. Which commands those are is found on a
+        // throwaway screen (with a record selected every command is walked, so a disabled one needs a reviewed entry).
+        List<Operation> OperationsOf(int group)
         {
             var (screen, state) = todo[group];
-            var runnable = next;
+            var runnable = state == ScreenState.RecordSelected ? null : Runnable(screen, state);
+            return [.. CommandsOf(screen.ViewModel)
+                .Where(p => !p.IsDefined(typeof(NoOperationRunnerAttribute), false) || IsNoCall(screen.Name, p.Name))
+                .Where(p => runnable is null || runnable.Contains(p.Name))
+                .Select(p => new Operation(screen, p.Name, state, realTime: true))];
+        }
 
-            // All commands of a screen in one state are started together, each on its own screen instance and silent server, so the real 3.6 s of waiting are shared.
-            var operations = new List<Operation>();
-            try
+        var operations = new List<Operation>();
+        var upcoming = new List<Operation>();
+        try
+        {
+            if (todo.Count > 0)
             {
-                foreach (var command in CommandsOf(screen.ViewModel).Where(p => !p.IsDefined(typeof(NoOperationRunnerAttribute), false) || IsNoCall(screen.Name, p.Name)))
-                {
-                    if (runnable is null || runnable.Contains(command.Name))
-                    {
-                        operations.Add(new Operation(screen, command.Name, state, realTime: true));
-                    }
-                }
+                operations = OperationsOf(0);
+            }
 
-                // The screens are opened first, all of them (their waits shared), then the commands run one after the other: each operation's
-                // 3 s starts with its own command, as before, and none of them waits while another one's screen is still being built.
+            for (var group = 0; group < todo.Count; group++)
+            {
+                var (screen, state) = todo[group];
+
+                // All commands of a screen in one state are started together, each on its own screen instance and silent server, so the real 3.6 s of
+                // waiting are shared. The screens are opened first, all of them (their waits shared), then the commands run one after the other: each
+                // operation's 3 s starts with its own command, as before, and none of them waits while another one's screen is still being built.
                 var arranged = OpenAll(operations);
                 for (var i = 0; i < operations.Count; i++)
                 {
                     Run(operations[i], arranged[i]);
                 }
 
-                next = group + 1 < todo.Count ? Probe(group + 1) : null;
-
-                // Every operation has now been waking for at least 3.6 s: wait out what is left for the one that went last.
+                // Every operation must now be waking for at least 3.6 s. That time is used for the next group: its throwaway screen, and as many of
+                // its own screens as fit (one is started only while a second of the 3.6 s is left, so this group is not kept waiting much longer:
+                // a screen's load gives up after 10 s). What is then left of the 3.6 s for the operation that went last is waited out.
+                var waiting = operations.Any(o => !o.Finished);
                 var lastWaking = operations.Where(o => !o.Finished).Select(o => o.WakingSince).DefaultIfEmpty(System.Diagnostics.Stopwatch.GetTimestamp()).Max();
-                var left = 3600 - (int)System.Diagnostics.Stopwatch.GetElapsedTime(lastWaking).TotalMilliseconds;
-                if (left > 0 && operations.Any(o => !o.Finished))
+                int Left() => 3600 - (int)System.Diagnostics.Stopwatch.GetElapsedTime(lastWaking).TotalMilliseconds;
+                if (group + 1 < todo.Count)
                 {
-                    Hosted.RunDispatcherFor(left);
+                    upcoming = OperationsOf(group + 1);
+                    foreach (var op in upcoming)
+                    {
+                        if (!waiting || Left() < 1000)
+                        {
+                            break;
+                        }
+
+                        Build(op);
+                    }
+                }
+
+                if (waiting && Left() > 0)
+                {
+                    Hosted.RunDispatcherFor(Left());
                 }
 
                 // What every operation shows, and Cancel; then, for each, whether its requests stopped 250 ms after its Cancel. Those 250 ms are the
@@ -797,11 +845,16 @@ public sealed class WakingEveryOperationTests
                         found.Add($"[{state}] {problem}");
                     }
                 }
-            }
-            finally
-            {
+
                 operations.ForEach(o => o.Dispose());
+                operations = upcoming;
+                upcoming = [];
             }
+        }
+        finally
+        {
+            operations.ForEach(o => o.Dispose());
+            upcoming.ForEach(o => o.Dispose());
         }
 
         return new WalkResult(found, exercised, withCalls);
