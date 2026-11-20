@@ -154,8 +154,36 @@ public sealed class LifestreamDataGrid : DataGrid
         }
     }
 
+    protected override void OnInitialized(EventArgs e)
+    {
+        base.OnInitialized(e);
+        KeepDeclaredWidths(); // before the grid works out its columns for the first time
+    }
+
+    /// <summary>
+    /// A column declared with a width in DIP keeps it: the width is also its minimum, so the grid cannot take width from it. WPF's DataGrid takes width from
+    /// fixed columns, down to their minimum, whenever it believes the table is too narrow, and gives it back only to star columns. A grouped grid believes
+    /// that until its first row exists (it finds its scroll viewer, and so its own width, through a row), so the Time column of Appointments was shown at
+    /// the grid's minimum of 64 and "09:00" ended in an ellipsis whenever the rows arrived after the first layout, as they do from a real server.
+    /// </summary>
+    private void KeepDeclaredWidths()
+    {
+        foreach (var column in Columns)
+        {
+            if (column.Width.IsAbsolute && column.MinWidth < column.Width.Value && column.Width.Value <= column.MaxWidth)
+            {
+                column.MinWidth = column.Width.Value;
+            }
+        }
+    }
+
     private void ApplyColumnDefaults()
     {
+        if (!_defaultsApplied)
+        {
+            KeepDeclaredWidths(); // a grid built in code gets its columns after it is initialised
+        }
+
         _defaultsApplied = Columns.Count > 0;
         foreach (var column in Columns)
         {
