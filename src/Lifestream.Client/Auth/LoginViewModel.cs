@@ -251,6 +251,10 @@ public sealed partial class LoginViewModel : ViewModelBase
         }
     }
 
+    /// <summary>True while the pill says "Waking the server" because a call of this screen is slow (not because the readiness check said so).</summary>
+    private bool _pillWakingFromACall;
+    private ServerReadiness _pillBeforeWaking = ServerReadiness.Checking;
+
     private void OnServerStatusChanged(object? sender, EventArgs e)
     {
         void Apply()
@@ -258,7 +262,22 @@ public sealed partial class LoginViewModel : ViewModelBase
             IsServerWaking = _serverStatus?.State == ServerState.Waking;
             if (IsServerWaking)
             {
+                if (!_pillWakingFromACall)
+                {
+                    _pillBeforeWaking = Server;
+                    _pillWakingFromACall = true;
+                }
+
                 Server = ServerReadiness.Waking;
+            }
+            else if (_pillWakingFromACall)
+            {
+                // The slow call is over: the pill goes back to what it said before it, and the call's own answer (Fail, or a sign-in) then says more.
+                _pillWakingFromACall = false;
+                if (Server == ServerReadiness.Waking)
+                {
+                    Server = _pillBeforeWaking;
+                }
             }
         }
 
@@ -385,5 +404,14 @@ public sealed partial class LoginViewModel : ViewModelBase
             _ => (LoginProblem.Other, "Sign-in didn't work. Try again in a moment."),
         };
         ErrorDetail = $"{problem.Status} {problem.Code}" + (problem.CorrelationId is null ? string.Empty : $" (correlation {problem.CorrelationId})");
+
+        // The footer pill follows what this attempt learned about the server: any answer of its own (a wrong password, a lockout) means it is up.
+        Server = Problem switch
+        {
+            LoginProblem.ServerUnreachable => ServerReadiness.Unreachable,
+            LoginProblem.ServerWaking => ServerReadiness.Waking,
+            LoginProblem.WrongCredentials or LoginProblem.LockedOut => ServerReadiness.Ready,
+            _ => Server,
+        };
     }
 }
