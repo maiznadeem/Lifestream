@@ -23,7 +23,7 @@ BeforeAll {
     $script:SyncFw = Load 'sync-sql-firewall.yml'
 }
 
-Describe 'INFRA-13 deploy-api.yml: keyless, after build and tests, separate from the PR build' {
+Describe 'INFRA-13 deploy-api.yml: keyless, separate from the PR build, no build-and-test job of its own' {
     It 'is a separate workflow from ci.yml and does not run on pull requests' {
         $script:Deploy.Yaml.name | Should -Not -Be $script:Ci.Yaml.name
         $script:Deploy.Yaml.on.Keys | Should -Not -Contain 'pull_request'
@@ -36,13 +36,34 @@ Describe 'INFRA-13 deploy-api.yml: keyless, after build and tests, separate from
         foreach ($p in 'src/Lifestream.Api/**', 'src/Lifestream.Data/**', 'src/Lifestream.Contracts/**', 'src/Lifestream.Domain/**', 'infra/**') { $paths | Should -Contain $p }
     }
 
-    It 'deploys only after the image job, which only runs after the gate job (build and tests)' {
-        $script:Deploy.Yaml.jobs.image.needs | Should -Contain 'gate'
+    # The build and every test are proven on the developer's PC before the push; the deploy does only what cannot be done there.
+    It 'has two jobs, image then deploy, and builds or tests nothing but the image' {
+        @($script:Deploy.Yaml.jobs.Keys | Sort-Object) | Should -Be @('deploy', 'image')
+        $script:Deploy.Yaml.jobs.image.ContainsKey('needs') | Should -BeFalse
         $script:Deploy.Yaml.jobs.deploy.needs | Should -Contain 'image'
-        $gate = (@($script:Deploy.Yaml.jobs.gate.steps) | ForEach-Object { Run $_ }) -join "`n"
-        $gate | Should -Match 'dotnet build'
-        $gate | Should -Match 'dotnet test tests/Lifestream\.\$project\.Tests'
-        $gate | Should -Match "'Domain', 'Client', 'Api'"
+        $script:Deploy.Text | Should -Not -Match 'dotnet (build|test)'
+        $script:Deploy.Text | Should -Not -Match 'mssql/server'
+    }
+
+    It 'gives every job and every step that waits on Azure a time limit that matches its own deadline' {
+        $script:Deploy.Yaml.jobs.image.'timeout-minutes' | Should -BeLessOrEqual 10
+        $steps = @($script:Deploy.Yaml.jobs.deploy.steps)
+        $limit = @{}
+        foreach ($name in 'migrate', 'update', 'health') {
+            $pattern = @{ migrate = 'az containerapp job start'; update = 'az containerapp update'; health = '/healthz' }[$name]
+            $i = StepIndex $script:Deploy.Yaml.jobs.deploy { param($st) (Run $st) -match $pattern }
+            $i | Should -BeGreaterThan -1 -Because $name
+            $steps[$i].ContainsKey('timeout-minutes') | Should -BeTrue -Because $name
+            $limit[$name] = [int]$steps[$i].'timeout-minutes'
+        }
+        # the migration watcher gives up by itself at 1080 s and the health check at 300 s: the step limits are just above those
+        $limit.migrate | Should -BeGreaterThan 18
+        $limit.migrate | Should -BeLessOrEqual 22
+        $limit.health | Should -BeGreaterThan 5
+        $limit.health | Should -BeLessOrEqual 8
+        $job = [int]$script:Deploy.Yaml.jobs.deploy.'timeout-minutes'
+        $job | Should -BeGreaterOrEqual ($limit.migrate + $limit.update + $limit.health)
+        $job | Should -BeLessOrEqual 35
     }
 
     It 'asks for an OIDC token in the deploy job and signs in with azure/login using ids, not a secret' {
@@ -129,28 +150,24 @@ Describe 'deploy-api.yml order: scan before push, migrate before app update' {
     }
 }
 
-Describe 'INFRA-04 firewall sync is wired in, before the migration job, from the deploy and a weekly workflow' {
-    It 'deploy-api.yml runs infra/sync-sql-firewall.ps1 BEFORE the migration job (an outbound-address change must not block it), with the explicit subscription' {
-        $steps = @($script:Deploy.Yaml.jobs.deploy.steps)
-        $migrate = StepIndex $script:Deploy.Yaml.jobs.deploy { param($s) (Run $s) -match 'az containerapp job start' }
-        $update = StepIndex $script:Deploy.Yaml.jobs.deploy { param($s) (Run $s) -match 'az containerapp update' }
+# INFRA-04 as it is since 2026-11-19: the Consumption environment's shared outbound pool is 170+ addresses and adding them one rule at a
+# time took longer than the deploy job, so the deploy does not sync the firewall and nothing runs on a schedule. Entra-only
+# authentication is the access control; infra/sync-sql-firewall.ps1 and its workflow stay for manual use (tests/infra/BicepTests.ps1).
+Describe 'INFRA-04 firewall sync is manual only: not in the deploy, not on a schedule' {
+    It 'deploy-api.yml does not run infra/sync-sql-firewall.ps1, and requires Entra-only authentication BEFORE the migration job' {
         $sync = StepIndex $script:Deploy.Yaml.jobs.deploy { param($s) (Run $s) -match 'infra/sync-sql-firewall\.ps1' }
-        $sync | Should -BeGreaterThan -1
-        $sync | Should -BeLessThan $migrate
-        $sync | Should -BeLessThan $update
-        $run = Run $steps[$sync]
-        $run | Should -Match '-SubscriptionId \$env:AZURE_SUBSCRIPTION_ID'
-        $run | Should -Match '-Environment \$env:CONTAINER_ENVIRONMENT'
-        $script:Deploy.Yaml.env.CONTAINER_ENVIRONMENT | Should -Be 'lifestream-env'
+        $sync | Should -Be -1
+        $entra = StepIndex $script:Deploy.Yaml.jobs.deploy { param($s) (Run $s) -match 'az sql server ad-only-auth get' }
+        $migrate = StepIndex $script:Deploy.Yaml.jobs.deploy { param($s) (Run $s) -match 'az containerapp job start' }
+        $entra | Should -BeGreaterThan -1
+        $entra | Should -BeLessThan $migrate
+        (Run @($script:Deploy.Yaml.jobs.deploy.steps)[$entra]) | Should -Match 'REFUSING TO DEPLOY'
     }
 
-    It 'sync-sql-firewall.yml runs weekly and on demand, signs in with OIDC, and never touches the database' {
+    It 'sync-sql-firewall.yml runs on demand only, signs in with OIDC, and never touches the database' {
         $y = $script:SyncFw.Yaml
-        $y.on.Keys | Should -Contain 'schedule'
-        $y.on.Keys | Should -Contain 'workflow_dispatch'
-        @($y.on.schedule)[0].cron | Should -Match '^\d+ \d+ \* \* \d$'
+        @($y.on.Keys) | Should -Be @('workflow_dispatch')
         $y.jobs.sync.permissions.'id-token' | Should -Be 'write'
-        $y.on.Keys | Should -Not -Contain 'pull_request'
         $script:SyncFw.Text | Should -Match 'infra/sync-sql-firewall\.ps1'
         $script:SyncFw.Text | Should -Not -Match '(?i)sqlcmd|bootstrap-sql|Invoke-Sqlcmd|client-secret|AZURE_CREDENTIALS'
         $found = [regex]::Matches($script:SyncFw.Text, 'secrets\.(\w+)') | ForEach-Object { $_.Groups[1].Value }
@@ -162,7 +179,7 @@ Describe 'workflow robustness: the guarded steps cannot be neutered by || true o
     # The decisions are tested as scripts (SqlFirewall, ImageVersions, ScanArtifacts tests). What these tests protect is the call
     # site: a step that runs a guard must run it alone, and must be allowed to fail the job.
     It '<_> runs its guard script without ||, ; chaining, set +e or continue-on-error' -ForEach @(
-        @{ File = 'Deploy'; Pattern = 'tools/scan-image\.sh|tools/prune-image-versions|tools/verify-image-versions|infra/sync-sql-firewall' }
+        @{ File = 'Deploy'; Pattern = 'tools/scan-image\.sh|tools/prune-image-versions|tools/verify-image-versions' }
         @{ File = 'Scan'; Pattern = 'tools/scan-image\.sh|tools/scan-artifacts\.ps1' }
         @{ File = 'Release'; Pattern = 'tools/scan-artifacts\.ps1' }
         @{ File = 'Ci'; Pattern = 'tools/scan-artifacts\.ps1' }
@@ -194,15 +211,20 @@ Describe 'workflow robustness: the guarded steps cannot be neutered by || true o
 }
 
 Describe 'INFRA-01 workflows scan every built artifact' {
-    It 'secret-scan.yml scans the repository tree and history, the desktop and API publish output, the logs and the API image, on pushes and pull requests' {
+    It 'secret-scan.yml scans the repository tree and history on pull requests and pushes to master, and keeps the desktop, API publish and image scans for manual runs' {
         $script:Scan.Yaml.on.Keys | Should -Contain 'push'
         $script:Scan.Yaml.on.Keys | Should -Contain 'pull_request'
+        $script:Scan.Yaml.on.Keys | Should -Contain 'workflow_dispatch'
         $text = $script:Scan.Text
         $text | Should -Match 'scan-artifacts\.ps1 -Path src,tests,infra,packaging'
         $text | Should -Match 'gitleaks/gitleaks-action@v2'
         $text | Should -Match 'desktop-publish\.log'
         $text | Should -Match 'api-publish\.log'
         $text | Should -Match 'tools/scan-image\.sh lifestream-api:scan'
+        # both scans of the repository job are in the job that runs by itself
+        $repo = (@($script:Scan.Yaml.jobs.repository.steps) | ForEach-Object { (Run $_) + ' ' + (Uses $_) }) -join "`n"
+        $repo | Should -Match 'scan-artifacts\.ps1 -Path src,tests,infra,packaging -GitTracked'
+        $repo | Should -Match 'gitleaks/gitleaks-action@v2'
     }
 
     # The desktop job of secret-scan.yml was red from 2026-11-19: it published the API without a runtime identifier, which copies
@@ -241,8 +263,11 @@ Describe 'INFRA-01 workflows scan every built artifact' {
 }
 
 Describe 'release.yml' {
-    It 'runs on v* tags, after a gate, and publishes self-contained win-x64 with ReadyToRun' {
-        $script:Release.Yaml.on.push.tags | Should -Contain 'v*'
+    It 'is started by hand only and on a version tag, after a gate, and publishes self-contained win-x64 with ReadyToRun' {
+        @($script:Release.Yaml.on.Keys) | Should -Be @('workflow_dispatch')
+        $version = @($script:Release.Yaml.jobs.release.steps | Where-Object { $_.ContainsKey('id') -and $_.id -eq 'version' })[0]
+        (Run $version) | Should -Match "GITHUB_REF_TYPE -ne 'tag'"
+        (Run $version) | Should -Match '\^v\(\?<v>'
         $script:Release.Yaml.jobs.release.needs | Should -Contain 'gate'
         $script:Release.Text | Should -Match 'dotnet publish src/Lifestream\.Desktop -c Release -r win-x64 --self-contained -p:PublishReadyToRun=true'
         $script:Release.Text | Should -Match '--runtime.*win-x64'
@@ -254,6 +279,130 @@ Describe 'release.yml' {
         $script:Release.Text | Should -Match 'name: store-msix'
         $script:Release.Yaml.jobs.release.permissions.contents | Should -Be 'write'
         $script:Release.Yaml.jobs.release.Keys | Should -Not -Contain 'id-token'
+    }
+}
+
+# GitHub Actions minutes are limited (2026-11-20: a release waited 20 minutes on them). The build and every test are proven on the
+# developer's PC before a push, so what a push, a pull request or a tag starts by itself must finish in under 2 minutes.
+# deploy-api.yml is the stated exception: its migration job and rollout are Azure's time (about 5 minutes, see its header).
+Describe 'automatic runs are short: one run per push, under two minutes' {
+    BeforeAll {
+        $script:All = @{}
+        foreach ($f in Get-ChildItem $script:Dir -Filter '*.yml') { $script:All[$f.Name] = Load $f.Name }
+        function script:Auto($job) { -not ($job.ContainsKey('if') -and [string]$job.if -match "github\.event_name == 'workflow_dispatch'") }
+    }
+
+    It 'no workflow starts on a tag, on a branch other than master, or on a schedule' {
+        foreach ($name in $script:All.Keys) {
+            $on = $script:All[$name].Yaml.on
+            $on.Keys | Should -Not -Contain 'schedule' -Because $name
+            $on.Keys | Should -Not -Contain 'release' -Because $name
+            $on.Keys | Should -Not -Contain 'create' -Because $name
+            if ($on.Keys -contains 'push') {
+                # a bare `push:` runs on every branch and every tag
+                $on.push | Should -Not -BeNullOrEmpty -Because "$name has a bare push trigger"
+                $on.push.Keys | Should -Not -Contain 'tags' -Because $name
+                @($on.push.branches) | Should -Be @('master') -Because $name
+            }
+        }
+    }
+
+    It 'release.yml and screenshots.yml are started by hand only' {
+        @($script:Release.Yaml.on.Keys) | Should -Be @('workflow_dispatch')
+        @($script:All['screenshots.yml'].Yaml.on.Keys) | Should -Be @('workflow_dispatch')
+    }
+
+    # A branch is checked by its pull request and master by the push of the merge, so one push starts one run of each check;
+    # the pull request number in the group makes a newer push cancel the older run.
+    It '<_> runs once per push (pull_request for branches, push for master only) and a newer push cancels the older run' -ForEach @('ci.yml', 'secret-scan.yml') {
+        $y = $script:All[$_].Yaml
+        $y.on.Keys | Should -Contain 'pull_request'
+        $y.on.pull_request | Should -BeNullOrEmpty
+        @($y.on.push.branches) | Should -Be @('master')
+        $y.concurrency.group | Should -Match 'github\.event\.pull_request\.number \|\| github\.ref'
+        $y.concurrency.'cancel-in-progress' | Should -Be $true
+    }
+
+    It 'every job that starts by itself in ci.yml and secret-scan.yml has a runner limit of 2 minutes, and every other job runs on workflow_dispatch only' {
+        $auto = @()
+        foreach ($name in 'ci.yml', 'secret-scan.yml') {
+            $jobs = $script:All[$name].Yaml.jobs
+            foreach ($jobName in $jobs.Keys) {
+                $job = $jobs[$jobName]
+                if (Auto $job) {
+                    $auto += "$name/$jobName"
+                    [int]$job.'timeout-minutes' | Should -BeLessOrEqual 2 -Because "$name/$jobName starts by itself"
+                    [string]$job.if | Should -Match "github\.event_name != 'workflow_dispatch'" -Because "$name/$jobName"
+                    [string]$job.'runs-on' | Should -Be 'ubuntu-latest' -Because "$name/$jobName"
+                }
+            }
+        }
+        @($auto | Sort-Object) | Should -Be @('ci.yml/fast', 'secret-scan.yml/repository')
+    }
+
+    It 'ci.yml keeps the full jobs (api, desktop, both test orders) for manual runs' {
+        foreach ($jobName in 'api', 'desktop', 'test-order') {
+            $script:Ci.Yaml.jobs.Keys | Should -Contain $jobName
+            (Auto $script:Ci.Yaml.jobs[$jobName]) | Should -BeFalse -Because $jobName
+        }
+        @($script:Ci.Yaml.jobs.'test-order'.strategy.matrix.include).Count | Should -Be 2
+    }
+
+    It 'secret-scan.yml keeps the desktop and api-image jobs for manual runs' {
+        foreach ($jobName in 'desktop', 'api-image') { (Auto $script:Scan.Yaml.jobs[$jobName]) | Should -BeFalse -Because $jobName }
+    }
+
+    It 'the fast job builds and tests Client and Domain only, through the scanning wrapper, with the NuGet cache' {
+        $job = $script:Ci.Yaml.jobs.fast
+        $steps = @($job.steps)
+        $test = StepIndex $job { param($s) (Run $s) -match 'dotnet test' }
+        $test | Should -BeGreaterThan -1
+        $run = Run $steps[$test]
+        $run | Should -Match "foreach \(\`$project in 'Client', 'Domain'\)"
+        $run | Should -Match 'run-logged\.ps1 -Log "\$env:RUNNER_TEMP/test-logs/fast-\$project\.log" -Command "dotnet test tests/Lifestream\.\$project\.Tests -c Release"'
+        $run | Should -Match 'if \(\$failed -gt 0\) \{ exit 1 \}'
+        $all = ($steps | ForEach-Object { Run $_ }) -join "`n"
+        $all | Should -Not -Match 'Lifestream\.(Api|Desktop)\.Tests|Lifestream\.slnx|mssql|docker'
+        $cache = @($steps | Where-Object { (Uses $_) -like 'actions/cache@*' })
+        $cache.Count | Should -Be 1
+        $cache[0].with.path | Should -Match '\.nuget/packages'
+        $cache[0].with.key | Should -Match 'hashFiles\(.*Directory\.Packages\.props'
+        $scan = StepIndex $job { param($s) (Run $s) -match 'tools/scan-artifacts\.ps1 -Path "\$env:RUNNER_TEMP/test-logs"' }
+        $scan | Should -BeGreaterThan $test
+        $steps[$scan].if | Should -Match 'always\(\)'
+    }
+
+    It 'the fast job has a budget of 90 seconds, counted from its first step and checked by its last, which fails the run when it is exceeded' {
+        $job = $script:Ci.Yaml.jobs.fast
+        $steps = @($job.steps)
+        [string]$job.env.BUDGET_SECONDS | Should -Be '90'
+        (Run $steps[0]) | Should -Match 'FAST_STARTED=\$\(date \+%s\)" >> "\$GITHUB_ENV"'
+        $last = $steps[$steps.Count - 1]
+        $last.if | Should -Match 'always\(\)'
+        $last.ContainsKey('continue-on-error') | Should -BeFalse
+        $run = Run $last
+        $run | Should -Match 'elapsed=\$\(\( \$\(date \+%s\) - FAST_STARTED \)\)'
+        $run | Should -Match 'if \[ "\$elapsed" -gt "\$BUDGET_SECONDS" \]; then'
+        $run | Should -Match 'BUDGET EXCEEDED'
+        $run | Should -Match '(?m)^\s*exit 1\s*$'
+    }
+
+    # The budget step is run for real: 30 s into a 90 s budget passes, 120 s fails.
+    It 'the budget step itself exits <Exit> when the job took <Took> s' -ForEach @(@{ Took = 30; Exit = 0 }, @{ Took = 120; Exit = 1 }) {
+        $steps = @($script:Ci.Yaml.jobs.fast.steps)
+        $bash = @('C:\Program Files\Git\bin\bash.exe', '/usr/bin/bash', '/bin/bash') | Where-Object { Test-Path $_ } | Select-Object -First 1
+        $bash | Should -Not -BeNullOrEmpty
+        $file = Join-Path $TestDrive "budget-$Took.sh"
+        [IO.File]::WriteAllText($file, (Run $steps[$steps.Count - 1]).Replace("`r`n", "`n"), [Text.UTF8Encoding]::new($false))
+        $psi = [Diagnostics.ProcessStartInfo]::new($bash)
+        foreach ($a in '--noprofile', '--norc', '-e', $file.Replace('\', '/')) { $psi.ArgumentList.Add($a) }
+        $psi.Environment['FAST_STARTED'] = [string]([DateTimeOffset]::UtcNow.ToUnixTimeSeconds() - $Took)
+        $psi.Environment['BUDGET_SECONDS'] = '90'
+        $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
+        $proc = [Diagnostics.Process]::Start($psi)
+        $out = $proc.StandardOutput.ReadToEnd() + $proc.StandardError.ReadToEnd(); $proc.WaitForExit()
+        $proc.ExitCode | Should -Be $Exit -Because $out
+        if ($Exit -ne 0) { $out | Should -Match 'BUDGET EXCEEDED' }
     }
 }
 
@@ -273,7 +422,7 @@ Describe 'actionlint passes on every workflow, ci.yml included' {
 }
 
 Describe 'INFRA-01 workflows scan the logs: docker build output, vpk output, test logs and captures before upload' {
-    It 'ci.yml writes the output of every dotnet build and test run to a file, scans it (both scanners) before it is printed, and scans the log folder even when tests fail, in both jobs' {
+    It 'ci.yml writes the output of every dotnet build and test run to a file, scans it (both scanners) before it is printed, and scans the log folder even when tests fail, in the api and desktop jobs' {
         foreach ($jobName in 'api', 'desktop') {
             $job = $script:Ci.Yaml.jobs[$jobName]
             $test = StepIndex $job { param($s) (Run $s) -match 'dotnet test' }
