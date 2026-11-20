@@ -243,6 +243,9 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
 
     private int? _fulfilWhenOpen;
 
+    /// <summary>True once a load has put the stock in place (or found it could not be read): a fulfil asked for by another screen waits for it.</summary>
+    private bool _stockRead;
+
     /// <summary>
     /// The status filter; "All statuses" sends none. The saved views replace it on screen, so it is shown (as a chip that can be cleared) only while a link from another
     /// screen has set it.
@@ -438,8 +441,9 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
     }
 
     /// <summary>
-    /// Opens the fulfil step asked for by another screen as soon as it can run: the request's detail is in the panel and no operation of the screen (the list's load)
-    /// keeps the step's command disabled. A request that is no longer pending, or another selection, drops the wish.
+    /// Opens the fulfil step asked for by another screen as soon as it can run: the request's detail is in the panel, the stock behind its cover has been read
+    /// (the list's load brings it), and no operation of the screen keeps the step's command disabled. A request that is no longer pending, one with none of its
+    /// group in stock, or another selection, drops the wish.
     /// </summary>
     private void TryStartPendingFulfil()
     {
@@ -455,7 +459,7 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
             return;
         }
 
-        if (FulfilCommand.CanExecute(null))
+        if (_stockRead && FulfilCommand.CanExecute(null))
         {
             _fulfilWhenOpen = null;
             FulfilCommand.Execute(null);
@@ -472,6 +476,7 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
     {
         // The stock first: the rows' Cover cells read it when the page's rows are put in place.
         _available = _fetchedStock?.ToDictionary(s => s.BloodType, s => s.Available);
+        _stockRead = true; // known, or failed to load (then the server checks the stock when fulfilling)
         ViewCounts = _fetchedCounts;
         base.Apply();
         OnPropertyChanged(nameof(ViewCounts));
