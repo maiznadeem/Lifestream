@@ -200,6 +200,11 @@ All data comes from code, never from a backup.
     reverse: an appointment whose time passes after the reset stays pending until someone records it, as in the app itself.
   - The last appointment of today and of tomorrow belongs to a donor who has never donated; today's and tomorrow's other donors last donated more
     than 90 days ago, so they are eligible. The totals do not depend on the time of day (`SeedSizes`): today's rows come out of the same counts.
+  - **Nobody breaks the donation rule** (`Eligibility.MinDaysBetweenDonations`, and the age limits). A donor's donations are at least that many days
+    apart; every appointment, whatever became of it, is on a day the donor was (or will be) eligible as the API judges a booking; and a donor's open
+    bookings keep the same distance from each other. That is why the history is two years long (180 donations by 38 donors do not fit in one), why
+    a month holds about seven donations, why the three months before today hold fewer (whoever comes in yesterday, today or tomorrow gave no blood
+    in them), and why the open bookings after tomorrow start thin and reach some months ahead: a donor books from the day they are eligible again.
   Names come from two lists in `SyntheticVocabulary`, phones are in the fictional range `+1-555-0100` to `+1-555-0199`,
   addresses are on "Sample" streets in "Demoville". Every staff row holds the hash of a random password that was thrown away, so no
   seeded account has a known password; the demo login issues a token without one.
