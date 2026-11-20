@@ -327,6 +327,7 @@ internal static unsafe class Program
         SetHandleInformation(errRead, HandleFlagInherit, 0);
         SetHandleInformation(inWrite, HandleFlagInherit, 0);
 
+        env["LIFESTREAM_ISOLATED_DESKTOP"] = name; // what the app, the driver and the real-window tests check before they create a window
         var block = new StringBuilder();
         foreach (var (k, v) in env)
         {
