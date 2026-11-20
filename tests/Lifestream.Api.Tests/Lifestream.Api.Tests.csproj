@@ -4,7 +4,9 @@
     <VSTestTestCaseFilter>Category!=Perf</VSTestTestCaseFilter>
   </PropertyGroup>
   <ItemGroup>
-    <!-- Most test time is spent waiting on SQL Server: the aggressive algorithm starts another test while one awaits, still with at most one running test per processor. -->
+    <!-- xUnit's default (conservative) parallel algorithm, on purpose. The aggressive one starts another class whenever one awaits SQL Server; on 8 cores that
+         saved 16 s, but on the 4 processors of a CI runner, shared with SQL Server, it starts more than the server can answer in time (requests of
+         milliseconds took up to 30 s and a different timing-dependent test failed in about one run in three) and the run is slower (150 s against 134 s). -->
     <Content Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
     <ProjectReference Include="..\..\src\Lifestream.Api\Lifestream.Api.csproj" />

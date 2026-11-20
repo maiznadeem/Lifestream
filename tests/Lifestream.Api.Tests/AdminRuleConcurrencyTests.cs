@@ -7,7 +7,7 @@ using Lifestream.Domain;
 namespace Lifestream.Api.Tests;
 
 /// <summary>API-35: the last-administrator rule holds under concurrency (the verifier's probe P10), and the self-delete rule is tested on its own.</summary>
-[Collection(Lifestream.Api.Tests.Support.Bursts.Name)] // a burst of concurrent requests: runs after the parallel classes, alone
+[Collection(Lifestream.Api.Tests.Support.Alone.Name)] // a burst of concurrent requests: runs after the parallel classes, alone
 public sealed class AdminRuleConcurrencyTests(ApiFixture fx) : IClassFixture<ApiFixture>
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

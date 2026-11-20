@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Lifestream.Api.Tests.Data;
 
 /// <summary>The demo reset (plan Task 1; Review Focus 3).</summary>
-[Collection(Lifestream.Api.Tests.Support.Bursts.Name)] // a burst of concurrent requests: runs after the parallel classes, alone
+[Collection(Lifestream.Api.Tests.Support.Alone.Name)] // a burst of concurrent requests: runs after the parallel classes, alone
 public sealed class DemoResetTests(SqlServerDatabaseFixture fixture) : IClassFixture<SqlServerDatabaseFixture>
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
