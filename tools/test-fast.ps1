@@ -23,6 +23,11 @@ have ended, so SQL Server is as quiet for them as in an unsharded run. That only
 The Api tests keep the backup of their 100x template database on the server between runs and say in the summary
 whether this run restored it or had to build it (a change in the generator, the seed code, the migrations or the day).
 
+The real-window tests of the Desktop project need the compositor drawing: with the display off (it turns off after some
+minutes without input, although the session is not locked) each of them fails after waiting 60 seconds for a drawn
+window. While it runs, this script asks Windows to keep the display on. It does not turn a display on that is already
+off: it says so when that is likely, and -WakeDisplay makes it move the mouse one pixel and back first.
+
 Every test process runs with DOTNET_TieredPGO=0: the same tests and results for about 30 % less processor time (the
 JIT does not instrument code for a profile that a process this short never gets to use).
 
@@ -60,6 +65,9 @@ param(
     [string]$Out,
     # The class durations file (default: tools/test-fast.durations.json of the checkout, else the one beside this script).
     [string]$Durations,
+    # When the display is probably off (no input for longer than its timeout), wake it with a one-pixel mouse move and back before
+    # the tests: the real-window tests fail on a display that is off. Without this the run only says that they will.
+    [switch]$WakeDisplay,
     # Run Domain and Client by themselves first; Api and the Desktop tests start when both have ended.
     [switch]$DomainAndClientFirst,
     # Skip the build (the Release output must be up to date).
@@ -417,6 +425,7 @@ $self = [System.Diagnostics.Process]::GetCurrentProcess()
 $before = @{ Affinity = $self.ProcessorAffinity; Priority = $self.PriorityClass; Root = $env:DOTNET_ROOT; HostPath = $env:DOTNET_HOST_PATH; Pgo = $env:DOTNET_TieredPGO; TemplateLog = $env:LIFESTREAM_SCALE_TEMPLATE_LOG; Reuse = $env:MSBUILDDISABLENODEREUSE; Server = $env:DOTNET_CLI_USE_MSBUILD_SERVER }
 $mutex = New-Object System.Threading.Mutex($false, 'Global\Lifestream.TestFast')
 $held = $false
+$displayHeld = $false
 $exitCode = 1
 try {
     try {
@@ -475,6 +484,41 @@ try {
         if ($allowed -gt 0 -and ($allowed - $busy) -ge 0.75 * $allowed) {
             $Walkers = 8
         }
+    }
+
+    # The display: kept on while this runs (the request ends in the finally block below), and a word when it is probably off already.
+    try {
+        Add-Type -Namespace LifestreamTestFast -Name Desktop -MemberDefinition @'
+[System.Runtime.InteropServices.DllImport("kernel32.dll")] public static extern uint SetThreadExecutionState(uint flags);
+[System.Runtime.InteropServices.DllImport("user32.dll")] public static extern void mouse_event(uint flags, int dx, int dy, uint data, System.UIntPtr extra);
+[System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)] public struct LastInput { public uint Size; public uint Time; }
+[System.Runtime.InteropServices.DllImport("user32.dll")] public static extern bool GetLastInputInfo(ref LastInput info);
+public static double IdleSeconds() { var info = new LastInput(); info.Size = (uint)System.Runtime.InteropServices.Marshal.SizeOf(info); GetLastInputInfo(ref info); return unchecked((uint)System.Environment.TickCount - info.Time) / 1000.0; }
+'@
+        $idle = [LifestreamTestFast.Desktop]::IdleSeconds()
+        $timeout = 0
+        $setting = & powercfg.exe /q SCHEME_CURRENT SUB_VIDEO VIDEOIDLE 2>$null | Select-String 'Current AC Power Setting Index:\s*0x([0-9a-fA-F]+)'
+        if ($setting) {
+            $timeout = [Convert]::ToInt32($setting.Matches[0].Groups[1].Value, 16)
+        }
+
+        if ($timeout -gt 0 -and $idle -ge $timeout) {
+            if ($WakeDisplay) {
+                [LifestreamTestFast.Desktop]::mouse_event(1, 1, 0, 0, [UIntPtr]::Zero)
+                [LifestreamTestFast.Desktop]::mouse_event(1, -1, 0, 0, [UIntPtr]::Zero)
+                Start-Sleep -Seconds 2
+                Write-Host ('  display: no input for {0:N0} s, so it was probably off: woken with a one-pixel mouse move and back' -f $idle)
+            }
+            else {
+                Write-Host ('  display: no input for {0:N0} s and it turns off after {1} s, so it is probably off: the real-window tests will then fail, each after 60 s (wake it, or pass -WakeDisplay)' -f $idle, $timeout)
+            }
+        }
+
+        [void][LifestreamTestFast.Desktop]::SetThreadExecutionState([uint32]2147483651) # continuous + system required + display required
+        $displayHeld = $true
+    }
+    catch {
+        Write-Verbose "The display state could not be read or held: $_"
     }
 
     $buildSeconds = 0.0
@@ -831,6 +875,10 @@ finally {
     $env:LIFESTREAM_SCALE_TEMPLATE_LOG = $before.TemplateLog
     $env:MSBUILDDISABLENODEREUSE = $before.Reuse
     $env:DOTNET_CLI_USE_MSBUILD_SERVER = $before.Server
+    if ($displayHeld) {
+        [void][LifestreamTestFast.Desktop]::SetThreadExecutionState([uint32]2147483648) # continuous only: the display may turn off again
+    }
+
     if ($held) {
         $mutex.ReleaseMutex()
     }
