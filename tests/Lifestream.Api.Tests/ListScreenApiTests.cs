@@ -210,6 +210,23 @@ public sealed class ListScreenApiTests(ApiFixture fx) : IClassFixture<ApiFixture
 
     // ---- appointments: views, counts, first-time ----
 
+    /// <summary>
+    /// Puts the API clock at noon UTC of its current day for a test that reasons about a caller's local day, and puts it back when the test ends.
+    /// This fixture's clock starts at the real time, so without the pin the outcome depends on the hour the test runs at: the test below failed in
+    /// every run between 00:00 and 10:00 UTC (found by running the suite at 00:18 UTC). Same idiom as ServerClockAndRangeTests.PinClocks.
+    /// </summary>
+    private Restore PinClockAtNoonUtc()
+    {
+        var before = fx.Clock.GetUtcNow().UtcDateTime;
+        fx.Clock.Set(before.Date.AddHours(12));
+        return new Restore(() => fx.Clock.Set(before));
+    }
+
+    private sealed class Restore(Action undo) : IDisposable
+    {
+        public void Dispose() => undo();
+    }
+
     [Fact]
     public async Task AppointmentViews_SplitTheDay_AndTheCountsMatchTheLists()
     {
@@ -239,9 +256,10 @@ public sealed class ListScreenApiTests(ApiFixture fx) : IClassFixture<ApiFixture
     [Fact]
     public async Task AppointmentViews_FollowTheCallersLocalDay()
     {
+        using var pinned = PinClockAtNoonUtc();
         var staff = await fx.AddStaffAsync(Role.Staff);
         var donor = await Seed.DonorAsync(fx, fx.NextName("Offset donor "));
-        // The fixture's clock is at 12:00 UTC: at UTC+14 it is already 02:00 tomorrow there, so tomorrow 09:00 UTC is "today" for that caller.
+        // The API clock is at 12:00 UTC: at UTC+14 it is already 02:00 tomorrow there, so tomorrow 09:00 UTC is "today" for that caller.
         var tomorrow = await Seed.AppointmentAsync(fx, donor, Now.Date.AddDays(1).AddHours(9));
         var utc = await (await staff.Client.GetApi(ApiRoutes.AppointmentViews, $"?donorId={donor.Id}")).Read<AppointmentViewCounts>();
         var east = await (await staff.Client.GetApi(ApiRoutes.AppointmentViews, $"?donorId={donor.Id}&utcOffsetMinutes=840")).Read<AppointmentViewCounts>();
