@@ -23,8 +23,11 @@ public sealed record WakePolicy
     /// <summary>How long a call may be slow, or be retried, before the "waking up the server" state is shown.</summary>
     public TimeSpan ShowWakingAfter { get; init; } = TimeSpan.FromSeconds(3);
 
-    /// <summary>A single attempt that takes longer than this is abandoned and retried.</summary>
-    public TimeSpan AttemptTimeout { get; init; } = TimeSpan.FromSeconds(20);
+    /// <summary>
+    /// The longest any one call may last: the budget plus a margin for the answer that arrives as the budget ends. The handler itself
+    /// stops at the budget; this is the limit the operation scope puts on top (<see cref="ScopedApiClient"/>).
+    /// </summary>
+    public TimeSpan Ceiling => Budget + TimeSpan.FromSeconds(20);
 
     public TimeSpan FirstBackoff { get; init; } = TimeSpan.FromSeconds(1);
 
@@ -34,11 +37,20 @@ public sealed record WakePolicy
 }
 
 /// <summary>
-/// Retries a call, with exponential backoff, while the server or database is waking up: on an attempt timeout, a 502/503/504, or a
-/// <c>database_waking</c> problem, for up to <see cref="WakePolicy.Budget"/>, showing the waking state after
-/// <see cref="WakePolicy.ShowWakingAfter"/>. A connection that cannot be made at all is a different thing: it is retried quietly for
-/// <see cref="WakePolicy.UnreachableBudget"/> only, never shows the waking state, and then fails as unreachable. The retry re-sends the same
-/// request headers, so the Idempotency-Key is identical on every attempt. The caller's cancellation token stops it at any moment.
+/// Waits for a server or database that is waking up, for up to <see cref="WakePolicy.Budget"/>, showing the waking state after
+/// <see cref="WakePolicy.ShowWakingAfter"/>. A request that is out and unanswered is left alone for as long as the budget lasts:
+/// the server is working on it (starting the container, waiting for the database to resume), and giving up on it would cancel
+/// that work on the server and start it again. A request is sent again, with exponential backoff, only when the last one is over
+/// without an answer worth keeping: a 502/503/504, a <c>database_waking</c> problem, or a connection that was lost under it.
+/// <para>
+/// A connection that cannot be made at all is a different thing: it is retried quietly for <see cref="WakePolicy.UnreachableBudget"/>
+/// only, never shows the waking state, and then fails as unreachable.
+/// </para>
+/// <para>
+/// The retry re-sends the same request headers, so the Idempotency-Key is identical on every attempt. The caller's cancellation
+/// token stops it at any moment, down to the request in flight. A connection that has died is not waited on:
+/// <see cref="ApiHttpClientFactory"/> has the connection checked while a request waits, and its failure is retried here.
+/// </para>
 /// </summary>
 public sealed class WakeAwareHandler(WakePolicy policy, ServerStatus status, HttpMessageHandler inner) : DelegatingHandler(inner)
 {
@@ -57,11 +69,16 @@ public sealed class WakeAwareHandler(WakePolicy policy, ServerStatus status, Htt
         var started = clock.GetTimestamp();
         byte[]? body = request.Content is null ? null : await request.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
 
-        var call = new CallState(status);
+        var call = new CallState(status, clock);
         using var slowTimer = clock.CreateTimer(_ => call.Slow(), null, policy.ShowWakingAfter, Timeout.InfiniteTimeSpan);
         var backoff = policy.FirstBackoff;
         long? unreachableSince = null;
         var unreachableBudget = policy.UnreachableBudget < policy.Budget ? policy.UnreachableBudget : policy.Budget;
+
+        // The one time limit of a call: an attempt still unanswered when the budget ends is given up. Nothing shorter cuts an attempt off.
+        // (A budget of zero means one attempt and no retry; that attempt is not cut off at all.)
+        using var budget = policy.Budget > TimeSpan.Zero ? new CancellationTokenSource(policy.Budget, clock) : new CancellationTokenSource();
+        using var attempt = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, budget.Token);
         try
         {
             while (true)
@@ -69,8 +86,6 @@ public sealed class WakeAwareHandler(WakePolicy policy, ServerStatus status, Htt
                 HttpResponseMessage? response = null;
                 Exception? failure = null;
                 var attemptStarted = clock.GetTimestamp();
-                using var attemptTimeout = new CancellationTokenSource(policy.AttemptTimeout, clock);
-                using var attempt = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, attemptTimeout.Token);
                 try
                 {
                     using var copy = Clone(request, body);
@@ -83,7 +98,7 @@ public sealed class WakeAwareHandler(WakePolicy policy, ServerStatus status, Htt
                 }
                 catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
                 {
-                    failure = ex; // the attempt timed out, not the caller
+                    failure = ex; // the budget ended with the attempt unanswered; the caller did not cancel
                 }
 
                 if (response is not null)
@@ -93,14 +108,24 @@ public sealed class WakeAwareHandler(WakePolicy policy, ServerStatus status, Htt
                         status.NotifyDemoReset();
                     }
 
-                    if (!await IsWakingAsync(response).ConfigureAwait(false))
+                    var answer = await ReadAnswerAsync(request, response).ConfigureAwait(false);
+                    if (answer.FromServer)
+                    {
+                        // The server itself answered, so its container is up; what it said about its database decides the phase shown.
+                        status.Heard(clock, answer.DatabaseWaking);
+                    }
+
+                    if (!answer.IsWaking)
                     {
                         return response;
                     }
                 }
 
                 // No connection at all (refused, no network) is not "waking": no waking state while it lasts, and a short budget of its own.
-                var unreachable = failure is HttpRequestException;
+                // A connection that cannot be made fails within seconds. An attempt that fails only after it has been out for longer than
+                // that budget had its connection and lost it while the server was working on the request: that one is sent again as any
+                // other request of a waking server, not given up as unreachable.
+                var unreachable = failure is HttpRequestException && clock.GetElapsedTime(attemptStarted) < unreachableBudget;
                 unreachableSince = unreachable ? unreachableSince ?? attemptStarted : null;
                 call.Unreachable(unreachable);
 
@@ -146,29 +171,41 @@ public sealed class WakeAwareHandler(WakePolicy policy, ServerStatus status, Htt
         return response;
     }
 
-    private static async Task<bool> IsWakingAsync(HttpResponseMessage response)
+    /// <summary>
+    /// What an answer means for the wait. <c>IsWaking</c>: try again. <c>FromServer</c>: the API itself wrote it (a 502, a 504 or a 503
+    /// without a problem code comes from the platform in front of a container that is not up yet). <c>DatabaseWaking</c>: true when the
+    /// API said so, false when the answer came out of the database, null when the answer says nothing about the database.
+    /// </summary>
+    private readonly record struct Answer(bool IsWaking, bool FromServer, bool? DatabaseWaking);
+
+    private static async Task<Answer> ReadAnswerAsync(HttpRequestMessage request, HttpResponseMessage response)
     {
         if (response.StatusCode is HttpStatusCode.BadGateway or HttpStatusCode.GatewayTimeout)
         {
-            return true;
+            return new Answer(IsWaking: true, FromServer: false, DatabaseWaking: null);
         }
 
         if (response.StatusCode != HttpStatusCode.ServiceUnavailable)
         {
-            return false;
+            // /healthz never touches the database, and an error answer may not have either; any other success came out of the database.
+            var fromDatabase = response.IsSuccessStatusCode && request.RequestUri?.AbsolutePath.EndsWith(ApiRoutes.Healthz, StringComparison.OrdinalIgnoreCase) != true;
+            return new Answer(IsWaking: false, FromServer: true, DatabaseWaking: fromDatabase ? false : null);
         }
 
-        // A "resting" database (free allowance used up) will not wake by waiting, so it is returned as is.
         try
         {
             var text = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
             using var doc = JsonDocument.Parse(text);
             var code = JsonText.Property(doc.RootElement, "code");
-            return code != ProblemCodes.DatabaseResting;
+
+            // A "resting" database (free allowance used up) will not wake by waiting, so it is returned as is.
+            return code == ProblemCodes.DatabaseResting ? new Answer(IsWaking: false, FromServer: true, DatabaseWaking: null)
+                : code == ProblemCodes.DatabaseWaking ? new Answer(IsWaking: true, FromServer: true, DatabaseWaking: true)
+                : new Answer(IsWaking: true, FromServer: code is not null, DatabaseWaking: null);
         }
         catch (Exception ex) when (ex is JsonException or InvalidOperationException or ArgumentException or NotSupportedException)
         {
-            return true;
+            return new Answer(IsWaking: true, FromServer: false, DatabaseWaking: null);
         }
     }
 
@@ -194,9 +231,10 @@ public sealed class WakeAwareHandler(WakePolicy policy, ServerStatus status, Htt
 
     /// <summary>
     /// Tracks whether this call has the server in the waking state: it does once it has been slow for <see cref="WakePolicy.ShowWakingAfter"/>,
-    /// except while its last attempt could not connect at all, and never after it has ended. Every Enter is balanced by one Leave.
+    /// except while its last attempt could not connect at all, and never after it has ended. Every Enter is balanced by one Leave. The
+    /// state is entered on the handler's clock, the one the server's answers are noted on (<see cref="ServerStatus.Heard"/>).
     /// </summary>
-    private sealed class CallState(ServerStatus status)
+    private sealed class CallState(ServerStatus status, TimeProvider clock)
     {
         private readonly Lock _gate = new();
         private bool _slow;
@@ -227,7 +265,7 @@ public sealed class WakeAwareHandler(WakePolicy policy, ServerStatus status, Htt
 
             if (enter)
             {
-                status.Enter();
+                status.Enter(clock);
             }
             else if (leave)
             {

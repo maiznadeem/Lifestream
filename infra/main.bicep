@@ -163,9 +163,14 @@ resource sqlDatabase 'Microsoft.Sql/servers/databases@2023-08-01' = {
     collation: 'SQL_Latin1_General_CP1_CI_AS'
     maxSizeBytes: 34359738368
     minCapacity: json('0.5')
-    autoPauseDelay: 60
+    // autoPauseDelay is not declared, on purpose. On the free offer the database pauses after 15 minutes without a session and
+    // "the auto-pause delay is fixed and can't be changed" (Microsoft Learn, Azure SQL Database free tier, Considerations). This
+    // file used to send 60: Azure stored and reported 60 and still paused after 15 (measured 2026-11-20: 15 min 45 s after the last
+    // session closed). Each resume takes 42 to 58 s and uses about 1,000 of the month's 100,000 free vCore-seconds.
     useFreeLimit: true
-    freeLimitExhaustionBehavior: 'AutoPause' // never bills: the database stops for the month instead
+    // Never bills: when the month's allowance is used up the database stays paused until the 1st (logins get SQL error 42119, which
+    // the API answers as "database_resting" and the app shows as "back on the 1st").
+    freeLimitExhaustionBehavior: 'AutoPause'
     requestedBackupStorageRedundancy: 'Local'
     zoneRedundant: false
     readScale: 'Disabled'
@@ -268,7 +273,8 @@ resource acaEnvironment 'Microsoft.App/managedEnvironments@2024-03-01' = {
 
 var sqlConnectionBase = 'Server=tcp:${sqlFqdn},1433;Database=${sqlDatabaseName};Encrypt=True;TrustServerCertificate=False;Connection Timeout=60;Authentication=Active Directory Managed Identity'
 
-resource api 'Microsoft.App/containerApps@2024-03-01' = {
+// API version 2025-01-01 for this resource: it is the first stable one with scale.cooldownPeriod.
+resource api 'Microsoft.App/containerApps@2025-01-01' = {
   name: 'lifestream-api'
   location: location
   identity: { type: 'SystemAssigned' }
@@ -294,7 +300,16 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
         {
           name: 'api'
           image: apiImage
-          resources: { cpu: json('0.25'), memory: '0.5Gi' }
+          // Size and cooldown are chosen together, against the Container Apps free grant (per subscription and month: 180,000
+          // vCPU-seconds and 360,000 GiB-seconds; Microsoft Learn, Billing in Azure Container Apps). A replica is billed from its start
+          // until it is removed, which is the cooldown plus about 135 s after the last request (measured: 7 min 15 s at 300 s).
+          //   One session of 15 minutes: 30 s start + 900 s + 300 s + 135 s = 1,365 replica-seconds. One stray request: 465.
+          //   The owner's scale, 5 sessions and 2 stray requests a day for 30 days: 232,650 replica-seconds a month.
+          //   At 0.5 vCPU / 1 GiB that is 116,325 vCPU-seconds and 232,650 GiB-seconds: 65 % of each grant. Free up to 8 sessions a day.
+          //   At 1 vCPU / 2 GiB it would be 129 %: not free. At 0.25 vCPU the first use of a new replica takes twice as long.
+          // tests/infra/BicepTests.ps1 redoes this sum from the values below and fails when they leave the grant.
+          // (With minReplicas 1 the size is paid around the clock: 0.5 vCPU would cost about 10 USD a month idle, 0.25 about 4.)
+          resources: { cpu: json('0.5'), memory: '1Gi' }
           env: [
             { name: 'ASPNETCORE_URLS', value: 'http://+:8080' }
             { name: 'ASPNETCORE_ENVIRONMENT', value: 'Production' }
@@ -305,13 +320,16 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
           ]
           probes: [
             {
-              // Liveness of the process only; /healthz never opens a database connection, so a cold database cannot fail it.
+              // Liveness of the process only; /healthz never opens a database connection, so a cold database cannot fail it
+              // and the probe never wakes the database. The process listens 1.0 to 1.6 s after its start and the first try comes
+              // after 1 s, so it often misses; with a period of 1 s (the minimum) the next try is 1 s later, not 2. Sixty tries
+              // keep the same minute of patience as before.
               type: 'Startup'
               httpGet: { path: '/healthz', port: 8080 }
               initialDelaySeconds: 1
-              periodSeconds: 2
+              periodSeconds: 1
               timeoutSeconds: 3
-              failureThreshold: 30
+              failureThreshold: 60
             }
           ]
         }
@@ -319,6 +337,10 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
       scale: {
         minReplicas: 0
         maxReplicas: 1
+        // The platform default, now written down because the free-grant sum above depends on it. A longer cooldown would spare a
+        // returning visitor the 24 to 31 s container start, but not the database resume (the database pauses 15 minutes after its
+        // last session whatever the replica does), and at 0.5 vCPU 600 s would already take 82 % of the grant.
+        cooldownPeriod: 300
         rules: [
           { name: 'http', http: { metadata: { concurrentRequests: '30' } } }
         ]

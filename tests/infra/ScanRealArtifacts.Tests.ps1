@@ -3,7 +3,7 @@
 #     once clean and once with the v-03c verifier's plant: one 65-byte connection string with a Pwd key as an assembly attribute and as
 #     a XAML Tag (compiled to BAML), both stored as UTF-8 behind a length byte 'A';
 #   - a Velopack Releases folder (full nupkg, Portable.zip, Setup.exe) packed from each publish;
-#   - the API publish (linux-x64, framework-dependent, no apphost: as the Dockerfile and secret-scan.yml publish it);
+#   - the API publish (linux-x64, framework-dependent, no apphost, ReadyToRun: as the Dockerfile and secret-scan.yml publish it);
 #   - the stock mcr.microsoft.com/dotnet/aspnet:11.0 linux/amd64 layers, each layer blob scanned separately, as downloaded.
 # Scanner v3 adds the verifier's v-03d counterexamples, each in the REAL publish and in the vpk Releases packed from it: a connection
 # string in Lifestream.dll whose password value starts with a tilde, an appsettings.json password in braces, a shipped db.env whose
@@ -116,7 +116,7 @@ internal static class VerifierPlantV3
         $script:PubV3 = Join-Path $script:Work 'pub-v3'
         $t4 = Start-Tool $dotnet (@('publish', (Join-Path $v3 'src/Lifestream.Desktop')) + $publish[2..($publish.Count - 1)] + @('-o', $script:PubV3)) (Join-Path $script:Work 'pub-v3.log')
         Wait-Tool $t1; Wait-Tool $t2; Wait-Tool $t4
-        $t3 = Start-Tool $dotnet @('publish', (Join-Path $clean 'src/Lifestream.Api'), '-c', 'Release', '-r', 'linux-x64', '--self-contained', 'false', '-p:UseAppHost=false', '--nologo', '-o', $script:PubApi) (Join-Path $script:Work 'pub-api.log')
+        $t3 = Start-Tool $dotnet @('publish', (Join-Path $clean 'src/Lifestream.Api'), '-c', 'Release', '-r', 'linux-x64', '--self-contained', 'false', '-p:UseAppHost=false', '-p:PublishReadyToRun=true', '--nologo', '-o', $script:PubApi) (Join-Path $script:Work 'pub-api.log')
         Wait-Tool $t3
         $script:Timings.publishSeconds = [Math]::Round($sw.Elapsed.TotalSeconds, 1)
         $script:RelClean = Join-Path $script:Work 'Releases-clean'; $script:RelPlanted = Join-Path $script:Work 'Releases-planted'

@@ -497,7 +497,7 @@ public abstract partial class ViewModelBase : ObservableObject, IDisposable
         var message = problem.Code switch
         {
             Contracts.ProblemCodes.DatabaseWaking => "The server is still starting up. Try again in a moment.",
-            Contracts.ProblemCodes.DatabaseResting => "The demo is resting until the start of next month.",
+            Contracts.ProblemCodes.DatabaseResting => WakingTexts.Resting,
             ClientProblemCodes.Unreachable => UnreachableMessage,
             ClientProblemCodes.SessionExpired => "Your session has expired. Sign in again.",
             "forbidden" => "You don't have permission to see this.",
