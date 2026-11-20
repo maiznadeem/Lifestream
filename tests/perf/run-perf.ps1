@@ -45,7 +45,11 @@ param(
     [string]$WorkDir,
     [switch]$SkipQuietCheck,   # only for the planted-failure demonstrations: the failure they show does not depend on a quiet machine
     [string]$TestFilter,   # development only: run this test filter instead of the phase's own
-    [string]$FromResults
+    [string]$FromResults,
+    # Run the test processes on the desktop of the person at the PC. By default each runs on an isolated desktop (tests/isolated), as tools/test-fast.ps1
+    # runs the Desktop tests: the views are hosted in windows, and windows in that person's session took their keyboard focus. The launch phase starts the
+    # real app and runs only with this switch.
+    [switch]$InSession
 )
 
 $ErrorActionPreference = 'Stop'
@@ -124,9 +128,28 @@ try {
     & dotnet publish (Join-Path $root 'tests/Lifestream.Desktop.Tests') -c Release -r win-x64 --self-contained -p:PublishReadyToRun=true -o $testPublish --nologo -v quiet | Out-Host
     if ($LASTEXITCODE -ne 0) { Fail 'publish of the perf tests failed' }
     $script:testExe = Join-Path $testPublish 'Lifestream.Desktop.Tests.exe'
+
+    # ---- the isolated desktop every test process runs on (unless -InSession) ----
+    $script:iso = $null
+    if (-not $InSession) {
+        Write-Host '== isolated desktop =='
+        & dotnet build (Join-Path $root 'tests/isolated/Lifestream.Isolated') -c Release --nologo -v quiet | Out-Host
+        if ($LASTEXITCODE -ne 0) { Fail 'build of the isolated-desktop tool failed' }
+        $isoExe = Join-Path $root 'tests/isolated/Lifestream.Isolated/bin/Release/net11.0-windows/Lifestream.Isolated.exe'
+        $isoState = Join-Path $WorkDir 'isolated'
+        $affinity = '0x{0:X}' -f [int64][System.Diagnostics.Process]::GetCurrentProcess().ProcessorAffinity
+        $hold = Start-Process $isoExe -ArgumentList @('hold', $isoState, '--minutes', '180', '--affinity', $affinity) -NoNewWindow -PassThru `
+            -RedirectStandardOutput (Join-Path $WorkDir 'isolated-hold.out') -RedirectStandardError (Join-Path $WorkDir 'isolated-hold.err')
+        foreach ($i in 1..150) { if (Test-Path (Join-Path $isoState 'desktop.txt')) { break }; Start-Sleep -Milliseconds 200 }
+        if (-not (Test-Path (Join-Path $isoState 'desktop.txt'))) { $hold | Stop-Process -Force -ErrorAction SilentlyContinue; Fail 'NO SIGNAL: the isolated desktop did not come up' }
+        $script:iso = @{ Exe = $isoExe; State = $isoState; Hold = $hold }
+        Write-Host "   $((Get-Content (Join-Path $isoState 'desktop.txt') -Raw).Trim()), job affinity $affinity (the job runs its processes at below-normal priority)"
+    }
+
     function Invoke-TestExe([string]$trait, [int]$tail = 12) {
         # Runs the published test exe for one trait. Returns its exit code, or 3 when it ran no test at all: a trait that matches nothing is a run that proved nothing.
-        $output = @(& $script:testExe -trait $trait -noColor 2>&1 | ForEach-Object { "$_" })
+        $output = if ($script:iso) { @(& $script:iso.Exe exec $script:iso.State -- $script:testExe -trait $trait -noColor 2>&1 | ForEach-Object { "$_" }) }
+            else { @(& $script:testExe -trait $trait -noColor 2>&1 | ForEach-Object { "$_" }) }
         $code = $LASTEXITCODE
         $output | Select-Object -Last $tail | Out-Host
         $total = $output | ForEach-Object { if ($_ -match 'Total:\s*(\d+)') { [int]$Matches[1] } } | Select-Object -Last 1
@@ -135,6 +158,9 @@ try {
     }
 
     # ---- 1. launch ----
+    if ($Phases -contains 'launch' -and -not $InSession) {
+        Fail 'the launch phase starts the real app on the desktop of the person at the PC: leave it out (-Phases timing,1x,10x,100x) or pass -InSession when nobody is using the PC'
+    }
     if ($Phases -contains 'launch') {
         Write-Host '== app launch to login window =='
         $publish = Join-Path $WorkDir 'publish'
@@ -276,6 +302,12 @@ try {
 catch [System.OperationCanceledException] { }
 catch { Write-Host "ERROR: $($_.Exception.Message)"; $exitCode = 2 }
 finally {
+    if ($script:iso) {
+        & $script:iso.Exe stop $script:iso.State 2>&1 | ForEach-Object { Write-Host "   isolated desktop: $_" }
+        if (-not $script:iso.Hold.WaitForExit(15000)) { $script:iso.Hold | Stop-Process -Force -ErrorAction SilentlyContinue }
+        $violation = Join-Path $script:iso.State 'violation.txt'
+        if (Test-Path $violation) { Write-Host "ERROR: VIOLATION, something of this run reached the person's desktop: $((Get-Content $violation -Raw).Trim())"; $script:exitCode = 2 }
+    }
     if ($seedDll) {
         Write-Host '== fixture databases left on the server =='
         & dotnet $seedDll list | Out-Host
@@ -359,6 +391,7 @@ Line '- **API timings** are round trips over loopback HTTP from request sent to 
 Line '- **Screen measurements** use the real client (real HTTP client, wake-aware handler, session, navigation, view models, views) hosted off-screen over a real socket to that API. The skeleton time runs from the navigation command until the dispatcher has finished the layout pass that puts the skeleton on screen (the final present to the screen adds at most one frame). The UI-thread gap is the longest an input-priority message posted from another thread waited for the UI thread while a screen loaded over a 250 ms-per-request link, first visits included. The API-call count includes retries and lazy requests that land within 400 ms of the load.'
 Line '- **Cold dashboard**: a fresh process each time (`PerfPhase=cold`): warm-up as at app start, sign-in, then the dashboard is loaded; the clock starts when the response body is fully in memory and stops when a rendered bitmap of the page shows both chart series (each look renders the page, which is part of the time).'
 Line '- Nothing is shown on the desktop and no focus is taken: every view is hosted in a window whose parent is a message-only window, and the launch window is off-screen and not activated.'
+if (-not $InSession -and -not $replay) { Line '- Every test process of this run ran on an isolated desktop (tests/isolated: a desktop of its own and a job object at below-normal priority, never shown, never given input), where WPF draws in software: absolute screen timings there differ from a GPU desktop, so compare runs made the same way.' }
 if ($ResultsFile) {
     $null = New-Item -ItemType Directory -Force -Path (Split-Path $ResultsFile)
     Set-Content -Path $ResultsFile -Value $md.ToString() -Encoding utf8
