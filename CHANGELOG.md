@@ -4,7 +4,7 @@ All notable changes to Lifestream are listed here. The section of a version is a
 
 ## [2.1.1] - 2026-11-20
 
-Fixes for what 2.1.0 got wrong in a real window, and a new typeface.
+Lifestream 2.1.1 fixes what 2.1.0 got wrong in a real window, and brings a new typeface.
 
 ### Look and feel
 

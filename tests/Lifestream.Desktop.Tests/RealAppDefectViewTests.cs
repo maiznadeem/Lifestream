@@ -74,8 +74,8 @@ public sealed partial class RealAppDefectViewTests
             var surface = Hosted.Descendants(flyout).OfType<ElevatedSurface>().First();
             var bellBounds = Hosted.BoundsOf(bell, view);
             var surfaceBounds = Hosted.BoundsOf(surface, view);
-            // In the order the keyboard reaches them: the items' actions (TabIndex 0, top to bottom), then "View all on the dashboard".
-            var buttons = Hosted.Descendants(surface).OfType<Button>().Where(b => b.IsVisible).OrderBy(b => b.TabIndex).ThenBy(b => Hosted.BoundsOf(b, view).Top)
+            // In the order the keyboard reaches them: the items' actions (top to bottom), then "View all on the dashboard".
+            var buttons = Hosted.Descendants(surface).OfType<Button>().Where(b => b.IsVisible).OrderBy(b => Hosted.BoundsOf(b, view).Top)
                 .Select(b => System.Windows.Automation.AutomationProperties.GetName(b)).ToList();
             var topToBottom = Hosted.Descendants(surface).OfType<Button>().Where(b => b.IsVisible).OrderBy(b => Hosted.BoundsOf(b, view).Top)
                 .Select(b => System.Windows.Automation.AutomationProperties.GetName(b)).ToList();

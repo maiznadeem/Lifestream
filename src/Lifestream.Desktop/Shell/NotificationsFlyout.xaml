@@ -16,26 +16,21 @@
       <controls:ElevatedSurface x:Name="Surface" Level="Flyout" CornerRadius="{DynamicResource Radius.Panel}" Width="420" Padding="0" BorderBrush="{DynamicResource Brush.Stroke2}"
                                 MouseDown="OnSurfaceMouseDown" KeyboardNavigation.TabNavigation="Cycle" KeyboardNavigation.DirectionalNavigation="Cycle"
                                 AutomationProperties.Name="Notifications">
-        <DockPanel>
+        <Grid>
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+          </Grid.RowDefinitions>
           <!-- Title and count -->
-          <Border DockPanel.Dock="Top" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="0,0,0,1" Padding="{DynamicResource Inset.H18V12}">
+          <Border Grid.Row="0" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="0,0,0,1" Padding="{DynamicResource Inset.H18V12}">
             <StackPanel Orientation="Horizontal">
               <TextBlock Style="{DynamicResource Text.BodyStrong}" Text="Needs attention" AutomationProperties.HeadingLevel="Level2" />
               <TextBlock x:Name="CountText" Style="{DynamicResource Text.Secondary}" Text="{Binding CountText}" Margin="{DynamicResource Inset.L12}" VerticalAlignment="Center" />
             </StackPanel>
           </Border>
 
-          <!-- The link to the whole picture -->
-          <Border DockPanel.Dock="Bottom" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="0,1,0,0" Padding="{DynamicResource Pad.8}">
-            <Button x:Name="ViewAllButton" Style="{DynamicResource Button.Subtle.Small}" Command="{Binding ViewAllCommand}" HorizontalAlignment="Stretch" AutomationProperties.Name="{Binding ViewAllText}">
-              <StackPanel Orientation="Horizontal">
-                <TextBlock Text="{Binding ViewAllText}" VerticalAlignment="Center" />
-                <controls:Icon Kind="Chevr" Size="14" VerticalAlignment="Center" Margin="{DynamicResource Inset.L6}" />
-              </StackPanel>
-            </Button>
-          </Border>
-
-          <ScrollViewer x:Name="ItemsScroll" VerticalScrollBarVisibility="Auto" Focusable="False">
+          <ScrollViewer x:Name="ItemsScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto" Focusable="False">
             <Grid>
               <!-- The items: a tinted icon tile, the problem in SemiBold, why it matters, and the one action. -->
               <ItemsControl x:Name="ItemsList" ItemsSource="{Binding Items}" Focusable="False" AutomationProperties.Name="Needs attention">
@@ -53,8 +48,7 @@
                         <StackPanel Grid.Column="1">
                           <TextBlock Style="{DynamicResource Text.BodyStrong}" Text="{Binding Title}" TextWrapping="Wrap" />
                           <TextBlock Style="{DynamicResource Text.Secondary}" Text="{Binding Detail}" TextWrapping="Wrap" />
-                          <!-- TabIndex 0: the items' actions come before "View all" in the tab order (it is declared first, to dock at the bottom), so opening the flyout puts the focus on the first item. -->
-                          <Button Style="{DynamicResource Button.Secondary.Small}" Content="{Binding ActionText}" HorizontalAlignment="Left" Margin="{DynamicResource Inset.T8}" TabIndex="0"
+                          <Button Style="{DynamicResource Button.Secondary.Small}" Content="{Binding ActionText}" HorizontalAlignment="Left" Margin="{DynamicResource Inset.T8}"
                                   Command="{Binding DataContext.RunCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}"
                                   AutomationProperties.Name="{Binding ActionText}" AutomationProperties.HelpText="{Binding Title}" />
                         </StackPanel>
@@ -98,12 +92,22 @@
                   <controls:Icon Kind="Alert" Size="18" Foreground="{DynamicResource Brush.Critical}" VerticalAlignment="Top" Margin="{DynamicResource Inset.R10}" />
                   <TextBlock x:Name="ErrorText" Style="{DynamicResource Text.Body}" Text="{Binding ErrorMessage}" TextWrapping="Wrap" MaxWidth="340" />
                 </StackPanel>
-                <Button x:Name="RetryButton" Style="{DynamicResource Button.Secondary.Small}" Content="Retry" Command="{Binding RetryCommand}" HorizontalAlignment="Left" Margin="{DynamicResource Inset.T8}" TabIndex="0"
+                <Button x:Name="RetryButton" Style="{DynamicResource Button.Secondary.Small}" Content="Retry" Command="{Binding RetryCommand}" HorizontalAlignment="Left" Margin="{DynamicResource Inset.T8}"
                         AutomationProperties.Name="Retry" />
               </StackPanel>
             </Grid>
           </ScrollViewer>
-        </DockPanel>
+
+          <!-- The link to the whole picture: declared after the items, so the keyboard reaches the items first, in the order they are on screen -->
+          <Border Grid.Row="2" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="0,1,0,0" Padding="{DynamicResource Pad.8}">
+            <Button x:Name="ViewAllButton" Style="{DynamicResource Button.Subtle.Small}" Command="{Binding ViewAllCommand}" HorizontalAlignment="Stretch" AutomationProperties.Name="{Binding ViewAllText}">
+              <StackPanel Orientation="Horizontal">
+                <TextBlock Text="{Binding ViewAllText}" VerticalAlignment="Center" />
+                <controls:Icon Kind="Chevr" Size="14" VerticalAlignment="Center" Margin="{DynamicResource Inset.L6}" />
+              </StackPanel>
+            </Button>
+          </Border>
+        </Grid>
       </controls:ElevatedSurface>
     </Canvas>
   </Grid>
