@@ -1,10 +1,10 @@
 using System.Runtime.InteropServices;
-using System.Text;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using Lifestream.Desktop.Services;
 
 namespace Lifestream.Desktop.Tests.RealWindows;
 
@@ -14,6 +14,10 @@ namespace Lifestream.Desktop.Tests.RealWindows;
 /// taskbar button; it is captured with <c>PrintWindow(PW_RENDERFULLCONTENT)</c>, which returns what the compositor holds for this one window.
 /// Nothing here moves the pointer, sends keys, reads the screen or changes a setting, and a window is never maximized (Windows would put it on a
 /// monitor).
+/// <para>
+/// Real windows are created only on an isolated desktop (<see cref="IsolatedDesktop"/>), where they are drawn in software; the rules below
+/// were made for the person's own desktop and are kept on the isolated one as a second line.
+/// </para>
 /// <para>
 /// The window can never take the keyboard from the person at the PC. <c>ShowActivated = false</c> and <c>WS_EX_NOACTIVATE</c> are not enough:
 /// such a window still became the foreground window when a UI Automation pattern was called on it. So while a window is open, a hook on its
@@ -52,7 +56,6 @@ internal sealed class RealWindow : IDisposable
     private const int SmYVirtualScreen = 77;
     private const int SmCxVirtualScreen = 78;
     private const int SmCyVirtualScreen = 79;
-    private const int UoiName = 2;
 
     private static readonly Lazy<string?> Reason = new(WhyUnavailable);
 
@@ -73,10 +76,11 @@ internal sealed class RealWindow : IDisposable
     }
 
     /// <summary>
-    /// Why real windows cannot be created and captured here (the tests skip with this message), or null when they can. They need an interactive
-    /// desktop whose compositor is running: not a GitHub runner (set <c>LIFESTREAM_REAL_WINDOW_TESTS=1</c> to try there anyway), not a service
-    /// session, not a locked or disconnected session, and not while the display is off (<see cref="DisplayIsOff"/>).
-    /// <c>LIFESTREAM_REAL_WINDOW_TESTS=0</c> turns them off.
+    /// Why real windows cannot be created and captured here (the tests skip with this message), or null when they can. They run only on an
+    /// isolated desktop (<see cref="IsolatedDesktop"/>: tools/test-fast.ps1 -IsolatedDesktop), never on the desktop of the person at the PC, and
+    /// need an interactive window station with composition: not a GitHub runner (set <c>LIFESTREAM_REAL_WINDOW_TESTS=1</c> to try there anyway),
+    /// not a service session. The display's state is not asked there (<see cref="DisplayIsOff"/> is for a run on the person's own desktop, which
+    /// is no longer allowed). <c>LIFESTREAM_REAL_WINDOW_TESTS=0</c> turns them off.
     /// </summary>
     public static string? Unavailable => Reason.Value;
 
@@ -176,6 +180,12 @@ internal sealed class RealWindow : IDisposable
     /// <summary>Shows the window off every monitor, not activated and not in the taskbar.</summary>
     public static RealWindow Show(Window window)
     {
+        if (Unavailable is { } why)
+        {
+            throw new InvalidOperationException("No real window is shown: " + why);
+        }
+
+        IsolatedDesktop.UseSoftwareRendering();
         var screen = VirtualScreen;
         var scale = GetDpiForSystem() / 96.0;
         window.WindowStartupLocation = WindowStartupLocation.Manual;
@@ -246,16 +256,17 @@ internal sealed class RealWindow : IDisposable
 
     /// <summary>
     /// What the compositor draws for this window, the non-client area included. Waits until the content is drawn: for the first moments after a
-    /// window is shown the compositor holds an empty frame.
+    /// window is shown the compositor holds an empty frame. A window that shows little (its content hidden) may say how few colours count as
+    /// drawn; it is then taken when two captures in a row are the same.
     /// </summary>
-    public WindowCapture Capture(int timeoutMilliseconds = 60_000)
+    public WindowCapture Capture(int timeoutMilliseconds = 60_000, int drawnColours = 24)
     {
         var started = System.Diagnostics.Stopwatch.StartNew();
         WindowCapture? previous = null;
         while (true)
         {
             var capture = CaptureNow();
-            var drawn = capture.DistinctColours(24) >= 24;
+            var drawn = capture.DistinctColours(drawnColours) >= drawnColours;
             if (drawn && previous is not null && capture.Pixels.AsSpan().SequenceEqual(previous.Pixels))
             {
                 return capture;
@@ -403,6 +414,12 @@ internal sealed class RealWindow : IDisposable
             return "Real-window tests are turned off (LIFESTREAM_REAL_WINDOW_TESTS=0).";
         }
 
+        // Never on the desktop of the person at the PC: only on an isolated desktop (IsolatedDesktop).
+        if (IsolatedDesktop.WhyNot is { } notIsolated)
+        {
+            return "Real-window tests run only on an isolated desktop (tools/test-fast.ps1 -IsolatedDesktop), never on the desktop of the person at the PC: " + notIsolated + ".";
+        }
+
         if (setting != "1" && Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true")
         {
             return need + "; this is a GitHub Actions runner, where they were never proven. Set LIFESTREAM_REAL_WINDOW_TESTS=1 to run them anyway.";
@@ -429,34 +446,9 @@ internal sealed class RealWindow : IDisposable
             return need + $"; the desktop starts at {screen.X},{screen.Y}, too far out for a window beside it.";
         }
 
-        // A locked or disconnected session composes nothing for the user's desktop: the desktop that receives input is then another one.
-        var input = OpenInputDesktop(0, false, 0x0001);
-        if (input == IntPtr.Zero)
-        {
-            return need + "; the session is locked or disconnected (its desktop is not the one receiving input).";
-        }
-
-        try
-        {
-            var ours = GetThreadDesktop(GetCurrentThreadId());
-            if (!string.Equals(DesktopName(input), DesktopName(ours), StringComparison.OrdinalIgnoreCase))
-            {
-                return need + "; the session is locked or disconnected (its desktop is not the one receiving input).";
-            }
-        }
-        finally
-        {
-            CloseDesktop(input);
-        }
-
-        // Last, the display itself: off after some minutes without input, with the session still unlocked (see DisplayIsOff).
-        return DisplayReason(ConsoleDisplayState());
-    }
-
-    private static string DesktopName(IntPtr desktop)
-    {
-        var buffer = new byte[512];
-        return GetUserObjectInformation(desktop, UoiName, buffer, buffer.Length, out var needed) ? Encoding.Unicode.GetString(buffer, 0, Math.Max(0, needed - 2)) : string.Empty;
+        // The display's state (DisplayIsOff) is not asked: on the isolated desktop the windows are drawn in software into what PrintWindow returns,
+        // whether the person's display is on or off (2026-11-21: the owner's display turns off at night and the checks must still run).
+        return null;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -550,23 +542,6 @@ internal sealed class RealWindow : IDisposable
 
     [DllImport("user32.dll")]
     private static extern int GetMenuItemCount(IntPtr menu);
-
-    [DllImport("user32.dll")]
-    private static extern IntPtr OpenInputDesktop(uint flags, [MarshalAs(UnmanagedType.Bool)] bool inherit, uint access);
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool CloseDesktop(IntPtr desktop);
-
-    [DllImport("user32.dll")]
-    private static extern IntPtr GetThreadDesktop(uint thread);
-
-    [DllImport("user32.dll", EntryPoint = "GetUserObjectInformationW")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool GetUserObjectInformation(IntPtr handle, int index, byte[] buffer, int length, out int needed);
-
-    [DllImport("kernel32.dll")]
-    private static extern uint GetCurrentThreadId();
 
     [DllImport("dwmapi.dll")]
     private static extern int DwmIsCompositionEnabled([MarshalAs(UnmanagedType.Bool)] out bool enabled);

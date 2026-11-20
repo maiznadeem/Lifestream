@@ -51,6 +51,7 @@ public sealed class ExitApiInventoryTests
         ["WpfWindowHost.ShowMain"] = Guarded + "when the main window closes the process ends; the user's close goes through MainWindow.OnClosing -> ConfirmCloseAsync (MainWindowCloseTests, DiscardChangesTests.ClosingTheMainWindow)",
         ["VelopackFeed.ApplyAsync"] = Guarded + "reached only through UpdateService.ApplyAsync from ShellViewModel.ApplyUpdateCommand, which asks first (ExitPathsGuardTests.RestartAndUpdate...), and from the sign-in window's banner (no form there)",
         ["WpfFormDialogPresenter.Show"] = Guarded + "a dialog window closes only when its view model asks it to, after the dialog's own Discard changes? (UnsavedChangesInventoryTests, DialogAndFieldViewTests)",
+        ["OffscreenMode.Install"] = NoForm + "the real-app test switch (LIFESTREAM_OFFSCREEN=1) ends the app at start-up, before any window exists, when it is not on an isolated desktop",
         ["LaunchProbe.OnFirstRender"] = NoForm + "the launch measurement mode (an environment switch for the perf harness) ends the app after the first frame of the sign-in window",
         // Client: the flows and the commands.
         ["AppFlow.SignOutAsync"] = Guarded + "asks navigation.ConfirmDiscardAsync unless forced by an expired session (DiscardChangesTests)",

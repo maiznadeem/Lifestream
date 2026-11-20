@@ -40,7 +40,7 @@ public sealed class App : Application
     {
         base.OnStartup(e);
         LaunchProbe.Configure(e.Args);
-        OffscreenMode.Install(); // test-only (LIFESTREAM_OFFSCREEN=1): every window off the desktop, never activated
+        OffscreenMode.Install(); // test-only (LIFESTREAM_OFFSCREEN=1): runs only on an isolated desktop, else exits before any window
 
         // Order matters. The host (configuration, logging, DI) comes first, then the global exception handlers, and only then the theme and the
         // fonts: anything that goes wrong while loading them is logged and shown as a friendly dialog instead of ending the process unseen (SHELL-01).

@@ -1,5 +1,6 @@
 // Drives the real Lifestream desktop app off the owner's screen (run/briefs/real-window-capture.md):
-//   launch  starts Lifestream.exe with LIFESTREAM_OFFSCREEN=1 (every window outside every monitor, never activated) against a given API;
+//   launch  starts Lifestream.exe with LIFESTREAM_OFFSCREEN=1 against a given API, on this process's isolated desktop (both refuse to run
+//           anywhere else: tools/realapp-isolated.ps1 sets it up and watches the person's desktop meanwhile);
 //   run     executes a script of UI Automation commands (Invoke, Toggle, Value, SelectionItem, ExpandCollapse, ScrollItem, Transform,
 //           Window) against that process and captures its windows with PrintWindow(PW_RENDERFULLCONTENT).
 // Nothing here moves the pointer, sends keys or activates a window. UIA patterns call the controls directly.
@@ -34,6 +35,12 @@ internal static partial class Program
     private static int Main(string[] args)
     {
         Console.OutputEncoding = Encoding.UTF8;
+        if (args.Length >= 1 && args[0] is "launch" or "run" && Isolation.WhyNot() is { } why)
+        {
+            Console.Error.WriteLine($"REFUSED: the real-app driver runs only on an isolated desktop (tools/realapp-isolated.ps1): {why}.");
+            return 5;
+        }
+
         if (args.Length >= 4 && args[0] == "launch")
         {
             return Launch(args[1], args[2], args[3], args.Length > 4 ? args[4] : "--system");
@@ -71,25 +78,18 @@ internal static partial class Program
             File.WriteAllText(prefs, node.ToJsonString());
         }
 
-        var start = new ProcessStartInfo(exe) { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(exe)! };
-        start.Environment["LIFESTREAM_OFFSCREEN"] = "1";
-        start.Environment["LIFESTREAM_OFFSCREEN_PIPE"] = "1";
-        start.Environment["LIFESTREAM_OFFSCREEN_LOG"] = Path.Combine(workDir, "offscreen.log");
-        start.Environment["LIFESTREAM_PREFERENCES_PATH"] = prefs;
-        start.Environment["Api__BaseAddress"] = api;
-        start.Environment["DOTNET_PROCESSOR_COUNT"] = "8";
-        var process = Process.Start(start)!;
-        try
-        {
-            process.PriorityClass = ProcessPriorityClass.Idle;
-            process.ProcessorAffinity = 0xFF;
-        }
-        catch (InvalidOperationException)
-        {
-        }
-
-        File.WriteAllText(Path.Combine(workDir, "pid"), process.Id.ToString(CultureInfo.InvariantCulture));
-        Console.WriteLine(process.Id);
+        // The app inherits this process's (isolated) desktop and job; the job sets its processors and priority.
+        var environment = Environment.GetEnvironmentVariables().Cast<System.Collections.DictionaryEntry>()
+            .ToDictionary(e => (string)e.Key, e => (string?)e.Value ?? string.Empty, StringComparer.OrdinalIgnoreCase);
+        environment["LIFESTREAM_OFFSCREEN"] = "1";
+        environment["LIFESTREAM_OFFSCREEN_PIPE"] = "1";
+        environment["LIFESTREAM_OFFSCREEN_LOG"] = Path.Combine(workDir, "offscreen.log");
+        environment["LIFESTREAM_PREFERENCES_PATH"] = prefs;
+        environment["Api__BaseAddress"] = api;
+        environment["DOTNET_PROCESSOR_COUNT"] = "2";
+        var pid = Isolation.StartWithoutFeedback(exe, Path.GetDirectoryName(exe)!, environment);
+        File.WriteAllText(Path.Combine(workDir, "pid"), pid.ToString(CultureInfo.InvariantCulture));
+        Console.WriteLine(pid);
         return 0;
     }
 
