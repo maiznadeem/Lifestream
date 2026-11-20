@@ -7,8 +7,9 @@ namespace Lifestream.Data.Seed;
 public static class SeedSizes
 {
     public const int Staff = 11;
-    // Close to the old database's 32 donors and 35 patients, so the 100x dataset keeps their proportions (3,500 each).
-    public const int Donors = 40;
+    // Enough donors for a year of the demo's donations at the rule's pace (Eligibility.MinDaysBetweenDonations): with 40, each would have had to give
+    // blood more often than the rule allows, or the history would have had to be twice as long and half as busy.
+    public const int Donors = 100;
     public const int Patients = 35;
     public const int CompletedAppointments = 180;
     public const int CancelledAppointments = 30;
@@ -76,6 +77,11 @@ public sealed class DemoDataSet
 /// with its receipt and bags, or the day's one no-show) only when its slot started <see cref="DonationMinutes"/> or more before the instant;
 /// no row carries a time after the instant.
 /// </para>
+/// <para>
+/// Nobody breaks the rule the app enforces (<see cref="Eligibility.MinDaysBetweenDonations"/>): a donor's donations are at least that many days apart, and
+/// every appointment, whatever became of it, is on a day the donor was (or will be) eligible, judged as the API judges a booking. See <see cref="DonationSlots"/>
+/// and <see cref="AssignDonors"/>.
+/// </para>
 /// </summary>
 internal static class SyntheticDataBuilder
 {
@@ -97,6 +103,9 @@ internal static class SyntheticDataBuilder
 
     /// <summary>The demo history reaches this far back: the twelve months of the dashboard chart plus the part of the month before them.</summary>
     internal const int HistoryDays = 365;
+
+    /// <summary>The reason an appointment carries when its donor was not eligible on the day. Nothing the generator plans needs it (see <see cref="AssignDonors"/>).</summary>
+    private const string EarlyDonationReason = "Physician approved an early donation.";
 
     /// <summary>The oldest days of the history in which nothing is issued yet: the first donations have to build stock first.</summary>
     private const int IssueFreeDays = 30;
@@ -128,7 +137,7 @@ internal static class SyntheticDataBuilder
         var futureDays = 30 * ((factor + 3) / 4);
 
         BuildStaff(set, rng, today, factor);
-        BuildPeople(set, rng, today, factor);
+        BuildPeople(set, rng, today, factor, pastDays, futureDays);
         var donationAppointments = BuildAppointments(set, rng, aroundRng, nowUtc, factor, pastDays, futureDays);
         BuildDonations(set, rng, donationAppointments);
         BuildRequestsAndIssues(set, rng, nowUtc, factor, pastDays);
@@ -162,16 +171,20 @@ internal static class SyntheticDataBuilder
         }
     }
 
-    private static void BuildPeople(DemoDataSet set, DeterministicRandom rng, DateOnly today, int factor)
+    private static void BuildPeople(DemoDataSet set, DeterministicRandom rng, DateOnly today, int factor, int pastDays, int futureDays)
     {
         var donors = SeedSizes.Donors * factor;
         var donorOrder = Shuffled(donors, rng, NameSpace(donors));
+        // A donor is within the age limits on every day of the dataset: old enough on the first day of the history, and not too old on the day of the
+        // latest booking (two bookings ahead at most, each the rule's gap and the booking window after the one before: see BookAhead).
+        var youngest = (Eligibility.MinAgeYears * 365) + 30 + pastDays;
+        var oldest = Math.Min((Eligibility.MaxAgeYears - 1) * 365, (Eligibility.MaxAgeYears * 365) - (2 * (Eligibility.MinDaysBetweenDonations + futureDays)) - 2);
         for (var i = 0; i < donors; i++)
         {
             set.Donors.Add(new Donor
             {
                 Name = SyntheticVocabulary.PersonName(donorOrder[i]),
-                DateOfBirth = today.AddDays(-rng.Between(18 * 365 + 30, 59 * 365)),
+                DateOfBirth = today.AddDays(-rng.Between(youngest, oldest)),
                 Gender = PickGender(rng),
                 BloodType = i < 8 ? (BloodType)i : PickBloodType(rng),
                 Phone = SyntheticVocabulary.Phone(rng.Next(100)),
@@ -197,13 +210,12 @@ internal static class SyntheticDataBuilder
     }
 
     /// <summary>
-    /// Creates every appointment with a unique slot and returns the completed ones (each gets a donation receipt). The history ends two days ago and the
-    /// open bookings start the day after tomorrow; yesterday, today and tomorrow are the full clinic days of <see cref="AroundToday"/>. The rows of those
+    /// Creates every appointment with a unique slot and returns the completed ones (each gets a donation receipt), oldest first. The history ends two days ago;
+    /// yesterday, today and tomorrow are the full clinic days of <see cref="AroundToday"/>; the open bookings start the day after tomorrow. The rows of those
     /// three days come out of the same totals, so the dataset holds exactly <see cref="SeedSizes"/> times the factor of every status at any time of day.
     /// </summary>
     private static List<Appointment> BuildAppointments(DemoDataSet set, DeterministicRandom rng, DeterministicRandom aroundRng, DateTime nowUtc, int factor, int pastDays, int futureDays)
     {
-        var completed = new List<Appointment>();
         var todayStart = nowUtc.Date;
         var donors = DonorRoles.Assign(set.Donors, aroundRng);
         var around = AroundToday(aroundRng, nowUtc, donors);
@@ -211,55 +223,224 @@ internal static class SyntheticDataBuilder
         var completedInHistory = (SeedSizes.CompletedAppointments * factor) - around.Count(a => a.Status == AppointmentStatus.Completed);
         var noShowsInHistory = (SeedSizes.NoShowAppointments * factor) - around.Count(a => a.Status == AppointmentStatus.NoShow);
         var cancelled = SeedSizes.CancelledAppointments * factor;
-        var pastCount = completedInHistory + cancelled + noShowsInHistory;
         var historyStart = todayStart.AddDays(-pastDays);
-        var recent = todayStart.AddDays(-Eligibility.MinDaysBetweenDonations);
-        var pastSlots = SlotsOverMonths(pastCount, rng, historyStart, pastDays - 1);
-        for (var i = 0; i < pastCount; i++)
+
+        // The donations of the history: when, then who.
+        var donationSlots = DonationSlots(completedInHistory, rng, historyStart, pastDays, donors);
+        var completed = donationSlots.ConvertAll(slot => NewPastAppointment(rng, SlotTime(historyStart, slot), AppointmentStatus.Completed));
+        AssignDonors(completed, rng, donors, todayStart);
+        set.Appointments.AddRange(completed);
+        completed.AddRange(around.Where(a => a.Status == AppointmentStatus.Completed));
+        var donationDays = completed.GroupBy(a => a.Donor!).ToDictionary(g => g.Key, g => g.Select(a => a.SlotStartUtc.Date).Order().ToArray());
+
+        // The appointments that were cancelled or missed, in the slots the donations left free: each was booked by a donor who was eligible on its day.
+        var otherSlots = SlotsOverMonths(cancelled + noShowsInHistory, rng, historyStart, pastDays - 1, [.. donationSlots]);
+        for (var i = 0; i < otherSlots.Length; i++)
         {
-            var status = i < completedInHistory ? AppointmentStatus.Completed
-                : i < completedInHistory + cancelled ? AppointmentStatus.Cancelled
-                : AppointmentStatus.NoShow;
-            var slot = SlotTime(historyStart, pastSlots[i]);
-            // A donor who comes in today or tomorrow has not given blood in the 90 days before; one who comes for the first time never has.
-            var donor = status != AppointmentStatus.Completed ? rng.Pick(set.Donors)
-                : slot >= recent ? rng.Pick(donors.Regulars)
-                : rng.Pick(donors.Returning);
-            var appointment = new Appointment
-            {
-                Donor = donor,
-                DonorBloodType = donor.BloodType,
-                SlotStartUtc = slot,
-                PlacedAtUtc = slot.AddDays(-rng.Between(1, 14)).AddMinutes(rng.Between(-120, 120)),
-                Status = status,
-                OverrideReason = status == AppointmentStatus.Completed && rng.Chance(0.02) ? "Physician approved an early donation." : null,
-            };
+            var appointment = NewPastAppointment(rng, SlotTime(historyStart, otherSlots[i]), i < cancelled ? AppointmentStatus.Cancelled : AppointmentStatus.NoShow);
+            appointment.Donor = DonorEligibleOn(appointment.SlotStartUtc.Date, rng, set.Donors, donors, donationDays);
             set.Appointments.Add(appointment);
-            if (status == AppointmentStatus.Completed)
-            {
-                completed.Add(appointment);
-            }
         }
 
         set.Appointments.AddRange(around);
-        completed.AddRange(around.Where(a => a.Status == AppointmentStatus.Completed));
 
-        var pendingCount = (SeedSizes.PendingAppointments * factor) - around.Count(a => a.Status == AppointmentStatus.Pending);
-        var futureSlots = Shuffled(pendingCount, rng, modulus: futureDays * SlotsPerDay);
-        for (var i = 0; i < pendingCount; i++)
+        BookAhead(set, rng, nowUtc, (SeedSizes.PendingAppointments * factor) - around.Count(a => a.Status == AppointmentStatus.Pending), futureDays, donationDays, around);
+
+        foreach (var appointment in set.Appointments)
         {
-            var donor = rng.Pick(set.Donors);
-            set.Appointments.Add(new Appointment
-            {
-                Donor = donor,
-                DonorBloodType = donor.BloodType,
-                SlotStartUtc = SlotTime(todayStart.AddDays(2), futureSlots[i]),
-                PlacedAtUtc = NotAfter(DuringTheWorkingDay(todayStart.AddDays(-rng.Between(0, 6)), rng.Between(0, WorkingMinutes - 1)), nowUtc),
-                Status = AppointmentStatus.Pending,
-            });
+            appointment.DonorBloodType = appointment.Donor!.BloodType;
         }
 
         return completed;
+    }
+
+    /// <summary>
+    /// The open bookings after tomorrow, <paramref name="count"/> of them. A booking is for a day on which the donor is eligible, as the API judges a booking, and
+    /// it keeps the rule's distance from the donor's other open booking too, so recording one donation never makes another booking of that donor a day the rule forbids.
+    /// <para>
+    /// Nobody books twice while somebody has not booked (an appointment still to come today or tomorrow is a booking). The donors who can come soonest book,
+    /// three in every four of them, so some donors who are eligible now have no appointment yet: from the day after tomorrow for a donor who is eligible now,
+    /// otherwise from the day the rule allows, in both cases within the booking window after it. Should there be more bookings than donors, the rest are
+    /// second ones, <see cref="Eligibility.MinDaysBetweenDonations"/> days or more after the donor's first.
+    /// </para>
+    /// </summary>
+    private static void BookAhead(DemoDataSet set, DeterministicRandom rng, DateTime nowUtc, int count, int futureDays, Dictionary<Donor, DateTime[]> donationDays, List<Appointment> around)
+    {
+        var gap = Eligibility.MinDaysBetweenDonations;
+        var todayStart = nowUtc.Date;
+        var firstOpenDay = todayStart.AddDays(2);
+        var taken = new HashSet<DateTime>();
+
+        // Each donor's latest day that a new booking has to keep its distance from: the last donation, or the booking still open.
+        var latest = donationDays.ToDictionary(d => d.Key, d => d.Value[^1]);
+        var booked = new HashSet<Donor>();
+        foreach (var appointment in around.Where(a => a.Status == AppointmentStatus.Pending))
+        {
+            latest[appointment.Donor!] = appointment.SlotStartUtc.Date;
+            booked.Add(appointment.Donor!);
+        }
+
+        // Whoever can come soonest first (a stable sort: donors who can come on the same day stay in their drawn order), every fourth passed over.
+        var everybody = Shuffled(set.Donors.Count, rng).Select(i => set.Donors[i]).ToList();
+        var round = everybody.Where(d => !booked.Contains(d)).OrderBy(d => latest.GetValueOrDefault(d)).Where((_, i) => i % 4 != 3).ToList();
+        while (count > 0)
+        {
+            foreach (var donor in round.Take(count))
+            {
+                var from = latest.TryGetValue(donor, out var day) && day.AddDays(gap) > firstOpenDay ? day.AddDays(gap) : firstOpenDay;
+                var slot = FreeSlot(from.AddDays(rng.Next(futureDays)), rng, taken);
+                latest[donor] = slot.Date;
+                set.Appointments.Add(new Appointment
+                {
+                    Donor = donor,
+                    SlotStartUtc = slot,
+                    PlacedAtUtc = NotAfter(DuringTheWorkingDay(todayStart.AddDays(-rng.Between(0, 6)), rng.Between(0, WorkingMinutes - 1)), nowUtc),
+                    Status = AppointmentStatus.Pending,
+                });
+            }
+
+            count -= Math.Min(count, round.Count);
+            // The next round: everybody, whoever comes soonest first.
+            round = [.. everybody.OrderBy(d => latest.GetValueOrDefault(d))];
+        }
+    }
+
+    /// <summary>An appointment of the history, booked one to fourteen days before its slot. The donor is set by the caller.</summary>
+    private static Appointment NewPastAppointment(DeterministicRandom rng, DateTime slot, AppointmentStatus status) => new()
+    {
+        SlotStartUtc = slot,
+        PlacedAtUtc = slot.AddDays(-rng.Between(1, 14)).AddMinutes(rng.Between(-120, 120)),
+        Status = status,
+    };
+
+    /// <summary>
+    /// The slots of the history's donations, as slot indexes from <paramref name="historyStart"/>, oldest first. They are placed so that there is always a donor
+    /// who may give blood: in any <see cref="Eligibility.MinDaysBetweenDonations"/> consecutive days there are fewer donations than donors who can donate.
+    /// <para>
+    /// Each calendar month holds at most its share of one donation per donor and gap, and a month's donations are spread over its days (one in each equal
+    /// part of the month), so no run of days is busier than its months. The months that reach into the last days before yesterday (as many days as the
+    /// rule's gap, less one) are tighter: whoever comes in yesterday, today or tomorrow gives no blood in those days, so the limit there counts only the
+    /// other donors. Within those limits the months vary as every other row of the history does (<see cref="MonthShares"/>).
+    /// </para>
+    /// </summary>
+    private static List<int> DonationSlots(int count, DeterministicRandom rng, DateTime historyStart, int pastDays, DonorRoles donors)
+    {
+        var gap = Eligibility.MinDaysBetweenDonations;
+        var firstRecentDay = pastDays - gap;
+        // Donations a day that the donors can keep up for ever, with two to spare for the ends of a run of days that cuts two months.
+        var perDay = (donors.Donating - 2) / (double)gap;
+        var perRecentDay = Math.Max(0, Math.Min(perDay, (donors.Donating - donors.AroundToday - 2) / (double)(gap - 1)));
+
+        var months = MonthRanges(historyStart, pastDays - 1);
+        var perMonth = MonthShares(count, rng, months, capacities: [.. months.Select(m =>
+            Math.Min((m.End - m.Start) * SlotsPerDay, (int)((m.End > firstRecentDay ? perRecentDay : perDay) * (m.End - m.Start))))]);
+        var slots = new List<int>(count);
+        for (var m = 0; m < months.Count; m++)
+        {
+            slots.AddRange(SpreadEvenly(perMonth[m], rng, (months[m].End - months[m].Start) * SlotsPerDay).Select(i => (months[m].Start * SlotsPerDay) + i));
+        }
+
+        return slots;
+    }
+
+    /// <summary><paramref name="count"/> values from [0, range), ascending: the range is cut into that many equal parts and one value is drawn from each.</summary>
+    private static IEnumerable<int> SpreadEvenly(int count, DeterministicRandom rng, int range)
+    {
+        for (var i = 0; i < count; i++)
+        {
+            var from = (int)((long)i * range / count);
+            var to = (int)((long)(i + 1) * range / count);
+            yield return from + rng.Next(to - from);
+        }
+    }
+
+    /// <summary>
+    /// Gives each donation of the history (oldest first in <paramref name="donations"/>) its donor, working back from the newest: a donor is free for a
+    /// donation when their next one (or their appointment of yesterday, today or tomorrow) is <see cref="Eligibility.MinDaysBetweenDonations"/> days or more
+    /// after it, and one of the free donors is drawn. So no donor gives blood twice within the gap, and whoever comes in around today is eligible on that
+    /// day. Donors who come for the first time are never drawn.
+    /// <para>
+    /// <see cref="DonationSlots"/> leaves a free donor for every donation. Should a change of the sizes break that, the donor who has waited longest gives
+    /// blood early and the appointment carries the reason, as the API would have recorded it; the dataset stays whole.
+    /// </para>
+    /// </summary>
+    private static void AssignDonors(List<Appointment> donations, DeterministicRandom rng, DonorRoles donors, DateTime todayStart)
+    {
+        var gap = Eligibility.MinDaysBetweenDonations;
+        var free = new List<Donor>(donors.Others);
+        // Donors with a donation ahead of them, the one furthest ahead first: they become free again in that order.
+        var waiting = new Queue<(Donor Donor, DateTime Next)>();
+        foreach (var (group, day) in new[] { (donors.Tomorrow, 1), (donors.Today, 0), (donors.Yesterday, -1) })
+        {
+            foreach (var donor in group)
+            {
+                waiting.Enqueue((donor, todayStart.AddDays(day)));
+            }
+        }
+
+        for (var i = donations.Count - 1; i >= 0; i--)
+        {
+            var day = donations[i].SlotStartUtc.Date;
+            while (waiting.Count > 0 && waiting.Peek().Next >= day.AddDays(gap))
+            {
+                free.Add(waiting.Dequeue().Donor);
+            }
+
+            Donor chosen;
+            if (free.Count > 0)
+            {
+                var pick = rng.Next(free.Count);
+                chosen = free[pick];
+                free[pick] = free[^1];
+                free.RemoveAt(free.Count - 1);
+            }
+            else
+            {
+                chosen = waiting.Dequeue().Donor;
+                donations[i].OverrideReason = EarlyDonationReason;
+            }
+
+            donations[i].Donor = chosen;
+            waiting.Enqueue((chosen, day));
+        }
+    }
+
+    /// <summary>
+    /// A donor who was eligible on <paramref name="day"/> by the rule the API applies to a booking: no donation in the <see cref="Eligibility.MinDaysBetweenDonations"/>
+    /// days up to it. Drawn at random; a donor who has never donated is always one.
+    /// </summary>
+    private static Donor DonorEligibleOn(DateTime day, DeterministicRandom rng, List<Donor> all, DonorRoles donors, Dictionary<Donor, DateTime[]> donationDays)
+    {
+        for (var attempt = 0; attempt < 32; attempt++)
+        {
+            var donor = rng.Pick(all);
+            if (!donationDays.TryGetValue(donor, out var days))
+            {
+                return donor;
+            }
+
+            // The donor's last donation on or before the day.
+            var after = Array.BinarySearch(days, day);
+            after = after >= 0 ? after + 1 : ~after;
+            if (after == 0 || days[after - 1].AddDays(Eligibility.MinDaysBetweenDonations) <= day)
+            {
+                return donor;
+            }
+        }
+
+        return rng.Pick(donors.FirstTime);
+    }
+
+    /// <summary>A free slot on <paramref name="day"/>, or the next free one after it when the day is full; the slot is then <paramref name="taken"/>.</summary>
+    private static DateTime FreeSlot(DateTime day, DeterministicRandom rng, HashSet<DateTime> taken)
+    {
+        var index = rng.Next(SlotsPerDay);
+        while (!taken.Add(SlotTime(day, index)))
+        {
+            index++;
+        }
+
+        return SlotTime(day, index);
     }
 
     /// <summary>
@@ -272,13 +453,13 @@ internal static class SyntheticDataBuilder
     /// <para>
     /// Status: yesterday is over (seven donations and one no-show). Today, an appointment whose slot started <see cref="DonationMinutes"/> or more before
     /// <paramref name="nowUtc"/> is over; the others, and all of tomorrow's, are pending. The last appointment of today and of tomorrow is a first-time donor's.
+    /// Nobody comes twice in the three days.
     /// </para>
     /// </summary>
     private static List<Appointment> AroundToday(DeterministicRandom rng, DateTime nowUtc, DonorRoles donors)
     {
         var appointments = new List<Appointment>(3 * AppointmentsPerClinicDay);
         var todayStart = nowUtc.Date;
-        var yesterday = Shuffled(AppointmentsPerClinicDay, rng, donors.Regulars.Count);
         for (var day = -1; day <= 1; day++)
         {
             // One of the day's appointments (never the first, never one of the last two) is a no-show once its time has passed.
@@ -287,13 +468,11 @@ internal static class SyntheticDataBuilder
             {
                 var slot = todayStart.AddDays(day).AddHours(OpeningHourUtc + hour).AddMinutes(30 * rng.Next(2));
                 var isOver = slot.AddMinutes(DonationMinutes) <= nowUtc;
-                var donor = day < 0 ? donors.Regulars[yesterday[hour]]
-                    : hour == AppointmentsPerClinicDay - 1 ? donors.FirstTime[day]
-                    : donors.Eligible[(day * (AppointmentsPerClinicDay - 1)) + hour];
                 appointments.Add(new Appointment
                 {
-                    Donor = donor,
-                    DonorBloodType = donor.BloodType,
+                    Donor = day < 0 ? donors.Yesterday[hour]
+                        : hour == AppointmentsPerClinicDay - 1 ? donors.FirstTime[day]
+                        : day == 0 ? donors.Today[hour] : donors.Tomorrow[hour],
                     SlotStartUtc = slot,
                     // Booked on an earlier day: two days or more before the slot is before today for tomorrow's appointments too.
                     PlacedAtUtc = slot.AddDays(-rng.Between(2, 14)).AddMinutes(rng.Between(-120, 120)),
@@ -306,22 +485,29 @@ internal static class SyntheticDataBuilder
     }
 
     /// <summary>
-    /// Which donors the days around today draw on. <see cref="FirstTime"/> never appear in a completed appointment of the history; <see cref="Eligible"/> (today's and
-    /// tomorrow's other donors) have none in the last <see cref="Eligibility.MinDaysBetweenDonations"/> days; <see cref="Regulars"/> are everybody else, and
-    /// <see cref="Returning"/> is everybody who has donated before. The first eight donors (one per blood group) stay regulars, so every group keeps a donor who
-    /// gives blood all year.
+    /// Who comes in around today. <see cref="FirstTime"/> (the last appointment of today and of tomorrow) have never donated; <see cref="Today"/> and
+    /// <see cref="Tomorrow"/> are those days' other donors and <see cref="Yesterday"/> that day's eight; <see cref="Others"/> is everybody else. The first
+    /// eight donors (one per blood group) are never first-time donors or today's or tomorrow's, so every group keeps a donor with a history.
     /// </summary>
-    private sealed record DonorRoles(List<Donor> FirstTime, List<Donor> Eligible, List<Donor> Regulars, List<Donor> Returning)
+    private sealed record DonorRoles(List<Donor> FirstTime, List<Donor> Today, List<Donor> Tomorrow, List<Donor> Yesterday, List<Donor> Others)
     {
+        /// <summary>The donors who give blood at all: everybody but the first-time donors.</summary>
+        public int Donating => Today.Count + Tomorrow.Count + Yesterday.Count + Others.Count;
+
+        /// <summary>The donors with an appointment yesterday, today or tomorrow who have donated before.</summary>
+        public int AroundToday => Today.Count + Tomorrow.Count + Yesterday.Count;
+
         public static DonorRoles Assign(List<Donor> all, DeterministicRandom rng)
         {
             var groups = BloodTypeExtensions.All.Count;
-            var eligible = 2 * (AppointmentsPerClinicDay - 1);
-            var order = Shuffled(FirstTimeDonors + eligible, rng, all.Count - groups);
-            var firstTime = order[..FirstTimeDonors].Select(i => all[groups + i]).ToList();
-            var today = order[FirstTimeDonors..].Select(i => all[groups + i]).ToList();
-            var taken = new HashSet<Donor>(firstTime.Concat(today));
-            return new DonorRoles(firstTime, today, [.. all.Where(d => !taken.Contains(d))], [.. all.Where(d => !firstTime.Contains(d))]);
+            var perDay = AppointmentsPerClinicDay - 1;
+            var order = Shuffled(FirstTimeDonors + (2 * perDay), rng, all.Count - groups).Select(i => all[groups + i]).ToList();
+            var firstTime = order[..FirstTimeDonors];
+            var today = order[FirstTimeDonors..(FirstTimeDonors + perDay)];
+            var tomorrow = order[(FirstTimeDonors + perDay)..];
+            var rest = all.Except(order).ToList();
+            var yesterday = Shuffled(AppointmentsPerClinicDay, rng, rest.Count).Select(i => rest[i]).ToList();
+            return new DonorRoles(firstTime, today, tomorrow, yesterday, [.. rest.Except(yesterday)]);
         }
     }
 
@@ -514,17 +700,17 @@ internal static class SyntheticDataBuilder
 
     /// <summary>
     /// <paramref name="count"/> distinct clinic slot indexes (day * slots per day + slot) in random order over <paramref name="days"/> days from <paramref name="firstDay"/>, spread over the
-    /// calendar months with <see cref="MonthShares"/>: a month never holds more slots than it has, and no two rows share a slot.
+    /// calendar months with <see cref="MonthShares"/>, none of them one of the <paramref name="taken"/> slots: a month never holds more slots than it has free, and no two rows share a slot.
     /// </summary>
-    private static int[] SlotsOverMonths(int count, DeterministicRandom rng, DateTime firstDay, int days)
+    private static int[] SlotsOverMonths(int count, DeterministicRandom rng, DateTime firstDay, int days, HashSet<int> taken)
     {
         var months = MonthRanges(firstDay, days);
-        var perMonth = MonthShares(count, rng, months, capacities: [.. months.Select(m => (m.End - m.Start) * SlotsPerDay)]);
+        var free = months.ConvertAll(m => Enumerable.Range(m.Start * SlotsPerDay, (m.End - m.Start) * SlotsPerDay).Where(slot => !taken.Contains(slot)).ToArray());
+        var perMonth = MonthShares(count, rng, months, capacities: [.. free.Select(f => f.Length)]);
         var slots = new List<int>(count);
         for (var m = 0; m < months.Count; m++)
         {
-            var first = months[m].Start * SlotsPerDay;
-            slots.AddRange(Shuffled(perMonth[m], rng, modulus: (months[m].End - months[m].Start) * SlotsPerDay).Select(i => first + i));
+            slots.AddRange(Shuffled(perMonth[m], rng, modulus: free[m].Length).Select(i => free[m][i]));
         }
 
         // The months were filled in order; shuffle so that the statuses handed out by position are not sorted by date.
