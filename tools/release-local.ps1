@@ -126,7 +126,7 @@ function Scan([string]$What, [string[]]$Path, [string]$Report) {
     $out = & (Join-Path $toolScripts 'scan-artifacts.ps1') -Path $Path -ReportPath $Report 6>&1 | Out-String
     $code = $LASTEXITCODE
     ($out -split "`r?`n" | Where-Object { $_ -match '^(FINDING|ERROR|scanned)' }) | ForEach-Object { Write-Host "   $_" }
-    if ($code -ne 0) { throw "$What: the credential scan exited $code (1 = a credential found, 2 = the scan could not run). Report: $Report" }
+    if ($code -ne 0) { throw "${What}: the credential scan exited $code (1 = a credential found, 2 = the scan could not run). Report: $Report" }
 }
 
 Push-Location $root
