@@ -12,8 +12,8 @@ using Lifestream.Desktop.Theme;
 namespace Lifestream.Desktop.Shell;
 
 /// <summary>
-/// The main window's content (direction A): the title bar (mark, search field that opens the palette, notifications, account), the sidebar (full,
-/// or an icon rail when collapsed with Ctrl+B or when the window is compact), the page on the canvas, toasts and the command palette. It adapts to
+/// The main window's content (direction A): the title bar (mark, search field that opens the palette, the bell with its notifications flyout, account),
+/// the sidebar (full, or an icon rail when collapsed with Ctrl+B or when the window is compact), the page on the canvas, toasts and the command palette. It adapts to
 /// the window's breakpoint (Controls/Responsive): below 1280 DIP the sidebar is a rail, the title bar is 40 DIP and the search collapses to a button.
 /// F6 moves focus between the regions: title bar, sidebar, page.
 /// </summary>
@@ -25,12 +25,6 @@ public partial class ShellView : UserControl
     public static readonly DependencyProperty IsRailProperty =
         DependencyProperty.Register(nameof(IsRail), typeof(bool), typeof(ShellView), new FrameworkPropertyMetadata(false));
 
-    public static readonly DependencyProperty HasAttentionProperty =
-        DependencyProperty.Register(nameof(HasAttention), typeof(bool), typeof(ShellView), new FrameworkPropertyMetadata(false));
-
-    public static readonly DependencyProperty NotificationsNameProperty =
-        DependencyProperty.Register(nameof(NotificationsName), typeof(string), typeof(ShellView), new FrameworkPropertyMetadata("Notifications"));
-
     private static readonly DependencyPropertyDescriptor BreakpointDescriptor = DependencyPropertyDescriptor.FromProperty(Responsive.BreakpointProperty, typeof(Grid));
 
     private ShellViewModel? _model;
@@ -38,22 +32,19 @@ public partial class ShellView : UserControl
     public ShellView()
     {
         InitializeComponent();
+        Notifications.Anchor = NotificationsButton;
         BreakpointDescriptor.AddValueChanged(Root, OnBreakpointChanged);
         DataContextChanged += OnDataContextChanged;
         PageHost.LayoutUpdated += (_, _) => UpdateLegacyTitle();
         PreviewKeyDown += OnPreviewKeyDown;
+        Nav.AddHandler(System.Windows.Controls.Primitives.ToggleButton.CheckedEvent, new RoutedEventHandler(OnNavItemChecked));
+        Nav.AddHandler(System.Windows.Controls.Primitives.ButtonBase.ClickEvent, new RoutedEventHandler(OnNavItemClicked));
         Unloaded += (_, _) => BreakpointDescriptor.RemoveValueChanged(Root, OnBreakpointChanged);
         Apply();
     }
 
     /// <summary>True while the sidebar shows as the 52 DIP icon rail.</summary>
     public bool IsRail { get => (bool)GetValue(IsRailProperty); private set => SetValue(IsRailProperty, value); }
-
-    /// <summary>True when something needs attention (blood groups below their minimum): the bell shows a red dot.</summary>
-    public bool HasAttention { get => (bool)GetValue(HasAttentionProperty); private set => SetValue(HasAttentionProperty, value); }
-
-    /// <summary>The bell's name and tooltip: what needs attention, and that it opens the dashboard.</summary>
-    public string NotificationsName { get => (string)GetValue(NotificationsNameProperty); private set => SetValue(NotificationsNameProperty, value); }
 
     /// <summary>The current breakpoint of the shell (for tests).</summary>
     public Breakpoint Breakpoint => Responsive.GetBreakpoint(Root);
@@ -76,7 +67,7 @@ public partial class ShellView : UserControl
 
     private void OnModelChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(ShellViewModel.IsNavCollapsed) or nameof(ShellViewModel.LowStockGroups))
+        if (e.PropertyName is nameof(ShellViewModel.IsNavCollapsed))
         {
             Apply();
         }
@@ -108,18 +99,14 @@ public partial class ShellView : UserControl
         SearchField.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
         CompactSearch.Visibility = compact ? Visibility.Visible : Visibility.Collapsed;
         NotificationsButton.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+        if (compact)
+        {
+            _model?.Notifications.Close(); // the bell is hidden in a compact window, and a flyout never hangs under a control that is not there
+        }
+
         AvatarButton.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
         ApplyPageMargin();
         LegacyTitle.Margin = compact ? ThemeTokens.Inset("Inset.L22T18R16") : ThemeTokens.Inset("Inset.L32T24R32");
-
-        var low = _model?.LowStockGroups ?? 0;
-        HasAttention = low > 0;
-        NotificationsName = low switch
-        {
-            0 => "Notifications: nothing needs attention",
-            1 => "Notifications: 1 blood group is below its minimum. Opens the dashboard.",
-            _ => $"Notifications: {low} blood groups are below their minimum. Opens the dashboard.",
-        };
     }
 
     /// <summary>A page that draws its own page header (the direction A PageHeader) hides the shell's plain title.</summary>
@@ -154,13 +141,50 @@ public partial class ShellView : UserControl
         }
     }
 
-    /// <summary>The bell opens the dashboard, whose "Needs attention" list holds what the dot announces.</summary>
-    private void OnNotificationsClick(object sender, RoutedEventArgs e) => _model?.NavigateToIndexCommand.Execute(1);
+    private NavItem? _clickedItem;
+
+    /// <summary>A click (pointer, Space or Enter) runs the item's command itself; remembered so <see cref="OnNavItemChecked"/> does not navigate a second time.</summary>
+    private void OnNavItemClicked(object sender, RoutedEventArgs e)
+    {
+        if (e.OriginalSource is RadioButton { DataContext: NavItem item })
+        {
+            _clickedItem = item;
+            _ = Dispatcher.BeginInvoke(DispatcherPriority.Background, () => _clickedItem = null);
+        }
+    }
+
+    /// <summary>
+    /// A sidebar item selected without a click navigates too. UI Automation's Select (a screen reader's or a voice-control tool's way to choose a radio
+    /// button) only checks the button and raises no click, so without this the item looked chosen while the page stayed where it was.
+    /// </summary>
+    private void OnNavItemChecked(object sender, RoutedEventArgs e)
+    {
+        if (e.OriginalSource is not RadioButton { DataContext: NavItem item } button || item.IsSelected)
+        {
+            return;
+        }
+
+        _ = Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
+        {
+            if (!ReferenceEquals(_clickedItem, item) && button.IsChecked == true && !item.IsSelected && _model?.NavigateCommand.CanExecute(item) == true)
+            {
+                _model.NavigateCommand.Execute(item);
+            }
+        });
+    }
 
     /// <summary>F6 and Shift+F6 cycle the regions: title bar, sidebar, page (and the palette's own field while it is open).</summary>
     private void OnPreviewKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key != Key.F6 || Palette.IsOpen)
+        if (e.Key == Key.Escape && Notifications.IsOpen)
+        {
+            // Esc closes the notifications wherever the focus is (in the flyout, or still on the bell).
+            _model?.Notifications.Close();
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key != Key.F6 || Palette.IsOpen || Notifications.IsOpen)
         {
             return;
         }

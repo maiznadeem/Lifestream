@@ -214,6 +214,7 @@ public sealed class ShellRenderTests
             var png = host.Capture();
             System.IO.Directory.CreateDirectory(RenderTests.Directory);
             File.WriteAllBytes(Path.Combine(RenderTests.Directory, $"palette-{theme}-{width}x{height}.png"), png);
+            TextChecks.Check(host, $"palette-{theme}-{width}x{height}"); // the palette's own text, over the dashboard
             var palette = (CommandPaletteView)view.FindName("Palette");
             var surface = (FrameworkElement)palette.FindName("Surface");
             var rows = host.All<ListBoxItem>().Where(i => i.IsVisible && palette.IsAncestorOf(i)).Select(i => Hosted.BoundsOf(i, host.Element)).ToList();

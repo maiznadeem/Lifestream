@@ -28,9 +28,10 @@ Store as an MSIX. Nothing here is submitted automatically; the Store listing nee
 
 ## Every release
 
-1. Push the tag (`git tag v2.1.0 && git push origin v2.1.0`). `release.yml` publishes the app, scans it, builds the GitHub release
-   and, when the variables above exist, the workflow artifact **store-msix** (`Lifestream-2.1.0-x64.msix`).
-2. Download the artifact from the workflow run page (Actions > Release > the run > Artifacts).
+1. Make the release on the release PC: `tools/release-local.ps1 -Version 2.1.1` publishes the app, scans it and builds the GitHub
+   release (it creates the tag `v2.1.1`). It leaves the publish folder in its work folder.
+2. Build the Store package from that publish folder: `packaging/store/build-msix.ps1 -PublishDir <work>/publish -Version 2.1.1 -OutputDir <folder>`
+   with the three variables above set (`Lifestream-2.1.1-x64.msix`). The **Release** workflow still does both when run by hand.
 3. Screenshots: use the committed `packaging/store/screenshots/` (check `screenshots.json` and the images are from this
    release's look). To regenerate them, run `tools/generate-screenshots.ps1` on a machine with a local SQL Server (it needs
    one at `localhost`, which a GitHub-hosted runner does not have, so the **Screenshots** workflow runs only by hand) and commit the result.

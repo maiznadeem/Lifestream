@@ -77,11 +77,20 @@ public static class StaHost
         var deadline = DateTime.UtcNow.AddMilliseconds(milliseconds);
         while (DateTime.UtcNow < deadline)
         {
-            var frame = new DispatcherFrame();
-            Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, () => frame.Continue = false);
-            Dispatcher.PushFrame(frame);
+            Drain();
             Thread.Sleep(16);
         }
+    }
+
+    /// <summary>
+    /// Runs what is queued on the dispatcher, down to idle, once. No time has to pass, so a test can put "the queued work ran" before or after another event on
+    /// purpose (the rows of a list arriving), where <see cref="Settle"/> leaves that order to the machine.
+    /// </summary>
+    public static void Drain()
+    {
+        var frame = new DispatcherFrame();
+        Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, () => frame.Continue = false);
+        Dispatcher.PushFrame(frame);
     }
 
     public static int CountDistinctColours(byte[] png) => Pixels(png).Distinct().Count();

@@ -11,11 +11,22 @@ namespace Lifestream.Desktop.Chrome;
 /// <summary>
 /// The one window chrome (SHELL-19), reused by every window (login, main, dialogs). It draws its own 44 DIP title bar (direction A): edge and
 /// corner resizing (6 DIP border), Snap Layouts on the maximize button, double-click maximize and Alt+Space (the system menu), a restore glyph
-/// while maximized, maximized insets from the real resize-frame thickness (nothing is clipped), and 46 x 44 caption buttons whose click area
+/// while maximized, maximized insets from the real frame thickness (nothing is clipped), and 46 x 44 caption buttons whose click area
 /// equals their highlight because the maximize button's hit test is answered from the button's own bounds. On Windows 11 the frame gets Mica
 /// (the Brush.Mica fallback paints it elsewhere), DWM's round corners and a dark frame in the dark theme. A window either shows the default
 /// caption (mark and title) or, with <see cref="ExtendsContentIntoTitleBar"/>, lets its content draw the title bar (the main window's search
 /// and account, the sign-in screen) with only the caption buttons on top.
+/// <para>
+/// The window keeps its caption and system-menu styles (the system menu, Snap and the taskbar depend on them), so Windows still has caption buttons
+/// of its own for it. They are drawn in the top part of the frame and show through wherever the window is transparent there, which with Mica is the
+/// whole title bar. So the frame is never extended from the top: for Mica it is extended from the bottom over the whole window
+/// (<c>Chrome.GlassFrameMica</c>), which leaves Windows no title bar to draw. Only <c>tests/.../RealWindows</c> can see this: an off-screen render
+/// has no window.
+/// </para>
+/// <para>
+/// A transparent window (<see cref="Window.AllowsTransparency"/>: the dialogs, which draw their own surface and shadow) asks Windows for no frame
+/// at all: no round corners, no border and no extended frame, or Windows outlines the whole window rectangle, shadow room included.
+/// </para>
 /// </summary>
 [TemplatePart(Name = "PART_Root", Type = typeof(Border))]
 [TemplatePart(Name = "PART_Minimize", Type = typeof(Button))]
@@ -36,7 +47,7 @@ public class ChromeWindow : Window
         DependencyProperty.Register(nameof(ExtendsContentIntoTitleBar), typeof(bool), typeof(ChromeWindow), new FrameworkPropertyMetadata(false));
 
     public static readonly DependencyProperty TitleBarHeightProperty =
-        DependencyProperty.Register(nameof(TitleBarHeight), typeof(double), typeof(ChromeWindow), new FrameworkPropertyMetadata(CaptionHeight, (d, e) => ((ChromeWindow)d).OnTitleBarHeightChanged((double)e.NewValue)));
+        DependencyProperty.Register(nameof(TitleBarHeight), typeof(double), typeof(ChromeWindow), new FrameworkPropertyMetadata(CaptionHeight, (d, _) => ((ChromeWindow)d).OnTitleBarHeightChanged()));
 
     private static readonly DependencyPropertyKey IsMicaActivePropertyKey =
         DependencyProperty.RegisterReadOnly(nameof(IsMicaActive), typeof(bool), typeof(ChromeWindow), new FrameworkPropertyMetadata(false));
@@ -56,6 +67,7 @@ public class ChromeWindow : Window
     private const int WmNcLeftButtonDown = 0x00A1;
     private const int WmNcLeftButtonUp = 0x00A2;
     private const int WmNcMouseLeave = 0x02A2;
+    private const int HitClient = 1;
     private const int HitMaxButton = 9;
 
     /// <summary>Opens the system menu (Alt+Space), which the custom caption would otherwise lose.</summary>
@@ -64,6 +76,7 @@ public class ChromeWindow : Window
     private readonly WindowChrome _chrome;
     private FrameworkElement? _maximizeButton;
     private Border? _root;
+    private bool _laidOutMaximized;
 
     public ChromeWindow()
     {
@@ -122,11 +135,25 @@ public class ChromeWindow : Window
 
     protected override void OnSourceInitialized(EventArgs e)
     {
+        if (AllowsTransparency)
+        {
+            // Before the window chrome sees the window: a frame it has extended once stays extended.
+            _chrome.GlassFrameThickness = new Thickness(0);
+        }
+
         base.OnSourceInitialized(e);
         if (PresentationSource.FromVisual(this) is HwndSource source)
         {
             source.AddHook(WindowProc);
-            Dwm.SetRoundCorners(source.Handle);
+            if (AllowsTransparency)
+            {
+                Dwm.SetNoFrame(source.Handle);
+            }
+            else
+            {
+                Dwm.SetRoundCorners(source.Handle);
+            }
+
             ApplyFrame(source);
         }
 
@@ -136,25 +163,46 @@ public class ChromeWindow : Window
         }
     }
 
-    private void UpdateForState()
+    protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
     {
+        base.OnDpiChanged(oldDpi, newDpi);
+        ApplyStateLayout(_laidOutMaximized);
+    }
+
+    private void UpdateForState() => ApplyStateLayout(WindowState == WindowState.Maximized);
+
+    /// <summary>
+    /// Lays the window out as restored or as maximized. Separate from <see cref="Window.WindowState"/> so the maximized layout can be checked in a
+    /// window that is not on a monitor (tests/.../RealWindows): the same code runs when the state really changes.
+    /// </summary>
+    internal void ApplyStateLayout(bool maximized)
+    {
+        _laidOutMaximized = maximized;
+
+        // A maximized window extends past the screen by the resize frame plus the padded border on every side; pull the content back inside by
+        // exactly that, so no edge is clipped and nothing is left over.
+        var inset = maximized ? Dwm.MaximizedOverhang(VisualTreeHelper.GetDpi(this).PixelsPerInchX) : new Thickness(0);
+
+        // The drag area is measured from the window's own top edge, which is off-screen by the inset while maximized.
+        _chrome.CaptionHeight = TitleBarHeight + inset.Top;
         if (_root is null)
         {
             return;
         }
 
-        // A maximized window extends past the screen by the resize frame plus the padded border on every side; pull the content back inside by
-        // exactly that (WindowResizeBorderThickness is SM_CXSIZEFRAME + SM_CXPADDEDBORDER in DIPs), so no edge is clipped and nothing is left over.
-        var maximized = WindowState == WindowState.Maximized;
-        _root.Padding = maximized ? MaximizedInset : new Thickness(0);
-        // Windows 11 draws the frame's 1 px border and round corners itself; Windows 10 gets a 1 px stroke from us while restored.
-        _root.BorderThickness = maximized || Dwm.DrawsRoundCorners ? new Thickness(0) : ThemeTokens.Inset("Pad.1");
+        _root.Padding = inset;
+        // Windows 11 draws the frame's 1 px border and round corners itself; Windows 10 gets a 1 px stroke from us while restored. A transparent
+        // window draws its own surface, so it never gets one.
+        _root.BorderThickness = maximized || AllowsTransparency || Dwm.DrawsRoundCorners ? new Thickness(0) : ThemeTokens.Inset("Pad.1");
     }
 
-    /// <summary>How far a maximized window reaches past the screen on each side (the resize frame plus the padded border).</summary>
-    public static Thickness MaximizedInset => SystemParameters.WindowResizeBorderThickness;
+    /// <summary>
+    /// How far a maximized window reaches past the screen on each side (the resize frame plus the padded border), at the system's DPI. A window
+    /// uses the value for its own monitor's DPI.
+    /// </summary>
+    public static Thickness MaximizedInset => Dwm.MaximizedOverhang(Dwm.SystemDpi);
 
-    private void OnTitleBarHeightChanged(double height) => _chrome.CaptionHeight = height;
+    private void OnTitleBarHeightChanged() => ApplyStateLayout(_laidOutMaximized);
 
     private void OnThemeChanged(object? sender, EventArgs e)
     {
@@ -168,14 +216,15 @@ public class ChromeWindow : Window
     private void ApplyFrame(HwndSource source)
     {
         Dwm.SetDarkFrame(source.Handle, ThemeService.IsDark);
-        if (IsDialog || IsMicaActive)
+        if (IsDialog || AllowsTransparency || IsMicaActive)
         {
             return;
         }
 
-        if (Dwm.SetMica(source.Handle, on: true))
+        if (Dwm.SetMica(source.Handle))
         {
-            // Mica shows through wherever the window paints Brush.Mica: the window surface and this window's copy of the brush become transparent.
+            // Mica shows through wherever the window paints Brush.Mica: the window surface and this window's copy of the brush become transparent,
+            // and the frame is extended under all of it, from the bottom (never from the top: see the class remarks).
             IsMicaActive = true;
             source.CompositionTarget.BackgroundColor = Colors.Transparent;
             _chrome.GlassFrameThickness = ThemeTokens.Inset("Chrome.GlassFrameMica");
@@ -187,17 +236,29 @@ public class ChromeWindow : Window
     {
         switch (msg)
         {
-            case WmNcHitTest when _maximizeButton is { IsVisible: true } && !IsDialog:
-                if (IsOverMaximize(lParam))
+            case WmNcHitTest:
+                if (_maximizeButton is { IsVisible: true } && !IsDialog)
                 {
-                    // Answering HTMAXBUTTON is what makes Windows 11 show the Snap Layouts flyout.
-                    IsMaximizeHovered = true;
-                    handled = true;
-                    return new IntPtr(HitMaxButton);
+                    if (IsOverMaximize(lParam))
+                    {
+                        // Answering HTMAXBUTTON is what makes Windows 11 show the Snap Layouts flyout.
+                        IsMaximizeHovered = true;
+                        handled = true;
+                        return new IntPtr(HitMaxButton);
+                    }
+
+                    IsMaximizeHovered = false;
+                    IsMaximizePressed = false;
                 }
 
-                IsMaximizeHovered = false;
-                IsMaximizePressed = false;
+                if (IsJustUnderTitleBar(lParam))
+                {
+                    // The window chrome adds its resize border to the height of the drag area, so the first rows of the content under the
+                    // title bar would drag the window (and not click). The drag area is the title bar and nothing more.
+                    handled = true;
+                    return new IntPtr(HitClient);
+                }
+
                 break;
             case WmNcLeftButtonDown when wParam.ToInt32() == HitMaxButton:
                 IsMaximizePressed = true;
@@ -225,12 +286,17 @@ public class ChromeWindow : Window
         return IntPtr.Zero;
     }
 
-    private bool IsOverMaximize(IntPtr lParam)
+    private bool IsOverMaximize(IntPtr lParam) => IsWithinMaximize(_maximizeButton!.PointFromScreen(ScreenPoint(lParam)));
+
+    /// <summary>True for a point in the rows right under the title bar that the window chrome would still treat as the drag area (not on the left or right resize border).</summary>
+    private bool IsJustUnderTitleBar(IntPtr lParam)
     {
-        var x = (short)(lParam.ToInt64() & 0xFFFF);
-        var y = (short)((lParam.ToInt64() >> 16) & 0xFFFF);
-        return IsWithinMaximize(_maximizeButton!.PointFromScreen(new Point(x, y)));
+        var point = PointFromScreen(ScreenPoint(lParam));
+        var border = _chrome.ResizeBorderThickness;
+        return point.Y >= _chrome.CaptionHeight && point.Y < _chrome.CaptionHeight + border.Top && point.X >= border.Left && point.X < ActualWidth - border.Right;
     }
+
+    private static Point ScreenPoint(IntPtr lParam) => new((short)(lParam.ToInt64() & 0xFFFF), (short)((lParam.ToInt64() >> 16) & 0xFFFF));
 
     /// <summary>True when a point (in the maximize button's own coordinates) is inside the button: the same rectangle that is highlighted.</summary>
     internal bool IsWithinMaximize(Point local) =>

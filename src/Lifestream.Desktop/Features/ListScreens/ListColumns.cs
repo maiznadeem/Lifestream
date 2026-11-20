@@ -87,8 +87,8 @@ public static class ListColumns
     }
 
     /// <summary>
-    /// WPF's DataGrid takes width from fixed columns, down to their minimum, while the table is too narrow for them (a passing layout, the side panel opening), and
-    /// gives it back only to star columns. Once the table is laid out, each fixed column gets the width it was declared with back.
+    /// Once the table is laid out, each fixed column gets the width it was declared with back. (The grid itself cannot make one narrower: its width is also its
+    /// minimum, <see cref="Lifestream.Desktop.Controls.LifestreamDataGrid"/>. This undoes a width set since, by dragging a column's edge.)
     /// </summary>
     public static void RestoreWidths(DataGrid grid)
     {
@@ -196,6 +196,17 @@ public static class ListColumns
             return;
         }
 
+        // A grouped grid does not know its own width until its first row exists (WPF finds the scroll viewer through a row), so what it shared out before
+        // then, it shared out of nothing: the detail columns sit at their minimums. The first fit with rows shares the room again, whatever queued it, so the
+        // table looks the same whether the rows arrive before or after the work the first layout queued (from a real server, always after).
+        var hasRows = grid.HasItems;
+        if (hasRows && !(bool)grid.GetValue(SharedWithRowsProperty))
+        {
+            shareAgain = true;
+        }
+
+        grid.SetValue(SharedWithRowsProperty, hasRows);
+
         var room = grid.ActualWidth - grid.BorderThickness.Left - grid.BorderThickness.Right - grid.Padding.Left - grid.Padding.Right;
         for (var pass = 0; pass < grid.Columns.Count; pass++)
         {
@@ -260,6 +271,10 @@ public static class ListColumns
             }
         }
     }
+
+    /// <summary>True once the columns were fitted while the grid had rows (see <see cref="Fit"/>).</summary>
+    private static readonly DependencyProperty SharedWithRowsProperty =
+        DependencyProperty.RegisterAttached("SharedWithRows", typeof(bool), typeof(ListColumns), new PropertyMetadata(false));
 
     /// <summary>On a name column that is filling the table's spare width for now: what its names needed when it started to (NaN otherwise).</summary>
     private static readonly DependencyProperty StretchedNeedProperty =

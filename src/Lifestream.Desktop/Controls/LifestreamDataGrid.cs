@@ -14,7 +14,7 @@ namespace Lifestream.Desktop.Controls;
 /// </summary>
 public sealed class LifestreamDataGrid : DataGrid
 {
-    /// <summary>The narrowest a column may get.</summary>
+    /// <summary>The narrowest a column that sizes to its content or shares the room may get. A column declared with a width in DIP has that width, also below this.</summary>
     public const double MinimumColumnWidth = 64;
 
     public static readonly DependencyProperty SortCommandProperty =
@@ -154,12 +154,42 @@ public sealed class LifestreamDataGrid : DataGrid
         }
     }
 
+    protected override void OnInitialized(EventArgs e)
+    {
+        base.OnInitialized(e);
+        KeepDeclaredWidths(); // before the grid works out its columns for the first time
+    }
+
+    /// <summary>
+    /// A column declared with a width in DIP keeps it: the width is also its minimum, so the grid cannot take width from it. WPF's DataGrid takes width from
+    /// fixed columns, down to their minimum, whenever it believes the table is too narrow, and gives it back only to star columns. A grouped grid believes
+    /// that until its first row exists (it finds its scroll viewer, and so its own width, through a row), so the Time column of Appointments was shown at
+    /// the grid's minimum of 64 and "09:00" ended in an ellipsis whenever the rows arrived after the first layout, as they do from a real server.
+    /// </summary>
+    private void KeepDeclaredWidths()
+    {
+        foreach (var column in Columns)
+        {
+            // Set on the column itself, so it also holds below the grid's minimum (a 60 DIP column was shown at 64 while the layout counted it as 60).
+            if (column.Width.IsAbsolute && column.Width.Value <= column.MaxWidth
+                && (column.ReadLocalValue(DataGridColumn.MinWidthProperty) is not double set || set < column.Width.Value))
+            {
+                column.MinWidth = column.Width.Value;
+            }
+        }
+    }
+
     private void ApplyColumnDefaults()
     {
+        if (!_defaultsApplied)
+        {
+            KeepDeclaredWidths(); // a grid built in code gets its columns after it is initialised
+        }
+
         _defaultsApplied = Columns.Count > 0;
         foreach (var column in Columns)
         {
-            if (column.MinWidth < MinimumColumnWidth)
+            if (column.MinWidth < MinimumColumnWidth && !column.Width.IsAbsolute)
             {
                 column.MinWidth = MinimumColumnWidth;
             }
@@ -223,17 +253,26 @@ public static class TruncationTooltip
             return false;
         }
 
-        var formatted = new System.Windows.Media.FormattedText(
-            block.Text,
-            System.Globalization.CultureInfo.CurrentUICulture,
-            block.FlowDirection,
-            new System.Windows.Media.Typeface(block.FontFamily, block.FontStyle, block.FontWeight, block.FontStretch),
-            block.FontSize,
-            System.Windows.Media.Brushes.Black,
-            null,
-            System.Windows.Media.TextOptions.GetTextFormattingMode(block), // as the block itself is drawn: Display in the app's windows
-            System.Windows.Media.VisualTreeHelper.GetDpi(block).PixelsPerDip);
-        return formatted.WidthIncludingTrailingWhitespace > block.ActualWidth + 0.5;
+        // The same text in a block of its own, with all the width it wants and everything that decides its width taken from the block: the font, the
+        // formatting mode, and the typography (kerning is off in the app, Theme/TextDefaults.cs; a numeric column has tabular figures). FormattedText
+        // cannot be given a typography, so it measured kerned text against a block that draws it unkerned.
+        var whole = new TextBlock
+        {
+            Text = block.Text,
+            FontFamily = block.FontFamily,
+            FontStyle = block.FontStyle,
+            FontWeight = block.FontWeight,
+            FontStretch = block.FontStretch,
+            FontSize = block.FontSize,
+            FlowDirection = block.FlowDirection,
+            TextWrapping = TextWrapping.NoWrap,
+        };
+        System.Windows.Media.TextOptions.SetTextFormattingMode(whole, System.Windows.Media.TextOptions.GetTextFormattingMode(block));
+        System.Windows.Documents.Typography.SetKerning(whole, System.Windows.Documents.Typography.GetKerning(block));
+        System.Windows.Documents.Typography.SetNumeralAlignment(whole, System.Windows.Documents.Typography.GetNumeralAlignment(block));
+        System.Windows.Media.VisualTreeHelper.SetRootDpi(whole, System.Windows.Media.VisualTreeHelper.GetDpi(block));
+        whole.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        return whole.DesiredSize.Width > block.ActualWidth + 0.5;
     }
 
     /// <summary>The whole text of a block, also when it sits in inlines (a Hyperlink in a name cell), which the Text property does not report to a binding.</summary>

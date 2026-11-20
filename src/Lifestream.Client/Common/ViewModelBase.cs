@@ -260,6 +260,7 @@ public abstract partial class ViewModelBase : ObservableObject, IDisposable
         StartTimeout(cts);
         StartWakingWatch(cts);
 
+        var loaded = false;
         try
         {
             await Operations.RunAsync(ct => FetchAsync(ct), cts.Token).ConfigureAwait(true);
@@ -268,8 +269,12 @@ public abstract partial class ViewModelBase : ObservableObject, IDisposable
                 return;
             }
 
+            // The server has answered: from here on nothing may report "the server is taking too long", however long showing the answer takes.
+            _timeoutTimer?.Dispose();
+            _timeoutTimer = null;
             Apply();
             State = HasNoData ? LoadState.Empty : LoadState.Ready;
+            loaded = true;
         }
         catch (OperationCanceledException)
         {
@@ -301,6 +306,20 @@ public abstract partial class ViewModelBase : ObservableObject, IDisposable
 
             cts.Dispose();
         }
+
+        if (loaded)
+        {
+            OnLoaded();
+        }
+    }
+
+    /// <summary>
+    /// Called on the original (UI) context when a load has finished and the screen shows its data (Ready or Empty), after the load's timers have
+    /// stopped. Anything that waits on the person, a dialog above all, starts here and never in <see cref="Apply"/>: a modal dialog opened from
+    /// <see cref="Apply"/> holds the load open behind it, and the load's time limit then reports a server that had long answered.
+    /// </summary>
+    protected virtual void OnLoaded()
+    {
     }
 
     private bool _timedOut;

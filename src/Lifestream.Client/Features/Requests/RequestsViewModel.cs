@@ -116,6 +116,7 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
             {
                 _fulfilWhenOpen = null;
                 FulfilCommand.CanExecuteChanged -= OnFulfilCanExecuteChanged;
+                _fulfilSettled?.TrySetResult();
             }
         };
     }
@@ -242,6 +243,14 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
     private bool _openNew;
 
     private int? _fulfilWhenOpen;
+
+    private TaskCompletionSource? _fulfilSettled;
+
+    /// <summary>
+    /// Completes when the fulfil asked for by another screen has opened its step (<see cref="Fulfilment"/> is set) or will not open (the request is closed or has
+    /// none of its group in stock, its detail did not load, or the user chose another request) (for tests).
+    /// </summary>
+    internal Task PendingFulfil { get; private set; } = Task.CompletedTask;
 
     /// <summary>True once a load has put the stock in place (or found it could not be read): a fulfil asked for by another screen waits for it.</summary>
     private bool _stockRead;
@@ -421,6 +430,9 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
 
         if (parameter is RelatedRecord { Kind: RecordKind.Request } fulfil)
         {
+            _fulfilSettled?.TrySetResult(); // an earlier wish is replaced
+            _fulfilSettled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            PendingFulfil = _fulfilSettled.Task;
             _fulfilWhenOpen = fulfil.Id;
             ReceiveParameter(new ListPrefilter(RecordId: fulfil.Id));
             _ = FulfilOnceOpenAsync(fulfil.Id);
@@ -450,19 +462,22 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
         FulfilCommand.CanExecuteChanged -= OnFulfilCanExecuteChanged;
         if (_fulfilWhenOpen is not { } id || Detail is not { } detail || detail.Id != id)
         {
+            _fulfilSettled?.TrySetResult(); // no wish, or no detail to open it on (it did not load)
             return;
         }
 
         if (detail.Status != RequestStatus.Pending || FulfilHoldReason is not null)
         {
             _fulfilWhenOpen = null; // closed, or nothing in stock to fulfil it with (the panel says why)
+            _fulfilSettled?.TrySetResult();
             return;
         }
 
         if (_stockRead && FulfilCommand.CanExecute(null))
         {
             _fulfilWhenOpen = null;
-            FulfilCommand.Execute(null);
+            FulfilCommand.Execute(null); // the step is in the panel when this returns (Fulfilment is set before the step's first await)
+            _fulfilSettled?.TrySetResult();
         }
         else
         {

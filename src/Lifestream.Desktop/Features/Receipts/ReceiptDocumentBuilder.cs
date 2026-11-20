@@ -17,7 +17,7 @@ public static class ReceiptDocumentBuilder
         ArgumentNullException.ThrowIfNull(receipt);
         var document = new FlowDocument
         {
-            FontFamily = ThemeLoader.Resources["Font.Family"] as FontFamily ?? throw new InvalidOperationException("The theme has no Font.Family resource."), // the bundled Inter, on screen and in print (SHELL-26)
+            FontFamily = ThemeLoader.Resources["Font.Family"] as FontFamily ?? throw new InvalidOperationException("The theme has no Font.Family resource."), // the app's bundled font, on screen and in print (SHELL-26)
             FontSize = 14,
             Foreground = Brushes.Black,
             Background = Brushes.White,
