@@ -280,6 +280,7 @@ public partial class DashboardView : UserControl
                 TicksPaint = null,
                 MinStep = 1,
                 ForceStepToMin = true,
+                MaxLimit = last >= 0 ? last + RoomAfterLastMonth(Math.Max(EndValueText(donated[last]).Length, EndValueText(issued[last]).Length)) : null,
             },
         ];
         DonationsChart.YAxes =
@@ -298,6 +299,15 @@ public partial class DashboardView : UserControl
         DonationsChart.TooltipPosition = TooltipPosition.Hidden;
     }
 
+    private static string EndValueText(double value) => value.ToString("N0", CultureInfo.CurrentCulture);
+
+    /// <summary>
+    /// How far the month axis runs on past the last month, in months, so the value written beside the last point fits: the chart cuts a data label at the edge of
+    /// the plot area, and by itself the axis leaves half a month there, which in the smallest window (about 40 px a month) cut a number of two digits in half.
+    /// The gap before the value and each of its characters take about 0.3 and 0.2 of a month at that size; a wider window only leaves more room.
+    /// </summary>
+    internal static double RoomAfterLastMonth(int endValueCharacters) => 0.3 + (0.2 * Math.Max(1, endValueCharacters));
+
     private static ScatterSeries<ObservablePoint> EndMarker(int index, int value, SKColor color, SKColor fill) => new()
     {
         Values = [new ObservablePoint(index, value)],
@@ -307,7 +317,7 @@ public partial class DashboardView : UserControl
         DataLabelsPaint = new SolidColorPaint(color),
         DataLabelsSize = 11.5,
         DataLabelsPosition = DataLabelsPosition.Right,
-        DataLabelsFormatter = point => point.Coordinate.PrimaryValue.ToString("N0", CultureInfo.CurrentCulture),
+        DataLabelsFormatter = point => EndValueText(point.Coordinate.PrimaryValue),
         AnimationsSpeed = TimeSpan.Zero,
         IsHoverable = false,
     };
