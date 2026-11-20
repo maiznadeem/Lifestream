@@ -9,9 +9,9 @@ environment variables read by `main.bicepparam`.
 | Resource (resource group `Lifestream`) | Notes |
 |---|---|
 | Container Apps environment `lifestream-env` | Plain Consumption environment: Consumption profile only, **no virtual network**, no log destination (`appLogsConfiguration` omitted; Azure rejects the string `none`). |
-| Container app `lifestream-api` | External HTTPS only (port 8080, plain HTTP is redirected), min replicas 0, max 1, 0.25 vCPU / 0.5 GiB, startup probe `/healthz`, system-assigned identity, secret `jwt-signing-key`. |
+| Container app `lifestream-api` | External HTTPS only (port 8080, plain HTTP is redirected), min replicas 0, max 1, 0.5 vCPU / 1 GiB, cooldown 300 s, startup probe `/healthz` every second, system-assigned identity, secret `jwt-signing-key`. |
 | Container Apps job `lifestream-migrate` | Manual trigger only. Identity `lifestream-migrator` (user-assigned, no password). Secret `owner-admin-password`. |
-| SQL server `lifestream-server` and database `BloodBank` | Declared so the settings are code: free offer (`useFreeLimit`, `AutoPause`), auto-pause 60 min, Entra administrator, Entra-only switch, auditing, locks, backup policy. No firewall rule is declared: `sync-sql-firewall.ps1` owns them (see below). |
+| SQL server `lifestream-server` and database `BloodBank` | Declared so the settings are code: free offer (`useFreeLimit`, `AutoPause`; the offer pauses the database after 15 minutes without a session, which is fixed and not a setting), Entra administrator, Entra-only switch, auditing, locks, backup policy. No firewall rule is declared: `sync-sql-firewall.ps1` owns them (see below). |
 | `lifestream-audit` Log Analytics workspace | Receives SQL sign-in and schema-change audit events. 31-day retention, daily cap 0.1 GB, so it stays inside the free 5 GB a month. |
 | `lifestream-deployer` identity | GitHub Actions signs in as this identity through an OIDC federated credential for `maiznadeem/lifestream` branch `master`. Contributor on the resource group only. No secret. |
 | Budget `lifestream-monthly` | 1 per month, email alerts at 50% and 100% actual. An alert does not stop spending; the design relies on scale-to-zero and the free offer for that. |
