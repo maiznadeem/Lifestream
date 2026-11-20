@@ -112,6 +112,13 @@ public sealed class WpfWindowHost : IWindowHost
             return;
         }
 
+        if (OffscreenMode.Enabled)
+        {
+            OffscreenMode.Prepare(_login);
+            _login.Show();
+            return;
+        }
+
         _login.Show();
         _login.Activate();
     }
@@ -138,6 +145,11 @@ public sealed class WpfWindowHost : IWindowHost
                 Application.Current.Shutdown();
             }
         };
+        if (OffscreenMode.Enabled)
+        {
+            OffscreenMode.Prepare(_main);
+        }
+
         _main.Show();
     }
 
