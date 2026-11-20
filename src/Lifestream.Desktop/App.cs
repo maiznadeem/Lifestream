@@ -40,6 +40,7 @@ public sealed class App : Application
     {
         base.OnStartup(e);
         LaunchProbe.Configure(e.Args);
+        OffscreenMode.Install(); // test-only (LIFESTREAM_OFFSCREEN=1): every window off the desktop, never activated
 
         // Order matters. The host (configuration, logging, DI) comes first, then the global exception handlers, and only then the theme and the
         // fonts: anything that goes wrong while loading them is logged and shown as a friendly dialog instead of ending the process unseen (SHELL-01).
@@ -70,6 +71,7 @@ public sealed class App : Application
 
         RecordPicker.ViewModelFactory = kind => new RecordPickerViewModel(provider.GetRequiredService<ILifestreamApiClient>(), kind, serverStatus: provider.GetRequiredService<IServerStatus>());
         provider.GetRequiredService<ISessionExpiredWatcher>().Start();
+        OffscreenAgent.Start(); // test-only, with OffscreenMode: clicks and keys inside the process for the real-app driver
         provider.GetRequiredService<IAppFlow>().Start();
     }
 
@@ -84,7 +86,7 @@ public sealed class App : Application
     {
         var address = configuration["Api:BaseAddress"] ?? throw new InvalidOperationException("Api:BaseAddress is not configured.");
         var version = Assembly.GetEntryAssembly()?.GetName().Version ?? new Version(2, 1, 0);
-        services.AddSingleton<IPreferencesStore>(_ => new FilePreferencesStore(FilePreferencesStore.DefaultPath));
+        services.AddSingleton<IPreferencesStore>(_ => new FilePreferencesStore(OffscreenMode.PreferencesPath ?? FilePreferencesStore.DefaultPath));
         services.AddLifestreamClient(new Uri(address), version);
         services.AddSingleton<IUiDispatcher>(_ => new WpfUiDispatcher(Current.Dispatcher));
         services.AddSingleton<IWindowHost, WpfWindowHost>();
