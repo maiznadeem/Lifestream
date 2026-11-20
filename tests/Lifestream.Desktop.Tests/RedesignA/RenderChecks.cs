@@ -14,6 +14,7 @@ namespace Lifestream.Desktop.Tests.RedesignA;
 /// a button's label lies inside its button, and a toolbar's chips inside the toolbar (a control wider than its place is cut by it);
 /// and in a standard or wide window nothing in a table is cut off (a name gets the room it needs before the detail columns share the rest) and no badge is
 /// squeezed. A compact window may end a long value in an ellipsis; its full text is then in a tooltip, which other tests check.
+/// Every render is also one typeface drawn one way (<see cref="TextChecks"/>).
 /// </summary>
 internal static class RenderChecks
 {
@@ -21,6 +22,7 @@ internal static class RenderChecks
     public static void Check(Hosted host, string name)
     {
         var problems = Problems(host, name);
+        problems.AddRange(TextChecks.Problems(TextChecks.Runs(host.Element)));
         Assert.True(problems.Count == 0, $"{name}: {string.Join(" | ", problems)}");
     }
 
