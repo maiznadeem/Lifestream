@@ -16,6 +16,7 @@ public sealed class PatientsViewModel : SortedRecordListViewModel<PatientListIte
     private readonly ILifestreamApiClient api;
     private readonly INavigationService navigation;
     private (int PatientId, IReadOnlyList<Contracts.Requests.RequestListItem>? Requests, int Total, IReadOnlyList<Contracts.Stock.StockItem>? Stock)? _fetchedWaiting;
+    private (int PatientId, int? Requests)? _fetchedRequests;
 
     public PatientsViewModel(ILifestreamApiClient api, IListViewStateStore states, IToastService toasts, IDialogService dialogs, INavigationService navigation, IUiDispatcher ui)
         : base(states, "patients", toasts, dialogs, ui)
@@ -111,7 +112,8 @@ public sealed class PatientsViewModel : SortedRecordListViewModel<PatientListIte
         OnPropertyChanged(nameof(OpenRequestsText));
     }
 
-    // The patient's open requests (needed first at the top) and the stock, side by side; either may fail without failing the panel.
+    // The patient's open requests (needed first at the top), the stock, and how many requests of any status the patient has on record, side by side; any may fail
+    // without failing the panel (an unknown number of requests leaves Delete to the server).
     protected override async Task<IReadOnlyList<DetailFact>> GetExtraFactsAsync(int id, CancellationToken ct)
     {
         var query = new Contracts.Requests.RequestQuery(PatientId: id, PageSize: WaitingLimit)
@@ -119,11 +121,14 @@ public sealed class PatientsViewModel : SortedRecordListViewModel<PatientListIte
             View = Contracts.Requests.RequestView.Open,
             UtcOffsetMinutes = (int)Clock.GetLocalNow().Offset.TotalMinutes,
         };
+        var allCall = api.GetRequestsAsync(new Contracts.Requests.RequestQuery(PatientId: id, PageSize: 1), ct); // every status; only the total is read
         var requestsCall = api.GetRequestsAsync(query, ct);
         var stockCall = api.GetStockAsync(ct);
         var requests = await requestsCall.ConfigureAwait(false);
         var stock = await stockCall.ConfigureAwait(false);
+        var all = await allCall.ConfigureAwait(false);
         _fetchedWaiting = (id, requests.IsOk ? requests.Value.Items : null, requests.IsOk ? requests.Value.Total : 0, stock.IsOk ? stock.Value : null);
+        _fetchedRequests = (id, all.IsOk ? all.Value.Total : null);
         return [];
     }
 
@@ -200,6 +205,18 @@ public sealed class PatientsViewModel : SortedRecordListViewModel<PatientListIte
     ];
 
     protected override Task<ApiResult> DeleteRecordAsync(int id, CancellationToken ct) => api.DeletePatientAsync(id, ct);
+
+    /// <summary>
+    /// A patient with a request on record (waiting, fulfilled or cancelled) can't be deleted: the server keeps every request and its receipt, and they point at the
+    /// patient. Delete is offered only for a patient with none (one added by mistake).
+    /// </summary>
+    protected override string? DeleteBlockOf(PatientDetail patient) =>
+        _fetchedRequests is { } fetched && fetched.PatientId == patient.Id && fetched.Requests is > 0
+            ? "A patient with requests on record can't be deleted: their history is kept."
+            : null;
+
+    protected override string DeleteRefusedText(string name) =>
+        $"Patient '{name}' can't be deleted: they have requests on record, and that history is kept. Nothing was changed.";
 
     protected override Task<ApiResult<PatientDetail>> RestoreAsync(PatientDetail d, CancellationToken ct) =>
         api.RestorePatientAsync(d.Id, ct);

@@ -58,7 +58,7 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
             OpenEditor(Detail);
             return Task.CompletedTask;
         }, () => Detail is not null && !IsEditing);
-        DeleteCommand = Command(_ => DeleteSelectedAsync(), () => Detail is { } record && !IsEditing && CanDelete(record), opensModal: true);
+        DeleteCommand = Command(_ => DeleteSelectedAsync(), () => Detail is { } record && !IsEditing && CanDelete(record) && DeleteBlockOf(record) is null, opensModal: true);
         RetryDetailCommand = Command(_ => LoadDetailAsync(_selectedId));
         CancelDetailCommand = Command(_ =>
         {
@@ -153,12 +153,19 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
     public partial TItem? SelectedItem { get; set; }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasDetail), nameof(ShowDetailSkeleton), nameof(HasDetailError), nameof(DetailTitle), nameof(IsDetailOpen))]
+    [NotifyPropertyChangedFor(nameof(HasDetail), nameof(ShowDetailSkeleton), nameof(HasDetailError), nameof(DetailTitle), nameof(IsDetailOpen), nameof(DeleteBlockedReason), nameof(ShowNoSelection))]
     public partial TDetail? Detail { get; set; }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasDetail), nameof(ShowDetailSkeleton), nameof(HasDetailError), nameof(IsDetailWaking), nameof(ShowWakingNotice), nameof(IsDetailOpen))]
+    [NotifyPropertyChangedFor(nameof(HasDetail), nameof(ShowDetailSkeleton), nameof(HasDetailError), nameof(IsDetailWaking), nameof(ShowWakingNotice), nameof(IsDetailOpen), nameof(ShowNoSelection))]
     public partial LoadState DetailState { get; set; } = LoadState.Ready;
+
+    /// <summary>
+    /// True while the detail pane has nothing to show (no record, no skeleton, no error): only then does it say "Select a donor to see their details." The pane can
+    /// show a record that has no row in the list (it left the list's view when it was fulfilled or booked for another day, or another screen opened it by id), so
+    /// the selected row does not decide this.
+    /// </summary>
+    public bool ShowNoSelection => Detail is null && DetailState == LoadState.Ready;
 
     /// <summary>
     /// True while the side panel has something to show: a selected record (loading, loaded or failed) or an open editor. Selecting nothing and closing the editor closes it
@@ -260,6 +267,28 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
     /// <summary>Whether the selected record may be deleted at all (the signed-in admin's own staff record may not).</summary>
     protected virtual bool CanDelete(TDetail detail) => true;
 
+    /// <summary>
+    /// Why the server will refuse to delete this record (other records point at it: a donor's appointments, a patient's requests), or null when it can be deleted or
+    /// the screen does not know. Delete is not offered while there is a reason; the "..." menu shows the reason under the disabled item.
+    /// </summary>
+    protected virtual string? DeleteBlockOf(TDetail detail) => null;
+
+    /// <summary>Why the selected record can't be deleted (<see cref="DeleteBlockOf"/>), or null: shown with the disabled Delete.</summary>
+    public string? DeleteBlockedReason => Detail is { } record ? DeleteBlockOf(record) : null;
+
+    /// <summary>
+    /// What to say when the server refuses a delete because other records point at the record (409): the screen could not know beforehand, or it changed since.
+    /// It says "deleted", why, and that the record is kept.
+    /// </summary>
+    protected virtual string DeleteRefusedText(string name) => $"{Capitalise(RecordType)} '{name}' can't be deleted because other records refer to it. Nothing was changed.";
+
+    /// <summary>Call when what <see cref="DeleteBlockOf"/> answers may have changed (the record's history has loaded).</summary>
+    protected void RaiseDeleteBlockChanged()
+    {
+        OnPropertyChanged(nameof(DeleteBlockedReason));
+        DeleteCommand.RaiseCanExecuteChanged();
+    }
+
     /// <summary>Whether a deleted record can be offered back with Undo; false for records the API cannot restore (staff).</summary>
     protected virtual bool SupportsUndo => true;
 
@@ -344,6 +373,9 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
         EditCommand.RaiseCanExecuteChanged();
         DeleteCommand.RaiseCanExecuteChanged();
     }
+
+    // The extra lines arrive with the record's history (a donor's appointments): whether it can be deleted is known from then on.
+    partial void OnDetailFactsChanged(IReadOnlyList<DetailFact> value) => RaiseDeleteBlockChanged();
 
     partial void OnEditorChanged(RecordEditorViewModel? value)
     {
@@ -541,6 +573,14 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
         if (!result.IsOk)
         {
             // The list stays exactly as it was; only a message says why.
+            if (result.Problem!.Code == ProblemCodes.Conflict)
+            {
+                // Other records point at it (the screen did not know, or it changed since): say so, and read the record again so Delete is no longer offered.
+                Toasts.Show(ToastKind.Error, DeleteRefusedText(name));
+                await LoadDetailAsync(id).ConfigureAwait(true);
+                return;
+            }
+
             Toasts.Show(ToastKind.Error, ProblemText.For(result.Problem!, RecordType, name));
             return;
         }
