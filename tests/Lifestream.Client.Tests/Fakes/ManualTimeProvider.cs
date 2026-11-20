@@ -15,14 +15,19 @@ public sealed class ManualTimeProvider(DateTimeOffset? start = null) : TimeProvi
     /// </summary>
     public long TimersFired => Interlocked.Read(ref _fired);
 
-    /// <summary>How many timers are waiting on this clock right now: none until the code under test has reached it.</summary>
-    public int TimersWaiting
+    /// <summary>
+    /// How many <c>Task.Delay(time, clock)</c> calls are waiting on this clock right now. Code that has reached such a delay (a retry that waits
+    /// before it asks again) has nothing to do until the clock is advanced, which is what a test needs to know before it advances it. A delay
+    /// is told from the other timers by its state: <c>Task.Delay</c> hands the clock the task it will complete
+    /// (ManualTimeProviderTests in the Client tests holds that this stays so).
+    /// </summary>
+    public int DelaysWaiting
     {
         get
         {
             lock (_gate)
             {
-                return _timers.Count;
+                return _timers.Count(t => t.IsDelay);
             }
         }
     }
@@ -81,6 +86,8 @@ public sealed class ManualTimeProvider(DateTimeOffset? start = null) : TimeProvi
         private long _period;
 
         public long Due { get; private set; } = long.MaxValue;
+
+        public bool IsDelay { get; } = state is Task;
 
         public bool Change(TimeSpan dueTime, TimeSpan period)
         {

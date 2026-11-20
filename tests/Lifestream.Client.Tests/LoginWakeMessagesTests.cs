@@ -15,12 +15,33 @@ namespace Lifestream.Client.Tests;
 /// </summary>
 public sealed class LoginWakeMessagesTests
 {
-    private sealed record Screen(LoginViewModel Vm, ManualTimeProvider Clock, ServerStatus Status, Rig Rig) : IDisposable
+    /// <summary>
+    /// One sign-in window of a test: its view model on a UI thread of its own, the manual clock everything waits on, and the operation the test
+    /// started (a sign-in, a readiness check).
+    /// </summary>
+    private sealed record Screen(LoginViewModel Vm, ManualTimeProvider Clock, ServerStatus Status, Rig Rig, TestUiThread Ui, HoldingServer? Holding) : IDisposable
     {
+        private Task? _operation;
+
+        /// <summary>Starts an operation of the view model on its UI thread, as a click or the window's appearing starts it.</summary>
+        public Task Start(Func<LoginViewModel, Task> operation) => _operation = Ui.Run(() => operation(Vm));
+
+        /// <summary>
+        /// True when the operation has nothing left to do but wait: it is over, or its call is waiting out a retry delay on the clock, or the
+        /// test's server is holding its request. False in between: while a call is on its way, and between the two rounds of the readiness
+        /// check, when the view model has been told the first round is over and has not sent the second yet.
+        /// </summary>
+        public bool Waiting => _operation is null || _operation.IsCompleted || Clock.DelaysWaiting > 0 || Holding is { Arrived: > 0 };
+
         public void Dispose()
         {
-            Vm.Dispose();
+            Ui.Run(() =>
+            {
+                Vm.Dispose();
+                return true;
+            });
             Rig.Dispose();
+            Ui.Dispose();
         }
     }
 
@@ -33,8 +54,9 @@ public sealed class LoginWakeMessagesTests
         var policy = (basePolicy ?? new WakePolicy()) with { Clock = clock };
         var http = new HttpClient(new WakeAwareHandler(policy, status, server)) { BaseAddress = new Uri("https://api.test/"), Timeout = Timeout.InfiniteTimeSpan };
         var inner = new LifestreamApiClient(http, rig.Session);
-        var vm = new LoginViewModel(ScopedApiClient.Wrap(inner, policy, strict: true), rig.Session, rig.Get<IAppFlow>(), status) { Username = "u", Password = TestSecrets.P, Clock = clock };
-        return new Screen(vm, clock, status, rig);
+        var ui = new TestUiThread();
+        var vm = ui.Run(() => new LoginViewModel(ScopedApiClient.Wrap(inner, policy, strict: true), rig.Session, rig.Get<IAppFlow>(), status) { Username = "u", Password = TestSecrets.P, Clock = clock });
+        return new Screen(vm, clock, status, rig, ui, server as HoldingServer);
     }
 
     private static async Task WaitForAsync(Func<bool> condition)
@@ -48,32 +70,44 @@ public sealed class LoginWakeMessagesTests
     }
 
     /// <summary>
-    /// Waits until an operation that was just started has reached the clock (the handler puts its waking timer and its budget there before its
-    /// first attempt) or is over already (an answer that needs no waiting), and gives its first attempt the same real moment a step used to
-    /// give. Before this, the first step of the clock went ahead of an operation that had not started counting yet.
+    /// Waits until the screen has done what it was woken to do: the operation is waiting again (<see cref="Screen.Waiting"/>) and the view
+    /// model's UI thread has run everything that was posted to it. Both are the work's own signals, so this takes as long as the work takes
+    /// and no longer: a fixed pause instead was once too short (on a 4-processor Linux runner the second round of the readiness check had
+    /// not been sent when the test went on, the clock had nothing due, and the test ran it to its 400th second). Twice: what the UI thread
+    /// ran may itself have ended a wait or started the next one.
     /// </summary>
-    private static async Task StartedAsync(ManualTimeProvider clock, Task operation)
+    private static async Task SettledAsync(Screen screen)
     {
-        await WaitForAsync(() => clock.TimersWaiting > 0 || operation.IsCompleted);
-        await Task.Delay(1);
+        for (var pass = 0; pass < 2; pass++)
+        {
+            await WaitForAsync(() => screen.Waiting);
+            await screen.Ui.DrainedAsync();
+        }
+
+        await WaitForAsync(() => screen.Waiting);
+    }
+
+    /// <summary>The operation's end (within the 5 s the tests always gave it), and then what its end posted to the UI thread.</summary>
+    private static async Task FinishedAsync(Screen screen, Task operation)
+    {
+        await operation.WaitAsync(TimeSpan.FromSeconds(5));
+        await screen.Ui.DrainedAsync();
     }
 
     /// <summary>
     /// Steps the manual clock half a second at a time. Everything under test waits on that clock (the handler's waking timer, its retry delays
-    /// and its budget, the view model's "longer than usual" timer), so it can only move when a step fires one of the clock's timers. After such a
-    /// step the code that was woken gets the same real moment to run as before, ahead of the next step; a step that fired nothing woke nothing,
-    /// and is not waited after. (The pause used to follow every step: hundreds of them, about 15 ms each on Windows, for a clock that had mostly
-    /// nothing due: 31 s for this class.)
+    /// and its budget, the view model's "longer than usual" timer), so it can only move when a step fires one of the clock's timers. After such
+    /// a step the screen is waited for (<see cref="SettledAsync"/>) before the next one; a step that fired nothing woke nothing.
     /// </summary>
-    private static async Task PassAsync(ManualTimeProvider clock, double seconds)
+    private static async Task PassAsync(Screen screen, double seconds)
     {
         for (var i = 0; i < seconds * 2; i++)
         {
-            var fired = clock.TimersFired;
-            clock.Advance(TimeSpan.FromMilliseconds(500));
-            if (clock.TimersFired != fired)
+            var fired = screen.Clock.TimersFired;
+            screen.Clock.Advance(TimeSpan.FromMilliseconds(500));
+            if (screen.Clock.TimersFired != fired)
             {
-                await Task.Delay(1);
+                await SettledAsync(screen);
             }
         }
     }
@@ -100,16 +134,17 @@ public sealed class LoginWakeMessagesTests
         using var screen = Open(server);
         var vm = screen.Vm;
 
-        var signIn = vm.DemoCommand.ExecuteAsync();
+        var signIn = screen.Start(v => v.DemoCommand.ExecuteAsync());
         await WaitForAsync(() => server.Arrived == 1);
-        await PassAsync(screen.Clock, 3.5);
+        await SettledAsync(screen);
+        await PassAsync(screen, 3.5);
         Assert.True(vm.IsServerWaking);
         Assert.Equal(WakingTexts.SignIn, vm.WakingText);
         Assert.Equal("Starting the server", vm.ServerText); // nothing has answered: the container is starting
 
         foreach (var second in new[] { 20, 40, 60, 80, 95 })
         {
-            await PassAsync(screen.Clock, second - screen.Clock.Elapsed.TotalSeconds);
+            await PassAsync(screen, second - screen.Clock.Elapsed.TotalSeconds);
             Assert.True(vm.IsBusy, $"at {second} s");
             Assert.True(vm.CanCancel, $"at {second} s");
             Assert.Equal(LoginProblem.None, vm.Problem);
@@ -120,7 +155,7 @@ public sealed class LoginWakeMessagesTests
         }
 
         server.Answer(0, ScriptedHandler.Json(HttpStatusCode.OK, """{"accessToken":"a","refreshToken":"r","accessTokenExpiresUtc":"2030-01-01T00:00:00Z","user":{"staffId":1,"displayName":"Demo","role":"Staff","isDemo":true,"canManageStaff":false}}"""));
-        await signIn.WaitAsync(TimeSpan.FromSeconds(5));
+        await FinishedAsync(screen, signIn);
 
         Assert.Equal(LoginProblem.None, vm.Problem);
         Assert.NotNull(screen.Rig.Session.AccessToken);
@@ -136,12 +171,13 @@ public sealed class LoginWakeMessagesTests
         var changes = 0;
         vm.PropertyChanged += (_, e) => changes += e.PropertyName == nameof(LoginViewModel.WakingText) ? 1 : 0;
 
-        var signIn = vm.SignInCommand.ExecuteAsync();
+        var signIn = screen.Start(v => v.SignInCommand.ExecuteAsync());
         await WaitForAsync(() => server.Arrived == 1);
-        await PassAsync(screen.Clock, 102);
+        await SettledAsync(screen);
+        await PassAsync(screen, 102);
         Assert.Equal(WakingTexts.SignIn, vm.WakingText); // waking has shown for 99 s: not yet
 
-        await PassAsync(screen.Clock, 3);
+        await PassAsync(screen, 3);
         Assert.Equal(WakingTexts.SignInLate, vm.WakingText);
         Assert.Equal(1, changes);
         Assert.True(vm.IsBusy);
@@ -150,7 +186,7 @@ public sealed class LoginWakeMessagesTests
         Assert.Null(vm.Message);
 
         server.Answer(0, ScriptedHandler.Problem(HttpStatusCode.Unauthorized, "invalid_credentials"));
-        await signIn.WaitAsync(TimeSpan.FromSeconds(5));
+        await FinishedAsync(screen, signIn);
 
         Assert.False(vm.IsServerWaking);
         Assert.NotEqual(WakingTexts.SignInLate, vm.WakingText); // "longer than usual" ends with the wake it was about
@@ -164,14 +200,14 @@ public sealed class LoginWakeMessagesTests
         using var screen = Open(handler);
         var vm = screen.Vm;
 
-        var signIn = vm.SignInCommand.ExecuteAsync();
-        await StartedAsync(screen.Clock, signIn);
+        var signIn = screen.Start(v => v.SignInCommand.ExecuteAsync());
+        await SettledAsync(screen);
         for (var i = 0; i < 300 && !signIn.IsCompleted; i++)
         {
-            await PassAsync(screen.Clock, 1);
+            await PassAsync(screen, 1);
         }
 
-        await signIn.WaitAsync(TimeSpan.FromSeconds(5));
+        await FinishedAsync(screen, signIn);
         Assert.InRange(screen.Clock.Elapsed.TotalSeconds, 100, 125);
         Assert.Equal(LoginProblem.ServerWaking, vm.Problem);
         Assert.Contains("longer than usual", vm.Message, StringComparison.Ordinal);
@@ -188,14 +224,14 @@ public sealed class LoginWakeMessagesTests
         var handler = new ScriptedHandler((_, _) => ScriptedHandler.Json(HttpStatusCode.ServiceUnavailable, $$"""{"title":"t","status":503,"code":"{{code}}","database":"x"}""", ("Retry-After", "2")));
         using var screen = Open(handler);
 
-        var check = screen.Vm.CheckServerAsync();
-        await StartedAsync(screen.Clock, check);
+        var check = screen.Start(v => v.CheckServerAsync());
+        await SettledAsync(screen);
         for (var i = 0; i < 300 && !check.IsCompleted; i++)
         {
-            await PassAsync(screen.Clock, 1);
+            await PassAsync(screen, 1);
         }
 
-        await check.WaitAsync(TimeSpan.FromSeconds(5));
+        await FinishedAsync(screen, check);
         Assert.Equal(expected, screen.Vm.Server);
         Assert.Equal(text, screen.Vm.ServerText);
     }
@@ -211,20 +247,20 @@ public sealed class LoginWakeMessagesTests
         using var screen = Open(handler);
         clock = screen.Clock;
 
-        var check = screen.Vm.CheckServerAsync();
-        await StartedAsync(screen.Clock, check);
-        await PassAsync(screen.Clock, 95);
+        var check = screen.Start(v => v.CheckServerAsync());
+        await SettledAsync(screen);
+        await PassAsync(screen, 95);
         Assert.Equal(WakingTexts.SignInDatabase, screen.Vm.WakingText);
 
-        await PassAsync(screen.Clock, 40); // 135 s: the first wait is over, the second has shown "waking" again
+        await PassAsync(screen, 40); // 135 s: the first wait is over, the second has shown "waking" again
         Assert.False(check.IsCompleted);
         Assert.True(screen.Vm.IsServerWaking);
         Assert.Equal(WakingTexts.SignInLate, screen.Vm.WakingText); // one wake, counted from its start: longer than usual by now
         Assert.Equal("Waking the database", screen.Vm.ServerText);
         Assert.NotEqual(ServerReadiness.Unreachable, screen.Vm.Server);
 
-        await PassAsync(screen.Clock, 20);
-        await check.WaitAsync(TimeSpan.FromSeconds(5));
+        await PassAsync(screen, 20);
+        await FinishedAsync(screen, check);
         Assert.Equal("Server ready", screen.Vm.ServerText);
         Assert.False(screen.Vm.IsServerWaking);
     }
@@ -235,19 +271,19 @@ public sealed class LoginWakeMessagesTests
         var handler = new ScriptedHandler((_, _) => ScriptedHandler.Json(HttpStatusCode.ServiceUnavailable, $$"""{"title":"waking","status":503,"code":"{{ProblemCodes.DatabaseWaking}}","database":"waking"}""", ("Retry-After", "2")));
         using var screen = Open(handler);
 
-        var check = screen.Vm.CheckServerAsync();
-        await StartedAsync(screen.Clock, check);
+        var check = screen.Start(v => v.CheckServerAsync());
+        await SettledAsync(screen);
         for (var i = 0; i < 400 && !check.IsCompleted; i++)
         {
-            await PassAsync(screen.Clock, 1);
+            await PassAsync(screen, 1);
         }
 
-        await check.WaitAsync(TimeSpan.FromSeconds(5));
+        await FinishedAsync(screen, check);
         Assert.InRange(screen.Clock.Elapsed.TotalSeconds, 230, 245);
         Assert.Equal("Waking the database", screen.Vm.ServerText);
         var asked = handler.Requests.Count;
 
-        await PassAsync(screen.Clock, 120);
+        await PassAsync(screen, 120);
         Assert.Equal(asked, handler.Requests.Count); // nothing keeps knocking on a database that is not coming back
     }
 
@@ -257,14 +293,14 @@ public sealed class LoginWakeMessagesTests
         var handler = new ScriptedHandler((_, _) => throw new HttpRequestException("no route"));
         using var screen = Open(handler);
 
-        var check = screen.Vm.CheckServerAsync();
-        await StartedAsync(screen.Clock, check);
+        var check = screen.Start(v => v.CheckServerAsync());
+        await SettledAsync(screen);
         for (var i = 0; i < 300 && !check.IsCompleted; i++)
         {
-            await PassAsync(screen.Clock, 1);
+            await PassAsync(screen, 1);
         }
 
-        await check.WaitAsync(TimeSpan.FromSeconds(5));
+        await FinishedAsync(screen, check);
         Assert.Equal(ServerReadiness.Unreachable, screen.Vm.Server);
         Assert.Equal("Can't reach the server", screen.Vm.ServerText);
     }
@@ -280,15 +316,15 @@ public sealed class LoginWakeMessagesTests
         using var screen = Open(handler);
         clock = screen.Clock;
 
-        var check = screen.Vm.CheckServerAsync();
-        await StartedAsync(screen.Clock, check);
-        await PassAsync(screen.Clock, 59.5);
+        var check = screen.Start(v => v.CheckServerAsync());
+        await SettledAsync(screen);
+        await PassAsync(screen, 59.5);
         Assert.False(check.IsCompleted);
         Assert.Equal("Waking the database", screen.Vm.ServerText);
         Assert.Equal(WakingTexts.SignInDatabase, screen.Vm.WakingText);
 
-        await PassAsync(screen.Clock, 2.5);
-        await check.WaitAsync(TimeSpan.FromSeconds(5));
+        await PassAsync(screen, 2.5);
+        await FinishedAsync(screen, check);
         Assert.Equal("Server ready", screen.Vm.ServerText);
         Assert.InRange(screen.Clock.Elapsed.TotalSeconds, 60, 62.5);
     }
