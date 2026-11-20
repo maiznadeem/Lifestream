@@ -256,7 +256,7 @@ public sealed class ComponentTests
 
         Assert.True(emptyVisible);
         Assert.Equal("Clear filters", actionText);
-        Assert.Equal("Waking up the server, this can take up to a minute", wakingText);
+        Assert.Equal(Lifestream.Client.Common.WakingTexts.Operation, wakingText); // the screens' banner and the shared notice are one text
         Assert.Contains("Cancel", wakingButtons);
         Assert.Contains("Retry", wakingButtons);
     }

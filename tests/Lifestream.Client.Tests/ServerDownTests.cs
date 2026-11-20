@@ -124,6 +124,10 @@ public sealed class ServerDownTests
         Assert.Equal("Can't reach the server. Check your internet connection, then retry.", vm.Message);
         Assert.False(waking, "the sign-in screen said the server was waking while the connection was refused");
         Assert.DoesNotContain("Waking the server", pill);
+        Assert.DoesNotContain("Starting the server", pill); // the pill's words for a wake since the phases: none of them for a refused connection
+        Assert.DoesNotContain("Waking the database", pill);
+        Assert.DoesNotContain("Waiting for the server", pill);
+        Assert.Equal(1, pill.Count(text => text == "Can't reach the server")); // one notice, once
         Assert.Equal("Can't reach the server", vm.ServerText);
         Assert.InRange(clock.Elapsed.TotalSeconds, 3, 6.5);
     }

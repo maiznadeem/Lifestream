@@ -52,7 +52,7 @@ public sealed class LoginServerPillTests
         }
 
         clock.Advance(TimeSpan.FromSeconds(3.5));
-        Assert.Equal("Waking the server", vm.ServerText); // a call slower than 3 s: the pill says so while it lasts
+        Assert.Equal("Waiting for the server", vm.ServerText); // a call slower than 3 s to a server that answered a moment ago: slow, not starting
 
         server.SignIn.SetResult(ScriptedHandler.Problem(HttpStatusCode.Unauthorized, "invalid_credentials"));
         await signIn.WaitAsync(TimeSpan.FromSeconds(5));

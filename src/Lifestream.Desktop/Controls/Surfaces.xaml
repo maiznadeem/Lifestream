@@ -307,7 +307,7 @@
                                   CornerRadius="{StaticResource Radius.Panel}">
               <StackPanel Orientation="Horizontal">
                 <controls:Icon Kind="Sync" Size="16" Foreground="{DynamicResource Brush.Info}" VerticalAlignment="Center" Margin="{StaticResource Inset.R12}" />
-                <TextBlock Style="{StaticResource Text.Body}" Text="Waking up the server, this can take up to a minute" VerticalAlignment="Center" Margin="{StaticResource Inset.R16}"
+                <TextBlock Style="{StaticResource Text.Body}" Text="Waking up the server, this can take about a minute and a half" VerticalAlignment="Center" Margin="{StaticResource Inset.R16}"
                            TextWrapping="NoWrap" />
                 <Button Style="{StaticResource Button.Secondary.Small}" Content="Retry" Command="{TemplateBinding RetryCommand}" Margin="{StaticResource Inset.R8}" />
                 <Button x:Name="PART_CancelWaking" Style="{StaticResource Button.Subtle.Small}" Content="Cancel" />
