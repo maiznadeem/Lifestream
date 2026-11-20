@@ -96,7 +96,7 @@
             </Grid.RowDefinitions>
             <controls:LifestreamDataGrid x:Name="Grid" ItemsSource="{Binding Items}" SelectedItem="{Binding SelectedItem, Mode=TwoWay}" SortCommand="{Binding SortCommand}"
                                          SortColumn="{Binding SortColumn, Mode=OneWay}" SortDescending="{Binding SortDescending, Mode=OneWay}"
-                                         lists:ListColumns.IsResponsive="True" lists:ListKeys.Panel="{Binding ElementName=Panel}"
+                                         lists:ListColumns.IsResponsive="True" lists:ListKeys.Panel="{Binding ElementName=Panel}" lists:ListReveal.IsEnabled="True"
                                          AutomationProperties.Name="Donors">
               <DataGrid.Columns>
                 <DataGridTemplateColumn Header="Name" SortMemberPath="name" Width="Auto" MinWidth="184" MaxWidth="320">

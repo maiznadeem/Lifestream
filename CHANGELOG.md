@@ -2,6 +2,21 @@
 
 All notable changes to Lifestream are listed here. The section of a version is also the text of its release on the GitHub Releases page.
 
+## [2.1.3] - 2026-11-20
+
+Lifestream 2.1.3 fixes more of what using the app end to end against a real server turned up, on the list screens.
+
+### Fixed
+
+- The "..." menu on a donor or patient shows its Delete item's text again.
+- Delete is offered only when it can work: for a donor with appointments or a patient with requests it is greyed out, with the reason under it.
+- The line "Select a record to see its details" is no longer drawn over a record that is open.
+- Fulfil request is offered only when stock covers the whole request; when it covers part, the panel says how many units are short.
+- A record opened from another screen opens on the tab that holds it, with its row selected and in view; after a save the list moves to that tab too.
+- Messages name what happened: "Appointment for Asher Devereux booked", "Request for Nadia Holloway cancelled".
+- A receipt that is only opened no longer says a duplicate copy was printed; the line appears on the printed copy.
+- The access list of a staff member says plainly that the Staff role has no access to staff accounts.
+
 ## [2.1.2] - 2026-11-20
 
 Lifestream 2.1.2 fixes defects found by using the app end to end against a real server.

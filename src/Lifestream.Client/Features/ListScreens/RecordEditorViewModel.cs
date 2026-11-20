@@ -91,6 +91,12 @@ public abstract partial class RecordEditorViewModel : FormViewModelBase
     /// <summary>The name shown in toasts ("Donor 'Name' saved.").</summary>
     protected abstract string RecordName { get; }
 
+    /// <summary>
+    /// The toast after a save: "Donor 'Ana Li' added." A record that is not named after itself says whose it is and what happened to it ("Appointment for 'Ana Li'
+    /// booked.", not "Appointment 'Ana Li' added.").
+    /// </summary>
+    protected virtual string SavedMessage => $"{Capitalise(RecordType)} '{RecordName}' {(IsNew ? "added" : "saved")}.";
+
     /// <summary>Called on the UI thread: reads the fields, builds the request, and returns the work that sends it (null means success; the saved record goes to <see cref="SavedRecord"/>).</summary>
     protected abstract Func<CancellationToken, Task<ApiProblem?>> PrepareSubmit();
 
@@ -169,7 +175,7 @@ public abstract partial class RecordEditorViewModel : FormViewModelBase
         if (problem is null)
         {
             AcceptAsBaseline();
-            _toasts.ShowForRecord(ToastKind.Success, Capitalise(RecordType), RecordName, IsNew ? "added" : "saved");
+            _toasts.Show(ToastKind.Success, SavedMessage);
             Closed?.Invoke(this, new EditorClosedEventArgs(true, SavedRecord));
             return;
         }

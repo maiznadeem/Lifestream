@@ -17,7 +17,7 @@
   <Border x:Name="Frame" SnapsToDevicePixels="True" AutomationProperties.Name="Details">
     <Grid>
       <TextBlock x:Name="NoSelection" Style="{DynamicResource Text.Secondary}" Text="{Binding NoSelectionText}" TextWrapping="Wrap"
-                 VerticalAlignment="Top" Visibility="{Binding SelectedItem, Converter={StaticResource NullToVisible}}" />
+                 VerticalAlignment="Top" Visibility="{Binding ShowNoSelection, Converter={StaticResource BoolToVisibility}}" />
       <controls:Skeleton Kind="Detail" Visibility="{Binding ShowDetailSkeleton, Converter={StaticResource BoolToVisibility}}" />
       <controls:ErrorState Message="{Binding DetailError}" RetryCommand="{Binding RetryDetailCommand}" Visibility="{Binding HasDetailError, Converter={StaticResource BoolToVisibility}}" />
       <Grid x:Name="DetailBody" Visibility="{Binding HasDetail, Converter={StaticResource BoolToVisibility}}">

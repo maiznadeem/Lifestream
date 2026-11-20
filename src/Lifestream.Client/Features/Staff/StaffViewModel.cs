@@ -114,7 +114,7 @@ public sealed partial class StaffViewModel : SortedRecordListViewModel<StaffRow,
     public bool DetailIsProtected => Detail?.IsProtected == true;
 
     /// <summary>What the selected person can do with staff accounts: the last line of the panel's Access list.</summary>
-    public string DetailStaffAccessText => DetailIsAdmin ? "Staff accounts: add, change and reset passwords" : "Staff list, view only";
+    public string DetailStaffAccessText => DetailIsAdmin ? "Staff accounts: add, change and reset passwords" : "No access to staff accounts (administrators only)";
 
     /// <summary>"Doctor, morning shift": what the person does, under their name.</summary>
     public string DetailSubtitle => Detail is { } s ? $"{StaffText.JobTitle(s.Designation)}, {(s.Shift == Lifestream.Domain.Shift.FullTime ? "full time" : $"{s.Shift.ToString().ToLowerInvariant()} shift")}" : string.Empty;
