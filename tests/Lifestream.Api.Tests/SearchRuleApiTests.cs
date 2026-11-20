@@ -348,6 +348,26 @@ public sealed class SearchRuleApiTests(ApiFixture fx) : IClassFixture<ApiFixture
     }
 
     [Fact]
+    public async Task ThePickers_WriteABloodGroupAsTheBadgesDo_WithTheMinusSign_AndStillFindItTypedWithAHyphen()
+    {
+        var rows = await RowsAsync();
+
+        // The subtitle of a picker's row, found by what was typed (a hyphen, as people type it).
+        async Task<string> SubtitleAsync(string route, string search, string key)
+        {
+            using var response = await rows.Client.GetAsync($"{ApiRoutes.Path(route)}?search={Uri.EscapeDataString(search)}", Ct);
+            var items = JsonElement.Parse(await response.Content.ReadAsStringAsync(Ct));
+            return items.EnumerateArray().Single(i => i.GetProperty("id").GetInt32() == rows.Ids[key]).GetProperty("subtitle").GetString()!;
+        }
+
+        // The badges write "O−" with a real minus sign (BloodType.ToTypographic); the pickers wrote "O-" (real-app walk on the isolated desktop).
+        // Only the group changes: a phone number keeps its hyphens.
+        Assert.Equal("O− · +1-555-0156", await SubtitleAsync(ApiRoutes.LookupDonors, "O-", "donor:eastwood"));
+        Assert.Equal("AB− · +1-555-0164", await SubtitleAsync(ApiRoutes.LookupPatients, "eastwood", "patient:eastwood"));
+        Assert.EndsWith(" x AB−", await SubtitleAsync(ApiRoutes.LookupRequests, "eastwood", "request:eastwood"), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ASearchWithNoMatch_AnswersAnEmptyPageWithTotalZero_OnEveryList()
     {
         var rows = await RowsAsync();
