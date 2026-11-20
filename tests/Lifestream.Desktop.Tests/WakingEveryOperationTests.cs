@@ -94,6 +94,7 @@ public sealed class WakingEveryOperationTests
         ["Staff.EditCommand"] = "opens the editor",
         ["Receipts.EditCommand"] = "receipts cannot be edited (the command is disabled or opens nothing)",
         ["Stock.ClearFiltersCommand"] = "no filter is set on a fresh screen, so there is nothing to reload",
+        ["ShowMatchingViewCommand"] = "the empty state's action when a search finds nothing on this tab and another tab holds the matches: it only switches the tab, and the list then loads as on a tab click (the list's own load); with no match elsewhere, as on a loaded screen, it does nothing",
         ["EditRequestCommand"] = "opens the editor",
         [nameof(StaffViewModel.ResetPasswordCommand)] = "opens the reset-password dialog",
         ["BookAppointmentCommand"] = "navigates to Appointments with the donor (the next screen loads itself; the navigation is a fake here)",

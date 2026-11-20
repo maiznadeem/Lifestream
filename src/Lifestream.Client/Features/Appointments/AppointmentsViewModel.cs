@@ -232,6 +232,36 @@ public sealed class AppointmentsViewModel : SortedRecordListViewModel<Appointmen
         _ => "No appointments yet",
     };
 
+    protected override string EmptyInThisViewTitle => _view switch
+    {
+        AppointmentView.Today => "No appointments today match",
+        AppointmentView.Upcoming => "No upcoming appointments match",
+        AppointmentView.Past => "No past appointments match",
+        AppointmentView.Cancelled => "No cancelled appointments match",
+        _ => base.EmptyInThisViewTitle,
+    };
+
+    /// <summary>The other tabs that hold matches, from the tabs' counts (the same search and filters as the list).</summary>
+    protected override IReadOnlyList<OtherViewMatch> MatchesInOtherViews
+    {
+        get
+        {
+            if (ViewCounts is not { } counts || _view is not { } here)
+            {
+                return [];
+            }
+
+            (AppointmentView View, string Tab, int Count)[] tabs =
+            [
+                (AppointmentView.Today, "Today", counts.Today),
+                (AppointmentView.Upcoming, "Upcoming", counts.Upcoming),
+                (AppointmentView.Past, "Past", counts.Past),
+                (AppointmentView.Cancelled, "Cancelled", counts.Cancelled),
+            ];
+            return [.. tabs.Where(t => t.View != here && t.Count > 0).OrderByDescending(t => t.Count).Select(t => new OtherViewMatch(t.Tab, t.Count, () => View = t.View))];
+        }
+    }
+
     protected override string EmptyAddMessage => _view switch
     {
         AppointmentView.Today => "Nobody is booked in for today.",
@@ -484,6 +514,7 @@ public sealed class AppointmentsViewModel : SortedRecordListViewModel<Appointmen
     protected override void Apply()
     {
         ViewCounts = _fetchedCounts;
+        OnFiltersChanged(); // the empty state reads the tabs' counts: an empty tab says where the matches are
         base.Apply();
         // The agenda's next appointment: the first one of the day still pending, in time order. The rows' agenda cells bind AgendaVersion, so they read it again.
         _nextId = IsAgenda ? Items.Where(a => a.Status == AppointmentStatus.Pending).OrderBy(a => a.SlotStartUtc).Select(a => (int?)a.Id).FirstOrDefault() : null;

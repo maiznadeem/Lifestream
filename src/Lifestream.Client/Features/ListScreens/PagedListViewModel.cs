@@ -16,6 +16,9 @@ public static class ListDefaults
     public const int PageSize = Paging.DefaultPageSize;
 }
 
+/// <summary>Another tab of a list screen where the current search and filters find something: its label, how many, and how to go there.</summary>
+public sealed record OtherViewMatch(string Tab, int Count, Action Show);
+
 /// <summary>What the next fetch asks the API for.</summary>
 public readonly record struct ListRequest(int Page, int PageSize, string? Search, string? Sort);
 
@@ -159,19 +162,47 @@ public abstract partial class PagedListViewModel<TItem> : ViewModelBase
     /// <summary>Plural name used in the empty state, such as "donors".</summary>
     protected abstract string PluralName { get; }
 
-    public string EmptyTitle => HasActiveFilters ? $"No {PluralName} match these filters" : EmptyNoFilterTitle;
+    /// <summary>
+    /// The empty state's title. With a search or filter on a screen with tabs, an empty tab is not "nothing matches" when another tab holds the matches:
+    /// it then names the tab and what was looked for ("No appointments today match “eastwood”"), and the message and the action lead to the others.
+    /// </summary>
+    public string EmptyTitle => !HasActiveFilters ? EmptyNoFilterTitle
+        : MatchesInOtherViews.Count == 0 ? $"No {PluralName} match these filters"
+        : $"{EmptyInThisViewTitle} {(EffectiveSearch is { } search ? $"“{search}”" : "these filters")}";
 
     /// <summary>The empty-state title when nothing is filtered ("No donors yet"); a screen with saved views names the view ("No cancelled requests").</summary>
     protected virtual string EmptyNoFilterTitle => $"No {PluralName} yet";
 
-    public string EmptyMessage => HasActiveFilters ? "Try a different search, or clear the filters to see everyone." : EmptyAddMessage;
+    /// <summary>The start of the title when this tab has no match and another has, up to the word "match" ("No appointments today match").</summary>
+    protected virtual string EmptyInThisViewTitle => $"No {PluralName} on this tab match";
+
+    /// <summary>
+    /// On a screen with tabs: the other tabs where the same search and filters find something, the one with the most matches first (the tabs' own
+    /// order among equals). Empty on a screen without tabs, when no other tab has a match, and while the tabs' counts are not known.
+    /// </summary>
+    protected virtual IReadOnlyList<OtherViewMatch> MatchesInOtherViews => [];
+
+    public string EmptyMessage => !HasActiveFilters ? EmptyAddMessage
+        : MatchesInOtherViews is { Count: > 0 } elsewhere ? string.Join(", ", elsewhere.Select(m => $"{m.Count:N0} in {m.Tab}")) + "."
+        : "Try a different search, or clear the filters to see everyone.";
 
     /// <summary>The empty-state message when nothing is filtered.</summary>
     protected virtual string EmptyAddMessage => $"There are no {PluralName} to show.";
 
-    public string? EmptyActionText => HasActiveFilters ? "Clear filters" : NewActionText;
+    public string? EmptyActionText => !HasActiveFilters ? NewActionText : MatchesInOtherViews is [var first, ..] ? $"Show {first.Tab}" : "Clear filters";
 
-    public System.Windows.Input.ICommand? EmptyActionCommand => HasActiveFilters ? ClearFiltersCommand : NewCommand;
+    public System.Windows.Input.ICommand? EmptyActionCommand => !HasActiveFilters ? NewCommand : MatchesInOtherViews.Count > 0 ? ShowMatchingViewCommand : ClearFiltersCommand;
+
+    /// <summary>Goes to the other tab that holds the most matches of the search and filters (the empty state's action when this tab has none).</summary>
+    public AsyncRelayCommand ShowMatchingViewCommand => field ??= Command(_ =>
+    {
+        if (MatchesInOtherViews is [var first, ..])
+        {
+            first.Show();
+        }
+
+        return Task.CompletedTask;
+    });
 
     /// <summary>The text of the "add" action of the empty state; null when the screen has none.</summary>
     protected virtual string? NewActionText => null;

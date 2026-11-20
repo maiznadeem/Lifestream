@@ -1328,6 +1328,7 @@ Always go through `LoadSurface`; never hand-roll a spinner or a "no data" text.
 | Waking | Skeleton plus the "Waking up the server, this can take about a minute and a half" banner with Retry and Cancel (from the third second of a slow call) | Fixed text |
 | Empty, no records | `EmptyState` | "No donors yet." plus an action ("Add donor") |
 | Empty, filtered | `EmptyState` | "No donors match these filters." plus "Clear filters" |
+| Empty tab, matches on other tabs (Appointments, Requests) | `EmptyState` | "No appointments today match “eastwood”", "3 in Past, 1 in Upcoming, 1 in Cancelled." (the tabs' counts, most first) plus "Show Past" (the tab with the most; the search is kept) |
 | Error | `ErrorState` with Retry and Details | Plain cause and what to do ("Can't reach the server. Check your connection, then retry."); the exception text only behind Details |
 
 Copy rules for states: one line naming the cause in context, then a next action as a button. No apologies ("Sorry", "Oops"), no blame, no exclamation
