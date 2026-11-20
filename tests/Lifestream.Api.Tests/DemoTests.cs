@@ -239,6 +239,7 @@ public sealed class DemoResetTests(DemoResetApiFixture fx) : IClassFixture<DemoR
     }
 }
 
+[Collection(Lifestream.Api.Tests.Support.Alone.Name)] // the API's per-day write counts are one table for the process: another class's API on a later day clears them
 public sealed class DemoCapTests(DemoCapApiFixture fx) : IClassFixture<DemoCapApiFixture>
 {
     private static CreateDonorRequest Donor(string name) => new(name, new DateOnly(1990, 1, 1), Gender.Male, BloodType.APos, null, null, DonorFrequency.Regular);

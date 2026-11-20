@@ -8,7 +8,8 @@ Store as an MSIX. Nothing here is submitted automatically; the Store listing nee
 | File | Purpose |
 |---|---|
 | `AppxManifest.template.xml` | Full-trust desktop app manifest with placeholders for the Store identity. |
-| `build-msix.ps1` | Lays out the published app, fills the manifest, generates placeholder tile art and runs `makeappx` to produce an unsigned `Lifestream-<version>-x64.msix`. |
+| `build-msix.ps1` | Lays out the published app, fills the manifest, adds the tile art from `Assets/` and runs `makeappx` to produce an unsigned `Lifestream-<version>-x64.msix`. |
+| `Assets/` | The tile art: the Lifestream mark at 44x44, 150x150 and 50x50 (`Square44x44Logo.png`, `Square150x150Logo.png`, `StoreLogo.png`). |
 | `screenshots/` | Created by `tools/generate-screenshots.ps1` (demo dataset only, at least 1366x768), with `screenshots.json` recording the dataset. |
 
 ## One-time setup (about 30 minutes)
@@ -22,18 +23,20 @@ Store as an MSIX. Nothing here is submitted automatically; the Store listing nee
 4. In the GitHub repository open **Settings > Secrets and variables > Actions > Variables** and add these three as
    repository **variables** (they are identifiers, not secrets): `STORE_IDENTITY_NAME`, `STORE_PUBLISHER`,
    `STORE_PUBLISHER_DISPLAY_NAME`. Until they exist, `release.yml` skips the MSIX and says so in the run summary.
-5. Replace the generated tile art (`Assets/*.png`, red square with a white dot) with real artwork if you want: put your PNGs
-   in `packaging/store/Assets/` named `Square44x44Logo.png`, `Square150x150Logo.png` and `StoreLogo.png` (44x44, 150x150 and 50x50); `build-msix.ps1` uses them instead of the generated ones.
+5. The tile art in `packaging/store/Assets/` is the Lifestream mark. To change it, replace `Square44x44Logo.png`, `Square150x150Logo.png` and
+   `StoreLogo.png` there (44x44, 150x150 and 50x50). Only when one of them is missing does `build-msix.ps1` draw a placeholder (a red square with a white dot).
 
 ## Every release
 
-1. Push the tag (`git tag v2.0.1 && git push origin v2.0.1`). `release.yml` publishes the app, scans it, builds the GitHub release
-   and, when the variables above exist, the workflow artifact **store-msix** (`Lifestream-2.0.1-x64.msix`).
+1. Push the tag (`git tag v2.1.0 && git push origin v2.1.0`). `release.yml` publishes the app, scans it, builds the GitHub release
+   and, when the variables above exist, the workflow artifact **store-msix** (`Lifestream-2.1.0-x64.msix`).
 2. Download the artifact from the workflow run page (Actions > Release > the run > Artifacts).
-3. Generate screenshots: run the **Screenshots** workflow (Actions > Screenshots > Run workflow) and download its artifact.
+3. Screenshots: use the committed `packaging/store/screenshots/` (check `screenshots.json` and the images are from this
+   release's look). To regenerate them, run `tools/generate-screenshots.ps1` on a machine with a local SQL Server (it needs
+   one at `localhost`, which a GitHub-hosted runner does not have, so the **Screenshots** workflow runs only by hand) and commit the result.
 4. In Partner Center open the reserved app, choose **Start your submission**, then:
    - **Packages**: upload the `.msix` (the Store signs it; no certificate is needed).
-   - **Store listings**: upload the screenshots from the artifact (at least one, 1366x768 or larger), add the description and
+   - **Store listings**: upload the screenshots from `packaging/store/screenshots/` (at least one, 1366x768 or larger), add the description and
      a short privacy statement. The demo data is synthetic; say that the demo account is shared.
    - **Properties**: category *Health & fitness* or *Medical*; declare that the app uses the internet.
    - **Age ratings**: complete the questionnaire (no user-generated content, no purchases).

@@ -10,7 +10,7 @@ namespace Lifestream.Api.Infrastructure;
 
 /// <summary>
 /// The <c>--migrate</c> entry point (the Container Apps migrate job). Applies the EF Core migrations, makes sure the demo data
-/// exists (a database that was never reset is seeded), creates or refreshes the protected owner admin from
+/// exists (a database that was never reset is seeded; a demo reset today by an older release, which has no appointments today, is rebuilt), creates or refreshes the protected owner admin from
 /// <c>Owner:AdminPassword</c>, and returns the process exit code: 0 on success, 1 on any failure. The password is never logged.
 /// </summary>
 public static class Migrator
@@ -39,6 +39,7 @@ public static class Migrator
             }
 
             var database = host.Services.GetRequiredService<IOptions<DatabaseSettings>>().Value;
+            var demoEnabled = (builder.Configuration.GetSection(DemoSettings.Section).Get<DemoSettings>() ?? new DemoSettings()).Enabled;
             var options = new DbContextOptionsBuilder<LifestreamDbContext>()
                 .UseSqlServer(connection, sql => sql.ExecutionStrategy(d => new WakeAwareExecutionStrategy(d, database)))
                 .Options;
@@ -47,12 +48,17 @@ public static class Migrator
             logger.LogInformation("Applying migrations.");
             await db.Database.MigrateAsync();
 
-            var today = DateOnly.FromDateTime((time ?? TimeProvider.System).GetUtcNow().UtcDateTime);
+            var now = (time ?? TimeProvider.System).GetUtcNow().UtcDateTime;
             var neverReset = await db.DemoState.AnyAsync(s => s.LastResetDate != null) is false;
             if (neverReset)
             {
                 logger.LogInformation("Seeding the demo data.");
-                await DemoReset.RunIfDueAsync(db, today, CancellationToken.None);
+                await DemoReset.RunIfDueAsync(db, now, CancellationToken.None);
+            }
+            else if (demoEnabled && await DemoReset.RunIfTodayIsMissingAsync(db, now, CancellationToken.None))
+            {
+                // Today's demo data came from a release whose generator left today without appointments: rebuilt now, not at the next UTC midnight.
+                logger.LogInformation("The demo data of today had no appointments today; rebuilt.");
             }
 
             var ownerPassword = builder.Configuration["Owner:AdminPassword"];

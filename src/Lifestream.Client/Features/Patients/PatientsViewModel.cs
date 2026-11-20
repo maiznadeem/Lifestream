@@ -15,6 +15,7 @@ public sealed class PatientsViewModel : SortedRecordListViewModel<PatientListIte
 {
     private readonly ILifestreamApiClient api;
     private readonly INavigationService navigation;
+    private (int PatientId, IReadOnlyList<Contracts.Requests.RequestListItem>? Requests, int Total, IReadOnlyList<Contracts.Stock.StockItem>? Stock)? _fetchedWaiting;
 
     public PatientsViewModel(ILifestreamApiClient api, IListViewStateStore states, IToastService toasts, IDialogService dialogs, INavigationService navigation, IUiDispatcher ui)
         : base(states, "patients", toasts, dialogs, ui)
@@ -24,19 +25,148 @@ public sealed class PatientsViewModel : SortedRecordListViewModel<PatientListIte
         NewRequestCommand = Command(
             _ => Detail is { } patient ? this.navigation.NavigateTo<RequestsViewModel>(new RelatedRecord(RecordKind.Patient, patient.Id, patient.Name)) : Task.CompletedTask,
             () => Detail is not null && !IsEditing);
+        FulfilRequestCommand = Command(
+            (parameter, _) => parameter is PatientRequestRow { CanFulfil: true } row && Detail is { } patient
+                ? this.navigation.NavigateTo<RequestsViewModel>(new RelatedRecord(RecordKind.Request, row.Id, patient.Name))
+                : Task.CompletedTask,
+            parameter => parameter is not PatientRequestRow { CanFulfil: false }); // no stock at all: nothing to fulfil with (the card says why)
         PropertyChanged += (_, e) =>
         {
             if (e.PropertyName is nameof(Detail) or nameof(Editor))
             {
                 NewRequestCommand.RaiseCanExecuteChanged();
             }
+
+            if (e.PropertyName is nameof(Detail))
+            {
+                OnPropertyChanged(nameof(DetailCode));
+                OnPropertyChanged(nameof(DetailSubtitle));
+                OnPropertyChanged(nameof(DetailBloodGroup));
+                OnPropertyChanged(nameof(DetailInitials));
+            }
+
+            if (e.PropertyName is nameof(Detail) or nameof(SelectedItem))
+            {
+                OnPropertyChanged(nameof(OpenRequests));
+                OnPropertyChanged(nameof(OpenRequestsText));
+            }
+
+            if (e.PropertyName is nameof(DetailFacts))
+            {
+                OnPropertyChanged(nameof(PanelFacts));
+                ShowWaiting();
+            }
         };
+    }
+
+    /// <summary>"Fulfil" on one of the patient's waiting requests: opens that request on the Requests screen with its fulfil step (the bags to issue) in the panel.</summary>
+    public AsyncRelayCommand FulfilRequestCommand { get; }
+
+    /// <summary>The selected patient's requests waiting for blood (audit P1), each with whether today's stock covers it; empty while unknown.</summary>
+    public IReadOnlyList<PatientRequestRow> WaitingRequests { get; private set; } = [];
+
+    /// <summary>A line about the waiting requests when they could not be loaded, or when more wait than are listed; null otherwise.</summary>
+    public string? WaitingNote { get; private set; }
+
+    /// <summary>How many requests the panel lists at most.</summary>
+    public const int WaitingLimit = 10;
+
+    private void ShowWaiting()
+    {
+        WaitingRequests = [];
+        WaitingNote = null;
+        if (Detail is { } patient && _fetchedWaiting is { } fetched && fetched.PatientId == patient.Id)
+        {
+            if (fetched.Requests is not { } requests)
+            {
+                WaitingNote = "The waiting requests couldn't be loaded. Select the patient again to retry.";
+            }
+            else
+            {
+                var stock = fetched.Stock?.ToDictionary(s => s.BloodType, s => s.Available);
+                var today = DateOnly.FromDateTime(Clock.GetLocalNow().DateTime);
+                WaitingRequests = [.. requests.Select(r =>
+                {
+                    var cover = stock is null ? null : RequestCoverage.Of(r.Units, stock.GetValueOrDefault(r.BloodType));
+                    return new PatientRequestRow(
+                        r.Id,
+                        $"{RecordFormatting.Units(r.Units)} of {r.BloodType.ToTypographic()}",
+                        "Needed by " + Formatting.Date(r.RequiredBy),
+                        RequestUrgency.Of(r.Status, r.RequiredBy, today),
+                        cover)
+                    {
+                        HoldReason = cover?.HoldReason(r.BloodType),
+                    };
+                })];
+                if (fetched.Total > requests.Count)
+                {
+                    WaitingNote = $"The {requests.Count} needed first of {fetched.Total} are listed.";
+                }
+            }
+        }
+
+        OnPropertyChanged(nameof(WaitingRequests));
+        OnPropertyChanged(nameof(WaitingNote));
+        OnPropertyChanged(nameof(OpenRequests));
+        OnPropertyChanged(nameof(OpenRequestsText));
+    }
+
+    // The patient's open requests (needed first at the top) and the stock, side by side; either may fail without failing the panel.
+    protected override async Task<IReadOnlyList<DetailFact>> GetExtraFactsAsync(int id, CancellationToken ct)
+    {
+        var query = new Contracts.Requests.RequestQuery(PatientId: id, PageSize: WaitingLimit)
+        {
+            View = Contracts.Requests.RequestView.Open,
+            UtcOffsetMinutes = (int)Clock.GetLocalNow().Offset.TotalMinutes,
+        };
+        var requestsCall = api.GetRequestsAsync(query, ct);
+        var stockCall = api.GetStockAsync(ct);
+        var requests = await requestsCall.ConfigureAwait(false);
+        var stock = await stockCall.ConfigureAwait(false);
+        _fetchedWaiting = (id, requests.IsOk ? requests.Value.Items : null, requests.IsOk ? requests.Value.Total : 0, stock.IsOk ? stock.Value : null);
+        return [];
     }
 
     /// <summary>"New request" for the selected patient: opens the request form on the Requests screen with this patient already chosen (FEAT-04).</summary>
     public AsyncRelayCommand NewRequestCommand { get; }
 
     public override string PageTitle => "Patients";
+
+    /// <summary>The patient's code as the screens show it, "P-0051".</summary>
+    public static string Code(int id) => Receipts.RecordCodes.Patient(id);
+
+    /// <summary>The side panel's overline, "Patient P-0051".</summary>
+    public string? DetailCode => Detail is { } p ? "Patient " + Code(p.Id) : null;
+
+    /// <summary>The line under the patient's name in the side panel: "Female, age 42".</summary>
+    public string? DetailSubtitle => Detail is { } p ? $"{p.Gender}, age {Eligibility.AgeOn(p.DateOfBirth, DateOnly.FromDateTime(Clock.GetLocalNow().DateTime))}" : null;
+
+    /// <summary>The patient's blood group with a true minus sign, for the large tag in the side panel.</summary>
+    public string? DetailBloodGroup => Detail?.BloodType.ToTypographic();
+
+    public string? DetailInitials => Detail is { } p ? Donors.DonorsViewModel.PersonInitials(p.Name) : null;
+
+    /// <summary>The selected patient's requests still waiting for blood (from the panel's own call, else the list row), or null when not known.</summary>
+    public int? OpenRequests => Detail is { } p && _fetchedWaiting is { Requests: not null } fetched && fetched.PatientId == p.Id ? fetched.Total
+        : Detail is { } d && SelectedItem is { } row && row.Id == d.Id ? row.PendingRequests : null;
+
+    /// <summary>"2 requests waiting for blood", "No requests waiting", for the card in the side panel.</summary>
+    public string? OpenRequestsText => OpenRequests switch
+    {
+        null => null,
+        0 => "No requests waiting",
+        1 => "1 request waiting for blood",
+        var n => $"{n} requests waiting for blood",
+    };
+
+    /// <summary>The facts under "Details" in the side panel, without the blood group (it is in the header), and the groups the patient can receive red cells from.</summary>
+    public IReadOnlyList<DetailFact> PanelFacts => Detail is { } patient
+        ? [.. DetailFacts.Where(f => f.Label != "Blood group"), new DetailFact("Can receive", CanReceiveText(patient.BloodType))]
+        : [.. DetailFacts.Where(f => f.Label != "Blood group")];
+
+    /// <summary>"O−, O+, A−, A+": the groups whose red cells a patient of this group can be given.</summary>
+    public static string CanReceiveText(BloodType group) =>
+        string.Join(", ", SharedLists.BloodTypes.Select(c => c.Value).Where(t => t.CanGiveTo(group)).Select(t => t.ToTypographic()));
 
     protected override string PluralName => "patients";
 
@@ -64,7 +194,7 @@ public sealed class PatientsViewModel : SortedRecordListViewModel<PatientListIte
     [
         new("Date of birth", $"{Formatting.Date(patient.DateOfBirth)} (age {Eligibility.AgeOn(patient.DateOfBirth, DateOnly.FromDateTime(Clock.GetLocalNow().DateTime))})"),
         new("Gender", patient.Gender.ToString()),
-        new("Blood type", patient.BloodType.ToDisplay()),
+        new("Blood group", patient.BloodType.ToDisplay()),
         new("Phone", string.IsNullOrEmpty(patient.Phone) ? "Not given" : patient.Phone),
         new("Address", string.IsNullOrEmpty(patient.Address) ? "Not given" : patient.Address),
     ];

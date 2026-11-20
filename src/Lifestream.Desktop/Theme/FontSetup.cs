@@ -9,7 +9,7 @@ using System.Runtime.CompilerServices;
 namespace Lifestream.Desktop.Theme;
 
 /// <summary>
-/// Loads the bundled Inter for both text engines at startup (SHELL-26) and keeps the app alive when it cannot (SHELL-01): the WPF text
+/// Loads the bundled Onest for both text engines at startup (SHELL-26) and keeps the app alive when it cannot (SHELL-01): the WPF text
 /// falls back to the system UI font (<see cref="SystemFonts.MessageFontFamily"/>) and the charts to Skia's default typeface, each with a
 /// logged warning, instead of an exception that ends the process before any window exists. The two loaders are properties so a test can inject
 /// a failing one.
@@ -17,7 +17,7 @@ namespace Lifestream.Desktop.Theme;
 public static class FontSetup
 {
     private const string FontFolder = "pack://application:,,,/Lifestream;component/Fonts/";
-    private const string FamilyName = "Inter Variable Text";
+    private const string FamilyName = "Onest";
 
     // One Skia typeface per process, shared by every thread. LiveCharts latches its fallback typeface process-wide on the first label it draws
     // and disposes any other typeface when a paint is torn down, so a second object for the same font would be disposed under its users.
@@ -25,10 +25,10 @@ public static class FontSetup
     private static SKTypeface? _bundledTypeface;
     private static SKTypeface? _fallbackTypeface;
 
-    /// <summary>Loads the bundled Inter as a Skia typeface (the chart text). Throws when it cannot.</summary>
+    /// <summary>Loads the bundled Onest as a Skia typeface (the chart text). Throws when it cannot.</summary>
     public static Func<SKTypeface> ChartTypefaceLoader { get; set; } = LoadBundledChartTypeface;
 
-    /// <summary>Says whether WPF can resolve the bundled Inter family.</summary>
+    /// <summary>Says whether WPF can resolve the bundled Onest family.</summary>
     public static Func<bool> AppFontAvailable { get; set; } = IsBundledFamilyAvailable;
 
     /// <summary>Makes a typeface the default of every LiveCharts text. A property so a test can observe the choice without reconfiguring the process-wide LiveCharts settings.</summary>
@@ -43,11 +43,11 @@ public static class FontSetup
     /// <summary>True when the app font fell back to the system UI font.</summary>
     public static bool AppFellBack { get; private set; }
 
-    /// <summary>The Skia typeface the charts use: the bundled Inter, or the default typeface after a failed load.</summary>
+    /// <summary>The Skia typeface the charts use: the bundled Onest, or the default typeface after a failed load.</summary>
     public static SKTypeface? ChartTypeface { get; private set; }
 
     /// <summary>
-    /// Makes Inter the default of every LiveCharts text (idempotent). A load that fails is logged and replaced by the default typeface; if even that
+    /// Makes Onest the default of every LiveCharts text (idempotent). A load that fails is logged and replaced by the default typeface; if even that
     /// is unavailable the charts keep LiveCharts' own default.
     /// </summary>
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The typeface lives for the whole process: LiveCharts keeps it as its default.")]
@@ -95,7 +95,7 @@ public static class FontSetup
         if (!available)
         {
             AppFellBack = true;
-            Warn("The bundled font Inter could not be loaded. The app uses the system UI font.");
+            Warn("The bundled font Onest could not be loaded. The app uses the system UI font.");
             theme["Font.Family"] = SystemFonts.MessageFontFamily;
         }
     }
@@ -118,7 +118,7 @@ public static class FontSetup
         }
     }
 
-    /// <summary>Loads the bundled Inter once per process; every later call, from any thread, returns the same object. A failed load is not cached, so the next call retries.</summary>
+    /// <summary>Loads the bundled Onest once per process; every later call, from any thread, returns the same object. A failed load is not cached, so the next call retries.</summary>
     private static SKTypeface LoadBundledChartTypeface()
     {
         lock (TypefaceLock)
@@ -129,10 +129,10 @@ public static class FontSetup
             }
 
             _ = Application.Current; // registers the pack: scheme when no application exists yet (unit tests)
-            var resource = Application.GetResourceStream(new Uri(FontFolder + "InterVariable.ttf", UriKind.Absolute))
-                ?? throw new InvalidOperationException("The bundled font Fonts/InterVariable.ttf is not embedded in the executable.");
+            var resource = Application.GetResourceStream(new Uri(FontFolder + "Onest-Regular.ttf", UriKind.Absolute))
+                ?? throw new InvalidOperationException("The bundled font Fonts/Onest-Regular.ttf is not embedded in the executable.");
             using var stream = resource.Stream;
-            return _bundledTypeface = SKTypeface.FromStream(stream) ?? throw new InvalidOperationException("Skia could not read the bundled font Fonts/InterVariable.ttf.");
+            return _bundledTypeface = SKTypeface.FromStream(stream) ?? throw new InvalidOperationException("Skia could not read the bundled font Fonts/Onest-Regular.ttf.");
         }
     }
 

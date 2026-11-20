@@ -114,7 +114,9 @@ public sealed partial class SeedTests
         Assert.All(set.BloodBags, b => Assert.Equal(StockRules.ExpiryFor(b.CollectedAtUtc), b.ExpiresOn));
         Assert.All(set.BloodBags.Where(b => b.IssueReceipt is not null), b =>
             Assert.True(DateOnly.FromDateTime(b.IssueReceipt!.CreatedAtUtc) <= b.ExpiresOn, "A bag must not be issued after it expired."));
-        Assert.All(set.Appointments.Where(a => a.Status == AppointmentStatus.Pending), a => Assert.True(a.SlotStartUtc >= todayStart.AddDays(1)));
+        // Generate(Day) is the clinic at 00:00 UTC of Day: everything pending is still to come, today's appointments included (SeedTodayTests has the rule for any time of day).
+        Assert.All(set.Appointments.Where(a => a.Status == AppointmentStatus.Pending), a => Assert.True(a.SlotStartUtc >= todayStart));
+        Assert.Contains(set.Appointments, a => a.Status == AppointmentStatus.Pending && a.SlotStartUtc < todayStart.AddDays(1));
         Assert.All(set.Requests.Where(r => r.Status == RequestStatus.Pending), r => Assert.True(r.RequiredBy >= Day));
         Assert.Contains(set.Donors, d => d.Gender == Gender.Other);
         Assert.Equal(8, set.Donors.Select(d => d.BloodType).Distinct().Count());

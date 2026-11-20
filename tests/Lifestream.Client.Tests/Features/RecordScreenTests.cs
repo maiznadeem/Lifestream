@@ -69,7 +69,7 @@ public sealed class RecordScreenTests
         Assert.True(vm.HasDetail);
         Assert.True(hasDetailSeen[^1]); // the view is told when the pane becomes ready, after the state and the record are both set
         Assert.Equal("Donor 001", vm.DetailTitle);
-        Assert.Contains(vm.DetailFacts, f => f.Label == "Blood type" && f.Value == "O+");
+        Assert.Contains(vm.DetailFacts, f => f.Label == "Blood group" && f.Value == "O+");
         Assert.Contains(vm.DetailFacts, f => f.Label == "Eligibility" && f.Value == "Eligible to donate");
         Assert.True(vm.EditCommand.CanExecute(null));
         Assert.True(vm.DeleteCommand.CanExecute(null));
@@ -129,12 +129,13 @@ public sealed class RecordScreenTests
 
         var delete = vm.DeleteCommand.ExecuteAsync();
 
-        // The confirmation names the record and the danger button says verb and object.
+        // The confirmation names the record, the danger button says verb and object, and the other button says what it keeps (never a bare "Cancel").
         Assert.Single(rig.Dialogs.Confirmations);
-        var (title, body, verb) = rig.Dialogs.Confirmations[0];
+        var (title, body, verb, keep) = rig.Dialogs.Confirmations[0];
         Assert.Equal("Delete donor?", title);
-        Assert.Contains("'Donor 001'", body, StringComparison.Ordinal);
+        Assert.StartsWith("Donor 001 will be removed", body, StringComparison.Ordinal);
         Assert.Equal("Delete donor", verb);
+        Assert.Equal("Keep donor", keep);
 
         // While the API has not answered the list still shows the row and the button is busy.
         Assert.Equal(3, vm.Items.Count);
@@ -250,7 +251,8 @@ public sealed class RecordScreenTests
         await vm.DeleteCommand.ExecuteAsync();
         Assert.Equal(2, vm.Items.Count);
         Assert.Equal("Delete patient", rig.Dialogs.Confirmations.Single().Verb);
-        Assert.Contains("'Patient 001'", rig.Dialogs.Confirmations.Single().Body, StringComparison.Ordinal);
+        Assert.Equal("Keep patient", rig.Dialogs.Confirmations.Single().Keep);
+        Assert.StartsWith("Patient 001 will be removed", rig.Dialogs.Confirmations.Single().Body, StringComparison.Ordinal);
 
         rig.Fake.Handlers["DeletePatientAsync"] = _ => Task.FromResult<object>(ApiResult.Success);
         rig.PatientsReturn(_ => new PagedResult<PatientListItem>([Samples.PatientRow(2)], 1, 1, 50));
@@ -314,7 +316,7 @@ public sealed class RecordScreenTests
     {
         public List<string> Titles { get; } = [];
 
-        public Task<bool> ConfirmAsync(string title, string body, string dangerVerb)
+        public Task<bool> ConfirmAsync(string title, string body, string dangerVerb, string keepVerb)
         {
             Titles.Add(title);
             return Task.FromResult(answer);
@@ -399,9 +401,15 @@ public sealed class RecordScreenTests
         Assert.Equal([true, false], busy);
 
         var donors = rig.Donors();
-        rig.DonorsReturn(_ => Samples.DonorPage(1));
+        var loadGate = new TaskCompletionSource(); // the load is held until the test has looked at it: an instant answer could finish before the assertion runs
+        rig.Fake.On("GetDonorsAsync", async _ =>
+        {
+            await loadGate.Task;
+            return ApiResult<PagedResult<DonorListItem>>.Ok(Samples.DonorPage(1));
+        });
         var load = donors.LoadAsync();
         Assert.True(donors.IsLoading);
+        loadGate.SetResult();
         await load;
         Assert.False(donors.IsLoading);
     }

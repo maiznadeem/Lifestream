@@ -23,7 +23,7 @@ public sealed class ExitPathsGuardTests
     {
         public List<string> Asked { get; } = [];
 
-        public Task<bool> ConfirmAsync(string title, string body, string dangerVerb)
+        public Task<bool> ConfirmAsync(string title, string body, string dangerVerb, string keepVerb)
         {
             Asked.Add(title);
             return Task.FromResult(false); // the user chooses to stay
@@ -44,6 +44,9 @@ public sealed class ExitPathsGuardTests
         [nameof(ShellViewModel.SignOutCommand)] = (true, "closes the main window and shows the sign-in window"),
         [nameof(ShellViewModel.ApplyUpdateCommand)] = (true, "restarts the app into the new version: the process exits"),
         [nameof(ShellViewModel.BackToDashboardCommand)] = (true, "opens the dashboard"),
+        [nameof(ShellViewModel.NavigateToIndexCommand)] = (true, "Alt+1 to Alt+8: opens the n-th sidebar screen"),
+        [nameof(ShellViewModel.BookAppointmentCommand)] = (true, "opens the Appointments screen with its new-appointment form"),
+        [nameof(ShellViewModel.RecordDonationCommand)] = (true, "opens today's next appointment (or today's appointments) on the Appointments screen"),
         [nameof(ShellViewModel.SearchCommand)] = (false, "moves the keyboard focus to the page's search box"),
         [nameof(ShellViewModel.NewRecordCommand)] = (false, "runs the page's own new-record command; a dirty form on that page has no such command, and a list page asks itself (NewWhileDirtyTests)"),
     };
@@ -130,7 +133,7 @@ public sealed class ExitPathsGuardTests
 
     private sealed class AgreeingPresenter(Presenter record) : IDialogPresenter
     {
-        public Task<bool> ConfirmAsync(string title, string body, string dangerVerb)
+        public Task<bool> ConfirmAsync(string title, string body, string dangerVerb, string keepVerb)
         {
             record.Asked.Add(title);
             return Task.FromResult(true);
@@ -159,7 +162,12 @@ public sealed class ExitPathsGuardTests
                 var property = typeof(ShellViewModel).GetProperty(commandName)!;
                 var command = (AsyncRelayCommand)property.GetValue(shell)!;
                 // The sidebar command needs the item to open: any destination that is not the current screen.
-                object? parameter = property.Name == nameof(ShellViewModel.NavigateCommand) ? shell.Groups.SelectMany(g => g.Items).First() : null;
+                object? parameter = property.Name switch
+                {
+                    nameof(ShellViewModel.NavigateCommand) => shell.Groups.SelectMany(g => g.Items).First(),
+                    nameof(ShellViewModel.NavigateToIndexCommand) => "2",
+                    _ => null,
+                };
                 Assert.True(command.CanExecute(parameter), $"{property.Name} is not executable on a signed-in shell");
 
                 await command.ExecuteAsync(parameter);

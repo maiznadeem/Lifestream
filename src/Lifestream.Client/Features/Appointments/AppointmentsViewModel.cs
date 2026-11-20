@@ -6,6 +6,7 @@ using Lifestream.Client.Features.Receipts;
 using Lifestream.Client.Navigation;
 using Lifestream.Contracts;
 using Lifestream.Contracts.Appointments;
+using Lifestream.Contracts.Donors;
 using Lifestream.Contracts.Lookups;
 using Lifestream.Domain;
 using ContractSortKeys = Lifestream.Contracts.SortKeys;
@@ -22,6 +23,7 @@ public sealed class AppointmentsViewModel : SortedRecordListViewModel<Appointmen
     private const string StatusKey = "status";
     private const string DonorIdKey = "donorId";
     private const string DonorNameKey = "donorName";
+    private const string ViewKey = "view";
 
     private readonly ILifestreamApiClient _api;
     private readonly IFormDialogService _forms;
@@ -31,6 +33,9 @@ public sealed class AppointmentsViewModel : SortedRecordListViewModel<Appointmen
     private RecordOption? _donorFilter;
     private RecordOption? _bookFor;
     private bool _openBooking;
+    private AppointmentView? _view = AppointmentView.Today;
+    private AppointmentViewCounts? _fetchedCounts;
+    private int? _nextId;
 
     public AppointmentsViewModel(
         ILifestreamApiClient api,
@@ -54,6 +59,11 @@ public sealed class AppointmentsViewModel : SortedRecordListViewModel<Appointmen
             _statusFilter = StatusOptions.First(o => o.Value == status);
         }
 
+        if (ViewState.Filters.TryGetValue(ViewKey, out var savedView) && Enum.TryParse<AppointmentView>(savedView, out var view))
+        {
+            _view = view;
+        }
+
         if (ViewState.Filters.TryGetValue(DonorIdKey, out var savedId) && int.TryParse(savedId, out var donorId))
         {
             ViewState.Filters.TryGetValue(DonorNameKey, out var savedName);
@@ -75,12 +85,28 @@ public sealed class AppointmentsViewModel : SortedRecordListViewModel<Appointmen
         });
         OpenDonorCommand = Command(async (parameter, _) =>
         {
-            if (parameter is AppointmentListItem item)
+            var donorId = parameter switch
             {
-                await _navigation.NavigateTo<DonorsViewModel>(new ListPrefilter(RecordId: item.DonorId)).ConfigureAwait(true);
+                AppointmentListItem item => item.DonorId,
+                AppointmentDetail detail => detail.DonorId,
+                _ => (int?)null,
+            };
+            if (donorId is { } id)
+            {
+                await _navigation.NavigateTo<DonorsViewModel>(new ListPrefilter(RecordId: id)).ConfigureAwait(true);
             }
         });
         ViewReceiptCommand = Command(_ => Detail?.ReceiptId is { } id ? _receipts.ShowAsync(id, isDuplicate: true) : Task.CompletedTask, () => Detail?.ReceiptId is not null, opensModal: true);
+        RecordDonationForCommand = Command(async (parameter, _) =>
+        {
+            // This command is itself the modal-opening operation (as Record donation is), so it records the donation directly rather than through that command,
+            // which the runner keeps disabled while any operation, this one included, runs.
+            if (parameter is AppointmentListItem { Status: AppointmentStatus.Pending } item && await OpenRowAsync(item).ConfigureAwait(true) && IsPending && !IsEditing)
+            {
+                await RecordDonationAsync().ConfigureAwait(true);
+            }
+        }, opensModal: true);
+        ClearDonorFilterCommand = new CommunityToolkit.Mvvm.Input.RelayCommand(() => DonorFilter = null);
         PropertyChanged += (_, e) =>
         {
             if (e.PropertyName is nameof(Detail) or nameof(Editor))
@@ -90,7 +116,217 @@ public sealed class AppointmentsViewModel : SortedRecordListViewModel<Appointmen
                 CancelAppointmentCommand.RaiseCanExecuteChanged();
                 ViewReceiptCommand.RaiseCanExecuteChanged();
             }
+
+            if (e.PropertyName is nameof(Detail))
+            {
+                OnPropertyChanged(nameof(DetailCode));
+                OnPropertyChanged(nameof(DetailWhen));
+                OnPropertyChanged(nameof(DetailBloodGroup));
+                OnPropertyChanged(nameof(DetailInitials));
+                OnPropertyChanged(nameof(IsPendingDetail));
+            }
+
+            if (e.PropertyName is nameof(DetailFacts))
+            {
+                OnPropertyChanged(nameof(PanelFacts));
+                ShowDonorEligibility();
+            }
         };
+    }
+
+    /// <summary>The donor's eligibility on the day of the selected (pending) appointment, shown in the side panel; hidden for any other appointment.</summary>
+    public EligibilityBannerViewModel DonorEligibility { get; } = new();
+
+    /// <summary>The time zone the screen shows times in (the clinic's local time).</summary>
+    public TimeZoneInfo DisplayZone => Zone;
+
+    /// <summary>Today in the clinic's local time: the list highlights its day group.</summary>
+    public DateOnly Today => RecordFormatting.LocalDate(Clock.GetUtcNow().UtcDateTime, Zone);
+
+    /// <summary>The local day of an appointment: the list groups its rows by it.</summary>
+    public DateOnly DayOf(AppointmentListItem item) => RecordFormatting.LocalDate((item ?? throw new ArgumentNullException(nameof(item))).SlotStartUtc, Zone);
+
+    /// <summary>"Today, Thu 19 Nov", "Tomorrow, Fri 20 Nov", "Yesterday, Wed 18 Nov", "Mon 23 Nov 2026" (another year): a day group's heading.</summary>
+    public string DayHeading(DateOnly day)
+    {
+        var today = Today;
+        var date = day.ToString(day.Year == today.Year ? "ddd dd MMM" : "ddd dd MMM yyyy", System.Globalization.CultureInfo.InvariantCulture);
+        return (day.DayNumber - today.DayNumber) switch
+        {
+            0 => "Today, " + date,
+            1 => "Tomorrow, " + date,
+            -1 => "Yesterday, " + date,
+            _ => date,
+        };
+    }
+
+    /// <summary>The side panel's overline, "Appointment A-0904".</summary>
+    public string? DetailCode => Detail is { } a ? "Appointment " + Code(a.Id) : null;
+
+    /// <summary>An appointment's code as the screens show it, "A-0905".</summary>
+    public static string Code(int id) => RecordCodes.Appointment(id);
+
+    /// <summary>A receipt's code, "RC-0012".</summary>
+    private static string ReceiptCode(int id) => RecordCodes.Receipt(id);
+
+    // ---- the saved views ----
+
+    /// <summary>The saved view shown (Today by default), or null for every appointment (a link from another screen).</summary>
+    public AppointmentView? View
+    {
+        get => _view;
+        set
+        {
+            if (_view == value)
+            {
+                return;
+            }
+
+            _view = value;
+            ViewState.Filters[ViewKey] = value?.ToString();
+            RaiseViewChanged();
+            FilterChanged();
+        }
+    }
+
+    public bool IsTodayView { get => _view == AppointmentView.Today; set => SetViewFromTab(value, AppointmentView.Today); }
+
+    public bool IsUpcomingView { get => _view == AppointmentView.Upcoming; set => SetViewFromTab(value, AppointmentView.Upcoming); }
+
+    public bool IsPastView { get => _view == AppointmentView.Past; set => SetViewFromTab(value, AppointmentView.Past); }
+
+    public bool IsCancelledView { get => _view == AppointmentView.Cancelled; set => SetViewFromTab(value, AppointmentView.Cancelled); }
+
+    /// <summary>True on the Today tab: the list is the day's agenda, with Next, done and first-time marks and the inline Record donation.</summary>
+    public bool IsAgenda => _view == AppointmentView.Today;
+
+    /// <summary>How many appointments each view holds (the tabs' counts), with the same search and filters; null until known or when the count call failed.</summary>
+    public AppointmentViewCounts? ViewCounts { get; private set; }
+
+    private void SetViewFromTab(bool isChecked, AppointmentView view)
+    {
+        if (isChecked)
+        {
+            View = view;
+        }
+    }
+
+    private void RaiseViewChanged()
+    {
+        OnPropertyChanged(nameof(View));
+        OnPropertyChanged(nameof(IsTodayView));
+        OnPropertyChanged(nameof(IsUpcomingView));
+        OnPropertyChanged(nameof(IsPastView));
+        OnPropertyChanged(nameof(IsCancelledView));
+        OnPropertyChanged(nameof(IsAgenda));
+        OnPropertyChanged(nameof(EmptyTitle));
+        OnPropertyChanged(nameof(EmptyMessage));
+    }
+
+    protected override string EmptyNoFilterTitle => _view switch
+    {
+        AppointmentView.Today => "No appointments today",
+        AppointmentView.Upcoming => "No upcoming appointments",
+        AppointmentView.Past => "No past appointments",
+        AppointmentView.Cancelled => "No cancelled appointments",
+        _ => "No appointments yet",
+    };
+
+    protected override string EmptyAddMessage => _view switch
+    {
+        AppointmentView.Today => "Nobody is booked in for today.",
+        AppointmentView.Upcoming => "Nobody is booked in after today.",
+        _ => "There are no appointments to show.",
+    };
+
+    /// <summary>
+    /// Where a row stands in today's agenda (the Today tab): Done once recorded, Next for the first one still to come (the one to check in), Waiting for the later
+    /// ones, and Missed or Cancelled. None outside the Today tab.
+    /// </summary>
+    public AgendaState AgendaOf(AppointmentListItem item)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        if (!IsAgenda)
+        {
+            return AgendaState.None;
+        }
+
+        return item.Status switch
+        {
+            AppointmentStatus.Completed => AgendaState.Done,
+            AppointmentStatus.NoShow => AgendaState.Missed,
+            AppointmentStatus.Cancelled => AgendaState.Cancelled,
+            _ => item.Id == _nextId ? AgendaState.Next : AgendaState.Waiting,
+        };
+    }
+
+    /// <summary>Changes each time the agenda's marks were worked out again (a binding source for the rows' agenda cells).</summary>
+    public int AgendaVersion { get; private set; }
+
+    /// <summary>"Record donation" on a row of the agenda: opens that appointment and records its donation (the same dialog as the panel's).</summary>
+    public AsyncRelayCommand RecordDonationForCommand { get; }
+
+    /// <summary>Removes the donor filter (the x of the donor chip). No API call of its own; the list reloads.</summary>
+    public System.Windows.Input.ICommand ClearDonorFilterCommand { get; }
+
+    /// <summary>Selects a row and waits until its detail is in the panel; false when it did not load (or another row was chosen meanwhile).</summary>
+    private async Task<bool> OpenRowAsync(AppointmentListItem item)
+    {
+        if (!ReferenceEquals(SelectedItem, item))
+        {
+            SelectedItem = item;
+        }
+
+        await PendingDetail.ConfigureAwait(true);
+        return Detail?.Id == item.Id;
+    }
+
+    /// <summary>True while a status filter set by a link from another screen is on (it shows as a chip that can be cleared; the tabs replace it otherwise).</summary>
+    public bool HasStatusFilter => _statusFilter.Value is not null;
+
+    /// <summary>The appointment's time in the side panel's header: "Thu 19 Nov 2026, 11:00".</summary>
+    public string? DetailWhen => Detail is { } a
+        ? $"{RecordFormatting.LocalDate(a.SlotStartUtc, Zone).ToString("ddd dd MMM yyyy", System.Globalization.CultureInfo.InvariantCulture)}, {RecordFormatting.LocalTime(a.SlotStartUtc, Zone).ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture)}"
+        : null;
+
+    public string? DetailBloodGroup => Detail?.DonorBloodType.ToTypographic();
+
+    public string? DetailInitials => Detail is { } a ? DonorsViewModel.PersonInitials(a.DonorName) : null;
+
+    /// <summary>True while the selected appointment is still to come or to be recorded (its actions apply).</summary>
+    public bool IsPendingDetail => IsPending;
+
+    /// <summary>The facts under "Details" in the side panel, without those its header already shows (donor, blood group, time).</summary>
+    public IReadOnlyList<DetailFact> PanelFacts => [.. DetailFacts.Where(f => f.Label is not ("Donor" or "Blood group" or "Appointment"))];
+
+    private (int AppointmentId, DonorDetail Donor)? _donorOfDetail;
+
+    // The donor of a pending appointment, for the eligibility card: fetched with the detail, shown once the detail is in place (on the UI thread).
+    protected override async Task<IReadOnlyList<DetailFact>> GetExtraFactsAsync(int id, CancellationToken ct)
+    {
+        _donorOfDetail = null;
+        if (SelectedItem is { Status: AppointmentStatus.Pending } row && row.Id == id)
+        {
+            var donor = await _api.GetDonorAsync(row.DonorId, ct).ConfigureAwait(false);
+            if (donor.IsOk)
+            {
+                _donorOfDetail = (id, donor.Value);
+            }
+        }
+
+        return [];
+    }
+
+    private void ShowDonorEligibility()
+    {
+        if (Detail is { Status: AppointmentStatus.Pending } appointment && _donorOfDetail is { } found && found.AppointmentId == appointment.Id)
+        {
+            DonorEligibility.Show(found.Donor, RecordFormatting.LocalDate(appointment.SlotStartUtc, Zone), Today);
+        }
+        else
+        {
+            DonorEligibility.Hide();
+        }
     }
 
     public override string PageTitle => "Appointments";
@@ -127,6 +363,7 @@ public sealed class AppointmentsViewModel : SortedRecordListViewModel<Appointmen
             if (SetProperty(ref _statusFilter, value))
             {
                 ViewState.Filters[StatusKey] = value.Value?.ToString();
+                OnPropertyChanged(nameof(HasStatusFilter));
                 FilterChanged();
             }
         }
@@ -155,14 +392,30 @@ public sealed class AppointmentsViewModel : SortedRecordListViewModel<Appointmen
         _statusFilter = StatusOptions[0];
         _donorFilter = null;
         OnPropertyChanged(nameof(StatusFilter));
+        OnPropertyChanged(nameof(HasStatusFilter));
         OnPropertyChanged(nameof(DonorFilter));
     }
 
     /// <summary>The only column that sorts is the appointment time; the API supports "slot" and "placed" and this screen offers the first.</summary>
     public override IReadOnlyList<string> SortKeys { get; } = [ContractSortKeys.Slot];
 
-    protected override Task<ApiResult<PagedResult<AppointmentListItem>>> FetchSortedAsync(ListRequest request, CancellationToken ct) =>
-        _api.GetAppointmentsAsync(new AppointmentQuery(request.Search, _donorFilter?.Id, _statusFilter.Value, BloodTypeValue, null, null, request.Page, request.PageSize, request.Sort), ct);
+    /// <summary>
+    /// One call for the page (the view, search, donor, blood type and status go with it; the API runs Today and Upcoming in time order unless a sort is chosen), and beside
+    /// it, best effort, the views' counts.
+    /// </summary>
+    protected override async Task<ApiResult<PagedResult<AppointmentListItem>>> FetchSortedAsync(ListRequest request, CancellationToken ct)
+    {
+        var query = new AppointmentQuery(request.Search, _donorFilter?.Id, _statusFilter.Value, BloodTypeValue, null, null, request.Page, request.PageSize, request.Sort)
+        {
+            View = _view,
+            UtcOffsetMinutes = (int)TimeZoneInfo.ConvertTime(Clock.GetUtcNow(), Zone).Offset.TotalMinutes,
+        };
+        var page = _api.GetAppointmentsAsync(query, ct);
+        var counts = _api.GetAppointmentViewCountsAsync(query, ct);
+        var result = await page.ConfigureAwait(false);
+        _fetchedCounts = await counts.ConfigureAwait(false) is { IsOk: true } c ? c.Value : null;
+        return result;
+    }
 
     protected override void ApplyPrefilter(ListPrefilter prefilter)
     {
@@ -172,7 +425,15 @@ public sealed class AppointmentsViewModel : SortedRecordListViewModel<Appointmen
             _statusFilter = StatusOptions.First(o => o.Value == status);
             ViewState.Filters[StatusKey] = status.ToString();
             OnPropertyChanged(nameof(StatusFilter));
+            OnPropertyChanged(nameof(HasStatusFilter));
             OnFiltersChanged();
+        }
+
+        if (prefilter.Status is not null || prefilter.RecordId is not null)
+        {
+            // A link from another screen (a dashboard card, a receipt): every appointment, so what it points at is in the list whatever its day. Not remembered.
+            _view = null;
+            RaiseViewChanged();
         }
     }
 
@@ -196,7 +457,13 @@ public sealed class AppointmentsViewModel : SortedRecordListViewModel<Appointmen
 
     protected override void Apply()
     {
+        ViewCounts = _fetchedCounts;
         base.Apply();
+        // The agenda's next appointment: the first one of the day still pending, in time order. The rows' agenda cells bind AgendaVersion, so they read it again.
+        _nextId = IsAgenda ? Items.Where(a => a.Status == AppointmentStatus.Pending).OrderBy(a => a.SlotStartUtc).Select(a => (int?)a.Id).FirstOrDefault() : null;
+        AgendaVersion++;
+        OnPropertyChanged(nameof(AgendaVersion));
+        OnPropertyChanged(nameof(ViewCounts));
         if (_openBooking)
         {
             _openBooking = false;
@@ -218,11 +485,11 @@ public sealed class AppointmentsViewModel : SortedRecordListViewModel<Appointmen
     {
         var facts = new List<DetailFact>
         {
-            new("Donor", RecordFormatting.NameWithId(a.DonorName, a.DonorId)),
-            new("Blood type", a.DonorBloodType.ToDisplay()),
+            new("Donor", RecordFormatting.NameWithCode(a.DonorName, RecordCodes.Donor(a.DonorId))),
+            new("Blood group", a.DonorBloodType.ToDisplay()),
             new("Appointment", RecordFormatting.When(a.SlotStartUtc, Zone)),
             new("Status", StatusText(a.Status)),
-            new("Booked on", RecordFormatting.When(a.PlacedAtUtc, Zone)),
+            new("Booked on", RecordFormatting.Stamp(a.PlacedAtUtc, Zone)),
         };
         if (!string.IsNullOrWhiteSpace(a.OverrideReason))
         {
@@ -231,7 +498,7 @@ public sealed class AppointmentsViewModel : SortedRecordListViewModel<Appointmen
 
         if (a.ReceiptId is { } receipt)
         {
-            facts.Add(new DetailFact("Receipt", RecordFormatting.IdText(receipt)));
+            facts.Add(new DetailFact("Receipt", ReceiptCode(receipt)));
         }
 
         return facts;
@@ -281,7 +548,7 @@ public sealed class AppointmentsViewModel : SortedRecordListViewModel<Appointmen
         var receiptId = dialog.Receipt?.Id;
         Toasts.Show(
             ToastKind.Success,
-            receiptId is null ? $"Donation recorded for '{appointment.DonorName}'." : $"Donation recorded for '{appointment.DonorName}'. Receipt {RecordFormatting.IdText(receiptId.Value)} issued.",
+            receiptId is null ? $"Donation recorded for '{appointment.DonorName}'." : $"Donation recorded for '{appointment.DonorName}'. Receipt {ReceiptCode(receiptId.Value)} issued.",
             receiptId is null ? null : "View receipt",
             receiptId is null ? null : () => _receipts.ShowAsync(receiptId.Value, isDuplicate: false));
         await RefreshAfterActionAsync(appointment.Id).ConfigureAwait(true);
@@ -294,11 +561,11 @@ public sealed class AppointmentsViewModel : SortedRecordListViewModel<Appointmen
             return;
         }
 
-        var when = RecordFormatting.When(appointment.SlotStartUtc, Zone);
         var confirmed = await Dialogs.ConfirmAsync(
             "Cancel appointment?",
-            $"The appointment of '{appointment.DonorName}' on {when} will be cancelled and the time becomes free for someone else.",
-            "Cancel appointment").ConfigureAwait(true);
+            $"{appointment.DonorName}'s appointment on {RecordFormatting.DayAndTime(appointment.SlotStartUtc, Zone)} will be cancelled, and the slot becomes free.",
+            "Cancel appointment",
+            "Keep appointment").ConfigureAwait(true);
         if (!confirmed)
         {
             return;
@@ -323,4 +590,26 @@ public sealed class AppointmentsViewModel : SortedRecordListViewModel<Appointmen
     }
 
     public static string StatusText(AppointmentStatus status) => status == AppointmentStatus.NoShow ? "No show" : status.ToString();
+}
+
+/// <summary>Where an appointment stands in today's agenda.</summary>
+public enum AgendaState
+{
+    /// <summary>Not on the Today tab.</summary>
+    None,
+
+    /// <summary>The donation is recorded.</summary>
+    Done,
+
+    /// <summary>The first appointment still to come: the one to check in.</summary>
+    Next,
+
+    /// <summary>A later appointment still to come.</summary>
+    Waiting,
+
+    /// <summary>The donor did not come.</summary>
+    Missed,
+
+    /// <summary>Cancelled.</summary>
+    Cancelled,
 }

@@ -25,7 +25,7 @@ public sealed class UndoRetryTests
 {
     private sealed class Yes : IDialogPresenter
     {
-        public Task<bool> ConfirmAsync(string title, string body, string dangerVerb) => Task.FromResult(true);
+        public Task<bool> ConfirmAsync(string title, string body, string dangerVerb, string keepVerb) => Task.FromResult(true);
 
         public Task ShowErrorAsync(string title, string message, string? details) => Task.CompletedTask;
     }
@@ -39,6 +39,13 @@ public sealed class UndoRetryTests
             Opened.Add(viewModel.GetType().Name);
             return new TaskCompletionSource().Task; // a modal that stays open
         }
+    }
+
+    /// <summary>Steps the rig's clock over the 3 s waking threshold (to 3.6 s) and lets the dispatcher show what changed.</summary>
+    private static void PastWakingThreshold(ManualTimeProvider clock, Hosted host)
+    {
+        clock.Advance(TimeSpan.FromMilliseconds(3600));
+        host.Settle(150);
     }
 
     private static void Click(Button button) => ((IInvokeProvider)UIElementAutomationPeer.CreatePeerForElement(button)!).Invoke();
@@ -104,7 +111,8 @@ public sealed class UndoRetryTests
     {
         StaHost.Run(() =>
         {
-            var rig = Part2Harness.NewRig();
+            var clock = new ManualTimeProvider(DateTimeOffset.UtcNow); // the clock of the shell, its screens and the toasts
+            var rig = Part2Harness.NewRig(clock: clock);
             rig.Get<DialogService>().Presenter = new Yes();
             var shell = rig.Get<ShellViewModel>();
             using var host = Hosted.Create(new ShellView { DataContext = shell }, 1366, 736);
@@ -150,7 +158,7 @@ public sealed class UndoRetryTests
             host.Settle(150);
             Assert.Equal(2, restores.Count);
             rig.Get<ServerStatus>().Enter();
-            Hosted.RunDispatcherFor(3600);
+            PastWakingThreshold(clock, host);
             var notice = host.Find<Lifestream.Desktop.Controls.WakingNotice>("ToastActionWakingNotice");
             var cancel = Hosted.Descendants(notice).OfType<Button>().FirstOrDefault(b => b.IsVisible && b.Content as string == "Cancel");
             Assert.True(cancel is not null, "the retried Undo shows no 'Waking up the server' notice with Cancel after 3 s");
@@ -166,7 +174,8 @@ public sealed class UndoRetryTests
     {
         StaHost.Run(() =>
         {
-            var rig = Part2Harness.NewRig();
+            var clock = new ManualTimeProvider(DateTimeOffset.UtcNow); // the clock of the shell, its screens and the toasts
+            var rig = Part2Harness.NewRig(clock: clock);
             rig.Get<DialogService>().Presenter = new Yes();
             var flow = rig.Get<IAppFlow>();
             Hosted.Await(() => flow.SignedInAsync());
@@ -177,7 +186,7 @@ public sealed class UndoRetryTests
             Click(Visible(host, "Undo")!);
             host.Settle(150);
             rig.Get<ServerStatus>().Enter();
-            Hosted.RunDispatcherFor(3600);
+            PastWakingThreshold(clock, host);
             Assert.True(toasts.Actions.IsWaking, "set-up: the Undo is not waiting");
 
             var signedInWhenCancelled = new List<bool>();
@@ -205,7 +214,8 @@ public sealed class UndoRetryTests
     {
         StaHost.Run(() =>
         {
-            var rig = Part2Harness.NewRig();
+            var clock = new ManualTimeProvider(DateTimeOffset.UtcNow); // the clock of the shell, its screens and the toasts
+            var rig = Part2Harness.NewRig(clock: clock);
             var forms = new CountingForms();
             rig.Get<DialogService>().Presenter = new Yes();
             rig.Get<FormDialogService>().Presenter = forms;
@@ -224,7 +234,7 @@ public sealed class UndoRetryTests
             Click(Visible(host, "Undo")!);
             host.Settle(150);
             rig.Get<ServerStatus>().Enter();
-            Hosted.RunDispatcherFor(3600);
+            PastWakingThreshold(clock, host);
             Assert.True(toasts.Actions.IsWaking, "set-up: the Undo is not waiting");
 
             Assert.False(appointments.RecordDonationCommand.CanExecute(null));

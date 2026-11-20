@@ -3,113 +3,249 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="clr-namespace:Lifestream.Desktop.Controls"
              xmlns:feat="clr-namespace:Lifestream.Desktop.Features"
-             xmlns:services="clr-namespace:Lifestream.Desktop.Services"
-             Focusable="False">
-  <!-- Profile: your photo, what you can't change as label and value text, the two things you can change (name and phone), and your password in its own dialog. Save is enabled only when something changed. -->
+             xmlns:profile="clr-namespace:Lifestream.Client.Features.Profile;assembly=Lifestream.Client"
+             xmlns:staff="clr-namespace:Lifestream.Desktop.Features.Staff"
+             controls:ShellPage.OwnsHeader="True" Focusable="False">
+  <!-- Profile (direction A): a settings page, centred at MaxWidth.Settings (960) at every window size. Account: your photo (initials until you add one), name
+       and what an administrator keeps, as label and value text. Your details: the two you can change (name and phone). Security: the password, in its own
+       dialog. Appearance: light, dark or match Windows, applied at once (only when the app provides it). Shortcuts: the keys of the main window. Save and
+       Discard sit in a bar at the foot of the page that shows only while something has changed. (Density is not offered: no style reads it yet.) -->
   <UserControl.Resources>
     <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
-    <services:AvatarConverter x:Key="Avatar" />
+    <staff:PhotoSourceConverter x:Key="Photo" />
   </UserControl.Resources>
-  <controls:LoadSurface State="{Binding State}" SkeletonKind="Profile" ErrorMessage="{Binding ErrorMessage}" ErrorDetail="{Binding ErrorDetail}" RetryCommand="{Binding RetryCommand}">
-    <ScrollViewer VerticalScrollBarVisibility="Auto" Focusable="False">
-      <controls:Card HorizontalAlignment="Left" VerticalAlignment="Top" MaxWidth="640" MinWidth="360" Background="{DynamicResource Brush.SurfaceRaised}" CornerRadius="{DynamicResource Radius.Card}" Padding="{DynamicResource Pad.24}"
-              AutomationProperties.Name="Your profile" BorderBrush="{DynamicResource Brush.BorderCard}" BorderThickness="1">
-        <StackPanel KeyboardNavigation.TabNavigation="Local">
+
+  <Grid x:Name="Page">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="*" />
+      <RowDefinition Height="Auto" />
+    </Grid.RowDefinitions>
+
+    <controls:PageHeader x:Name="Header" Title="Profile" MaxWidth="{DynamicResource MaxWidth.Settings}" HorizontalAlignment="Stretch" />
+
+    <controls:LoadSurface Grid.Row="1" State="{Binding State}" SkeletonKind="Profile" ErrorMessage="{Binding ErrorMessage}" ErrorDetail="{Binding ErrorDetail}" RetryCommand="{Binding RetryCommand}"
+                          feat:Edge.Top="{DynamicResource Space.24}">
+      <!-- The viewer reaches 14 into the page's right padding and its content keeps that strip free, so the scroll bar lies beside the cards, never over them (5.27) -->
+      <ScrollViewer x:Name="PageScroll" VerticalScrollBarVisibility="Auto" Focusable="False" Margin="{DynamicResource Inset.RN14}">
+        <Border Padding="{DynamicResource Inset.R14}">
+        <StackPanel x:Name="Sections" MaxWidth="{DynamicResource MaxWidth.Settings}" HorizontalAlignment="Stretch" KeyboardNavigation.TabNavigation="Local" AutomationProperties.Name="Your profile"
+                    feat:Edge.Bottom="{DynamicResource Space.24}">
           <controls:WakingNotice x:Name="Waking" IsActive="{Binding IsOperationWaking}" CancelCommand="{Binding CancelOperationCommand}" feat:Edge.Bottom="{DynamicResource Space.16}" />
-          <StackPanel Orientation="Horizontal" feat:Edge.Bottom="{DynamicResource Space.24}">
-            <Ellipse Width="96" Height="96" feat:Edge.Right="{DynamicResource Space.24}" AutomationProperties.Name="Your photo">
-              <Ellipse.Fill>
-                <ImageBrush ImageSource="{Binding PhotoBytes, Converter={StaticResource Avatar}}" Stretch="UniformToFill" />
-              </Ellipse.Fill>
-            </Ellipse>
-            <StackPanel VerticalAlignment="Center">
-              <TextBlock Style="{DynamicResource Text.Title}" Text="{Binding DisplayName}" TextWrapping="Wrap" AutomationProperties.HeadingLevel="Level1" />
-              <Button Style="{DynamicResource Button.Secondary}" Command="{Binding PickPhotoCommand}" HorizontalAlignment="Left" feat:Edge.Top="{DynamicResource Space.8}" AutomationProperties.Name="Change photo">
+
+          <!-- Account: who you are, and what an administrator keeps (label and value text, never boxes). -->
+          <controls:Section x:Name="AccountSection" Header="Account" Subtitle="An administrator keeps these. Ask one if something is wrong.">
+            <StackPanel>
+              <Grid>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="Auto" />
+                  <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <!-- Initials, or the photo when there is one. -->
+                <controls:Avatar x:Name="ProfileAvatar" Size="72" Initials="{Binding Initials}" Source="{Binding PhotoBytes, Converter={StaticResource Photo}}"
+                                 AutomationProperties.Name="Your photo" VerticalAlignment="Center" feat:Edge.Right="{DynamicResource Space.20}" />
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                  <TextBlock Style="{DynamicResource Text.Section}" Text="{Binding SavedName}" TextWrapping="Wrap" AutomationProperties.HeadingLevel="Level2" />
+                  <TextBlock Style="{DynamicResource Text.Secondary}" TextWrapping="Wrap" feat:Edge.Top="{DynamicResource Space.4}">
+                    <Run Text="{Binding DesignationText, Mode=OneWay}" /><Run Text=", " /><Run Text="{Binding ShiftText, Mode=OneWay}" />
+                  </TextBlock>
+                  <StackPanel Orientation="Horizontal" feat:Edge.Top="{DynamicResource Space.12}">
+                    <Button Style="{DynamicResource Button.Secondary.Small}" Command="{Binding PickPhotoCommand}" AutomationProperties.Name="Change photo">
+                      <StackPanel Orientation="Horizontal">
+                        <controls:Icon Kind="User" Size="14" VerticalAlignment="Center" feat:Edge.Right="{DynamicResource Space.8}" />
+                        <TextBlock Text="Change photo" VerticalAlignment="Center" />
+                      </StackPanel>
+                    </Button>
+                    <TextBlock Style="{DynamicResource Text.Caption}" Text="New photo chosen. Save to keep it." VerticalAlignment="Center" feat:Edge.Left="{DynamicResource Space.12}"
+                               Visibility="{Binding PhotoWasReplaced, Converter={StaticResource BoolToVisibility}}" AutomationProperties.LiveSetting="Polite" />
+                  </StackPanel>
+                </StackPanel>
+              </Grid>
+
+              <Border BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="0,1,0,0" feat:Edge.Top="{DynamicResource Space.20}" Padding="{DynamicResource Inset.T16}">
+                <Grid x:Name="Facts">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                  </Grid.ColumnDefinitions>
+                  <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                  </Grid.RowDefinitions>
+                  <StackPanel AutomationProperties.Name="Username" feat:Edge.Bottom="{DynamicResource Space.16}">
+                    <TextBlock Style="{DynamicResource Text.Label}" Text="Username" />
+                    <TextBlock x:Name="UsernameValue" Style="{DynamicResource Text.Body}" Text="{Binding Username}" TextWrapping="Wrap" feat:Edge.Top="{DynamicResource Space.4}" />
+                  </StackPanel>
+                  <StackPanel Grid.Column="1" AutomationProperties.Name="Job title" feat:Edge.Bottom="{DynamicResource Space.16}">
+                    <TextBlock Style="{DynamicResource Text.Label}" Text="Job title" />
+                    <TextBlock x:Name="DesignationValue" Style="{DynamicResource Text.Body}" Text="{Binding DesignationText}" TextWrapping="Wrap" feat:Edge.Top="{DynamicResource Space.4}" />
+                  </StackPanel>
+                  <StackPanel Grid.Column="2" AutomationProperties.Name="Shift" feat:Edge.Bottom="{DynamicResource Space.16}">
+                    <TextBlock Style="{DynamicResource Text.Label}" Text="Shift" />
+                    <TextBlock x:Name="ShiftValue" Style="{DynamicResource Text.Body}" Text="{Binding ShiftText}" TextWrapping="Wrap" feat:Edge.Top="{DynamicResource Space.4}" />
+                  </StackPanel>
+                  <StackPanel Grid.Row="1" AutomationProperties.Name="Date of birth">
+                    <TextBlock Style="{DynamicResource Text.Label}" Text="Date of birth" />
+                    <TextBlock x:Name="DateOfBirthValue" Style="{DynamicResource Text.Body}" Text="{Binding DateOfBirthText}" TextWrapping="Wrap" feat:Edge.Top="{DynamicResource Space.4}" />
+                  </StackPanel>
+                  <StackPanel Grid.Row="1" Grid.Column="1" AutomationProperties.Name="Member since">
+                    <TextBlock Style="{DynamicResource Text.Label}" Text="Member since" />
+                    <TextBlock x:Name="MemberSinceValue" Style="{DynamicResource Text.Body}" Text="{Binding MemberSinceText}" TextWrapping="Wrap" feat:Edge.Top="{DynamicResource Space.4}" />
+                  </StackPanel>
+                </Grid>
+              </Border>
+            </StackPanel>
+          </controls:Section>
+
+          <!-- Your details: what you can change yourself. Save and Discard are in the bar at the foot of the page. -->
+          <controls:Section x:Name="DetailsSection" Header="Your details" Subtitle="Your name and phone show to the rest of the team." feat:Edge.Top="{DynamicResource Space.16}">
+            <StackPanel>
+              <Grid>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="*" />
+                  <ColumnDefinition Width="16" />
+                  <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <controls:FormField Label="Full name" IsRequired="True" controls:FormFocus.FieldName="DisplayName" Error="{Binding [DisplayName]}">
+                  <TextBox x:Name="NameBox" Text="{Binding DisplayName, UpdateSourceTrigger=PropertyChanged}" MaxLength="100" AutomationProperties.Name="Full name" />
+                </controls:FormField>
+                <controls:FormField Grid.Column="2" Label="Phone (optional)" Hint="Include the country code, for example +1 555 0175" controls:FormFocus.FieldName="Phone" Error="{Binding [Phone]}">
+                  <TextBox x:Name="PhoneBox" Text="{Binding Phone, UpdateSourceTrigger=PropertyChanged}" MaxLength="21" AutomationProperties.Name="Phone" />
+                </controls:FormField>
+              </Grid>
+
+              <!-- Someone else changed the profile (409): reload, never overwrite. -->
+              <controls:CrispBorder Padding="{DynamicResource Inset.H12V8}" feat:Edge.Top="{DynamicResource Space.8}" Background="{DynamicResource Brush.WarningSoft}" BorderBrush="{DynamicResource Brush.WarningSoft}"
+                                    BorderThickness="1" CornerRadius="{DynamicResource Radius.Control}" Visibility="{Binding HasConflict, Converter={StaticResource BoolToVisibility}}" AutomationProperties.LiveSetting="Assertive">
+                <Grid>
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                  </Grid.ColumnDefinitions>
+                  <controls:Icon Kind="Alert" Size="18" Foreground="{DynamicResource Brush.Warning}" VerticalAlignment="Top" feat:Edge.Right="{DynamicResource Space.12}" />
+                  <StackPanel Grid.Column="1">
+                    <TextBlock Style="{DynamicResource Text.Body}" Text="{Binding ConflictMessage}" TextWrapping="Wrap" />
+                    <Button Style="{DynamicResource Button.Secondary.Small}" Content="Reload" Command="{Binding ReloadCommand}" HorizontalAlignment="Left" feat:Edge.Top="{DynamicResource Space.8}"
+                            AutomationProperties.Name="Reload the latest version" />
+                  </StackPanel>
+                </Grid>
+              </controls:CrispBorder>
+              <!-- What went wrong with a save or a photo. -->
+              <controls:CrispBorder Padding="{DynamicResource Inset.H12V8}" feat:Edge.Top="{DynamicResource Space.8}" Background="{DynamicResource Brush.CriticalSoft}" BorderBrush="{DynamicResource Brush.CriticalSoft}"
+                                    BorderThickness="1" CornerRadius="{DynamicResource Radius.Control}" Visibility="{Binding HasFormError, Converter={StaticResource BoolToVisibility}}" AutomationProperties.LiveSetting="Assertive">
+                <Grid>
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                  </Grid.ColumnDefinitions>
+                  <controls:Icon Kind="Alert" Size="18" Foreground="{DynamicResource Brush.Critical}" VerticalAlignment="Top" feat:Edge.Right="{DynamicResource Space.12}" />
+                  <TextBlock Grid.Column="1" Style="{DynamicResource Text.Body}" Text="{Binding FormError}" TextWrapping="Wrap" />
+                </Grid>
+              </controls:CrispBorder>
+            </StackPanel>
+          </controls:Section>
+
+          <!-- Security -->
+          <controls:Section x:Name="PasswordSection" Header="Security" Subtitle="Change the password you sign in with. You'll need the current one." feat:Edge.Top="{DynamicResource Space.16}">
+            <controls:Section.HeaderActions>
+              <Button x:Name="ChangePasswordButton" Style="{DynamicResource Button.Secondary}" Command="{Binding ChangePasswordCommand}" AutomationProperties.Name="Change password">
                 <StackPanel Orientation="Horizontal">
-                  <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE722;" feat:Edge.Right="{DynamicResource Space.8}" VerticalAlignment="Center" />
-                  <TextBlock Text="Change photo" VerticalAlignment="Center" />
+                  <controls:Icon Kind="Key" Size="16" VerticalAlignment="Center" feat:Edge.Right="{DynamicResource Space.8}" />
+                  <TextBlock Text="Change password" VerticalAlignment="Center" />
                 </StackPanel>
               </Button>
-              <TextBlock Style="{DynamicResource Text.Caption}" Foreground="{DynamicResource Brush.TextSecondary}" Text="New photo chosen. Save to keep it." feat:Edge.Top="{DynamicResource Space.4}"
-                         Visibility="{Binding PhotoWasReplaced, Converter={StaticResource BoolToVisibility}}" AutomationProperties.LiveSetting="Polite" />
-            </StackPanel>
-          </StackPanel>
+            </controls:Section.HeaderActions>
+          </controls:Section>
 
-          <TextBlock Style="{DynamicResource Text.Heading}" Text="Your account" feat:Edge.Bottom="{DynamicResource Space.12}" AutomationProperties.HeadingLevel="Level2" />
-          <Grid feat:Edge.Bottom="{DynamicResource Space.16}">
-            <Grid.ColumnDefinitions>
-              <ColumnDefinition Width="*" />
-              <ColumnDefinition Width="*" />
-              <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
-            <StackPanel AutomationProperties.Name="Username">
-              <TextBlock Style="{DynamicResource Text.Caption}" Foreground="{DynamicResource Brush.TextMuted}" Text="Username" />
-              <TextBlock x:Name="UsernameValue" Style="{DynamicResource Text.Body}" Text="{Binding Username}" TextWrapping="Wrap" />
-            </StackPanel>
-            <StackPanel Grid.Column="1" AutomationProperties.Name="Designation">
-              <TextBlock Style="{DynamicResource Text.Caption}" Foreground="{DynamicResource Brush.TextMuted}" Text="Designation" />
-              <TextBlock x:Name="DesignationValue" Style="{DynamicResource Text.Body}" Text="{Binding DesignationText}" TextWrapping="Wrap" />
-            </StackPanel>
-            <StackPanel Grid.Column="2" AutomationProperties.Name="Shift">
-              <TextBlock Style="{DynamicResource Text.Caption}" Foreground="{DynamicResource Brush.TextMuted}" Text="Shift" />
-              <TextBlock x:Name="ShiftValue" Style="{DynamicResource Text.Body}" Text="{Binding ShiftText}" TextWrapping="Wrap" />
-            </StackPanel>
-          </Grid>
-          <Grid feat:Edge.Bottom="{DynamicResource Space.16}">
-            <Grid.ColumnDefinitions>
-              <ColumnDefinition Width="*" />
-              <ColumnDefinition Width="*" />
-              <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
-            <StackPanel AutomationProperties.Name="Date of birth">
-              <TextBlock Style="{DynamicResource Text.Caption}" Foreground="{DynamicResource Brush.TextMuted}" Text="Date of birth" />
-              <TextBlock x:Name="DateOfBirthValue" Style="{DynamicResource Text.Body}" Text="{Binding DateOfBirthText}" TextWrapping="Wrap" />
-            </StackPanel>
-            <StackPanel Grid.Column="1" AutomationProperties.Name="Member since">
-              <TextBlock Style="{DynamicResource Text.Caption}" Foreground="{DynamicResource Brush.TextMuted}" Text="Member since" />
-              <TextBlock x:Name="MemberSinceValue" Style="{DynamicResource Text.Body}" Text="{Binding MemberSinceText}" TextWrapping="Wrap" />
-            </StackPanel>
-          </Grid>
-
-          <TextBlock Style="{DynamicResource Text.Heading}" Text="Your details" feat:Edge.Top="{DynamicResource Space.8}" feat:Edge.Bottom="{DynamicResource Space.12}" AutomationProperties.HeadingLevel="Level2" />
-          <controls:FormField Label="Full name (required)" IsRequired="True" controls:FormFocus.FieldName="DisplayName" Error="{Binding [DisplayName]}">
-            <TextBox x:Name="NameBox" Text="{Binding DisplayName, UpdateSourceTrigger=PropertyChanged}" MaxLength="100" AutomationProperties.Name="Full name" />
-          </controls:FormField>
-          <controls:FormField Label="Phone" Hint="Digits only; a leading + is allowed" controls:FormFocus.FieldName="Phone" Error="{Binding [Phone]}">
-            <TextBox x:Name="PhoneBox" Text="{Binding Phone, UpdateSourceTrigger=PropertyChanged}" MaxLength="21" AutomationProperties.Name="Phone" />
-          </controls:FormField>
-
-          <Border feat:Edge.PadX="{DynamicResource Space.12}" feat:Edge.PadY="{DynamicResource Space.8}" feat:Edge.Bottom="{DynamicResource Space.12}" Background="{DynamicResource Brush.SurfacePressed}"
-                  BorderBrush="{DynamicResource Brush.StatusWarning}" BorderThickness="1" CornerRadius="{DynamicResource Radius.Control}" Visibility="{Binding HasConflict, Converter={StaticResource BoolToVisibility}}"
-                  AutomationProperties.LiveSetting="Assertive">
-            <StackPanel>
-              <TextBlock Style="{DynamicResource Text.Body}" Text="{Binding ConflictMessage}" TextWrapping="Wrap" />
-              <Button Style="{DynamicResource Button.Secondary}" Content="Reload" Command="{Binding ReloadCommand}" HorizontalAlignment="Left" feat:Edge.Top="{DynamicResource Space.8}"
-                      AutomationProperties.Name="Reload the latest version" />
-            </StackPanel>
-          </Border>
-          <Border feat:Edge.PadX="{DynamicResource Space.12}" feat:Edge.PadY="{DynamicResource Space.8}" feat:Edge.Bottom="{DynamicResource Space.12}" Background="{DynamicResource Brush.SurfacePressed}"
-                  BorderBrush="{DynamicResource Brush.StatusDanger}" BorderThickness="1" CornerRadius="{DynamicResource Radius.Control}" Visibility="{Binding HasFormError, Converter={StaticResource BoolToVisibility}}"
-                  AutomationProperties.LiveSetting="Assertive">
+          <!-- Appearance: shown when the app gives the screen the preferences. -->
+          <controls:Section x:Name="AppearanceSection" Header="Appearance" Subtitle="Applies to every window at once. Match Windows follows your Windows app mode." feat:Edge.Top="{DynamicResource Space.16}"
+                            Visibility="{Binding CanChooseTheme, Converter={StaticResource BoolToVisibility}}">
             <StackPanel Orientation="Horizontal">
-              <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE783;" Foreground="{DynamicResource Brush.StatusDanger}" VerticalAlignment="Top" feat:Edge.Top="{DynamicResource Space.4}" feat:Edge.Right="{DynamicResource Space.12}" />
-              <TextBlock Style="{DynamicResource Text.Body}" Text="{Binding FormError}" TextWrapping="Wrap" MaxWidth="480" />
+              <TextBlock Style="{DynamicResource Text.Label}" Text="Theme" VerticalAlignment="Center" Width="96" />
+              <Border Style="{DynamicResource Segmented.Well}" AutomationProperties.Name="Theme">
+                <StackPanel Orientation="Horizontal">
+                  <RadioButton x:Name="LightOption" Style="{DynamicResource Segmented.Option}" GroupName="Theme" IsChecked="{Binding IsLightTheme, Mode=TwoWay}" AutomationProperties.Name="Light">
+                    <StackPanel Orientation="Horizontal">
+                      <controls:Icon Kind="Sun" Size="16" VerticalAlignment="Center" feat:Edge.Right="{DynamicResource Space.8}" />
+                      <TextBlock Text="Light" VerticalAlignment="Center" />
+                    </StackPanel>
+                  </RadioButton>
+                  <RadioButton x:Name="DarkOption" Style="{DynamicResource Segmented.Option}" GroupName="Theme" IsChecked="{Binding IsDarkTheme, Mode=TwoWay}" AutomationProperties.Name="Dark">
+                    <StackPanel Orientation="Horizontal">
+                      <controls:Icon Kind="Moon" Size="16" VerticalAlignment="Center" feat:Edge.Right="{DynamicResource Space.8}" />
+                      <TextBlock Text="Dark" VerticalAlignment="Center" />
+                    </StackPanel>
+                  </RadioButton>
+                  <RadioButton x:Name="SystemOption" Style="{DynamicResource Segmented.Option}" GroupName="Theme" IsChecked="{Binding IsSystemTheme, Mode=TwoWay}" AutomationProperties.Name="Match Windows">
+                    <StackPanel Orientation="Horizontal">
+                      <controls:Icon Kind="Monitor" Size="16" VerticalAlignment="Center" feat:Edge.Right="{DynamicResource Space.8}" />
+                      <TextBlock Text="Match Windows" VerticalAlignment="Center" />
+                    </StackPanel>
+                  </RadioButton>
+                </StackPanel>
+              </Border>
             </StackPanel>
-          </Border>
+          </controls:Section>
 
-          <StackPanel Orientation="Horizontal" feat:Edge.Top="{DynamicResource Space.8}">
-            <Button Style="{DynamicResource Button.Primary}" Content="{Binding SaveText}" Command="{Binding SaveCommand}" feat:Edge.Right="{DynamicResource Space.8}" AutomationProperties.Name="Save changes"
-                    controls:ButtonAssist.IsBusy="{Binding SaveCommand.IsRunning}" controls:ButtonAssist.BusyText="{Binding SaveBusyText}" />
-            <Button Style="{DynamicResource Button.Ghost}" Content="Discard" Command="{Binding DiscardCommand}" feat:Edge.Right="{DynamicResource Space.8}" AutomationProperties.Name="Discard changes" />
-            <Button Style="{DynamicResource Button.Secondary}" Command="{Binding ChangePasswordCommand}" AutomationProperties.Name="Change password">
-              <StackPanel Orientation="Horizontal">
-                <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE192;" feat:Edge.Right="{DynamicResource Space.8}" VerticalAlignment="Center" />
-                <TextBlock Text="Change password" VerticalAlignment="Center" />
-              </StackPanel>
-            </Button>
-          </StackPanel>
+          <!-- Shortcuts: the keys of the main window, in two columns of key caps and what they do. -->
+          <controls:Section x:Name="ShortcutsSection" Header="Shortcuts" Subtitle="These work anywhere in the main window." feat:Edge.Top="{DynamicResource Space.16}">
+            <ItemsControl x:Name="ShortcutList" ItemsSource="{Binding Shortcuts}" Focusable="False" AutomationProperties.Name="Keyboard shortcuts">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <UniformGrid Columns="2" />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="{x:Type profile:ShortcutInfo}">
+                  <Grid feat:Edge.Bottom="{DynamicResource Space.12}" feat:Edge.Right="{DynamicResource Space.16}" AutomationProperties.Name="{Binding AutomationName}">
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="104" />
+                      <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <ItemsControl ItemsSource="{Binding Keys}" Focusable="False" VerticalAlignment="Center">
+                      <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                          <StackPanel Orientation="Horizontal" />
+                        </ItemsPanelTemplate>
+                      </ItemsControl.ItemsPanel>
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                          <Border Style="{DynamicResource Kbd}" feat:Edge.Right="{DynamicResource Space.4}">
+                            <TextBlock Style="{DynamicResource Kbd.Text}" Text="{Binding}" />
+                          </Border>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock Grid.Column="1" Style="{DynamicResource Text.Body}" Text="{Binding Action}" TextWrapping="Wrap" VerticalAlignment="Center" />
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </controls:Section>
         </StackPanel>
-      </controls:Card>
-    </ScrollViewer>
-  </controls:LoadSurface>
+        </Border>
+      </ScrollViewer>
+    </controls:LoadSurface>
+
+    <!-- Save and Discard: only while something has changed, pinned to the foot of the page, the width of the sections. -->
+    <controls:CrispBorder x:Name="SaveBar" Grid.Row="2" MaxWidth="{DynamicResource MaxWidth.Settings}" Background="{DynamicResource Brush.Layer}" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="1"
+                          CornerRadius="{DynamicResource Radius.Panel}" Padding="{DynamicResource Inset.H16V12}" feat:Edge.Top="{DynamicResource Space.12}"
+                          Visibility="{Binding HasUnsavedChanges, Converter={StaticResource BoolToVisibility}}" AutomationProperties.Name="Unsaved changes" AutomationProperties.LiveSetting="Polite">
+      <Grid>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto" />
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+        <controls:Icon Kind="Edit" Size="16" Foreground="{DynamicResource Brush.Ink2}" VerticalAlignment="Center" feat:Edge.Right="{DynamicResource Space.12}" />
+        <TextBlock Grid.Column="1" Style="{DynamicResource Text.Body}" Text="You have unsaved changes." VerticalAlignment="Center" TextWrapping="Wrap" />
+        <StackPanel Grid.Column="2" Orientation="Horizontal" feat:Edge.Left="{DynamicResource Space.12}">
+          <Button x:Name="DiscardButton" Style="{DynamicResource Button.Secondary}" Content="Discard" Command="{Binding DiscardCommand}" feat:Edge.Right="{DynamicResource Space.8}" AutomationProperties.Name="Discard changes" />
+          <Button x:Name="SaveButton" Style="{DynamicResource Button.Primary}" Content="{Binding SaveText}" Command="{Binding SaveCommand}" AutomationProperties.Name="Save changes" IsDefault="True"
+                  controls:ButtonAssist.IsBusy="{Binding SaveCommand.IsRunning}" controls:ButtonAssist.BusyText="Saving" />
+        </StackPanel>
+      </Grid>
+    </controls:CrispBorder>
+  </Grid>
 </UserControl>

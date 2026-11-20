@@ -54,7 +54,7 @@ public sealed partial class ChangePasswordDialogViewModel : DialogViewModel
 
     public string Explanation => IsRequired
         ? "An administrator reset your password. Enter the temporary password you were given, then choose a new one."
-        : $"Choose a new password of at least {ResetPasswordDialogViewModel.MinLength} characters.";
+        : "Enter your current password, then choose a new one.";
 
     public string SuccessMessage => "Your password was changed.";
 

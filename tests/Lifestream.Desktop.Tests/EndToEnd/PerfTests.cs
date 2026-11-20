@@ -35,6 +35,20 @@ public sealed class PerfTests
 
     private static readonly string[] Screens = ["Dashboard", "Donors", "Appointments", "Patients", "Requests", "Stock", "Receipts", "Staff", "Profile"];
 
+    /// <summary>
+    /// The screens of direction A that load more than one data set, with the one request each data set costs (the budget is exactly one call per data set:
+    /// never one per row, never the same one twice). A screen that is not listed loads one data set with one call.
+    /// Dashboard: the figures and charts, the stock, today's appointments, the open requests. Appointments, Requests and Receipts: the list and the counts
+    /// of its tabs; Requests also the stock its Cover column is worked out from.
+    /// </summary>
+    private static readonly Dictionary<string, string[]> DataSets = new()
+    {
+        ["Dashboard"] = ["GET /api/v1/dashboard", "GET /api/v1/stock", "GET /api/v1/appointments", "GET /api/v1/requests"],
+        ["Appointments"] = ["GET /api/v1/appointments", "GET /api/v1/appointments/views"],
+        ["Requests"] = ["GET /api/v1/requests", "GET /api/v1/requests/views", "GET /api/v1/stock"],
+        ["Receipts"] = ["GET /api/v1/receipts", "GET /api/v1/receipts/counts"],
+    };
+
     // ---- pumping without sleeping, so the UI thread is idle (and measurable) whenever nothing needs doing ----
 
     internal static void Pump(Task task, int timeoutMilliseconds = 30_000)
@@ -302,8 +316,12 @@ public sealed class PerfTests
                     var calls = rig.Probe.Calls;
                     var page = Hosted.Descendants(pageHost).OfType<FrameworkElement>().FirstOrDefault(e => ReferenceEquals(e.DataContext, rig.Shell.CurrentPage) && e is UserControl);
                     var dataContextIsTheViewModel = page is not null;
-                    var pass = calls.Count == 1 && changes == 1 && dataContextIsTheViewModel;
-                    PerfLog.Record("api-calls", $"{screen}: API calls for one screen load", "count of one load", 1, calls.Count, "calls", "== 1", pass, $"{string.Join(", ", calls)}; view models created {changes}; DataContext is the view model: {dataContextIsTheViewModel}", "api-calls " + screen.ToLowerInvariant());
+                    // Exactly one call per data set of the screen: the listed ones, each once. Most screens have one data set; never a call per row.
+                    var dataSets = DataSets.TryGetValue(screen, out var sets) ? sets : null;
+                    var oneEach = dataSets is null ? calls.Count == 1 : calls.Order(StringComparer.Ordinal).SequenceEqual(dataSets.Order(StringComparer.Ordinal), StringComparer.Ordinal);
+                    var pass = oneEach && changes == 1 && dataContextIsTheViewModel;
+                    var limit = dataSets is null ? "== 1" : $"== {dataSets.Length}, one per data set ({string.Join(", ", dataSets.Select(s => s[(s.LastIndexOf("/v1/", StringComparison.Ordinal) + 4)..]))})";
+                    PerfLog.Record("api-calls", $"{screen}: API calls for one screen load", "count of one load", 1, calls.Count, "calls", limit, pass, $"{string.Join(", ", calls)}; view models created {changes}; DataContext is the view model: {dataContextIsTheViewModel}", "api-calls " + screen.ToLowerInvariant());
                     if (!pass)
                     {
                         found.Add($"{screen}: {calls.Count} calls ({string.Join(", ", calls)}), {changes} view model(s), context ok {dataContextIsTheViewModel}");
@@ -481,7 +499,10 @@ public sealed class PerfTests
                     var pixels = new byte[Width * Height * 4];
                     bitmap.CopyPixels(pixels, Width * 4, 0);
                     drawnAt = Stopwatch.GetTimestamp();
-                    drawnNow = CountNear(pixels, 0xFF, 0x7A, 0x8A) > 400 && CountNear(pixels, 0x7C, 0xB8, 0xFF) > 400;
+                    // The two series colours of the theme in use (Brush.Chart1, Brush.Chart2), in numbers only a drawn chart produces.
+                    var one = ((SolidColorBrush)view.FindResource("Brush.Chart1")).Color;
+                    var two = ((SolidColorBrush)view.FindResource("Brush.Chart2")).Color;
+                    drawnNow = CountNear(pixels, one.R, one.G, one.B) > 400 && CountNear(pixels, two.R, two.G, two.B) > 400;
                     if (!drawnNow)
                     {
                         PumpFor(1);

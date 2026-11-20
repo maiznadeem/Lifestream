@@ -3,166 +3,371 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="clr-namespace:Lifestream.Desktop.Controls"
              xmlns:feat="clr-namespace:Lifestream.Desktop.Features"
+             xmlns:reqs="clr-namespace:Lifestream.Desktop.Features.Requests"
              xmlns:lists="clr-namespace:Lifestream.Desktop.Features.ListScreens"
              xmlns:services="clr-namespace:Lifestream.Desktop.Services"
+             controls:ShellPage.OwnsHeader="True"
              Focusable="False">
-  <!-- Requests: one search box for the patient's name, status and blood type filters, the list (patient name with the id as secondary text, units, needed-by date, status chip) and on the right the request's actions and facts or its form. -->
+  <!-- Requests (direction A): the page header with the count, "New request" (secondary while a request is open) and the saved views (Open, Due in 48 h, Fulfilled,
+       Cancelled, with their counts); the search with the blood group chip; the table, open requests needed first at the top (overdue first), with the urgency, the Cover
+       (Can fulfil, n short, No stock) and, for closed requests only, the status; the paging footer; and the selected request in the side panel: the patient, what is
+       needed and by when, how urgent and whether the stock covers it, "Fulfil request", Edit and "...", and the details. Fulfilling happens in the panel: the step (the
+       bags that will be issued, oldest first) replaces the actions until it is done or "Not now". The request form opens in the panel too. -->
   <UserControl.Resources>
     <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
-    <feat:BloodTypeTextConverter x:Key="BloodTypeText" />
     <feat:DateTextConverter x:Key="DateText" />
     <feat:NullToCollapsedConverter x:Key="NullToCollapsed" />
     <feat:NullToVisibleConverter x:Key="NullToVisible" />
     <feat:RequestStatusKindConverter x:Key="StatusKind" />
     <feat:RequestStatusTextConverter x:Key="StatusText" />
-    <feat:LocalWhenConverter x:Key="LocalWhen" />
-    <feat:IdTextConverter x:Key="IdText" />
-    <Style x:Key="RecordLink" TargetType="Hyperlink">
-      <Setter Property="Foreground" Value="{DynamicResource Brush.StatusInfo}" />
-      <Setter Property="TextDecorations" Value="Underline" />
+    <lists:TypographicBloodTypeConverter x:Key="BloodGroup" />
+    <lists:InitialsConverter x:Key="Initials" />
+    <lists:RecordCodeConverter x:Key="Code" />
+    <lists:CompactCollapsedConverter x:Key="CompactCollapsed" />
+    <lists:EqualsToVisibleConverter x:Key="EqualsToVisible" />
+    <lists:CountTextConverter x:Key="CountText" />
+    <lists:UtcDateConverter x:Key="UtcDate" />
+    <lists:DataProxy x:Key="Model" Data="{Binding}" />
+    <reqs:RequestUrgencyConverter x:Key="Urgency" />
+    <reqs:UrgencyBadgeKindConverter x:Key="UrgencyKind" />
+    <reqs:UrgencyIconConverter x:Key="UrgencyIcon" />
+    <reqs:RequestCoverConverter x:Key="RowCover" />
+    <reqs:CoverPartConverter x:Key="Cover" />
+    <Thickness x:Key="Reqs.ToolbarGap">0,20,0,16</Thickness>
+    <Thickness x:Key="Reqs.NameGap">10,0,0,0</Thickness>
+    <Thickness x:Key="Reqs.HeaderGap">14,0,12,0</Thickness>
+    <Thickness x:Key="Reqs.ChipGap">0,0,8,0</Thickness>
+    <Thickness x:Key="Reqs.BadgeRow">0,0,0,16</Thickness>
+    <Style x:Key="PatientLink" TargetType="Hyperlink">
+      <Setter Property="Foreground" Value="{DynamicResource Brush.Ink}" />
+      <Setter Property="TextDecorations" Value="{x:Null}" />
+      <Style.Triggers>
+        <Trigger Property="IsMouseOver" Value="True">
+          <Setter Property="TextDecorations" Value="Underline" />
+        </Trigger>
+      </Style.Triggers>
     </Style>
   </UserControl.Resources>
   <Grid>
-    <Grid.RowDefinitions>
-      <RowDefinition Height="Auto" />
-      <RowDefinition Height="Auto" />
-      <RowDefinition Height="*" />
-    </Grid.RowDefinitions>
+    <Grid.ColumnDefinitions>
+      <ColumnDefinition Width="*" MinWidth="360" />
+      <ColumnDefinition Width="Auto" />
+      <ColumnDefinition Width="Auto" />
+    </Grid.ColumnDefinitions>
 
-    <DockPanel KeyboardNavigation.TabNavigation="Local">
-      <Button x:Name="AddButton" DockPanel.Dock="Right" Style="{DynamicResource Button.Primary}" Command="{Binding AddCommand}" VerticalAlignment="Bottom" feat:Edge.Bottom="{DynamicResource Space.16}"
-              AutomationProperties.Name="New request" ToolTip="Ctrl+N">
-        <StackPanel Orientation="Horizontal">
-          <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE710;" feat:Edge.Right="{DynamicResource Space.8}" VerticalAlignment="Center" />
-          <TextBlock Text="New request" VerticalAlignment="Center" />
-        </StackPanel>
-      </Button>
-      <WrapPanel>
-        <controls:FormField Label="Patient name" feat:Edge.Right="{DynamicResource Space.16}" MinWidth="220">
-          <TextBox x:Name="SearchBox" Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" MaxLength="100" AutomationProperties.Name="Search requests by patient name">
-            <TextBox.InputBindings>
-              <KeyBinding Key="Enter" Command="{Binding SearchNowCommand}" />
-            </TextBox.InputBindings>
-          </TextBox>
-        </controls:FormField>
-        <controls:FormField Label="Status" feat:Edge.Right="{DynamicResource Space.16}">
-          <ComboBox x:Name="StatusBox" ItemsSource="{Binding StatusOptions}" SelectedItem="{Binding StatusFilter, Mode=TwoWay}" DisplayMemberPath="Display" MinWidth="150" AutomationProperties.Name="Status" />
-        </controls:FormField>
-        <controls:FormField Label="Blood type" feat:Edge.Right="{DynamicResource Space.16}">
-          <ComboBox x:Name="BloodTypeBox" ItemsSource="{Binding BloodTypeOptions}" SelectedItem="{Binding BloodTypeFilter, Mode=TwoWay}" DisplayMemberPath="Display" MinWidth="150" AutomationProperties.Name="Blood type" />
-        </controls:FormField>
-        <Button Style="{DynamicResource Button.Ghost}" Content="Clear filters" Command="{Binding ClearFiltersCommand}" VerticalAlignment="Bottom" feat:Edge.Bottom="{DynamicResource Space.16}"
-                Visibility="{Binding HasActiveFilters, Converter={StaticResource BoolToVisibility}}" AutomationProperties.Name="Clear filters" />
-      </WrapPanel>
-    </DockPanel>
-
-    <lists:ScreenWakingNotice Grid.Row="1" />
-    <Grid Grid.Row="2">
-      <Grid.ColumnDefinitions>
-        <ColumnDefinition Width="*" MinWidth="360" />
-        <ColumnDefinition Width="16" />
-        <ColumnDefinition Width="400" />
-      </Grid.ColumnDefinitions>
-      <controls:LoadSurface x:Name="ListSurface" State="{Binding State}" SkeletonKind="List" SkeletonColumns="2*,100,70,110,130"
+    <!-- The list -->
+    <Grid x:Name="ListColumn">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto" />
+        <RowDefinition Height="Auto" />
+        <RowDefinition Height="Auto" />
+        <RowDefinition Height="*" />
+      </Grid.RowDefinitions>
+      <controls:PageHeader x:Name="Header" Title="{Binding PageTitle}" Count="{Binding HeaderCount}">
+        <controls:PageHeader.Actions>
+          <Button x:Name="AddButton" Style="{DynamicResource Button.Primary}" lists:HeaderAction.IsDemoted="{Binding IsDetailOpen}" Command="{Binding AddCommand}"
+                  AutomationProperties.Name="New request" ToolTip="New request (Ctrl+N)">
+            <StackPanel Orientation="Horizontal">
+              <controls:Icon Kind="Plus" Size="16" VerticalAlignment="Center" />
+              <TextBlock x:Name="AddLabel" Text="New request" VerticalAlignment="Center" Margin="{DynamicResource Inset.L8}">
+                <TextBlock.Style>
+                  <Style TargetType="TextBlock">
+                    <Style.Triggers>
+                      <DataTrigger Binding="{Binding (controls:Responsive.Breakpoint), RelativeSource={RelativeSource Self}}" Value="{x:Static controls:Breakpoint.Compact}">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                      </DataTrigger>
+                    </Style.Triggers>
+                  </Style>
+                </TextBlock.Style>
+              </TextBlock>
+            </StackPanel>
+          </Button>
+        </controls:PageHeader.Actions>
+        <controls:PageHeader.Tabs>
+          <Border Style="{DynamicResource Tabs.Strip}">
+            <StackPanel x:Name="Tabs" Orientation="Horizontal" Margin="{DynamicResource Inset.BN1}">
+              <RadioButton x:Name="OpenTab" Style="{DynamicResource Tab.Option}" GroupName="RequestView" IsChecked="{Binding IsOpenView, Mode=TwoWay}" AutomationProperties.Name="Open requests">
+                <TextBlock><Run Text="Open" /><Run Text=" " /><Run Text="{Binding ViewCounts.Open, Mode=OneWay, Converter={StaticResource CountText}}" Foreground="{DynamicResource Brush.Ink3}" /></TextBlock>
+              </RadioButton>
+              <RadioButton x:Name="DueSoonTab" Style="{DynamicResource Tab.Option}" GroupName="RequestView" IsChecked="{Binding IsDueSoonView, Mode=TwoWay}" AutomationProperties.Name="Due in 48 hours">
+                <TextBlock><Run Text="Due in 48 h" /><Run Text=" " /><Run Text="{Binding ViewCounts.DueSoon, Mode=OneWay, Converter={StaticResource CountText}}" Foreground="{DynamicResource Brush.Ink3}" /></TextBlock>
+              </RadioButton>
+              <RadioButton x:Name="FulfilledTab" Style="{DynamicResource Tab.Option}" GroupName="RequestView" IsChecked="{Binding IsFulfilledView, Mode=TwoWay}" AutomationProperties.Name="Fulfilled requests">
+                <TextBlock><Run Text="Fulfilled" /><Run Text=" " /><Run Text="{Binding ViewCounts.Fulfilled, Mode=OneWay, Converter={StaticResource CountText}}" Foreground="{DynamicResource Brush.Ink3}" /></TextBlock>
+              </RadioButton>
+              <RadioButton x:Name="CancelledTab" Style="{DynamicResource Tab.Option}" GroupName="RequestView" IsChecked="{Binding IsCancelledView, Mode=TwoWay}" AutomationProperties.Name="Cancelled requests">
+                <TextBlock><Run Text="Cancelled" /><Run Text=" " /><Run Text="{Binding ViewCounts.Cancelled, Mode=OneWay, Converter={StaticResource CountText}}" Foreground="{DynamicResource Brush.Ink3}" /></TextBlock>
+              </RadioButton>
+            </StackPanel>
+          </Border>
+        </controls:PageHeader.Tabs>
+      </controls:PageHeader>
+      <lists:ListToolbar x:Name="Toolbar" Grid.Row="1" Margin="{StaticResource Reqs.ToolbarGap}" SearchPlaceholder="Search patient or request ID" SearchWidth="300">
+        <lists:ListToolbar.Filters>
+          <!-- The status chip only while a link from another screen has set a status (the tabs replace it otherwise), so it can be cleared -->
+          <lists:FilterChip Label="Status" AutomationProperties.Name="Status filter" ItemsSource="{Binding StatusOptions}" SelectedItem="{Binding StatusFilter, Mode=TwoWay}" DisplayMemberPath="Display"
+                            Margin="{StaticResource Reqs.ChipGap}" Visibility="{Binding HasStatusFilter, Converter={StaticResource BoolToVisibility}}" />
+        </lists:ListToolbar.Filters>
+      </lists:ListToolbar>
+      <lists:ScreenWakingNotice Grid.Row="2" />
+      <!-- The table's frame is inside the load surface: an error or empty state stands alone as one card, not inside an empty framed panel -->
+      <controls:LoadSurface x:Name="ListSurface" Grid.Row="3" State="{Binding State}" SkeletonKind="List" SkeletonColumns="2*,80,70,*,*,*"
                             ErrorMessage="{Binding ErrorMessage}" ErrorDetail="{Binding ErrorDetail}" RetryCommand="{Binding RetryCommand}"
-                            EmptyGlyph="&#xE8F4;" EmptyTitle="{Binding EmptyTitle}" EmptyMessage="{Binding EmptyMessage}" EmptyActionText="{Binding EmptyActionText}"
+                            EmptyGlyph="&#xE9F9;" EmptyTitle="{Binding EmptyTitle}" EmptyMessage="{Binding EmptyMessage}" EmptyActionText="{Binding EmptyActionText}"
                             EmptyActionCommand="{Binding EmptyActionCommand}">
-        <Grid>
-          <Grid.RowDefinitions>
-            <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
-          </Grid.RowDefinitions>
-          <controls:LifestreamDataGrid x:Name="Grid" ItemsSource="{Binding Items}" SelectedItem="{Binding SelectedItem, Mode=TwoWay}" SortCommand="{Binding SortCommand}"
-                                       SortColumn="{Binding SortColumn, Mode=OneWay}" SortDescending="{Binding SortDescending, Mode=OneWay}"
-                                       AutomationProperties.Name="Requests">
-            <DataGrid.Columns>
-              <DataGridTemplateColumn Header="Patient" Width="2*" MinWidth="170" CanUserSort="False">
-                <DataGridTemplateColumn.CellTemplate>
-                  <DataTemplate>
-                    <StackPanel VerticalAlignment="Center" feat:Edge.Left="{DynamicResource Space.12}" feat:Edge.Right="{DynamicResource Space.12}">
-                      <TextBlock TextTrimming="CharacterEllipsis" TextWrapping="NoWrap">
-                        <Hyperlink Style="{StaticResource RecordLink}" Command="{Binding DataContext.OpenPatientCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}" CommandParameter="{Binding}"
-                                   AutomationProperties.Name="Open patient">
-                          <Run Text="{Binding PatientName, Mode=OneWay}" />
-                        </Hyperlink>
-                      </TextBlock>
-                      <TextBlock Style="{DynamicResource DataGrid.SecondaryLine}" Foreground="{DynamicResource Brush.TextMuted}" Text="{Binding PatientId, Converter={StaticResource IdText}}" />
-                    </StackPanel>
-                  </DataTemplate>
-                </DataGridTemplateColumn.CellTemplate>
-              </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Blood type" Width="100" CanUserSort="False">
-                <DataGridTemplateColumn.CellTemplate>
-                  <DataTemplate>
-                    <TextBlock Text="{Binding BloodType, Converter={StaticResource BloodTypeText}}" Style="{DynamicResource DataGrid.TextCell}" />
-                  </DataTemplate>
-                </DataGridTemplateColumn.CellTemplate>
-              </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Units" Width="70" CanUserSort="False">
-                <DataGridTemplateColumn.CellTemplate>
-                  <DataTemplate>
-                    <TextBlock Text="{Binding Units}" Style="{DynamicResource DataGrid.TextCell}" />
-                  </DataTemplate>
-                </DataGridTemplateColumn.CellTemplate>
-              </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Needed by" Width="Auto" MinWidth="110" SortMemberPath="requiredBy">
-                <DataGridTemplateColumn.CellTemplate>
-                  <DataTemplate>
-                    <TextBlock Text="{Binding RequiredBy, Converter={StaticResource DateText}}" Style="{DynamicResource DataGrid.TextCell}" />
-                  </DataTemplate>
-                </DataGridTemplateColumn.CellTemplate>
-              </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Status" Width="130" CanUserSort="False">
-                <DataGridTemplateColumn.CellTemplate>
-                  <DataTemplate>
-                    <controls:StatusChip Status="{Binding Status, Converter={StaticResource StatusKind}}" Label="{Binding Status, Converter={StaticResource StatusText}}" feat:Edge.Left="{DynamicResource Space.12}" />
-                  </DataTemplate>
-                </DataGridTemplateColumn.CellTemplate>
-              </DataGridTemplateColumn>
-            </DataGrid.Columns>
-          </controls:LifestreamDataGrid>
-          <lists:ListFooter Grid.Row="1" />
-        </Grid>
+        <Border x:Name="TablePanel" Background="{DynamicResource Brush.Layer}" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="1"
+                CornerRadius="{DynamicResource Radius.Panel}" SnapsToDevicePixels="True">
+          <Grid>
+            <Grid.RowDefinitions>
+              <RowDefinition Height="*" />
+              <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <controls:LifestreamDataGrid x:Name="Grid" ItemsSource="{Binding Items}" SelectedItem="{Binding SelectedItem, Mode=TwoWay}" SortCommand="{Binding SortCommand}"
+                                         SortColumn="{Binding SortColumn, Mode=OneWay}" SortDescending="{Binding SortDescending, Mode=OneWay}"
+                                         lists:ListColumns.IsResponsive="True" lists:ListKeys.Panel="{Binding ElementName=Panel}"
+                                         AutomationProperties.Name="Requests">
+              <DataGrid.Columns>
+                <DataGridTemplateColumn Header="Patient" Width="Auto" MinWidth="170" MaxWidth="320" CanUserSort="False">
+                  <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate>
+                      <Grid VerticalAlignment="Center">
+                        <Grid.ColumnDefinitions>
+                          <ColumnDefinition Width="Auto" />
+                          <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <controls:Avatar Initials="{Binding PatientName, Converter={StaticResource Initials}}" Size="28" VerticalAlignment="Center" />
+                        <StackPanel Grid.Column="1" Margin="{StaticResource Reqs.NameGap}" VerticalAlignment="Center">
+                          <TextBlock Style="{DynamicResource Text.Body}" FontWeight="Medium" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" ToolTip="{Binding PatientName}">
+                            <Hyperlink Style="{StaticResource PatientLink}" Command="{Binding DataContext.OpenPatientCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}" CommandParameter="{Binding}"
+                                       AutomationProperties.Name="Open patient">
+                              <Run Text="{Binding PatientName, Mode=OneWay}" />
+                            </Hyperlink>
+                          </TextBlock>
+                          <TextBlock Style="{DynamicResource DataGrid.SecondaryLine}"><Run Text="{Binding Id, Mode=OneWay, Converter={StaticResource Code}, ConverterParameter=R}" /><Run Text=" · " /><Run Text="{Binding PatientId, Mode=OneWay, Converter={StaticResource Code}, ConverterParameter=P}" /></TextBlock>
+                        </StackPanel>
+                      </Grid>
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="Group" Width="72" CanUserSort="False">
+                  <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate>
+                      <controls:BloodGroupTag Text="{Binding BloodType, Converter={StaticResource BloodGroup}}" HorizontalAlignment="Left" VerticalAlignment="Center" />
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="Units" Width="64" CanUserSort="False" controls:ColumnAssist.HeaderAlignment="Right" lists:ListColumns.HideBelow="600">
+                  <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate>
+                      <TextBlock Style="{DynamicResource DataGrid.TextCell}" Text="{Binding Units}" HorizontalAlignment="Right" />
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="Needed by" Width="*" MinWidth="110" SortMemberPath="requiredBy" lists:ListColumns.HideBelow="600">
+                  <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate>
+                      <TextBlock Style="{DynamicResource DataGrid.TextCell}" Text="{Binding RequiredBy, Converter={StaticResource DateText}}" />
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn x:Name="UrgencyColumn" Header="Urgency" Width="*" MinWidth="154" CanUserSort="False"
+                                        lists:ListColumns.IsShown="{Binding Data.ShowOpenColumns, Source={StaticResource Model}}">
+                  <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate>
+                      <!-- Tag carries the urgency kind; the colour and icon follow it. A closed request has none. -->
+                      <controls:Badge x:Name="UrgencyBadge" HorizontalAlignment="Left" VerticalAlignment="Center" Kind="{Binding Tag, RelativeSource={RelativeSource Self}, Converter={StaticResource UrgencyKind}}"
+                                      Icon="{Binding Tag, RelativeSource={RelativeSource Self}, Converter={StaticResource UrgencyIcon}}">
+                        <controls:Badge.Text>
+                          <MultiBinding Converter="{StaticResource Urgency}" ConverterParameter="Text">
+                            <Binding Path="Status" />
+                            <Binding Path="RequiredBy" />
+                            <Binding Path="DataContext" RelativeSource="{RelativeSource AncestorType=DataGrid}" />
+                          </MultiBinding>
+                        </controls:Badge.Text>
+                        <controls:Badge.Visibility>
+                          <MultiBinding Converter="{StaticResource Urgency}" ConverterParameter="Visibility">
+                            <Binding Path="Status" />
+                            <Binding Path="RequiredBy" />
+                            <Binding Path="DataContext" RelativeSource="{RelativeSource AncestorType=DataGrid}" />
+                          </MultiBinding>
+                        </controls:Badge.Visibility>
+                        <controls:Badge.Tag>
+                          <MultiBinding Converter="{StaticResource Urgency}" ConverterParameter="Kind">
+                            <Binding Path="Status" />
+                            <Binding Path="RequiredBy" />
+                            <Binding Path="DataContext" RelativeSource="{RelativeSource AncestorType=DataGrid}" />
+                          </MultiBinding>
+                        </controls:Badge.Tag>
+                      </controls:Badge>
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn x:Name="CoverColumn" Header="Cover" Width="*" MinWidth="118" CanUserSort="False"
+                                        lists:ListColumns.IsShown="{Binding Data.ShowOpenColumns, Source={StaticResource Model}}">
+                  <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate>
+                      <controls:Badge HorizontalAlignment="Left" VerticalAlignment="Center">
+                        <controls:Badge.Text>
+                          <MultiBinding Converter="{StaticResource RowCover}" ConverterParameter="Text">
+                            <Binding />
+                            <Binding Path="DataContext" RelativeSource="{RelativeSource AncestorType=DataGrid}" />
+                          </MultiBinding>
+                        </controls:Badge.Text>
+                        <controls:Badge.Kind>
+                          <MultiBinding Converter="{StaticResource RowCover}" ConverterParameter="Kind">
+                            <Binding />
+                            <Binding Path="DataContext" RelativeSource="{RelativeSource AncestorType=DataGrid}" />
+                          </MultiBinding>
+                        </controls:Badge.Kind>
+                        <controls:Badge.Icon>
+                          <MultiBinding Converter="{StaticResource RowCover}" ConverterParameter="Icon">
+                            <Binding />
+                            <Binding Path="DataContext" RelativeSource="{RelativeSource AncestorType=DataGrid}" />
+                          </MultiBinding>
+                        </controls:Badge.Icon>
+                        <controls:Badge.Visibility>
+                          <MultiBinding Converter="{StaticResource RowCover}" ConverterParameter="Visibility">
+                            <Binding />
+                            <Binding Path="DataContext" RelativeSource="{RelativeSource AncestorType=DataGrid}" />
+                          </MultiBinding>
+                        </controls:Badge.Visibility>
+                      </controls:Badge>
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn x:Name="StatusColumn" Header="Status" Width="*" MinWidth="120" CanUserSort="False"
+                                        lists:ListColumns.IsShown="{Binding Data.ShowStatusColumn, Source={StaticResource Model}}">
+                  <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate>
+                      <controls:StatusChip Status="{Binding Status, Converter={StaticResource StatusKind}}" Label="{Binding Status, Converter={StaticResource StatusText}}"
+                                           HorizontalAlignment="Left" VerticalAlignment="Center" />
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <!-- At Wide: when the request was placed (a useful extra column instead of stretching the others) -->
+                <DataGridTemplateColumn Header="Placed" Width="*" MinWidth="120" SortMemberPath="placed" lists:ListColumns.HideBelow="1100">
+                  <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate>
+                      <TextBlock Style="{DynamicResource DataGrid.TextCell}" Foreground="{DynamicResource Brush.Ink2}" Text="{Binding PlacedAtUtc, Converter={StaticResource UtcDate}}" />
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+              </DataGrid.Columns>
+            </controls:LifestreamDataGrid>
+            <lists:ListFooter Grid.Row="1" />
+          </Grid>
+        </Border>
       </controls:LoadSurface>
+    </Grid>
 
-      <Grid Grid.Column="2">
-        <lists:ActionDetailPane Visibility="{Binding Editor, Converter={StaticResource NullToVisible}}">
+    <!-- The gap before the side panel, only while it is open -->
+    <Border Grid.Column="1" Width="{DynamicResource Space.24}" Visibility="{Binding IsDetailOpen, Converter={StaticResource BoolToVisibility}}" />
+
+    <!-- The selected request, its fulfil step, or the request form -->
+    <controls:SidePanel x:Name="Panel" Grid.Column="2" IsOpen="{Binding IsDetailOpen, Mode=OneWay}" CloseCommand="{Binding CloseDetailCommand}" Overline="{Binding DetailCode}"
+                        lists:PanelBleed.IsEnabled="True" lists:DetailPaneFrame.IsInPanel="True">
+      <Grid>
+        <lists:ActionDetailPane x:Name="DetailPane" FactsSource="{Binding PanelFacts}" Visibility="{Binding Editor, Converter={StaticResource NullToVisible}}" ActionsFill="{Binding IsFulfilling}">
+          <lists:ActionDetailPane.Header>
+            <Grid>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+              </Grid.ColumnDefinitions>
+              <controls:Avatar Initials="{Binding Detail.PatientName, Converter={StaticResource Initials}}" Size="52" VerticalAlignment="Center" />
+              <StackPanel Grid.Column="1" Margin="{StaticResource Reqs.HeaderGap}" VerticalAlignment="Center">
+                <TextBlock Style="{DynamicResource Text.Section}" Text="{Binding Detail.PatientName}" TextWrapping="Wrap" AutomationProperties.HeadingLevel="Level2" />
+                <TextBlock Style="{DynamicResource Text.Secondary}" Text="{Binding DetailSubtitle}" TextWrapping="Wrap" />
+              </StackPanel>
+              <controls:BloodGroupTag Grid.Column="2" Text="{Binding DetailBloodGroup}" IsLarge="True" VerticalAlignment="Top" />
+            </Grid>
+          </lists:ActionDetailPane.Header>
           <lists:ActionDetailPane.Actions>
-            <WrapPanel>
-              <Button Style="{DynamicResource Button.Primary}" Command="{Binding FulfilCommand}" feat:Edge.Right="{DynamicResource Space.8}" feat:Edge.Bottom="{DynamicResource Space.8}"
-                      AutomationProperties.Name="Fulfil request" controls:ButtonAssist.IsBusy="{Binding FulfilCommand.IsRunning}" controls:ButtonAssist.BusyText="Fulfilling...">
-                <StackPanel Orientation="Horizontal">
-                  <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE73E;" feat:Edge.Right="{DynamicResource Space.8}" VerticalAlignment="Center" />
-                  <TextBlock Text="Fulfil request" VerticalAlignment="Center" />
-                </StackPanel>
-              </Button>
-              <Button Style="{DynamicResource Button.Secondary}" Command="{Binding EditRequestCommand}" feat:Edge.Right="{DynamicResource Space.8}" feat:Edge.Bottom="{DynamicResource Space.8}"
-                      AutomationProperties.Name="Edit request">
-                <StackPanel Orientation="Horizontal">
-                  <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE70F;" feat:Edge.Right="{DynamicResource Space.8}" VerticalAlignment="Center" />
-                  <TextBlock Text="Edit" VerticalAlignment="Center" />
-                </StackPanel>
-              </Button>
-              <Button Style="{DynamicResource Button.Danger}" Command="{Binding CancelRequestCommand}" feat:Edge.Right="{DynamicResource Space.8}" feat:Edge.Bottom="{DynamicResource Space.8}"
-                      AutomationProperties.Name="Cancel request" controls:ButtonAssist.IsBusy="{Binding CancelRequestCommand.IsRunning}" controls:ButtonAssist.BusyText="Cancelling...">
-                <StackPanel Orientation="Horizontal">
-                  <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE711;" feat:Edge.Right="{DynamicResource Space.8}" VerticalAlignment="Center" />
-                  <TextBlock Text="Cancel request" VerticalAlignment="Center" />
-                </StackPanel>
-              </Button>
-              <Button Style="{DynamicResource Button.Secondary}" Command="{Binding ViewReceiptCommand}" feat:Edge.Right="{DynamicResource Space.8}" feat:Edge.Bottom="{DynamicResource Space.8}"
-                      AutomationProperties.Name="View receipt">
-                <StackPanel Orientation="Horizontal">
-                  <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE8A5;" feat:Edge.Right="{DynamicResource Space.8}" VerticalAlignment="Center" />
-                  <TextBlock Text="View receipt" VerticalAlignment="Center" />
-                </StackPanel>
-              </Button>
-            </WrapPanel>
+            <!-- A dock, not a stack: while fulfilling, the step below fills the rest of the panel (so its buttons stay in view) -->
+            <DockPanel LastChildFill="True">
+              <!-- How urgent the request is and whether the stock covers it (pending); its status (closed) -->
+              <WrapPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="{StaticResource Reqs.BadgeRow}">
+                <controls:Badge DataContext="{Binding DetailUrgency}" Text="{Binding Text}" Kind="{Binding Kind, Converter={StaticResource UrgencyKind}}" Icon="{Binding Kind, Converter={StaticResource UrgencyIcon}}"
+                                Margin="{StaticResource Reqs.ChipGap}" Visibility="{Binding Kind, Converter={StaticResource EqualsToVisible}, ConverterParameter=Critical|Soon|Normal}" />
+                <controls:Badge Text="{Binding DetailCover, Converter={StaticResource Cover}, ConverterParameter=Text}" Kind="{Binding DetailCover, Converter={StaticResource Cover}, ConverterParameter=Kind}"
+                                Icon="{Binding DetailCover, Converter={StaticResource Cover}, ConverterParameter=Icon}" Margin="{StaticResource Reqs.ChipGap}"
+                                Visibility="{Binding DetailCover, Converter={StaticResource Cover}, ConverterParameter=Visibility}" />
+                <controls:StatusChip Status="{Binding Detail.Status, Converter={StaticResource StatusKind}}" Label="{Binding Detail.Status, Converter={StaticResource StatusText}}"
+                                     Visibility="{Binding IsClosedDetail, Converter={StaticResource BoolToVisibility}}" />
+              </WrapPanel>
+              <!-- The action row (one layout on every screen): [Fulfil request] [Edit] [...]; the rare and destructive actions in the menu, with full labels -->
+              <Grid DockPanel.Dock="Top" AutomationProperties.AutomationId="ActionsRow">
+                <Grid.Style>
+                  <Style TargetType="Grid">
+                    <Style.Triggers>
+                      <DataTrigger Binding="{Binding IsFulfilling}" Value="True">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                      </DataTrigger>
+                    </Style.Triggers>
+                  </Style>
+                </Grid.Style>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="*" />
+                  <ColumnDefinition Width="Auto" />
+                  <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <Grid Margin="{DynamicResource Inset.R8}">
+                  <Button AutomationProperties.AutomationId="FulfilButton" Style="{DynamicResource Button.Primary}" Command="{Binding FulfilCommand}" HorizontalAlignment="Stretch" AutomationProperties.Name="Fulfil request"
+                          AutomationProperties.HelpText="{Binding FulfilHoldReason}"
+                          Visibility="{Binding IsPendingDetail, Converter={StaticResource BoolToVisibility}}">
+                    <StackPanel Orientation="Horizontal">
+                      <controls:Icon Kind="Drop" Size="16" VerticalAlignment="Center" />
+                      <TextBlock Text="Fulfil request" VerticalAlignment="Center" Margin="{DynamicResource Inset.L8}" />
+                    </StackPanel>
+                  </Button>
+                  <Button AutomationProperties.AutomationId="ReceiptButton" Style="{DynamicResource Button.Primary}" Command="{Binding ViewReceiptCommand}" HorizontalAlignment="Stretch" AutomationProperties.Name="View receipt"
+                          Visibility="{Binding Detail.ReceiptId, Converter={StaticResource NullToCollapsed}}">
+                    <StackPanel Orientation="Horizontal">
+                      <controls:Icon Kind="Receipt" Size="16" VerticalAlignment="Center" />
+                      <TextBlock Text="View receipt" VerticalAlignment="Center" Margin="{DynamicResource Inset.L8}" />
+                    </StackPanel>
+                  </Button>
+                </Grid>
+                <Button AutomationProperties.AutomationId="EditButton" Grid.Column="1" Style="{DynamicResource Button.Secondary}" Command="{Binding EditRequestCommand}" controls:ButtonAssist.BusyText=""
+                        AutomationProperties.Name="Edit request" ToolTip="Edit request" Visibility="{Binding IsPendingDetail, Converter={StaticResource BoolToVisibility}}">
+                  <StackPanel Orientation="Horizontal">
+                    <controls:Icon Kind="Edit" Size="16" VerticalAlignment="Center" />
+                    <TextBlock AutomationProperties.AutomationId="EditText" Text="Edit" VerticalAlignment="Center" Margin="{DynamicResource Inset.L8}"
+                               Visibility="{Binding (controls:Responsive.Breakpoint), RelativeSource={RelativeSource Self}, Converter={StaticResource CompactCollapsed}}" />
+                  </StackPanel>
+                </Button>
+                <lists:MenuButton AutomationProperties.AutomationId="MoreButton" Grid.Column="2" Style="{DynamicResource Button.Icon}" Margin="{DynamicResource Inset.L8}" AutomationProperties.Name="More actions" ToolTip="More actions">
+                  <controls:Icon Kind="More" Size="18" />
+                  <lists:MenuButton.ContextMenu>
+                    <ContextMenu>
+                      <MenuItem Header="Open patient" Command="{Binding OpenPatientCommand}" CommandParameter="{Binding Detail}">
+                        <MenuItem.Icon>
+                          <controls:Icon Kind="Patient" Size="16" />
+                        </MenuItem.Icon>
+                      </MenuItem>
+                      <MenuItem AutomationProperties.AutomationId="CancelItem" Header="Cancel request" Command="{Binding CancelRequestCommand}" Foreground="{DynamicResource Brush.Critical}"
+                                Visibility="{Binding IsPendingDetail, Converter={StaticResource BoolToVisibility}}">
+                        <MenuItem.Icon>
+                          <controls:Icon Kind="X" Size="16" />
+                        </MenuItem.Icon>
+                      </MenuItem>
+                    </ContextMenu>
+                  </lists:MenuButton.ContextMenu>
+                </lists:MenuButton>
+              </Grid>
+              <!-- None of the group in stock: "Fulfil request" is disabled and this line says why (the request stays open) -->
+              <TextBlock DockPanel.Dock="Top" AutomationProperties.AutomationId="FulfilHoldReason" Style="{DynamicResource Text.Caption}" Foreground="{DynamicResource Brush.Ink2}" Text="{Binding FulfilHoldReason}"
+                         TextWrapping="Wrap" Margin="{DynamicResource Inset.T8}" Visibility="{Binding FulfilHoldReason, Converter={StaticResource NullToCollapsed}}" />
+              <!-- The fulfil step, in place of the actions while it is open -->
+              <ContentControl Content="{Binding Fulfilment}" ContentTemplateSelector="{x:Static services:ViewLocator.Instance}" IsTabStop="False" Focusable="False"
+                              HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" Visibility="{Binding Fulfilment, Converter={StaticResource NullToCollapsed}}" />
+            </DockPanel>
           </lists:ActionDetailPane.Actions>
         </lists:ActionDetailPane>
-        <ContentControl Content="{Binding Editor}" ContentTemplateSelector="{x:Static services:ViewLocator.Instance}" IsTabStop="False" Focusable="False"
+        <ContentControl x:Name="EditorHost" Content="{Binding Editor}" ContentTemplateSelector="{x:Static services:ViewLocator.Instance}" IsTabStop="False" Focusable="False"
                         HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" Visibility="{Binding Editor, Converter={StaticResource NullToCollapsed}}" />
       </Grid>
-    </Grid>
+    </controls:SidePanel>
   </Grid>
 </UserControl>

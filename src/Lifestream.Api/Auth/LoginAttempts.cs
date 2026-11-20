@@ -63,7 +63,7 @@ public sealed class UnknownLoginStore(LifestreamDbContext db, TimeProvider time)
 
         // A real account is serialised by an application lock on its id. An unknown name is serialised by the key-range lock the unknown-name
         // read below takes (see the read); it still asks for an application lock, on a resource no one else asks for, so both cases make the same calls.
-        await db.LockAsync(LoginLocks.Resource(staffId), token);
+        await db.LockAsync(LoginLocks.Resource(staffId), token, LoginLocks.WaitMs);
 
         var credential = await db.StaffCredentials.AsNoTracking().Where(c => c.StaffId == id)
             .Select(c => new { c.FailedCount, c.LockoutEndUtc, c.LastFailureUtc, c.RowVersion }).FirstOrDefaultAsync(token);
@@ -147,6 +147,14 @@ public sealed record AttemptReservation(bool LockedNow);
 
 public static class LoginLocks
 {
+    /// <summary>
+    /// A guess waits for its account's lock with no limit of its own, as a guess at an unknown name waits for the key-range lock of its row: the
+    /// queue of a burst moves one short transaction at a time, but on a busy server each step can wait for a thread, and a fixed limit then
+    /// answered 409 to guesses that should be counted (401) or refused as locked (429). The wait still ends with the request, or with the
+    /// command timeout, which the execution strategy retries like any other timeout (nothing was written, so the guess is counted once).
+    /// </summary>
+    public const int WaitMs = Timeout.Infinite;
+
     // Real account ids are below 2^31 and an unknown name's number is at least 2^32: the two never share a lock, and both are "login:" and digits.
     private const long UnknownBase = 1L << 32;
 

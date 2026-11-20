@@ -157,7 +157,7 @@ public abstract partial class DialogViewModel : FormViewModelBase
         if (HasUnsavedChanges)
         {
             var dialogs = Dialogs ?? throw new InvalidOperationException("This dialog has unsaved changes but was not opened through the form dialog service, so it cannot ask \"Discard changes?\".");
-            if (!await dialogs.ConfirmAsync("Discard changes?", "You have unsaved changes in this dialog. If you close it now they will be lost.", "Discard changes").ConfigureAwait(true))
+            if (!await dialogs.ConfirmAsync("Discard changes?", "You have unsaved changes in this dialog. If you close it now they will be lost.", "Discard changes", "Keep editing").ConfigureAwait(true))
             {
                 return;
             }

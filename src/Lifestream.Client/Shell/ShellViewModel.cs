@@ -9,16 +9,45 @@ using Lifestream.Client.Updates;
 namespace Lifestream.Client.Shell;
 
 /// <summary>One sidebar button.</summary>
-public sealed partial class NavItem(Destination destination) : ObservableObject
+public sealed partial class NavItem(Destination destination, int position) : ObservableObject
 {
+    public NavItem(Destination destination)
+        : this(destination, 0)
+    {
+    }
+
     public Destination Destination { get; } = destination;
 
     public string Title => Destination.Title;
 
     public string IconGlyph => Destination.IconGlyph;
 
+    /// <summary>The vector icon (Controls/IconKind name in the Desktop).</summary>
+    public string Icon => Destination.Icon;
+
+    /// <summary>"Alt+1" to "Alt+8": the shortcut shown in the rail's tooltip and in the palette.</summary>
+    public string Shortcut => position is >= 1 and <= 9 ? $"Alt+{position}" : string.Empty;
+
+    /// <summary>The tooltip of the icon rail: the title and the shortcut.</summary>
+    public string ToolTip => Shortcut.Length == 0 ? Title : $"{Title}  {Shortcut}";
+
     [ObservableProperty]
     public partial bool IsSelected { get; set; }
+
+    /// <summary>A count shown at the right of the item (appointments still to come today, open requests, groups below minimum); null hides it.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AutomationName))]
+    public partial string? Badge { get; set; }
+
+    /// <summary>Something here needs attention (stock below its minimum): the count turns red.</summary>
+    [ObservableProperty]
+    public partial bool HasAlert { get; set; }
+
+    /// <summary>"Requests, 40 open" for screen readers.</summary>
+    public string AutomationName => Badge is null ? Title : $"{Title}, {Badge} {BadgeNoun}";
+
+    /// <summary>What the badge counts, for <see cref="AutomationName"/>.</summary>
+    public string BadgeNoun { get; init; } = string.Empty;
 }
 
 public sealed record NavGroup(string Title, IReadOnlyList<NavItem> Items);
@@ -29,6 +58,7 @@ public sealed record NavGroup(string Title, IReadOnlyList<NavItem> Items);
 /// </summary>
 public sealed partial class ShellViewModel : ViewModelBase
 {
+    private readonly ILifestreamApiClient? _api;
     private readonly ISessionService _session;
     private readonly IAppFlow _flow;
     private readonly IServerStatus _serverStatus;
@@ -43,8 +73,10 @@ public sealed partial class ShellViewModel : ViewModelBase
         IToastService toasts,
         IServerStatus serverStatus,
         UpdateService updates,
-        IChangePasswordPrompt passwords)
-        : this(navigation, session, flow, toasts, serverStatus, updates, passwords, NavigationCatalog.Default)
+        IChangePasswordPrompt passwords,
+        ILifestreamApiClient? api = null,
+        UiPreferences? preferences = null)
+        : this(navigation, session, flow, toasts, serverStatus, updates, passwords, NavigationCatalog.Default, api, preferences)
     {
     }
 
@@ -56,9 +88,13 @@ public sealed partial class ShellViewModel : ViewModelBase
         IServerStatus serverStatus,
         UpdateService updates,
         IChangePasswordPrompt passwords,
-        IReadOnlyList<Destination> catalog)
+        IReadOnlyList<Destination> catalog,
+        ILifestreamApiClient? api = null,
+        UiPreferences? preferences = null)
         : base(LoadState.Ready)
     {
+        _api = api;
+        Preferences = preferences ?? new UiPreferences(new MemoryPreferencesStore());
         Navigation = navigation;
         Toasts = toasts;
         Updates = updates;
@@ -71,8 +107,9 @@ public sealed partial class ShellViewModel : ViewModelBase
         var allowed = catalog.Where(d => d.IsAllowedFor(session.User)).ToList();
         Groups =
         [
-            .. allowed.GroupBy(d => d.Group).Select(g => new NavGroup(g.Key, [.. g.Select(d => new NavItem(d))])),
+            .. allowed.GroupBy(d => d.Group).Select(g => new NavGroup(g.Key, [.. g.Select(d => new NavItem(d, allowed.IndexOf(d) + 1) { BadgeNoun = d.BadgeNoun })])),
         ];
+        Palette = new CommandPaletteViewModel(this, api);
 
         // Concurrent on purpose: the sidebar stays usable while a screen loads, and the newer click supersedes the older one (SHELL-07).
         NavigateCommand = Command((parameter, _) => parameter is NavItem item ? OpenAsync(item.Destination) : Task.CompletedTask, allowConcurrent: true);
@@ -101,6 +138,40 @@ public sealed partial class ShellViewModel : ViewModelBase
             }
         });
 
+        ToggleNavCommand = new AsyncRelayCommand(_ =>
+        {
+            Preferences.IsNavCollapsed = !Preferences.IsNavCollapsed;
+            return Task.CompletedTask;
+        });
+        OpenPaletteCommand = new AsyncRelayCommand(_ =>
+        {
+            Palette.Open();
+            return Task.CompletedTask;
+        });
+        SetThemeCommand = new AsyncRelayCommand((parameter, _) =>
+        {
+            if (parameter is ThemeMode mode || Enum.TryParse(parameter as string, out mode))
+            {
+                Preferences.Theme = mode;
+            }
+
+            return Task.CompletedTask;
+        });
+        NavigateToIndexCommand = Command((parameter, _) =>
+        {
+            var index = parameter switch
+            {
+                int i => i,
+                string text when int.TryParse(text, System.Globalization.CultureInfo.InvariantCulture, out var i) => i,
+                _ => 0,
+            };
+            var items = Items.ToList();
+            return index >= 1 && index <= items.Count ? OpenAsync(items[index - 1].Destination) : Task.CompletedTask;
+        }, allowConcurrent: true);
+        BookAppointmentCommand = Command(_ => BookAppointmentAsync());
+        RecordDonationCommand = Command(_ => RecordDonationAsync());
+        Preferences.PropertyChanged += OnPreferencesChanged;
+
         CancelToastActionCommand = new AsyncRelayCommand(_ =>
         {
             Toasts.Actions.Cancel();
@@ -109,6 +180,7 @@ public sealed partial class ShellViewModel : ViewModelBase
         Toasts.Actions.Changed += OnToastActionsChanged;
         navigation.CurrentChanged += OnCurrentChanged;
         serverStatus.DemoResetObserved += OnDemoReset;
+        serverStatus.Changed += OnServerStatusChanged;
         updates.PropertyChanged += (_, _) => OnPropertyChanged(nameof(UpdatePrompt));
     }
 
@@ -125,6 +197,62 @@ public sealed partial class ShellViewModel : ViewModelBase
     public AsyncRelayCommand CancelToastActionCommand { get; }
 
     public IToastService Toasts { get; }
+
+    /// <summary>Theme, density, the collapsed sidebar: the person's display choices on this PC.</summary>
+    public UiPreferences Preferences { get; }
+
+    /// <summary>The command palette (Ctrl+K).</summary>
+    public CommandPaletteViewModel Palette { get; }
+
+    /// <summary>Ctrl+B: the sidebar becomes an icon rail, or a full sidebar again (remembered).</summary>
+    [NoOperationRunner("It flips a local preference; it makes no API call.")]
+    public AsyncRelayCommand ToggleNavCommand { get; }
+
+    /// <summary>Ctrl+K: opens the command palette.</summary>
+    [NoOperationRunner("It opens the palette; the palette's own search runs its calls.")]
+    public AsyncRelayCommand OpenPaletteCommand { get; }
+
+    /// <summary>Light, Dark or System (the parameter is a <see cref="ThemeMode"/> or its name).</summary>
+    [NoOperationRunner("It changes a local preference; it makes no API call.")]
+    public AsyncRelayCommand SetThemeCommand { get; }
+
+    /// <summary>Alt+1 to Alt+8: opens the n-th sidebar destination (1-based).</summary>
+    public AsyncRelayCommand NavigateToIndexCommand { get; }
+
+    /// <summary>The dashboard's and the palette's "Book appointment": the Appointments screen with its new-appointment form open.</summary>
+    public AsyncRelayCommand BookAppointmentCommand { get; }
+
+    /// <summary>
+    /// Ctrl+D, the dashboard's and the palette's "Record donation": opens today's next pending appointment on the Appointments screen and starts recording
+    /// the donation for it; when nobody is booked for the rest of today, it opens today's appointments and says so.
+    /// </summary>
+    public AsyncRelayCommand RecordDonationCommand { get; }
+
+    /// <summary>True when the sidebar is an icon rail by the person's choice (a compact window shows the rail regardless).</summary>
+    public bool IsNavCollapsed => Preferences.IsNavCollapsed;
+
+    /// <summary>Groups of the sidebar below their minimum stock; the taskbar shows it as an overlay badge. Zero hides the badge.</summary>
+    [ObservableProperty]
+    public partial int LowStockGroups { get; set; }
+
+    /// <summary>True while a call waits on a waking server: the taskbar button shows indeterminate progress.</summary>
+    public bool IsServerWaking => _serverStatus.State == ServerState.Waking;
+
+    /// <summary>First name for the dashboard greeting ("Good morning, Hana").</summary>
+    public string FirstName => DisplayName.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault() ?? string.Empty;
+
+    /// <summary>"Doctor, morning shift" under the name at the foot of the sidebar (from the profile); the role until the profile has loaded.</summary>
+    public string UserSubtitle => _profileSubtitle ?? (_session.User is { } user ? (IsDemo ? "Demo account" : user.Role.ToString()) : string.Empty);
+
+    private string? _profileSubtitle;
+
+    /// <summary>The shell is running (StartAsync has opened the first screen): only then does it read counts in the background.</summary>
+    private bool _started;
+
+    private DateTimeOffset _lastCounts = DateTimeOffset.MinValue;
+
+    /// <summary>How often a navigation may refresh the sidebar counts.</summary>
+    public static readonly TimeSpan CountsInterval = TimeSpan.FromSeconds(30);
 
     public UpdateService Updates { get; }
 
@@ -155,8 +283,8 @@ public sealed partial class ShellViewModel : ViewModelBase
 
     public override string PageTitle => CurrentPage?.PageTitle ?? string.Empty;
 
-    /// <summary>"Lifestream - Donors": updated on every navigation (SHELL-23).</summary>
-    public string WindowTitle => string.IsNullOrEmpty(PageTitle) ? "Lifestream" : $"Lifestream - {PageTitle}";
+    /// <summary>"Lifestream, Donors": updated on every navigation, so the taskbar thumbnail and Alt+Tab say which screen is open (SHELL-23).</summary>
+    public string WindowTitle => string.IsNullOrEmpty(PageTitle) ? "Lifestream" : $"Lifestream, {PageTitle}";
 
     public string DisplayName => _session.User?.DisplayName ?? string.Empty;
 
@@ -199,6 +327,182 @@ public sealed partial class ShellViewModel : ViewModelBase
         }
 
         await OpenAsync(_catalog[0]).ConfigureAwait(true);
+        _started = true;
+        _ = RefreshCountsAsync();
+        _ = LoadProfileLineAsync();
+    }
+
+    /// <summary>Reads the profile once for the sidebar's "Doctor, morning shift" line; quiet on failure.</summary>
+    private async Task LoadProfileLineAsync()
+    {
+        if (_api is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await Operations.RunAsync(LoadProfileLineCoreAsync).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or TimeoutException or IOException or System.Text.Json.JsonException or InvalidOperationException)
+        {
+            // The role stays under the name.
+        }
+    }
+
+    [RunsInOperation("LoadProfileLineAsync runs it inside Operations.RunAsync.")]
+    private async Task LoadProfileLineCoreAsync(CancellationToken ct)
+    {
+        var profile = await _api!.GetProfileAsync(ct).ConfigureAwait(true);
+        if (profile.IsOk)
+        {
+            _profileSubtitle = $"{profile.Value.Designation}, " + profile.Value.Shift switch
+            {
+                Domain.Shift.Morning => "morning shift",
+                Domain.Shift.Evening => "evening shift",
+                _ => "full time",
+            };
+            Post(() => OnPropertyChanged(nameof(UserSubtitle)));
+        }
+    }
+
+    /// <summary>
+    /// Refreshes the sidebar counts and the taskbar badge, computed here by the shell (never by whichever page loaded last), on every screen alike:
+    /// Appointments counts today's pending appointments (the whole local day: the ones of the Today view still to record), Requests the open requests (the
+    /// Requests page's "Open" view: every pending request), and Stock shows its alert when any blood group is below its minimum.
+    /// Best effort and quiet: a failed call leaves the last counts in place (the screens report their own errors).
+    /// </summary>
+    public async Task RefreshCountsAsync(CancellationToken ct = default)
+    {
+        if (_api is null || !_started)
+        {
+            return;
+        }
+
+        _lastCounts = Clock.GetUtcNow();
+
+        try
+        {
+            await Operations.RunAsync(RefreshCountsCoreAsync, ct).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or TimeoutException or IOException or System.Text.Json.JsonException or InvalidOperationException)
+        {
+            // Counts are a hint; the screen that owns the data shows any error.
+        }
+    }
+
+    [RunsInOperation("RefreshCountsAsync runs it inside Operations.RunAsync.")]
+    private async Task RefreshCountsCoreAsync(CancellationToken ct)
+    {
+        var api = _api!;
+        var appointments = await api.GetAppointmentsAsync(Features.Appointments.LocalDay.Of(Clock).Query(Domain.AppointmentStatus.Pending, pageSize: 1), ct).ConfigureAwait(true);
+        var requests = await api.GetRequestsAsync(new Contracts.Requests.RequestQuery(Status: Domain.RequestStatus.Pending, PageSize: 1), ct).ConfigureAwait(true);
+        var stock = await api.GetStockAsync(ct).ConfigureAwait(true);
+        Post(() =>
+        {
+            SetBadge("Appointments", appointments.IsOk ? appointments.Value.Total : null, alert: false);
+            SetBadge("Requests", requests.IsOk ? requests.Value.Total : null, alert: false);
+            if (stock.IsOk)
+            {
+                LowStockGroups = stock.Value.Count(i => i.BelowThreshold);
+                SetBadge("Stock", LowStockGroups, alert: LowStockGroups > 0);
+            }
+        });
+    }
+
+    /// <summary>Runs an action on the UI thread the shell was created on (the palette's search results arrive from a background continuation).</summary>
+    internal void RunOnUi(Action action) => Post(action);
+
+    private void SetBadge(string title, int? count, bool alert)
+    {
+        if (Items.FirstOrDefault(i => i.Title == title) is { } item)
+        {
+            item.Badge = count is > 0 ? count.Value.ToString(System.Globalization.CultureInfo.CurrentCulture) : null;
+            item.HasAlert = alert;
+        }
+    }
+
+    /// <summary>
+    /// Opens a sidebar destination by its title ("Donors"), with an optional parameter for the screen. False when the role cannot see it or the
+    /// navigation did not happen (the person chose to keep unsaved changes).
+    /// </summary>
+    public async Task<bool> OpenByTitleAsync(string title, object? parameter = null)
+    {
+        var destination = Items.Select(i => i.Destination).FirstOrDefault(d => d.Title == title);
+        if (destination is null)
+        {
+            return false;
+        }
+
+        if (parameter is null)
+        {
+            await OpenAsync(destination).ConfigureAwait(true);
+            return Navigation.Current?.GetType() == destination.ViewModelType;
+        }
+
+        return await Navigation.NavigateTo(destination.ViewModelType, parameter).ConfigureAwait(true);
+    }
+
+    private async Task BookAppointmentAsync()
+    {
+        if (await OpenByTitleAsync("Appointments").ConfigureAwait(true) && Navigation.Current?.NewCommand is { } create)
+        {
+            await create.ExecuteAsync().ConfigureAwait(true);
+        }
+    }
+
+    private async Task RecordDonationAsync()
+    {
+        var next = await FindNextAppointmentAsync().ConfigureAwait(true);
+        if (next is null)
+        {
+            if (await OpenByTitleAsync("Appointments", new Features.ListScreens.ListPrefilter(Status: "Pending")).ConfigureAwait(true))
+            {
+                Toasts.Show(ToastKind.Info, "Nobody is booked for the rest of today. Choose an appointment to record a donation.");
+            }
+
+            return;
+        }
+
+        if (await OpenByTitleAsync("Appointments", new Features.ListScreens.ListPrefilter(RecordId: next.Id)).ConfigureAwait(true)
+            && Navigation.Current is Features.Appointments.AppointmentsViewModel page)
+        {
+            await page.PendingDetail.ConfigureAwait(true);
+            if (page.RecordDonationCommand.CanExecute(null))
+            {
+                await page.RecordDonationCommand.ExecuteAsync().ConfigureAwait(true);
+            }
+        }
+    }
+
+    /// <summary>Today's earliest pending appointment that has not started more than an hour ago, or null.</summary>
+    [RunsInOperation("RecordDonationCommand runs RecordDonationAsync, which calls it, through the shell's operation runner.")]
+    private async Task<Contracts.Appointments.AppointmentListItem?> FindNextAppointmentAsync()
+    {
+        if (_api is null)
+        {
+            return null;
+        }
+
+        var day = Features.Appointments.LocalDay.Of(Clock);
+        var result = await _api.GetAppointmentsAsync(day.Query(Domain.AppointmentStatus.Pending, sort: Contracts.SortKeys.Slot)).ConfigureAwait(true);
+        if (!result.IsOk)
+        {
+            return null;
+        }
+
+        var today = result.Value.Items.Where(day.Holds).ToList();
+        var earliest = Clock.GetUtcNow().UtcDateTime.AddHours(-1);
+        return today.Where(a => a.SlotStartUtc >= earliest).OrderBy(a => a.SlotStartUtc).FirstOrDefault()
+            ?? today.OrderBy(a => a.SlotStartUtc).FirstOrDefault();
+    }
+
+    private void OnPreferencesChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(UiPreferences.IsNavCollapsed))
+        {
+            OnPropertyChanged(nameof(IsNavCollapsed));
+        }
     }
 
     /// <summary>Opens a destination, or the access-denied page when the signed-in role cannot use it.</summary>
@@ -216,6 +520,8 @@ public sealed partial class ShellViewModel : ViewModelBase
 
     private async Task NavigateToTypeAsync(Type type, object parameter) => await Navigation.NavigateTo(type, parameter).ConfigureAwait(true);
 
+    private void OnServerStatusChanged(object? sender, EventArgs e) => Post(() => OnPropertyChanged(nameof(IsServerWaking)));
+
     private void OnToastActionsChanged(object? sender, EventArgs e) => Post(() => OnPropertyChanged(nameof(IsToastActionWaking)));
 
     private void OnCurrentChanged(object? sender, EventArgs e)
@@ -230,6 +536,10 @@ public sealed partial class ShellViewModel : ViewModelBase
         OnPropertyChanged(nameof(CurrentPage));
         OnPropertyChanged(nameof(PageTitle));
         OnPropertyChanged(nameof(WindowTitle));
+        if (Clock.GetUtcNow() - _lastCounts >= CountsInterval)
+        {
+            _ = RefreshCountsAsync();
+        }
     }
 
     private void OnDemoReset(object? sender, EventArgs e)
@@ -272,6 +582,8 @@ public sealed partial class ShellViewModel : ViewModelBase
         if (disposing)
         {
             Navigation.CurrentChanged -= OnCurrentChanged;
+            Preferences.PropertyChanged -= OnPreferencesChanged;
+            _serverStatus.Changed -= OnServerStatusChanged;
             Toasts.Actions.Changed -= OnToastActionsChanged;
             _serverStatus.DemoResetObserved -= OnDemoReset;
             Navigation.Reset();

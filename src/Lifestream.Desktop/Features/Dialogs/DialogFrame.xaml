@@ -3,41 +3,59 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:feat="clr-namespace:Lifestream.Desktop.Features"
              xmlns:controls="clr-namespace:Lifestream.Desktop.Controls"
+             xmlns:dialogs="clr-namespace:Lifestream.Desktop.Features.Dialogs"
              Focusable="False" IsTabStop="False">
-  <!-- The shell of every form dialog: title, a message for what went wrong, the fields, and the actions bottom-right. Cancel is always enabled. The data context is a DialogViewModel. -->
+  <!-- The frame of every form dialog, in direction A's DialogSurface look: Layer, radius 12, a 1 px Stroke and the dialog shadow drawn behind it (never on the
+       text); the title (20/28), a close button, a message for what went wrong, the fields, and a footer with Cancel and the primary action on the right.
+       Cancel is always enabled. The data context is a DialogViewModel. -->
   <UserControl.Resources>
     <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
   </UserControl.Resources>
-  <Border Padding="{DynamicResource Pad.24}" AutomationProperties.Name="Dialog">
-    <Grid>
-      <Grid.RowDefinitions>
-        <RowDefinition Height="Auto" />
-        <RowDefinition Height="Auto" />
-        <RowDefinition Height="*" />
-        <RowDefinition Height="Auto" />
-      </Grid.RowDefinitions>
-      <TextBlock Style="{DynamicResource Text.Heading}" Text="{Binding Title}" TextWrapping="Wrap" AutomationProperties.HeadingLevel="Level1" />
-      <StackPanel Grid.Row="1">
-      <controls:WakingNotice x:Name="Waking" IsActive="{Binding IsOperationWaking}" CancelCommand="{Binding CancelOperationCommand}" feat:Edge.Top="{DynamicResource Space.12}" />
-      <Border feat:Edge.PadX="{DynamicResource Space.12}" feat:Edge.PadY="{DynamicResource Space.8}" feat:Edge.Top="{DynamicResource Space.12}" Background="{DynamicResource Brush.SurfacePressed}"
-              BorderBrush="{DynamicResource Brush.StatusDanger}" BorderThickness="1" CornerRadius="{DynamicResource Radius.Control}" Visibility="{Binding HasFormError, Converter={StaticResource BoolToVisibility}}"
-              AutomationProperties.LiveSetting="Assertive">
+  <Grid>
+    <controls:DialogSurface x:Name="Surface" Title="{Binding Title}" Padding="{DynamicResource Inset.L24T16R24B24}"
+                            AutomationProperties.Name="{Binding Title}">
+      <controls:DialogSurface.Footer>
         <StackPanel Orientation="Horizontal">
-          <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE783;" Foreground="{DynamicResource Brush.StatusDanger}" VerticalAlignment="Top" feat:Edge.Top="{DynamicResource Space.4}" feat:Edge.Right="{DynamicResource Space.12}" />
-          <TextBlock Style="{DynamicResource Text.Body}" Text="{Binding FormError}" TextWrapping="Wrap" MaxWidth="440" />
+          <ContentControl x:Name="FooterStartHost" Focusable="False" IsTabStop="False" VerticalAlignment="Center" Content="{Binding FooterStart, RelativeSource={RelativeSource AncestorType=dialogs:DialogFrame}}" />
+          <Button x:Name="CancelButton" Style="{DynamicResource Button.Secondary}" Content="{Binding CancelText}" Command="{Binding CancelCommand}" IsCancel="True"
+                  AutomationProperties.Name="{Binding CancelText}" />
+          <Button x:Name="PrimaryButton" Style="{DynamicResource Button.Primary}" Content="{Binding PrimaryText}" Command="{Binding PrimaryCommand}" IsDefault="True" feat:Edge.Left="{DynamicResource Space.8}"
+                  Visibility="{Binding HasPrimary, Converter={StaticResource BoolToVisibility}}" controls:ButtonAssist.IsBusy="{Binding PrimaryCommand.IsRunning}"
+                  controls:ButtonAssist.BusyText="{Binding PrimaryBusyText}" AutomationProperties.Name="{Binding PrimaryText}" />
+          <ContentControl x:Name="FooterEndHost" Focusable="False" IsTabStop="False" VerticalAlignment="Center" Content="{Binding FooterEnd, RelativeSource={RelativeSource AncestorType=dialogs:DialogFrame}}" />
         </StackPanel>
-      </Border>
-      </StackPanel>
-      <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Focusable="False" feat:Edge.Top="{DynamicResource Space.16}">
-        <ContentControl Focusable="False" IsTabStop="False" Content="{Binding Fields, RelativeSource={RelativeSource AncestorType=UserControl}}" />
-      </ScrollViewer>
-      <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" feat:Edge.Top="{DynamicResource Space.16}">
-        <Button x:Name="CancelButton" Style="{DynamicResource Button.Secondary}" Content="{Binding CancelText}" Command="{Binding CancelCommand}" IsCancel="True"
-                AutomationProperties.Name="{Binding CancelText}" />
-        <Button x:Name="PrimaryButton" Style="{DynamicResource Button.Primary}" Content="{Binding PrimaryText}" Command="{Binding PrimaryCommand}" IsDefault="True" feat:Edge.Left="{DynamicResource Space.8}"
-                Visibility="{Binding HasPrimary, Converter={StaticResource BoolToVisibility}}" controls:ButtonAssist.IsBusy="{Binding PrimaryCommand.IsRunning}"
-                controls:ButtonAssist.BusyText="{Binding PrimaryBusyText}" AutomationProperties.Name="{Binding PrimaryText}" />
-      </StackPanel>
-    </Grid>
-  </Border>
+      </controls:DialogSurface.Footer>
+      <Grid>
+        <Grid.RowDefinitions>
+          <RowDefinition Height="Auto" />
+          <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <StackPanel>
+          <controls:WakingNotice x:Name="Waking" IsActive="{Binding IsOperationWaking}" CancelCommand="{Binding CancelOperationCommand}" feat:Edge.Bottom="{DynamicResource Space.12}" />
+          <!-- What went wrong: a Critical soft bar with the alert icon, read out at once. -->
+          <controls:CrispBorder x:Name="FormErrorBar" Padding="{DynamicResource Inset.H12V8}" feat:Edge.Bottom="{DynamicResource Space.16}" Background="{DynamicResource Brush.CriticalSoft}"
+                                BorderBrush="{DynamicResource Brush.CriticalSoft}" BorderThickness="1" CornerRadius="{DynamicResource Radius.Control}"
+                                Visibility="{Binding HasFormError, Converter={StaticResource BoolToVisibility}}" AutomationProperties.LiveSetting="Assertive">
+            <Grid>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <controls:Icon Kind="Alert" Size="18" Foreground="{DynamicResource Brush.Critical}" VerticalAlignment="Top" feat:Edge.Right="{DynamicResource Space.12}" />
+              <TextBlock Grid.Column="1" Style="{DynamicResource Text.Body}" Text="{Binding FormError}" TextWrapping="Wrap" />
+            </Grid>
+          </controls:CrispBorder>
+        </StackPanel>
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Focusable="False">
+          <ContentControl Focusable="False" IsTabStop="False" Content="{Binding Fields, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+        </ScrollViewer>
+      </Grid>
+    </controls:DialogSurface>
+    <!-- The close button in the title row: the same road as Esc and Cancel (it asks first when there are unsaved changes). -->
+    <Button x:Name="CloseButton" Style="{DynamicResource Button.Icon.Small}" Command="{Binding CancelCommand}" HorizontalAlignment="Right" VerticalAlignment="Top"
+            feat:Edge.Top="{DynamicResource Space.16}" feat:Edge.Right="{DynamicResource Space.16}" WindowChrome.IsHitTestVisibleInChrome="True" IsTabStop="False"
+            AutomationProperties.Name="Close dialog" ToolTip="Close (Esc)">
+      <controls:Icon Kind="X" Size="15" />
+    </Button>
+  </Grid>
 </UserControl>

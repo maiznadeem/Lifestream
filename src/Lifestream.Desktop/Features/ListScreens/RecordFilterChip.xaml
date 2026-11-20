@@ -1,0 +1,36 @@
+<UserControl x:Class="Lifestream.Desktop.Features.ListScreens.RecordFilterChip"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:Lifestream.Desktop.Controls"
+             Focusable="False" IsTabStop="False">
+  <!-- A filter chip for one record (direction A, audit A5): a dashed "+ Donor" while nothing is chosen; a click opens the record search (RecordPicker) under it, and the
+       chosen record shows on a filled chip, "Donor: Adrian Mukherjee", with an x that removes the filter. Esc closes the search without a change. -->
+  <UserControl.Resources>
+    <Thickness x:Key="RecordChip.ClearGap">2,0,0,0</Thickness>
+  </UserControl.Resources>
+  <Grid>
+    <StackPanel Orientation="Horizontal">
+      <Button x:Name="ChipButton" Style="{DynamicResource Button.Chip}" Click="OnChipClick" HorizontalAlignment="Left">
+        <StackPanel Orientation="Horizontal">
+          <controls:Icon x:Name="PlusIcon" Kind="Plus" Size="14" VerticalAlignment="Center" Margin="{DynamicResource Inset.R6}" />
+          <TextBlock x:Name="ChipText" VerticalAlignment="Center" TextWrapping="NoWrap" />
+        </StackPanel>
+      </Button>
+      <Button x:Name="ClearButton" Style="{DynamicResource Button.Icon.Small}" Click="OnClearClick" VerticalAlignment="Center" Margin="{StaticResource RecordChip.ClearGap}"
+              Visibility="Collapsed">
+        <controls:Icon Kind="X" Size="14" />
+      </Button>
+    </StackPanel>
+    <Popup x:Name="SearchPopup" PlacementTarget="{Binding ElementName=ChipButton}" Placement="Bottom" VerticalOffset="4" StaysOpen="False" AllowsTransparency="True"
+           PopupAnimation="None" Opened="OnPopupOpened">
+      <Grid Margin="{DynamicResource Inset.Popup}">
+        <controls:ElevatedSurface Level="Flyout" CornerRadius="{DynamicResource Radius.Panel}" Padding="{DynamicResource Pad.12}" Width="320">
+          <StackPanel>
+            <TextBlock x:Name="PopupLabel" Style="{DynamicResource Text.Label}" Margin="{DynamicResource Inset.B8}" />
+            <controls:RecordPicker x:Name="Picker" />
+          </StackPanel>
+        </controls:ElevatedSurface>
+      </Grid>
+    </Popup>
+  </Grid>
+</UserControl>

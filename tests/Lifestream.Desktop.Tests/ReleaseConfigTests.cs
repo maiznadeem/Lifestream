@@ -5,13 +5,13 @@ using Lifestream.Client.Tests;
 namespace Lifestream.Desktop.Tests;
 
 /// <summary>
-/// OWN-09: what ships on the GitHub Releases page for 2.0.1. The files that the installer, the updater and the release workflow read are checked as they are on disk: the app must point at
-/// the deployed API (an https Azure host, never localhost), the update feed at the real repository, every version place at 2.0.1, and the release text must be the changelog's section
+/// OWN-09: what ships on the GitHub Releases page for 2.1.0. The files that the installer, the updater and the release workflow read are checked as they are on disk: the app must point at
+/// the deployed API (an https Azure host, never localhost), the update feed at the real repository, every version place at 2.1.0, and the release text must be the changelog's section
 /// with nothing private in it. No window is opened and nothing is sent anywhere.
 /// </summary>
 public sealed partial class ReleaseConfigTests
 {
-    private const string Version = "2.0.1";
+    private const string Version = "2.1.0";
 
     private static string Text(string relative) => File.ReadAllText(RepoPaths.Find(relative)).Replace("\r\n", "\n", StringComparison.Ordinal);
 
@@ -40,18 +40,18 @@ public sealed partial class ReleaseConfigTests
     }
 
     [Fact]
-    public void Version_IsTwoDotZeroDotOne_EverywhereItIsSet()
+    public void Version_IsTheReleaseVersion_EverywhereItIsSet()
     {
         Assert.Contains($"<Version>{Version}</Version>", Text("Directory.Build.props"), StringComparison.Ordinal);
-        Assert.Equal(new System.Version(2, 0, 1), typeof(App).Assembly.GetName().Version is { } v ? new System.Version(v.Major, v.Minor, v.Build) : null);
+        Assert.Equal(System.Version.Parse(Version), typeof(App).Assembly.GetName().Version is { } v ? new System.Version(v.Major, v.Minor, v.Build) : null);
         Assert.Contains($"<assemblyIdentity version=\"{Version}.0\"", Text("src/Lifestream.Desktop/app.manifest"), StringComparison.Ordinal);
 
-        // The installer: vpk pack gets the version of the tag (v2.0.1), and the tag pattern is the only way in.
+        // The installer: vpk pack gets the version of the tag (v2.1.0), and the tag pattern is the only way in.
         var release = Text(".github/workflows/release.yml");
         Assert.Contains("'--packVersion', '${{ steps.version.outputs.version }}'", release, StringComparison.Ordinal);
         Assert.Contains("-p:Version=${{ steps.version.outputs.version }}", release, StringComparison.Ordinal);
 
-        // The Store package: the manifest takes the version from the build script, which makes it three parts plus .0 (2.0.1.0).
+        // The Store package: the manifest takes the version from the build script, which makes it three parts plus .0 (2.1.0.0).
         Assert.Contains("Version=\"{{VERSION}}\"", Text("packaging/store/AppxManifest.template.xml"), StringComparison.Ordinal);
         Assert.Contains("\"$numeric.0\"", Text("packaging/store/build-msix.ps1"), StringComparison.Ordinal);
         Assert.Contains($"git tag v{Version}", Text("packaging/store/README.md"), StringComparison.Ordinal);
@@ -63,7 +63,7 @@ public sealed partial class ReleaseConfigTests
         var changelog = Text("CHANGELOG.md");
         var section = Section(changelog, Version);
 
-        Assert.StartsWith("Lifestream 2.0", section, StringComparison.Ordinal);
+        Assert.StartsWith("Lifestream 2.1", section, StringComparison.Ordinal);
         Assert.Contains("### Look and feel", section, StringComparison.Ordinal);
 
         // Release text goes public: no credential, connection string, token, e-mail address, local path or internal run folder.
@@ -92,7 +92,7 @@ public sealed partial class ReleaseConfigTests
         var readme = Text("README.md");
         var install = readme[readme.IndexOf("## Install", StringComparison.Ordinal)..readme.IndexOf("## Try it", StringComparison.Ordinal)];
 
-        Assert.Contains("https://github.com/maiznadeem/lifestream/releases/tag/v2.0.1", install, StringComparison.Ordinal);
+        Assert.Contains("https://github.com/maiznadeem/lifestream/releases/tag/v2.1.0", install, StringComparison.Ordinal);
         Assert.Contains("More info", install, StringComparison.Ordinal);
         Assert.Contains("Run anyway", install, StringComparison.Ordinal);
         Assert.Contains("not code-signed", install, StringComparison.Ordinal);

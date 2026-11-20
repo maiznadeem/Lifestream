@@ -4,134 +4,270 @@
              xmlns:controls="clr-namespace:Lifestream.Desktop.Controls"
              xmlns:feat="clr-namespace:Lifestream.Desktop.Features"
              xmlns:lists="clr-namespace:Lifestream.Desktop.Features.ListScreens"
-             Focusable="False">
-  <!-- Receipts: text search, kind and blood type filters, the list (names with ids as secondary text; a row opens the printable receipt) and on the right the receipt's facts. Receipts are issued from appointments and requests, so there is no add button. -->
+             xmlns:receipts="clr-namespace:Lifestream.Desktop.Features.Receipts"
+             xmlns:stock="clr-namespace:Lifestream.Desktop.Features.Stock"
+             xmlns:vm="clr-namespace:Lifestream.Client.Features.Receipts;assembly=Lifestream.Client"
+             controls:ShellPage.OwnsHeader="True" Focusable="False">
+  <!-- Receipts (direction A): the page header with All / Donations / Blood issues tabs and their counts, a toolbar (search with Ctrl F, a blood group chip,
+       Clear filters), the table (the date over its time, the kind and the receipt's code, the donor or patient with the record it belongs to, the group and
+       units, and who issued it while the table is wide enough; nothing is cut off), and the selected receipt's side panel: who and what and who issued it,
+       Print (the one primary), the record it was issued for, a "..." menu with Open receipt and Save as PDF, and the receipt itself as it prints, on light
+       paper in either theme. Receipts are issued by recording a donation or fulfilling a request, so there is no add button. -->
   <UserControl.Resources>
     <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
-    <Style x:Key="RecordLink" TargetType="Hyperlink">
-      <Setter Property="Foreground" Value="{DynamicResource Brush.StatusInfo}" />
-      <Setter Property="TextDecorations" Value="Underline" />
-    </Style>
+    <lists:FalseToVisibleConverter x:Key="NotVisible" />
+    <stock:GroupOptionTextConverter x:Key="GroupOptionText" />
   </UserControl.Resources>
-  <Grid>
-    <Grid.RowDefinitions>
-      <RowDefinition Height="Auto" />
-      <RowDefinition Height="Auto" />
-      <RowDefinition Height="*" />
-    </Grid.RowDefinitions>
 
-    <WrapPanel KeyboardNavigation.TabNavigation="Local">
-      <controls:FormField Label="Search" feat:Edge.Right="{DynamicResource Space.16}" MinWidth="240" Hint="Receipt number, donor or patient name">
-        <TextBox x:Name="SearchBox" Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" MaxLength="100" AutomationProperties.Name="Search receipts">
+  <Grid x:Name="Root">
+    <Grid.ColumnDefinitions>
+      <ColumnDefinition Width="*" />
+      <ColumnDefinition Width="Auto" />
+    </Grid.ColumnDefinitions>
+
+    <Grid x:Name="Page" KeyboardNavigation.TabNavigation="Local">
+      <Grid.Style>
+        <Style TargetType="Grid">
+          <Style.Triggers>
+            <DataTrigger Binding="{Binding IsPanelOpen}" Value="True">
+              <Setter Property="Margin" Value="{DynamicResource Inset.R24}" />
+            </DataTrigger>
+          </Style.Triggers>
+        </Style>
+      </Grid.Style>
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto" />
+        <RowDefinition Height="Auto" />
+        <RowDefinition Height="Auto" />
+        <RowDefinition Height="*" />
+      </Grid.RowDefinitions>
+
+      <controls:PageHeader Title="Receipts" Count="{Binding Total}">
+        <controls:PageHeader.Tabs>
+          <Border Style="{DynamicResource Tabs.Strip}">
+            <StackPanel x:Name="Tabs" Orientation="Horizontal" feat:Edge.Bottom="-1">
+              <RadioButton x:Name="AllTab" Style="{DynamicResource Tab.Option}" GroupName="ReceiptKind" IsChecked="{Binding IsAllKinds, Mode=TwoWay}" AutomationProperties.Name="All receipts">
+                <TextBlock><Run Text="All" /><Run Text=" " /><Run Text="{Binding AllCountText, Mode=OneWay}" Foreground="{DynamicResource Brush.Ink3}" /></TextBlock>
+              </RadioButton>
+              <RadioButton x:Name="DonationsTab" Style="{DynamicResource Tab.Option}" GroupName="ReceiptKind" IsChecked="{Binding IsDonationKind, Mode=TwoWay}" AutomationProperties.Name="Donation receipts">
+                <TextBlock><Run Text="Donations" /><Run Text=" " /><Run Text="{Binding DonationCountText, Mode=OneWay}" Foreground="{DynamicResource Brush.Ink3}" /></TextBlock>
+              </RadioButton>
+              <RadioButton x:Name="IssuesTab" Style="{DynamicResource Tab.Option}" GroupName="ReceiptKind" IsChecked="{Binding IsIssueKind, Mode=TwoWay}" AutomationProperties.Name="Blood issue receipts">
+                <TextBlock><Run Text="Blood issues" /><Run Text=" " /><Run Text="{Binding IssueCountText, Mode=OneWay}" Foreground="{DynamicResource Brush.Ink3}" /></TextBlock>
+              </RadioButton>
+            </StackPanel>
+          </Border>
+        </controls:PageHeader.Tabs>
+      </controls:PageHeader>
+
+      <!-- Toolbar: search (Ctrl F, Enter searches at once), the blood group chip, Clear filters. -->
+      <WrapPanel Grid.Row="1" feat:Edge.Top="{DynamicResource Space.16}" feat:Edge.Bottom="{DynamicResource Space.12}">
+        <TextBox x:Name="SearchBox" Style="{DynamicResource TextBox.Search}" Width="320" Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" MaxLength="100"
+                 controls:SearchAssist.Shortcut="Ctrl F" controls:InputAssist.Placeholder="Search receipts or names" ToolTip="Search by receipt number, donor or patient" feat:Edge.Right="{DynamicResource Space.8}"
+                 AutomationProperties.Name="Search receipts">
           <TextBox.InputBindings>
             <KeyBinding Key="Enter" Command="{Binding SearchNowCommand}" />
           </TextBox.InputBindings>
         </TextBox>
-      </controls:FormField>
-      <controls:FormField Label="Receipts" feat:Edge.Right="{DynamicResource Space.16}">
-        <ComboBox x:Name="KindBox" ItemsSource="{Binding KindOptions}" SelectedItem="{Binding KindFilter, Mode=TwoWay}" DisplayMemberPath="Display" MinWidth="150" AutomationProperties.Name="Kind of receipt" />
-      </controls:FormField>
-      <controls:FormField Label="Blood type" feat:Edge.Right="{DynamicResource Space.16}">
-        <ComboBox x:Name="BloodTypeBox" ItemsSource="{Binding BloodTypeOptions}" SelectedItem="{Binding BloodTypeFilter, Mode=TwoWay}" DisplayMemberPath="Display" MinWidth="150" AutomationProperties.Name="Blood type" />
-      </controls:FormField>
-      <Button Style="{DynamicResource Button.Ghost}" Content="Clear filters" Command="{Binding ClearFiltersCommand}" VerticalAlignment="Bottom" feat:Edge.Bottom="{DynamicResource Space.16}"
-              Visibility="{Binding HasActiveFilters, Converter={StaticResource BoolToVisibility}}" AutomationProperties.Name="Clear filters" />
-    </WrapPanel>
+        <Button x:Name="BloodTypeChip" Style="{DynamicResource Button.Chip}" Click="OnBloodTypeChipClick" feat:Edge.Right="{DynamicResource Space.8}" AutomationProperties.Name="Blood group filter">
+          <StackPanel Orientation="Horizontal">
+            <!-- The one chip pattern (FilterChip's): "+" while nothing is chosen, a chevron once a value is -->
+            <controls:Icon Kind="Plus" Size="14" VerticalAlignment="Center" Margin="{DynamicResource Inset.R6}" Visibility="{Binding HasBloodTypeFilter, Converter={StaticResource NotVisible}}" />
+            <TextBlock Text="{Binding BloodTypeChipText}" VerticalAlignment="Center" />
+            <controls:Icon Kind="Chevd" Size="14" VerticalAlignment="Center" Margin="{DynamicResource Inset.L6}" Visibility="{Binding HasBloodTypeFilter, Converter={StaticResource BoolToVisibility}}" />
+          </StackPanel>
+          <Button.ContextMenu>
+            <ContextMenu x:Name="BloodTypeMenu" ItemsSource="{Binding BloodTypeOptions}" MenuItem.Click="OnBloodTypeChosen">
+              <ContextMenu.ItemTemplate>
+                <DataTemplate>
+                  <TextBlock Text="{Binding Converter={StaticResource GroupOptionText}}" />
+                </DataTemplate>
+              </ContextMenu.ItemTemplate>
+            </ContextMenu>
+          </Button.ContextMenu>
+        </Button>
+        <Button Style="{DynamicResource Button.Subtle}" Content="Clear filters" Command="{Binding ClearFiltersCommand}" Visibility="{Binding HasActiveFilters, Converter={StaticResource BoolToVisibility}}"
+                AutomationProperties.Name="Clear filters" />
+      </WrapPanel>
 
-    <lists:ScreenWakingNotice Grid.Row="1" />
-    <Grid Grid.Row="2">
-      <Grid.ColumnDefinitions>
-        <ColumnDefinition Width="*" MinWidth="360" />
-        <ColumnDefinition Width="16" />
-        <ColumnDefinition Width="360" />
-      </Grid.ColumnDefinitions>
-      <controls:LoadSurface x:Name="ListSurface" State="{Binding State}" SkeletonKind="List" SkeletonColumns="130,90,2*,80,60,*"
+      <lists:ScreenWakingNotice Grid.Row="2" />
+
+      <controls:LoadSurface x:Name="ListSurface" Grid.Row="3" State="{Binding State}" SkeletonKind="List" SkeletonColumns="110,120,2*,72,70,*"
                             ErrorMessage="{Binding ErrorMessage}" ErrorDetail="{Binding ErrorDetail}" RetryCommand="{Binding RetryCommand}"
-                            EmptyGlyph="&#xE8A5;" EmptyTitle="{Binding EmptyTitle}" EmptyMessage="{Binding EmptyMessage}" EmptyActionText="{Binding EmptyActionText}"
+                            EmptyIcon="Receipt" EmptyTitle="{Binding EmptyTitle}" EmptyMessage="{Binding EmptyMessage}" EmptyActionText="{Binding EmptyActionText}"
                             EmptyActionCommand="{Binding EmptyActionCommand}">
-        <Grid>
-          <Grid.RowDefinitions>
-            <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
-          </Grid.RowDefinitions>
-          <controls:LifestreamDataGrid x:Name="Grid" ItemsSource="{Binding Items}" SelectedItem="{Binding SelectedItem, Mode=TwoWay}" SortCommand="{Binding SortCommand}"
-                                       SortColumn="{Binding SortColumn, Mode=OneWay}" SortDescending="{Binding SortDescending, Mode=OneWay}"
-                                       AutomationProperties.Name="Receipts" MouseDoubleClick="OnRowDoubleClick" KeyDown="OnGridKeyDown">
-            <DataGrid.Columns>
-              <DataGridTemplateColumn Header="Date" Width="Auto" MinWidth="130" SortMemberPath="date">
-                <DataGridTemplateColumn.CellTemplate>
-                  <DataTemplate>
-                    <TextBlock Text="{Binding WhenText}" Style="{DynamicResource DataGrid.TextCell}" />
-                  </DataTemplate>
-                </DataGridTemplateColumn.CellTemplate>
-              </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Receipt" Width="90" CanUserSort="False">
-                <DataGridTemplateColumn.CellTemplate>
-                  <DataTemplate>
-                    <TextBlock Text="{Binding KindText}" Style="{DynamicResource DataGrid.TextCell}" />
-                  </DataTemplate>
-                </DataGridTemplateColumn.CellTemplate>
-              </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Donor or patient" Width="2*" MinWidth="170" CanUserSort="False">
-                <DataGridTemplateColumn.CellTemplate>
-                  <DataTemplate>
-                    <StackPanel VerticalAlignment="Center" feat:Edge.Left="{DynamicResource Space.12}" feat:Edge.Right="{DynamicResource Space.12}">
-                      <TextBlock TextTrimming="CharacterEllipsis" TextWrapping="NoWrap">
-                        <Hyperlink Style="{StaticResource RecordLink}" Command="{Binding DataContext.OpenPartyCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}" CommandParameter="{Binding}"
-                                   AutomationProperties.Name="Open record">
-                          <Run Text="{Binding PartyName, Mode=OneWay}" />
-                        </Hyperlink>
-                      </TextBlock>
-                      <TextBlock Style="{DynamicResource Text.Caption}" Foreground="{DynamicResource Brush.TextMuted}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis">
-                        <Run Text="{Binding SourceKindText, Mode=OneWay}" /> <Run Text="{Binding SourceIdText, Mode=OneWay}" />
-                      </TextBlock>
-                    </StackPanel>
-                  </DataTemplate>
-                </DataGridTemplateColumn.CellTemplate>
-              </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Blood" Width="80" CanUserSort="False">
-                <DataGridTemplateColumn.CellTemplate>
-                  <DataTemplate>
-                    <TextBlock Text="{Binding BloodTypeText}" Style="{DynamicResource DataGrid.TextCell}" />
-                  </DataTemplate>
-                </DataGridTemplateColumn.CellTemplate>
-              </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Units" Width="60" CanUserSort="False">
-                <DataGridTemplateColumn.CellTemplate>
-                  <DataTemplate>
-                    <TextBlock Text="{Binding UnitsText}" Style="{DynamicResource DataGrid.TextCell}" />
-                  </DataTemplate>
-                </DataGridTemplateColumn.CellTemplate>
-              </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Issued by" Width="*" MinWidth="130" CanUserSort="False">
-                <DataGridTemplateColumn.CellTemplate>
-                  <DataTemplate>
-                    <StackPanel VerticalAlignment="Center" feat:Edge.Left="{DynamicResource Space.12}" feat:Edge.Right="{DynamicResource Space.12}">
-                      <TextBlock Style="{DynamicResource DataGrid.PrimaryLine}" Text="{Binding StaffName}" />
-                      <TextBlock Style="{DynamicResource DataGrid.SecondaryLine}" Foreground="{DynamicResource Brush.TextMuted}" Text="{Binding StaffIdText}" />
-                    </StackPanel>
-                  </DataTemplate>
-                </DataGridTemplateColumn.CellTemplate>
-              </DataGridTemplateColumn>
-            </DataGrid.Columns>
-          </controls:LifestreamDataGrid>
-          <lists:ListFooter Grid.Row="1" />
-        </Grid>
+        <controls:CrispBorder x:Name="TableFrame" Background="{DynamicResource Brush.Layer}" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="1" CornerRadius="{DynamicResource Radius.Panel}">
+          <Grid>
+            <Grid.RowDefinitions>
+              <RowDefinition Height="*" />
+              <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <controls:LifestreamDataGrid x:Name="Grid" ItemsSource="{Binding Items}" SelectedItem="{Binding SelectedItem, Mode=TwoWay}" SortCommand="{Binding SortCommand}"
+                                         SortColumn="{Binding SortColumn, Mode=OneWay}" SortDescending="{Binding SortDescending, Mode=OneWay}"
+                                         AutomationProperties.Name="Receipts" MouseDoubleClick="OnRowDoubleClick" KeyDown="OnGridKeyDown" lists:ListColumns.IsResponsive="True">
+              <DataGrid.Columns>
+                <!-- The date over its time, so neither is ever cut: a fixed width that fits "18 Nov 2026", given back after the panel opens (ListColumns). -->
+                <DataGridTemplateColumn Header="Date" Width="*" MinWidth="120" MaxWidth="200" SortMemberPath="date">
+                  <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate DataType="{x:Type vm:ReceiptRow}">
+                      <StackPanel VerticalAlignment="Center" AutomationProperties.Name="{Binding WhenText}">
+                        <TextBlock Style="{DynamicResource DataGrid.PrimaryLine}" Text="{Binding DateText}" Typography.NumeralAlignment="Tabular" TextTrimming="None" />
+                        <TextBlock Style="{DynamicResource DataGrid.SecondaryLine}" Foreground="{DynamicResource Brush.Ink3}" Text="{Binding TimeText}" Typography.NumeralAlignment="Tabular" TextTrimming="None" />
+                      </StackPanel>
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <!-- The kind as a pill over the receipt's code, in a column wide enough for the longer pill ("Donation"). Both kinds are neutral; the icon tells them apart. -->
+                <DataGridTemplateColumn Header="Receipt" Width="*" MinWidth="124" MaxWidth="190" CanUserSort="False">
+                  <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate DataType="{x:Type vm:ReceiptRow}">
+                      <StackPanel VerticalAlignment="Center" HorizontalAlignment="Left">
+                        <controls:Badge x:Name="Kind" Text="{Binding KindText}" Kind="Neutral" Icon="Drop" HorizontalAlignment="Left" />
+                        <TextBlock Style="{DynamicResource DataGrid.SecondaryLine}" Foreground="{DynamicResource Brush.Ink3}" Text="{Binding CodeText}" TextTrimming="None" />
+                      </StackPanel>
+                      <DataTemplate.Triggers>
+                        <DataTrigger Binding="{Binding IsIssue}" Value="True">
+                          <Setter TargetName="Kind" Property="Icon" Value="Request" />
+                        </DataTrigger>
+                      </DataTemplate.Triggers>
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="Donor or patient" Width="Auto" MinWidth="180" MaxWidth="320" CanUserSort="False">
+                  <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate DataType="{x:Type vm:ReceiptRow}">
+                      <StackPanel VerticalAlignment="Center">
+                        <TextBlock Style="{DynamicResource DataGrid.PrimaryLine}">
+                          <Hyperlink Foreground="{DynamicResource Brush.Ink}" TextDecorations="{x:Null}" Command="{Binding DataContext.OpenPartyCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                     CommandParameter="{Binding}" AutomationProperties.Name="Open record"><Run Text="{Binding PartyName, Mode=OneWay}" /></Hyperlink>
+                        </TextBlock>
+                        <TextBlock Style="{DynamicResource DataGrid.SecondaryLine}" Foreground="{DynamicResource Brush.Ink3}">
+                          <Run Text="{Binding SourceKindText, Mode=OneWay}" /> <Run Text="{Binding SourceIdText, Mode=OneWay}" />
+                        </TextBlock>
+                      </StackPanel>
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="Group" Width="*" MinWidth="80" MaxWidth="140" CanUserSort="False">
+                  <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate DataType="{x:Type vm:ReceiptRow}">
+                      <controls:BloodGroupTag Text="{Binding GroupText}" HorizontalAlignment="Left" VerticalAlignment="Center" />
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn x:Name="UnitsColumn" Header="Units" Width="70" CanUserSort="False" controls:ColumnAssist.HeaderAlignment="Right">
+                  <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate DataType="{x:Type vm:ReceiptRow}">
+                      <TextBlock Text="{Binding UnitsText}" Style="{DynamicResource DataGrid.TextCell}" HorizontalAlignment="Right" Typography.NumeralAlignment="Tabular" />
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn x:Name="IssuedByColumn" Header="Issued by" Width="*" MinWidth="180" MaxWidth="360" CanUserSort="False" lists:ListColumns.HideBelow="860">
+                  <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate DataType="{x:Type vm:ReceiptRow}">
+                      <TextBlock Style="{DynamicResource DataGrid.TextCell}" Text="{Binding StaffName}" />
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+              </DataGrid.Columns>
+            </controls:LifestreamDataGrid>
+            <lists:ListFooter Grid.Row="1" />
+          </Grid>
+        </controls:CrispBorder>
       </controls:LoadSurface>
-
-      <lists:ActionDetailPane Grid.Column="2">
-        <lists:ActionDetailPane.Actions>
-          <WrapPanel>
-            <Button Style="{DynamicResource Button.Primary}" Command="{Binding OpenReceiptCommand}" feat:Edge.Right="{DynamicResource Space.8}" feat:Edge.Bottom="{DynamicResource Space.8}"
-                    AutomationProperties.Name="Open receipt to print">
-              <StackPanel Orientation="Horizontal">
-                <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE749;" feat:Edge.Right="{DynamicResource Space.8}" VerticalAlignment="Center" />
-                <TextBlock Text="Open and print" VerticalAlignment="Center" />
-              </StackPanel>
-            </Button>
-          </WrapPanel>
-        </lists:ActionDetailPane.Actions>
-      </lists:ActionDetailPane>
     </Grid>
+
+    <!-- The selected receipt. -->
+    <controls:SidePanel x:Name="Panel" Grid.Column="1" IsOpen="{Binding IsPanelOpen}" Overline="{Binding PanelOverline}" CloseCommand="{Binding ClosePanelCommand}"
+                        lists:PanelBleed.IsEnabled="True" AutomationProperties.Name="Receipt details">
+      <Grid>
+        <controls:Skeleton Kind="Detail" Visibility="{Binding ShowDetailSkeleton, Converter={StaticResource BoolToVisibility}}" />
+        <controls:ErrorState Message="{Binding DetailError}" RetryCommand="{Binding RetryDetailCommand}" Visibility="{Binding HasDetailError, Converter={StaticResource BoolToVisibility}}" />
+        <ScrollViewer x:Name="PanelBody" Style="{DynamicResource ScrollViewer.Panel}" VerticalScrollBarVisibility="Auto" Focusable="False" Visibility="{Binding HasDetail, Converter={StaticResource BoolToVisibility}}">
+          <StackPanel feat:Edge.Bottom="{DynamicResource Space.24}">
+            <Grid>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+              </Grid.ColumnDefinitions>
+              <StackPanel>
+                <TextBlock x:Name="PanelParty" Style="{DynamicResource Text.Section}" Text="{Binding DetailPartyName}" TextWrapping="Wrap" AutomationProperties.HeadingLevel="Level2" />
+                <TextBlock x:Name="PanelSubtitle" Style="{DynamicResource Text.Secondary}" Text="{Binding DetailSubtitle}" TextWrapping="Wrap" feat:Edge.Top="{DynamicResource Space.4}" />
+              </StackPanel>
+              <controls:BloodGroupTag Grid.Column="1" Text="{Binding DetailGroupText}" IsLarge="True" VerticalAlignment="Top" feat:Edge.Left="{DynamicResource Space.12}" />
+            </Grid>
+
+            <TextBlock x:Name="PanelIssuedBy" Style="{DynamicResource Text.Secondary}" TextWrapping="Wrap" feat:Edge.Top="{DynamicResource Space.4}">
+              <Run Text="Issued by " /><Run Text="{Binding DetailIssuedBy, Mode=OneWay}" />
+            </TextBlock>
+
+            <!-- Actions: Print (the one primary on the screen), the record it was issued for, and a "..." menu with the rarer actions. -->
+            <!-- As on every list screen: the one filled primary fills the row, then the secondary, then "...". -->
+            <Grid x:Name="ActionsRow" feat:Edge.Top="{DynamicResource Space.16}">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+              </Grid.ColumnDefinitions>
+              <Button x:Name="PrintButton" Style="{DynamicResource Button.Primary}" Command="{Binding PrintCommand}" feat:Edge.Right="{DynamicResource Space.8}" AutomationProperties.Name="Print a copy"
+                      ToolTip="Print a copy of this receipt" controls:ButtonAssist.IsBusy="{Binding PrintCommand.IsRunning}" controls:ButtonAssist.BusyText="Printing">
+                <StackPanel Orientation="Horizontal">
+                  <controls:Icon Kind="Print" Size="16" VerticalAlignment="Center" feat:Edge.Right="{DynamicResource Space.8}" />
+                  <TextBlock Text="Print" VerticalAlignment="Center" />
+                </StackPanel>
+              </Button>
+              <Button x:Name="SourceButton" Grid.Column="1" Style="{DynamicResource Button.Secondary}" Command="{Binding OpenSourceCommand}"
+                      AutomationProperties.Name="{Binding SourceActionText}">
+                <StackPanel Orientation="Horizontal">
+                  <TextBlock Text="{Binding SourceActionText}" VerticalAlignment="Center" />
+                  <controls:Icon Kind="Arrowright" Size="16" VerticalAlignment="Center" feat:Edge.Left="{DynamicResource Space.8}">
+                    <controls:Icon.Style>
+                      <Style TargetType="controls:Icon">
+                        <Style.Triggers>
+                          <!-- A compact window's panel is 352 wide: the arrow goes, so Print keeps its whole label. -->
+                          <DataTrigger Binding="{Binding (controls:Responsive.Breakpoint), RelativeSource={RelativeSource Self}}" Value="{x:Static controls:Breakpoint.Compact}">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                          </DataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </controls:Icon.Style>
+                  </controls:Icon>
+                </StackPanel>
+              </Button>
+              <lists:MenuButton x:Name="MoreButton" Grid.Column="2" Style="{DynamicResource Button.Icon}" feat:Edge.Left="{DynamicResource Space.8}" AutomationProperties.Name="More actions" ToolTip="More actions">
+                <controls:Icon Kind="More" Size="18" />
+                <lists:MenuButton.ContextMenu>
+                  <ContextMenu>
+                    <MenuItem x:Name="OpenItem" Header="Open receipt" Command="{Binding OpenReceiptCommand}">
+                      <MenuItem.Icon>
+                        <controls:Icon Kind="Receipt" Size="16" />
+                      </MenuItem.Icon>
+                    </MenuItem>
+                    <MenuItem x:Name="PdfItem" Header="Save as PDF" Command="{Binding SavePdfCommand}">
+                      <MenuItem.Icon>
+                        <controls:Icon Kind="Print" Size="16" />
+                      </MenuItem.Icon>
+                    </MenuItem>
+                  </ContextMenu>
+                </lists:MenuButton.ContextMenu>
+              </lists:MenuButton>
+            </Grid>
+
+            <!-- The receipt as it prints: the same document the printer gets, on white paper in either theme, scaled to the panel. -->
+            <Grid feat:Edge.Top="{DynamicResource Space.16}" feat:Edge.Bottom="{DynamicResource Space.8}">
+              <TextBlock Style="{DynamicResource Text.Heading}" Text="Receipt" AutomationProperties.HeadingLevel="Level3" />
+              <TextBlock Style="{DynamicResource Text.Caption}" Text="Reprints are marked as copies" HorizontalAlignment="Right" VerticalAlignment="Center" />
+            </Grid>
+            <controls:ElevatedSurface x:Name="Paper" Level="Flyout" CornerRadius="{DynamicResource Radius.Small}">
+              <controls:CrispBorder BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="1" CornerRadius="{DynamicResource Radius.Small}" ClipToBounds="True">
+                <Viewbox Stretch="Uniform" StretchDirection="DownOnly">
+                  <receipts:ReceiptPrintView x:Name="Preview" Width="560" Receipt="{Binding Preview}" IsHitTestVisible="False" />
+                </Viewbox>
+              </controls:CrispBorder>
+            </controls:ElevatedSurface>
+          </StackPanel>
+        </ScrollViewer>
+      </Grid>
+    </controls:SidePanel>
   </Grid>
 </UserControl>

@@ -50,10 +50,18 @@ public sealed class FakeApiClient : ILifestreamApiClient
 
     public static ApiResult<T> Unreachable<T>() => ApiResult<T>.Fail(new ApiProblem(0, ClientProblemCodes.Unreachable, "The server could not be reached."));
 
-    public void On<T>(string name, Func<CancellationToken, Task<ApiResult<T>>> handler) =>
+    // The latest answer set for a call wins: a scripted answer replaces an answer per id (ById) for the same call.
+    public void On<T>(string name, Func<CancellationToken, Task<ApiResult<T>>> handler)
+    {
+        ById.Remove(name);
         Handlers[name] = async ct => await handler(ct);
+    }
 
-    public void On<T>(string name, ApiResult<T> answer) => Handlers[name] = _ => Task.FromResult<object>(answer);
+    public void On<T>(string name, ApiResult<T> answer)
+    {
+        ById.Remove(name);
+        Handlers[name] = _ => Task.FromResult<object>(answer);
+    }
 
     private async Task<ApiResult<T>> Run<T>(string name, CancellationToken ct)
     {
@@ -118,7 +126,30 @@ public sealed class FakeApiClient : ILifestreamApiClient
 
     public Task<ApiResult<PagedResult<DonorListItem>>> GetDonorsAsync(DonorQuery query, CancellationToken ct = default) => Run<PagedResult<DonorListItem>>(nameof(GetDonorsAsync), ct);
 
-    public Task<ApiResult<DonorDetail>> GetDonorAsync(int id, CancellationToken ct = default) => Run<DonorDetail>(nameof(GetDonorAsync), ct);
+    public Task<ApiResult<DonorDetail>> GetDonorAsync(int id, CancellationToken ct = default) =>
+        DonorById is { } byId ? RecordThen(nameof(GetDonorAsync), () => byId(id)) : Run<DonorDetail>(nameof(GetDonorAsync), ct);
+
+    /// <summary>When set, answers GET donors/{id} per id (the scripted handler cannot see the id).</summary>
+    public Func<int, ApiResult<DonorDetail>>? DonorById { get; set; }
+
+    /// <summary>
+    /// Answers per id for the detail calls that take one (GetPatientAsync, GetAppointmentAsync, GetRequestAsync), by method name; the function returns the
+    /// ApiResult&lt;T&gt; of that call, so a list and its detail agree on every record. A later <see cref="On{T}(string, ApiResult{T})"/> for the same call replaces it.
+    /// </summary>
+    public Dictionary<string, Func<int, object>> ById { get; } = [];
+
+    private Task<ApiResult<T>> RunById<T>(string name, int id, CancellationToken ct) =>
+        ById.TryGetValue(name, out var answer) ? RecordThen(name, () => (ApiResult<T>)answer(id)) : Run<T>(name, ct);
+
+    private Task<ApiResult<T>> RecordThen<T>(string name, Func<ApiResult<T>> answer)
+    {
+        lock (_gate)
+        {
+            _calls.Add(name);
+        }
+
+        return Task.FromResult(answer());
+    }
 
     public Task<ApiResult<DonorDetail>> CreateDonorAsync(CreateDonorRequest request, CancellationToken ct = default) => Run<DonorDetail>(nameof(CreateDonorAsync), ct);
 
@@ -132,7 +163,7 @@ public sealed class FakeApiClient : ILifestreamApiClient
 
     public Task<ApiResult<PagedResult<PatientListItem>>> GetPatientsAsync(PatientQuery query, CancellationToken ct = default) => Run<PagedResult<PatientListItem>>(nameof(GetPatientsAsync), ct);
 
-    public Task<ApiResult<PatientDetail>> GetPatientAsync(int id, CancellationToken ct = default) => Run<PatientDetail>(nameof(GetPatientAsync), ct);
+    public Task<ApiResult<PatientDetail>> GetPatientAsync(int id, CancellationToken ct = default) => RunById<PatientDetail>(nameof(GetPatientAsync), id, ct);
 
     public Task<ApiResult<PatientDetail>> CreatePatientAsync(CreatePatientRequest request, CancellationToken ct = default) => Run<PatientDetail>(nameof(CreatePatientAsync), ct);
 
@@ -142,9 +173,13 @@ public sealed class FakeApiClient : ILifestreamApiClient
 
     public Task<ApiResult<PatientDetail>> RestorePatientAsync(int id, CancellationToken ct = default) => Run<PatientDetail>(nameof(RestorePatientAsync), ct);
 
-    public Task<ApiResult<PagedResult<AppointmentListItem>>> GetAppointmentsAsync(AppointmentQuery query, CancellationToken ct = default) => Run<PagedResult<AppointmentListItem>>(nameof(GetAppointmentsAsync), ct);
+    public Task<ApiResult<PagedResult<AppointmentListItem>>> GetAppointmentsAsync(AppointmentQuery query, CancellationToken ct = default) =>
+        AppointmentsFor?.Invoke(query) is { } answer ? RecordThen(nameof(GetAppointmentsAsync), () => answer) : Run<PagedResult<AppointmentListItem>>(nameof(GetAppointmentsAsync), ct);
 
-    public Task<ApiResult<AppointmentDetail>> GetAppointmentAsync(int id, CancellationToken ct = default) => Run<AppointmentDetail>(nameof(GetAppointmentAsync), ct);
+    /// <summary>When set, answers GET appointments for the queries it knows (null: the scripted handler answers), so one call can answer two callers differently.</summary>
+    public Func<AppointmentQuery, ApiResult<PagedResult<AppointmentListItem>>?>? AppointmentsFor { get; set; }
+
+    public Task<ApiResult<AppointmentDetail>> GetAppointmentAsync(int id, CancellationToken ct = default) => RunById<AppointmentDetail>(nameof(GetAppointmentAsync), id, ct);
 
     public Task<ApiResult<AppointmentDetail>> BookAppointmentAsync(BookAppointmentRequest request, CancellationToken ct = default) => Run<AppointmentDetail>(nameof(BookAppointmentAsync), ct);
 
@@ -156,9 +191,13 @@ public sealed class FakeApiClient : ILifestreamApiClient
 
     public Task<ApiResult> CancelAppointmentAsync(int id, CancellationToken ct = default) => RunVoid(nameof(CancelAppointmentAsync), ct);
 
-    public Task<ApiResult<PagedResult<RequestListItem>>> GetRequestsAsync(RequestQuery query, CancellationToken ct = default) => Run<PagedResult<RequestListItem>>(nameof(GetRequestsAsync), ct);
+    public Task<ApiResult<PagedResult<RequestListItem>>> GetRequestsAsync(RequestQuery query, CancellationToken ct = default) =>
+        RequestsFor?.Invoke(query) is { } answer ? RecordThen(nameof(GetRequestsAsync), () => answer) : Run<PagedResult<RequestListItem>>(nameof(GetRequestsAsync), ct);
 
-    public Task<ApiResult<RequestDetail>> GetRequestAsync(int id, CancellationToken ct = default) => Run<RequestDetail>(nameof(GetRequestAsync), ct);
+    /// <summary>When set, answers GET requests for the queries it knows (null: the scripted handler answers), so one call can answer two callers differently.</summary>
+    public Func<RequestQuery, ApiResult<PagedResult<RequestListItem>>?>? RequestsFor { get; set; }
+
+    public Task<ApiResult<RequestDetail>> GetRequestAsync(int id, CancellationToken ct = default) => RunById<RequestDetail>(nameof(GetRequestAsync), id, ct);
 
     public Task<ApiResult<RequestDetail>> CreateRequestAsync(CreateRequestRequest request, CancellationToken ct = default) => Run<RequestDetail>(nameof(CreateRequestAsync), ct);
 
@@ -209,4 +248,16 @@ public sealed class FakeApiClient : ILifestreamApiClient
     public Task<ApiResult<EnumLookups>> GetEnumLookupsAsync(CancellationToken ct = default) => Run<EnumLookups>(nameof(GetEnumLookupsAsync), ct);
 
     public Task<ApiResult> ResetDemoAsync(CancellationToken ct = default) => RunVoid(nameof(ResetDemoAsync), ct);
+
+    public Task<ApiResult<StockBagList>> GetStockBagsAsync(BloodType bloodType, CancellationToken ct = default) => Run<StockBagList>(nameof(GetStockBagsAsync), ct);
+
+    public Task<ApiResult<ReceiptCounts>> GetReceiptCountsAsync(ReceiptCountQuery query, CancellationToken ct = default) => Run<ReceiptCounts>(nameof(GetReceiptCountsAsync), ct);
+
+    public Task<ApiResult<DonorDonations>> GetDonorDonationsAsync(int id, CancellationToken ct = default) => Run<DonorDonations>(nameof(GetDonorDonationsAsync), ct);
+
+    public Task<ApiResult<AppointmentViewCounts>> GetAppointmentViewCountsAsync(AppointmentQuery query, CancellationToken ct = default) => Run<AppointmentViewCounts>(nameof(GetAppointmentViewCountsAsync), ct);
+
+    public Task<ApiResult<RequestViewCounts>> GetRequestViewCountsAsync(RequestQuery query, CancellationToken ct = default) => Run<RequestViewCounts>(nameof(GetRequestViewCountsAsync), ct);
+
+    public Task<ApiResult<FulfilPreview>> GetFulfilPreviewAsync(int requestId, CancellationToken ct = default) => Run<FulfilPreview>(nameof(GetFulfilPreviewAsync), ct);
 }

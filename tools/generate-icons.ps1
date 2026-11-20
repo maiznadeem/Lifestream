@@ -1,15 +1,15 @@
 <#
 .SYNOPSIS
-  Renders the Lifestream app mark (a blood drop with a white heart) to every icon file the app and the Store package use.
+  Renders the Lifestream app mark of direction A (a blood drop with a white stream wave) to every icon file the app and the Store package use.
 .DESCRIPTION
   Usage: pwsh tools/generate-icons.ps1      (Windows only; run from anywhere; safe to re-run, the output is byte-for-byte the same)
 
-  The mark is drawn from vector geometry in a 256x256 design space on a transparent background (no tile):
-    drop   M128,14 C128,14 40,108 40,166 A88,88 0 0 0 216,166 C216,108 128,14 128,14 Z
-           filled with a linear gradient #F0475C (0.2,0 = top left) to #B3122E (0.8,1 = bottom right)
-    heart  white, about 76 wide, centered in the round belly of the drop (cubic curves, symmetric)
-  Frames of 24 px and smaller drop the heart and scale the drop to the frame height with 1 px of padding so it stays crisp;
-  at 16 px the drop is also 10 px wide so its widest points land on whole pixels.
+  The mark is drawn from vector geometry in a 256x256 design space on a transparent background (no tile); it is the 32 x 32 mark of
+  Theme/Images.xaml (Geometry.LogoDrop, Geometry.LogoWave) scaled by 8:
+    drop   M128,20 C128,20 49.6,105.6 49.6,156.8 A78.4,78.4 0 0 0 206.4,156.8 C206.4,105.6 128,20 128,20 Z, filled with the blood token #B4162E
+    wave   M84.8,163.2 C99.2,150.4 113.6,150.4 128,163.2 C142.4,176 156.8,176 171.2,163.2, a white 16.8 round-capped stroke
+  Frames of 24 px and smaller drop the wave (it would be thinner than a pixel) and scale the drop to the frame height with 1 px of
+  padding so it stays crisp; at 16 px the drop is also 10 px wide so its widest points land on whole pixels.
 
   Rendering uses WPF (DrawingVisual + RenderTargetBitmap, 96 DPI, Pbgra32, default antialiasing); no window is ever created.
 
@@ -31,37 +31,37 @@ $pngs = Join-Path $root 'packaging/icon'   # PNG renders for the README and othe
 New-Item -ItemType Directory -Path $pngs -Force | Out-Null
 New-Item -ItemType Directory -Force $assets, $store | Out-Null
 
-$dropPath = 'M128,14 C128,14 40,108 40,166 A88,88 0 0 0 216,166 C216,108 128,14 128,14 Z'
-$heartPath = 'M128,200 C100,180 90,166 90,152 C90,140 99,132 109,132 C117,132 124,136 128,144 C132,136 139,132 147,132 C157,132 166,140 166,152 C166,166 156,180 128,200 Z'
+$dropPath = 'M128,20 C128,20 49.6,105.6 49.6,156.8 A78.4,78.4 0 0 0 206.4,156.8 C206.4,105.6 128,20 128,20 Z'
+$wavePath = 'M84.8,163.2 C99.2,150.4 113.6,150.4 128,163.2 C142.4,176 156.8,176 171.2,163.2'
 $drop = [Windows.Media.Geometry]::Parse($dropPath); $drop.Freeze()
-$heart = [Windows.Media.Geometry]::Parse($heartPath); $heart.Freeze()
+$wave = [Windows.Media.Geometry]::Parse($wavePath); $wave.Freeze()
 
-$gradient = New-Object Windows.Media.LinearGradientBrush
-$gradient.StartPoint = New-Object Windows.Point 0.2, 0
-$gradient.EndPoint = New-Object Windows.Point 0.8, 1
-$gradient.GradientStops.Add((New-Object Windows.Media.GradientStop ([Windows.Media.Color]::FromRgb(0xF0, 0x47, 0x5C)), 0))
-$gradient.GradientStops.Add((New-Object Windows.Media.GradientStop ([Windows.Media.Color]::FromRgb(0xB3, 0x12, 0x2E)), 1))
-$gradient.Freeze()
+$blood = New-Object Windows.Media.SolidColorBrush ([Windows.Media.Color]::FromRgb(0xB4, 0x16, 0x2E))
+$blood.Freeze()
 $white = [Windows.Media.Brushes]::White
+$wavePen = New-Object Windows.Media.Pen ($white, 16.8)
+$wavePen.StartLineCap = [Windows.Media.PenLineCap]::Round
+$wavePen.EndLineCap = [Windows.Media.PenLineCap]::Round
+$wavePen.Freeze()
 
 # Renders the mark into a size x size PNG. $Scale is the share of the frame the 256 design space occupies (1 = all of it).
 function New-MarkPng([int]$Size, [double]$Scale = 1.0) {
     $visual = New-Object Windows.Media.DrawingVisual
     $dc = $visual.RenderOpen()
     if ($Size -le 24) {
-        # Drop only, filling the frame height minus 1 px of padding; drop bounds are x 40..216, y 14..254 in the design space.
-        $sy = ($Size - 2) / 240.0
-        $sx = if ($Size -le 16) { 10.0 / 176 } else { $sy }
-        $left = ($Size - 176 * $sx) / 2
-        $dc.PushTransform((New-Object Windows.Media.MatrixTransform ($sx, 0, 0, $sy, ($left - 40 * $sx), (1 - 14 * $sy))))
-        $dc.DrawGeometry($gradient, $null, $drop)
+        # Drop only, filling the frame height minus 1 px of padding; drop bounds are x 49.6..206.4, y 20..235.2 in the design space.
+        $sy = ($Size - 2) / 215.2
+        $sx = if ($Size -le 16) { 10.0 / 156.8 } else { $sy }
+        $left = ($Size - 156.8 * $sx) / 2
+        $dc.PushTransform((New-Object Windows.Media.MatrixTransform ($sx, 0, 0, $sy, ($left - 49.6 * $sx), (1 - 20 * $sy))))
+        $dc.DrawGeometry($blood, $null, $drop)
         $dc.Pop()
     } else {
         $s = $Size * $Scale / 256.0
         $offset = $Size * (1 - $Scale) / 2
         $dc.PushTransform((New-Object Windows.Media.MatrixTransform ($s, 0, 0, $s, $offset, $offset)))
-        $dc.DrawGeometry($gradient, $null, $drop)
-        $dc.DrawGeometry($white, $null, $heart)
+        $dc.DrawGeometry($blood, $null, $drop)
+        $dc.DrawGeometry($null, $wavePen, $wave)
         $dc.Pop()
     }
     $dc.Close()

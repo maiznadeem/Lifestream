@@ -67,6 +67,14 @@ public sealed class InverseBooleanToVisibilityConverter : IValueConverter
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => throw new NotSupportedException();
 }
 
+/// <summary>Visible when the value is the number zero (the "nothing here" line under an empty list), collapsed otherwise.</summary>
+public sealed class ZeroToVisibleConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture) => value is 0 ? Visibility.Visible : Visibility.Collapsed;
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => throw new NotSupportedException();
+}
+
 /// <summary>Visible when the value is a non-empty string.</summary>
 public sealed class HasTextToVisibilityConverter : IValueConverter
 {

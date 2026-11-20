@@ -32,23 +32,14 @@ public static class AppointmentEndpoints
         api.MapDelete(ApiRoutes.AppointmentById, DeleteAsync);
     }
 
-    private static async Task<PagedResult<AppointmentListItem>> ListAsync([AsParameters] AppointmentQuery q, LifestreamDbContext db, CancellationToken ct)
+    // The saved view (Today, Upcoming, Past, Cancelled) arrives as two extra optional query values: the view and the caller's offset from UTC (direction A).
+    private static async Task<PagedResult<AppointmentListItem>> ListAsync([AsParameters] AppointmentQuery q, [FromQuery] AppointmentView? view, [FromQuery] int? utcOffsetMinutes, LifestreamDbContext db, TimeProvider time, CancellationToken ct)
     {
         var (page, size) = Lists.Normalize(q.Page, q.PageSize);
-        IQueryable<Appointment> filtered = db.Appointments.AsNoTracking();
-        if (q.DonorId is { } donorId)
-        {
-            filtered = filtered.Where(a => a.DonorId == donorId);
-        }
-
+        var filtered = ListScreenEndpoints.InView(Filter(db, q.Search, q.DonorId, q.BloodType), view, time, utcOffsetMinutes);
         if (q.Status is { } status)
         {
             filtered = filtered.Where(a => a.Status == status);
-        }
-
-        if (q.BloodType is { } type)
-        {
-            filtered = filtered.Where(a => a.DonorBloodType == type);
         }
 
         var (start, end) = Lists.DayRange(q.FromUtc, q.ToUtc);
@@ -62,7 +53,37 @@ public static class AppointmentEndpoints
             filtered = filtered.Where(a => a.SlotStartUtc < e);
         }
 
-        if (Lists.CleanSearch(q.Search) is { } term)
+        // Today's agenda and the upcoming appointments read in time order unless the caller sorts.
+        var sort = q.Sort ?? (view is AppointmentView.Today or AppointmentView.Upcoming ? SortKeys.Slot : null);
+        var total = Lists.Total(filtered);
+        var rows = await (from a in Sorts.Apply(filtered, sort).Skip((page - 1) * size).Take(size).ForSearch(q.Search)
+                          from t in total
+                          select new ListRow<AppointmentListItem>(
+                              new AppointmentListItem(a.Id, a.DonorId, a.Donor!.Name, a.Donor.BloodType, a.PlacedAtUtc, a.SlotStartUtc, a.Status)
+                              {
+                                  // No completed donation before this slot: a first-time donor (an index seek on DonorId, SlotStartUtc per row of the page, in the same statement).
+                                  DonorFirstTime = !db.Appointments.Any(o => o.DonorId == a.DonorId && o.Status == AppointmentStatus.Completed && o.SlotStartUtc < a.SlotStartUtc),
+                              },
+                              t))
+            .ToListAsync(ct);
+        return await Lists.BuildAsync(rows, page, size, () => filtered.CountAsync(ct));
+    }
+
+    /// <summary>The list's donor, blood group and search filters (shared by the list and the counts of its saved views).</summary>
+    internal static IQueryable<Appointment> Filter(LifestreamDbContext db, string? search, int? donorId, BloodType? bloodType)
+    {
+        IQueryable<Appointment> filtered = db.Appointments.AsNoTracking();
+        if (donorId is { } donor)
+        {
+            filtered = filtered.Where(a => a.DonorId == donor);
+        }
+
+        if (bloodType is { } type)
+        {
+            filtered = filtered.Where(a => a.DonorBloodType == type);
+        }
+
+        if (Lists.CleanSearch(search) is { } term)
         {
             // Donor ids by name (and phone, for a term long enough to be one: prefix seeks), then the appointments of those donors; a term that is a whole number also matches the id.
             var parsed = SearchQueries.ParseTerm(term);
@@ -72,14 +93,7 @@ public static class AppointmentEndpoints
                 : filtered.Where(a => donorIds.Contains(a.DonorId));
         }
 
-        var total = Lists.Total(filtered);
-        var rows = await (from a in Sorts.Apply(filtered, q.Sort).Skip((page - 1) * size).Take(size).ForSearch(q.Search)
-                          from t in total
-                          select new ListRow<AppointmentListItem>(
-                              new AppointmentListItem(a.Id, a.DonorId, a.Donor!.Name, a.Donor.BloodType, a.PlacedAtUtc, a.SlotStartUtc, a.Status),
-                              t))
-            .ToListAsync(ct);
-        return await Lists.BuildAsync(rows, page, size, () => filtered.CountAsync(ct));
+        return filtered;
     }
 
     private static async Task<List<SlotInfo>> SlotsAsync([FromQuery] DateOnly? date, LifestreamDbContext db, ClinicSchedule clinic, CancellationToken ct)

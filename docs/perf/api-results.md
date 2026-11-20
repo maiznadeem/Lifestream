@@ -7,8 +7,8 @@ Produced by `PerformanceSmokeTests` (100x) and `PerformanceAtDemoSizeTests` (1x 
 - **1x demo size** (what the public demo holds after each reset): 270 receipts, 300 appointments, 150 requests, 40 donors, 35 patients, 11 staff.
 
 Every request is made 8 times to warm up, then 40 times and timed (request sent to body read), as a signed-in Admin. p95 is the
-38th of 40 sorted samples. Budget (design 5.5): p95 below 100 ms. CI reports these numbers and does not gate on them (shared
-runners are too noisy); locally the tests assert the budget for every list shape below and for the default 12-month dashboard (the
+38th of 40 sorted samples. Budget (design 5.5): p95 below 100 ms. CI does not run these tests (every test project leaves
+`Category=Perf` out by default, and shared runners are too noisy to gate on); locally the tests assert the budget for every list shape below and for the default 12-month dashboard (the
 36-month dashboard is measured for information, not asserted). Both runs use the same requests, including the common filter
 values (status `Fulfilled`/`Completed`, blood type `OPos`), one-letter searches and deep pages.
 

@@ -70,11 +70,11 @@ public sealed class FakeDialogs : IDialogService
 {
     public bool Answer { get; set; } = true;
 
-    public List<(string Title, string Body, string Verb)> Confirmations { get; } = [];
+    public List<(string Title, string Body, string Verb, string Keep)> Confirmations { get; } = [];
 
-    public Task<bool> ConfirmAsync(string title, string body, string dangerVerb)
+    public Task<bool> ConfirmAsync(string title, string body, string dangerVerb, string keepVerb)
     {
-        Confirmations.Add((title, body, dangerVerb));
+        Confirmations.Add((title, body, dangerVerb, keepVerb));
         return Task.FromResult(Answer);
     }
 

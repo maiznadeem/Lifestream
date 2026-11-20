@@ -3,42 +3,45 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="clr-namespace:Lifestream.Desktop.Controls"
              xmlns:feat="clr-namespace:Lifestream.Desktop.Features"
+             xmlns:lists="clr-namespace:Lifestream.Desktop.Features.ListScreens"
              Focusable="False" IsTabStop="False">
-  <!-- The detail pane of a record whose actions are not just Edit and Delete (book, record a donation, fulfil, reset a password): the record's facts and, above them, the actions the screen puts in Actions. The data context is the list view model. -->
+  <!-- The selected record whose actions are not just Edit and Delete (book, record a donation, fulfil, reset a password), direction A: the header (the screen's Header, or the
+       record's name), the screen's Actions, the screen's Body, the record's facts under "Details", and the screen's Extra. ShowFrame (on by default) draws the pane as its own
+       panel; inside a SidePanel set it off. The data context is the list view model. -->
   <UserControl.Resources>
     <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
     <feat:NullToVisibleConverter x:Key="NullToVisible" />
+    <feat:NullToCollapsedConverter x:Key="NullToCollapsed" />
+    <Thickness x:Key="Pane.ActionsGap">0,16,0,20</Thickness>
   </UserControl.Resources>
-  <controls:Card Background="{DynamicResource Brush.SurfaceRaised}" CornerRadius="{DynamicResource Radius.Card}" Padding="{DynamicResource Pad.16}" AutomationProperties.Name="Details" BorderBrush="{DynamicResource Brush.BorderCard}" BorderThickness="1">
-    <DockPanel LastChildFill="True">
+  <Border x:Name="Frame" SnapsToDevicePixels="True" AutomationProperties.Name="Details">
     <Grid>
-      <TextBlock x:Name="NoSelection" Style="{DynamicResource Text.Body}" Foreground="{DynamicResource Brush.TextSecondary}" Text="{Binding NoSelectionText}" TextWrapping="Wrap"
+      <TextBlock x:Name="NoSelection" Style="{DynamicResource Text.Secondary}" Text="{Binding NoSelectionText}" TextWrapping="Wrap"
                  VerticalAlignment="Top" Visibility="{Binding SelectedItem, Converter={StaticResource NullToVisible}}" />
       <controls:Skeleton Kind="Detail" Visibility="{Binding ShowDetailSkeleton, Converter={StaticResource BoolToVisibility}}" />
       <controls:ErrorState Message="{Binding DetailError}" RetryCommand="{Binding RetryDetailCommand}" Visibility="{Binding HasDetailError, Converter={StaticResource BoolToVisibility}}" />
       <Grid x:Name="DetailBody" Visibility="{Binding HasDetail, Converter={StaticResource BoolToVisibility}}">
         <Grid.RowDefinitions>
           <RowDefinition Height="Auto" />
-          <RowDefinition Height="Auto" />
-          <RowDefinition Height="*" />
+          <RowDefinition x:Name="ActionsRow" Height="Auto" />
+          <RowDefinition x:Name="BodyRow" Height="*" />
         </Grid.RowDefinitions>
-        <TextBlock Style="{DynamicResource Text.Heading}" Text="{Binding DetailTitle}" TextWrapping="Wrap" AutomationProperties.HeadingLevel="Level2" />
-        <ContentControl Grid.Row="1" Focusable="False" IsTabStop="False" feat:Edge.Top="{DynamicResource Space.12}" feat:Edge.Bottom="{DynamicResource Space.16}"
-                        Content="{Binding Actions, RelativeSource={RelativeSource AncestorType=UserControl}}" />
-        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Focusable="False">
-          <ItemsControl ItemsSource="{Binding DetailFacts}" Focusable="False" AutomationProperties.Name="Record details">
-            <ItemsControl.ItemTemplate>
-              <DataTemplate>
-                <StackPanel feat:Edge.Bottom="{DynamicResource Space.12}">
-                  <TextBlock Style="{DynamicResource Text.Caption}" Text="{Binding Label}" Foreground="{DynamicResource Brush.TextMuted}" />
-                  <TextBlock Style="{DynamicResource Text.Body}" Text="{Binding Value}" TextWrapping="Wrap" />
-                </StackPanel>
-              </DataTemplate>
-            </ItemsControl.ItemTemplate>
-          </ItemsControl>
+        <Grid>
+          <TextBlock x:Name="TitleText" Style="{DynamicResource Text.Section}" Text="{Binding DetailTitle}" TextWrapping="Wrap" AutomationProperties.HeadingLevel="Level2"
+                     Visibility="{Binding Header, RelativeSource={RelativeSource AncestorType=lists:ActionDetailPane}, Converter={StaticResource NullToVisible}}" />
+          <ContentControl Focusable="False" IsTabStop="False" Content="{Binding Header, RelativeSource={RelativeSource AncestorType=lists:ActionDetailPane}}"
+                          Visibility="{Binding Header, RelativeSource={RelativeSource AncestorType=lists:ActionDetailPane}, Converter={StaticResource NullToCollapsed}}" />
+        </Grid>
+        <ContentControl x:Name="ActionsHost" Grid.Row="1" Focusable="False" IsTabStop="False" HorizontalContentAlignment="Stretch" Margin="{StaticResource Pane.ActionsGap}"
+                        Content="{Binding Actions, RelativeSource={RelativeSource AncestorType=lists:ActionDetailPane}}" />
+        <ScrollViewer x:Name="BodyScroll" Grid.Row="2" Style="{DynamicResource ScrollViewer.Panel}" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+          <StackPanel>
+            <ContentControl Focusable="False" IsTabStop="False" Content="{Binding Body, RelativeSource={RelativeSource AncestorType=lists:ActionDetailPane}}" />
+            <lists:FactGrid x:Name="Facts" />
+            <ContentControl Focusable="False" IsTabStop="False" Content="{Binding Extra, RelativeSource={RelativeSource AncestorType=lists:ActionDetailPane}}" />
+          </StackPanel>
         </ScrollViewer>
       </Grid>
     </Grid>
-    </DockPanel>
-  </controls:Card>
+  </Border>
 </UserControl>

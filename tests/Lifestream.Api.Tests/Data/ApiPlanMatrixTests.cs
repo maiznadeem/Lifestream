@@ -18,10 +18,29 @@ namespace Lifestream.Api.Tests.Data;
 /// than 5,000 rows. The matrix uses COMMON filter values (Fulfilled requests, Completed appointments, blood type OPos), 1- and 2-letter
 /// name searches, every documented sort, page 1 and a deep page. Each list request must also be one database call (API-22).
 /// Set LIFESTREAM_PLAN_CAPTURE to a file path to write one line per request (operators, pages read, SQL).
+/// The cases are split over this class and <see cref="ApiPlanMatrixPart2Tests"/> to <see cref="ApiPlanMatrixPart4Tests"/>, each with its own copy of
+/// the 100x database and host, so the four parts run at the same time (the cases of one class run one after the other).
 /// </summary>
-[Collection("Scale datasets: one class at a time")] // the 100x databases load 100,000 rows and the perf tests time requests, so they do not overlap
 public sealed class ApiPlanMatrixTests(ScaleApiFixture fx) : IClassFixture<ScaleApiFixture>
 {
+    /// <summary>How many classes share the cases.</summary>
+    public const int Parts = 4;
+
+    /// <summary>Every <see cref="Parts"/>-th case of <see cref="Cases"/>, starting at <paramref name="part"/>.</summary>
+    public static TheoryData<string> CasesOfPart(int part)
+    {
+        var data = new TheoryData<string>();
+        foreach (var (row, index) in Cases().Select((row, index) => (row, index)))
+        {
+            if (index % Parts == part)
+            {
+                data.Add(row.Data);
+            }
+        }
+
+        return data;
+    }
+
     private const int BigTableRows = 5_000;
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
@@ -32,7 +51,11 @@ public sealed class ApiPlanMatrixTests(ScaleApiFixture fx) : IClassFixture<Scale
 
     private static readonly Dictionary<string, ListShape> Lists = new()
     {
-        ["donors"] = new(ApiRoutes.Donors, ["name", "-name", "lastDonated", "-lastDonated"], ["", "bloodType=OPos", "bloodType=ONeg", .. Letters.Select(l => "search=" + l), "search=a&bloodType=OPos", "search=Al&bloodType=APos"], 60),
+        ["donors"] = new(ApiRoutes.Donors, ["name", "-name", "lastDonated", "-lastDonated"], [
+            "", "bloodType=OPos", "bloodType=ONeg", .. Letters.Select(l => "search=" + l), "search=a&bloodType=OPos", "search=Al&bloodType=APos",
+            "eligible=true", "eligible=false", "lastDonated=Within3Months", "lastDonated=Within12Months", "lastDonated=Over12Months", "lastDonated=Never",
+            "eligible=true&bloodType=OPos", "search=a&eligible=true&lastDonated=Over12Months",
+        ], 60),
         ["patients"] = new(ApiRoutes.Patients, ["name", "-name"], ["", "bloodType=OPos", .. Letters.Select(l => "search=" + l), "search=a&bloodType=OPos"], 60),
         ["appointments"] = new(
             ApiRoutes.Appointments,
@@ -57,6 +80,14 @@ public sealed class ApiPlanMatrixTests(ScaleApiFixture fx) : IClassFixture<Scale
                 "status=Completed&bloodType=OPos&fromUtc={from}&toUtc={to}",
                 .. Letters.Select(l => "search=" + l),
                 "search=a&status=Completed&bloodType=OPos",
+                "view=Today",
+                "view=Today&utcOffsetMinutes=-300",
+                "view=Upcoming&utcOffsetMinutes=-300",
+                "view=Past&utcOffsetMinutes=-300",
+                "view=Cancelled",
+                "view=Past&bloodType=OPos",
+                "view=Upcoming&donorId={donor}",
+                "search=a&view=Past&utcOffsetMinutes=-300",
             ],
             500),
         ["requests"] = new(
@@ -79,6 +110,13 @@ public sealed class ApiPlanMatrixTests(ScaleApiFixture fx) : IClassFixture<Scale
                 "status=Fulfilled&fromUtc={from}&toUtc={to}",
                 .. Letters.Select(l => "search=" + l),
                 "search=a&status=Fulfilled&bloodType=OPos",
+                "view=Open",
+                "view=DueSoon&utcOffsetMinutes=-300",
+                "view=Fulfilled",
+                "view=Cancelled",
+                "view=Open&bloodType=OPos",
+                "view=DueSoon&patientId={patient}",
+                "search=a&view=Open",
             ],
             250),
         ["receipts"] = new(
@@ -155,6 +193,35 @@ public sealed class ApiPlanMatrixTests(ScaleApiFixture fx) : IClassFixture<Scale
         data.Add("dashboard|offset");
         data.Add("eligibility|donor");
         data.Add("slots|today");
+        data.Add("stock-bags|OPos");
+        data.Add("stock-bags|ABNeg");
+        data.Add("receipt-counts|");
+        data.Add("receipt-counts|bloodType=OPos");
+        data.Add("receipt-counts|search=a");
+        data.Add("receipt-counts|search=Al&bloodType=APos");
+        data.Add("receipt-counts|fromUtc={from}&toUtc={to}");
+
+        // A saved view opened without a sort (the open request views then list the request needed first), and the counts of the saved views.
+        foreach (var view in Enum.GetNames<AppointmentView>())
+        {
+            data.Add($"view-default|appointments|view={view}&utcOffsetMinutes=-300");
+        }
+
+        foreach (var view in Enum.GetNames<RequestView>())
+        {
+            data.Add($"view-default|requests|view={view}&utcOffsetMinutes=-300");
+        }
+
+        foreach (var filter in new[] { "", "utcOffsetMinutes=-300", "bloodType=OPos", "search=a", "search=Al&bloodType=APos", "donorId={donor}" })
+        {
+            data.Add("appointment-views|" + filter);
+        }
+
+        foreach (var filter in new[] { "", "utcOffsetMinutes=-300", "bloodType=OPos", "search=a", "search=Al&bloodType=APos", "patientId={patient}" })
+        {
+            data.Add("request-views|" + filter);
+        }
+
         return data;
     }
 
@@ -163,10 +230,10 @@ public sealed class ApiPlanMatrixTests(ScaleApiFixture fx) : IClassFixture<Scale
     {
         var records = new Dictionary<string, (Type Type, string[] Properties)>
         {
-            ["donors"] = (typeof(DonorQuery), ["Search", "BloodType"]),
+            ["donors"] = (typeof(DonorQuery), ["Search", "BloodType", "Eligible", "LastDonated"]),
             ["patients"] = (typeof(PatientQuery), ["Search", "BloodType"]),
-            ["appointments"] = (typeof(AppointmentQuery), ["Search", "DonorId", "Status", "BloodType", "FromUtc", "ToUtc"]),
-            ["requests"] = (typeof(RequestQuery), ["Search", "PatientId", "Status", "BloodType"]),
+            ["appointments"] = (typeof(AppointmentQuery), ["Search", "DonorId", "Status", "BloodType", "FromUtc", "ToUtc", "View", "UtcOffsetMinutes"]),
+            ["requests"] = (typeof(RequestQuery), ["Search", "PatientId", "Status", "BloodType", "View", "UtcOffsetMinutes"]),
             ["receipts"] = (typeof(ReceiptQuery), ["Search", "Kind", "BloodType", "FromUtc", "ToUtc"]),
         };
         foreach (var (list, (type, expected)) in records)
@@ -176,6 +243,13 @@ public sealed class ApiPlanMatrixTests(ScaleApiFixture fx) : IClassFixture<Scale
             var filters = Lists[list].Filters;
             Assert.All(expected, name => Assert.Contains(filters, f => f.Contains(char.ToLowerInvariant(name[0]) + name[1..], StringComparison.Ordinal)));
         }
+
+        // Every value of the new filters is in the matrix: each saved view, each donation recency, eligible and not.
+        Assert.All(Enum.GetNames<AppointmentView>(), v => Assert.Contains(Lists["appointments"].Filters, f => f.Contains("view=" + v, StringComparison.Ordinal)));
+        Assert.All(Enum.GetNames<RequestView>(), v => Assert.Contains(Lists["requests"].Filters, f => f.Contains("view=" + v, StringComparison.Ordinal)));
+        Assert.All(Enum.GetNames<DonationRecency>(), v => Assert.Contains("lastDonated=" + v, Lists["donors"].Filters));
+        Assert.Contains("eligible=true", Lists["donors"].Filters);
+        Assert.Contains("eligible=false", Lists["donors"].Filters);
 
         // The common values the earlier verification found scanning must be in the matrix.
         Assert.Contains("status=Fulfilled&bloodType=OPos", Lists["requests"].Filters);
@@ -199,14 +273,17 @@ public sealed class ApiPlanMatrixTests(ScaleApiFixture fx) : IClassFixture<Scale
     }
 
     [Theory]
-    [MemberData(nameof(Cases))]
-    public async Task ApiRequest_AtScale_UsesNoTableScan_AndOneDatabaseCall(string @case)
+    [MemberData(nameof(CasesOfPart), 0)]
+    public Task ApiRequest_AtScale_UsesNoTableScan_AndOneDatabaseCall(string @case) => CheckAsync(fx, @case);
+
+    /// <summary>One case of the matrix against the given fixture's host and database.</summary>
+    internal static async Task CheckAsync(ScaleApiFixture fx, string @case)
     {
-        var admin = await AdminAsync();
+        var admin = await AdminAsync(fx);
         var sizes = (await fx.Db.RowsAsync(
             "SELECT t.name, SUM(p.rows) FROM sys.tables t JOIN sys.partitions p ON p.object_id = t.object_id AND p.index_id IN (0, 1) GROUP BY t.name", Ct))
             .ToDictionary(r => (string)r[0]!, r => Convert.ToInt64(r[1], CultureInfo.InvariantCulture));
-        var url = await UrlAsync(@case, admin.Client);
+        var url = await UrlAsync(fx, @case, admin.Client);
 
         fx.Statements.Drain();
         fx.Statements.Recording = true;
@@ -249,7 +326,7 @@ public sealed class ApiPlanMatrixTests(ScaleApiFixture fx) : IClassFixture<Scale
             }
         }
 
-        if (kind is "donors" or "patients" or "appointments" or "requests" or "receipts" or "page-size-200" or "staff")
+        if (kind is "donors" or "patients" or "appointments" or "requests" or "receipts" or "page-size-200" or "staff" or "view-default" or "appointment-views" or "request-views")
         {
             // API-22: a filter click is one database call (page and total together); the deep pages here are inside the data.
             Assert.True(plans.Count == 1, $"{url}: {plans.Count} database calls, expected 1:\n{string.Join("\n---\n", plans.Select(p => p.Sql))}");
@@ -266,23 +343,24 @@ public sealed class ApiPlanMatrixTests(ScaleApiFixture fx) : IClassFixture<Scale
     }
 
     private static readonly SemaphoreSlim AdminLock = new(1, 1);
-    private static TestUser? _admin;
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<ScaleApiFixture, TestUser> Admins = [];
 
-    /// <summary>One signed-in admin for the whole matrix (the fixture is shared by the class).</summary>
-    private async Task<TestUser> AdminAsync()
+    /// <summary>One signed-in admin per fixture for its part of the matrix (the fixture is shared by the class).</summary>
+    private static async Task<TestUser> AdminAsync(ScaleApiFixture fx)
     {
         await AdminLock.WaitAsync(Ct);
         try
         {
-            if (_admin is null)
+            if (!Admins.TryGetValue(fx, out var admin))
             {
-                _admin = await fx.AddStaffAsync(Role.Admin, "planadmin");
+                admin = await fx.AddStaffAsync(Role.Admin, "planadmin");
 
                 // The first request of a session also checks the session (refresh-token row, demo state); that is not a filter click.
-                (await _admin.Client.GetAsync(ApiRoutes.Path(ApiRoutes.Me), Ct)).EnsureSuccessStatusCode();
+                (await admin.Client.GetAsync(ApiRoutes.Path(ApiRoutes.Me), Ct)).EnsureSuccessStatusCode();
+                Admins.Add(fx, admin);
             }
 
-            return _admin;
+            return admin;
         }
         finally
         {
@@ -290,7 +368,7 @@ public sealed class ApiPlanMatrixTests(ScaleApiFixture fx) : IClassFixture<Scale
         }
     }
 
-    private async Task<string> UrlAsync(string @case, HttpClient client)
+    private static async Task<string> UrlAsync(ScaleApiFixture fx, string @case, HttpClient client)
     {
         var parts = @case.Split('|');
         var from = DateTime.UtcNow.AddDays(-120).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
@@ -334,6 +412,16 @@ public sealed class ApiPlanMatrixTests(ScaleApiFixture fx) : IClassFixture<Scale
                 return ApiRoutes.Path(ApiRoutes.DonorEligibility, donorId);
             case "slots":
                 return ApiRoutes.Path(ApiRoutes.AppointmentSlots) + "?date=" + DateTime.UtcNow.AddDays(1).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+            case "stock-bags":
+                return ApiRoutes.Path(ApiRoutes.StockBags) + "?bloodType=" + parts[1];
+            case "receipt-counts":
+                return ApiRoutes.Path(ApiRoutes.ReceiptCounts) + (parts[1].Length == 0 ? "" : "?" + Fill(parts[1]));
+            case "view-default":
+                return ApiRoutes.Path(Lists[parts[1]].Route) + "?" + parts[2];
+            case "appointment-views":
+                return ApiRoutes.Path(ApiRoutes.AppointmentViews) + (parts[1].Length == 0 ? "" : "?" + Fill(parts[1]));
+            case "request-views":
+                return ApiRoutes.Path(ApiRoutes.RequestViews) + (parts[1].Length == 0 ? "" : "?" + Fill(parts[1]));
             default:
                 var shape = Lists[parts[0]];
                 var query = new List<string>();
@@ -386,4 +474,28 @@ public sealed class ApiPlanMatrixTests(ScaleApiFixture fx) : IClassFixture<Scale
             File.AppendAllText(path, sb.ToString());
         }
     }
+}
+
+/// <summary>The second quarter of the cases of <see cref="ApiPlanMatrixTests"/>, on its own copy of the 100x database.</summary>
+public sealed class ApiPlanMatrixPart2Tests(ScaleApiFixture fx) : IClassFixture<ScaleApiFixture>
+{
+    [Theory]
+    [MemberData(nameof(ApiPlanMatrixTests.CasesOfPart), 1, MemberType = typeof(ApiPlanMatrixTests))]
+    public Task ApiRequest_AtScale_UsesNoTableScan_AndOneDatabaseCall(string @case) => ApiPlanMatrixTests.CheckAsync(fx, @case);
+}
+
+/// <summary>The third quarter of the cases of <see cref="ApiPlanMatrixTests"/>, on its own copy of the 100x database.</summary>
+public sealed class ApiPlanMatrixPart3Tests(ScaleApiFixture fx) : IClassFixture<ScaleApiFixture>
+{
+    [Theory]
+    [MemberData(nameof(ApiPlanMatrixTests.CasesOfPart), 2, MemberType = typeof(ApiPlanMatrixTests))]
+    public Task ApiRequest_AtScale_UsesNoTableScan_AndOneDatabaseCall(string @case) => ApiPlanMatrixTests.CheckAsync(fx, @case);
+}
+
+/// <summary>The last quarter of the cases of <see cref="ApiPlanMatrixTests"/>, on its own copy of the 100x database.</summary>
+public sealed class ApiPlanMatrixPart4Tests(ScaleApiFixture fx) : IClassFixture<ScaleApiFixture>
+{
+    [Theory]
+    [MemberData(nameof(ApiPlanMatrixTests.CasesOfPart), 3, MemberType = typeof(ApiPlanMatrixTests))]
+    public Task ApiRequest_AtScale_UsesNoTableScan_AndOneDatabaseCall(string @case) => ApiPlanMatrixTests.CheckAsync(fx, @case);
 }

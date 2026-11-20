@@ -59,10 +59,3 @@ public sealed class LocalWhenConverter : IValueConverter
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => throw new NotSupportedException();
 }
 
-/// <summary>"#42": an id as the secondary text under a name.</summary>
-public sealed class IdTextConverter : IValueConverter
-{
-    public object Convert(object value, Type targetType, object parameter, CultureInfo culture) => value is int id ? RecordFormatting.IdText(id) : string.Empty;
-
-    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => throw new NotSupportedException();
-}

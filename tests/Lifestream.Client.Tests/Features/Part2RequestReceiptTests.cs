@@ -83,7 +83,7 @@ public sealed class Part2RequestReceiptTests
     // FEAT-16
 
     [Fact]
-    public async Task FulfilRequest_IsAnActionOnTheRequest_OpensItsOwnDialog_IssuesReceipt()
+    public async Task FulfilRequest_IsAnActionOnTheRequest_OpensItsStepInTheSidePanel_IssuesReceipt()
     {
         var (rig, vm) = await LoadedRequestsAsync(Samples2.RequestRow(7, 3, "Omar Haddad"));
         rig.Fake.On("GetStockAsync", ApiResult<IReadOnlyList<StockItem>>.Ok([new StockItem(BloodType.ANeg, 8, 0, 10, true)]));
@@ -91,21 +91,23 @@ public sealed class Part2RequestReceiptTests
         Assert.False(vm.FulfilCommand.CanExecute(null)); // nothing selected
         await SelectFirstAsync(vm);
         Assert.True(vm.FulfilCommand.CanExecute(null));
-        rig.Forms.Script = async dialog =>
-        {
-            var fulfil = Assert.IsType<FulfilRequestDialogViewModel>(dialog);
-            await fulfil.PendingStock;
-            Assert.Equal("In stock: 8 units of A-", fulfil.StockText);
-            Assert.False(fulfil.StockIsShort);
-            await fulfil.PrimaryCommand.ExecuteAsync();
-        };
 
-        await vm.FulfilCommand.ExecuteAsync();
+        // The fulfil step opens in the side panel (direction A), not as a dialog: it is the view model's Fulfilment until it closes.
+        var run = vm.FulfilCommand.ExecuteAsync();
+        var fulfil = Assert.IsType<FulfilRequestDialogViewModel>(vm.Fulfilment);
+        Assert.True(vm.IsFulfilling);
+        Assert.Empty(rig.Forms.Shown); // no dialog
+        await fulfil.PendingStock;
+        Assert.Equal("In stock: 8 units of A-", fulfil.StockText);
+        Assert.False(fulfil.StockIsShort);
+        await fulfil.PrimaryCommand.ExecuteAsync();
+        await run;
+        Assert.Null(vm.Fulfilment); // the step closed after the request was fulfilled
 
         Assert.Equal(7, rig.Recorder.Calls.Single(c => c.Name == "FulfilRequestAsync").Args[0]);
         var toast = Assert.Single(rig.Toasts.Toasts);
         Assert.Contains("Omar Haddad", toast.Message, StringComparison.Ordinal);
-        Assert.Contains("#92", toast.Message, StringComparison.Ordinal);
+        Assert.Contains("RC-0092", toast.Message, StringComparison.Ordinal);
         Assert.Equal(2, rig.Recorder.CountOf("GetRequestsAsync")); // refreshed
         await toast.ActionCommand.ExecuteAsync();
         Assert.Equal([(92, false)], rig.Viewer.Opened);
@@ -118,20 +120,20 @@ public sealed class Part2RequestReceiptTests
         rig.Fake.On("GetStockAsync", ApiResult<IReadOnlyList<StockItem>>.Ok([new StockItem(BloodType.ANeg, 1, 0, 10, true)]));
         rig.Fake.On("FulfilRequestAsync", FakeApiClient.Fail<ReceiptDetail>(409, ProblemCodes.InsufficientStock, "Not enough stock"));
         await SelectFirstAsync(vm);
-        FulfilRequestDialogViewModel? shown = null;
-        rig.Forms.Script = async dialog =>
-        {
-            shown = (FulfilRequestDialogViewModel)dialog;
-            await shown.PendingStock;
-            Assert.True(shown.StockIsShort); // the warning is there before the click
-            await shown.PrimaryCommand.ExecuteAsync();
-        };
+        var run = vm.FulfilCommand.ExecuteAsync();
+        var shown = Assert.IsType<FulfilRequestDialogViewModel>(vm.Fulfilment);
+        await shown.PendingStock;
+        Assert.True(shown.StockIsShort); // the warning is there before the click
+        await shown.PrimaryCommand.ExecuteAsync();
 
-        await vm.FulfilCommand.ExecuteAsync();
-
-        Assert.False(shown!.Completed);
+        Assert.False(shown.Completed);
         Assert.Equal("There isn't enough A- blood in stock: this request needs 3 units. Nothing was issued.", shown.FormError);
         Assert.False(shown.IsBusy);
+        Assert.Same(shown, vm.Fulfilment); // the step stays open with the message
+        Assert.False(run.IsCompleted);
+        await shown.CancelCommand.ExecuteAsync(); // the user leaves it
+        await run;
+        Assert.Null(vm.Fulfilment);
         Assert.Empty(rig.Toasts.Toasts); // no success toast
         Assert.Equal(1, rig.Recorder.CountOf("GetRequestsAsync")); // the list was not touched
         Assert.Empty(rig.Viewer.Opened);
@@ -146,7 +148,8 @@ public sealed class Part2RequestReceiptTests
 
         await vm.CancelRequestCommand.ExecuteAsync();
 
-        Assert.Contains("Omar Haddad", rig.Dialogs.Confirmations.Single().Body, StringComparison.Ordinal);
+        Assert.StartsWith("Omar Haddad's request for ", rig.Dialogs.Confirmations.Single().Body, StringComparison.Ordinal);
+        Assert.Equal(("Cancel request", "Keep request"), (rig.Dialogs.Confirmations.Single().Verb, rig.Dialogs.Confirmations.Single().Keep));
         Assert.Equal(ToastKind.Error, Assert.Single(rig.Toasts.Toasts).Kind);
         Assert.Equal(1, rig.Recorder.CountOf("GetRequestsAsync")); // the list stays as it was after a refusal
 
@@ -213,15 +216,17 @@ public sealed class Part2RequestReceiptTests
 
         var donation = vm.Items[0];
         Assert.Equal("Dr. Staff Member", donation.StaffName); // the staff name, with the id only as secondary text
-        Assert.Equal("#1", donation.StaffIdText);
+        Assert.Equal("S-0001", donation.StaffIdText);
         Assert.Equal("Ayşe Nur Öztürk", donation.PartyName);
         Assert.Equal("Appointment", donation.SourceKindText);
-        Assert.Equal("#5", donation.SourceIdText);
+        Assert.Equal("A-0005", donation.SourceIdText);
         var issue = vm.Items[1];
         Assert.Equal("Request", issue.SourceKindText);
-        Assert.Equal("#7", issue.SourceIdText);
+        Assert.Equal("R-0007", issue.SourceIdText);
         Assert.Equal("Issue", issue.KindText);
         Assert.Equal("19 Nov 2026 14:30", donation.WhenText);
+        Assert.Equal(("19 Nov 2026", "14:30"), (donation.DateText, donation.TimeText)); // the cell's date line over its time line
+        Assert.Equal("RC-0090", donation.CodeText);
 
         vm.SearchText = "Haddad";
         await vm.SearchNowCommand.ExecuteAsync();
@@ -261,7 +266,7 @@ public sealed class Part2RequestReceiptTests
         Assert.Equal("Donation receipt", donation.Title);
         Assert.Contains(donation.Lines, l => l is { Label: "Donor", Value: "Ayşe Nur Öztürk-Abdulrahman" });
         Assert.Contains(donation.Lines, l => l is { Label: "Appointment" } && l.Value.StartsWith("Ayşe", StringComparison.Ordinal));
-        Assert.Contains(donation.Lines, l => l is { Label: "Issued by", Value: "Dr. Staff Member (#1)" });
+        Assert.Contains(donation.Lines, l => l is { Label: "Issued by", Value: "Dr. Staff Member (S-0001)" });
         Assert.Contains(donation.Lines, l => l is { Label: "Date", Value: "19 Nov 2026 14:30" });
         Assert.Null(donation.CopyNotice);
 

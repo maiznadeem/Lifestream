@@ -38,4 +38,11 @@ public sealed record RequestQuery(
     BloodType? BloodType = null,
     int Page = 1,
     int PageSize = Paging.DefaultPageSize,
-    string? Sort = null);
+    string? Sort = null)
+{
+    /// <summary>Optional: one of the screen's saved views (Open, DueSoon, Fulfilled, Cancelled) in the caller's local calendar.</summary>
+    public RequestView? View { get; init; }
+
+    /// <summary>How far the caller's local calendar is from UTC, in minutes (for <see cref="View"/>); UTC when absent.</summary>
+    public int? UtcOffsetMinutes { get; init; }
+}

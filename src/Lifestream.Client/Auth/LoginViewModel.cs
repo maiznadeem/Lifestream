@@ -6,8 +6,33 @@ using Lifestream.Client.Session;
 using Lifestream.Client.Updates;
 using Lifestream.Contracts;
 using Lifestream.Contracts.Auth;
+using Lifestream.Domain;
 
 namespace Lifestream.Client.Auth;
+
+/// <summary>What the sign-in screen knows about the server before anyone signs in (the pill in its footer).</summary>
+public enum ServerReadiness
+{
+    Checking,
+    Ready,
+    Waking,
+    Unreachable,
+}
+
+/// <summary>One cell of the sign-in screen's red-cell compatibility matrix: can the row's donor give to the column's patient.</summary>
+public sealed record CompatibilityCell(BloodType Donor, BloodType Patient, bool CanGive)
+{
+    /// <summary>The universal donor's row (O\u2212) and the universal recipient's column (AB+) are drawn at full strength.</summary>
+    public bool IsUniversal => Donor == BloodType.ONeg || Patient == BloodType.ABPos;
+
+    public string AutomationName => $"{Donor.ToTypographic()} to {Patient.ToTypographic()}: {(CanGive ? "compatible" : "not compatible")}";
+}
+
+/// <summary>One donor row of the compatibility matrix.</summary>
+public sealed record CompatibilityRow(BloodType Donor, IReadOnlyList<CompatibilityCell> Cells)
+{
+    public string Label => Donor.ToTypographic();
+}
 
 /// <summary>What the login screen is telling the user about the last attempt.</summary>
 public enum LoginProblem
@@ -33,11 +58,13 @@ public sealed partial class LoginViewModel : ViewModelBase
     private readonly IAppFlow _flow;
     private readonly IServerStatus? _serverStatus;
     private readonly UpdateService? _updates;
+    private readonly UiPreferences? _preferences;
     private readonly SynchronizationContext? _context = SynchronizationContext.Current;
 
-    public LoginViewModel(ILifestreamApiClient api, ISessionService session, IAppFlow flow, IServerStatus? serverStatus = null, UpdateService? updates = null)
+    public LoginViewModel(ILifestreamApiClient api, ISessionService session, IAppFlow flow, IServerStatus? serverStatus = null, UpdateService? updates = null, UiPreferences? preferences = null)
         : base(LoadState.Ready)
     {
+        _preferences = preferences;
         _api = api;
         _session = session;
         _flow = flow;
@@ -67,9 +94,74 @@ public sealed partial class LoginViewModel : ViewModelBase
             RetryCommand.Cancel();
             return Task.CompletedTask;
         });
+        if (preferences is { RememberUsername: true, Username: { Length: > 0 } remembered })
+        {
+            Username = remembered;
+        }
     }
 
     public override string PageTitle => "Lifestream";
+
+    /// <summary>The ABO/RhD red-cell compatibility of every donor group (rows) with every patient group (columns), from the domain rule.</summary>
+    public static IReadOnlyList<CompatibilityRow> Compatibility { get; } =
+    [
+        .. BloodTypeExtensions.All.Select(donor => new CompatibilityRow(donor, [.. BloodTypeExtensions.All.Select(patient => new CompatibilityCell(donor, patient, donor.CanGiveTo(patient)))])),
+    ];
+
+    /// <summary>The column headings of the matrix (patient groups).</summary>
+    public static IReadOnlyList<string> PatientGroups { get; } = [.. BloodTypeExtensions.All.Select(t => t.ToTypographic())];
+
+    /// <summary>Fill in the user name next time (saved on this PC; never the password).</summary>
+    public bool RememberUsername
+    {
+        get => _preferences?.RememberUsername ?? false;
+        set
+        {
+            if (_preferences is not null && _preferences.RememberUsername != value)
+            {
+                _preferences.RememberUsername = value;
+                if (!value)
+                {
+                    _preferences.Username = null;
+                }
+
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    /// <summary>True when the screen can remember the user name (a preferences store exists).</summary>
+    public bool CanRememberUsername => _preferences is not null;
+
+    /// <summary>The footer pill: checking, ready, waking or unreachable.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ServerText))]
+    public partial ServerReadiness Server { get; set; } = ServerReadiness.Checking;
+
+    /// <summary>"Server ready" and its siblings, for the footer pill.</summary>
+    public string ServerText => Server switch
+    {
+        ServerReadiness.Ready => "Server ready",
+        ServerReadiness.Waking => "Waking the server",
+        ServerReadiness.Unreachable => "Can't reach the server",
+        _ => "Checking the server",
+    };
+
+    /// <summary>
+    /// Asks the server whether it is ready, for the footer pill (the screen calls it once when it appears). A cold demo server answers "waking"; the
+    /// first sign-in then takes up to a minute, which the status line says.
+    /// </summary>
+    public async Task CheckServerAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            Server = await Operations.RunAsync(ReadReadinessAsync, ct).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TimeoutException or IOException or OperationCanceledException or System.Text.Json.JsonException)
+        {
+            Server = ServerReadiness.Unreachable;
+        }
+    }
 
     /// <summary>True from the third second of a slow or waking call until it ends: the server is starting from cold (SHELL-07).</summary>
     [ObservableProperty]
@@ -161,7 +253,15 @@ public sealed partial class LoginViewModel : ViewModelBase
 
     private void OnServerStatusChanged(object? sender, EventArgs e)
     {
-        void Apply() => IsServerWaking = _serverStatus?.State == ServerState.Waking;
+        void Apply()
+        {
+            IsServerWaking = _serverStatus?.State == ServerState.Waking;
+            if (IsServerWaking)
+            {
+                Server = ServerReadiness.Waking;
+            }
+        }
+
         if (_context is null || SynchronizationContext.Current == _context)
         {
             Apply();
@@ -224,6 +324,12 @@ public sealed partial class LoginViewModel : ViewModelBase
             if (result.IsOk)
             {
                 Password = string.Empty;
+                Server = ServerReadiness.Ready;
+                if (_preferences is { RememberUsername: true } && _signingInWithPassword)
+                {
+                    _preferences.Username = Username.Trim();
+                }
+
                 _session.Establish(result.Value);
                 await _flow.SignedInAsync().ConfigureAwait(true);
                 return;
@@ -244,6 +350,15 @@ public sealed partial class LoginViewModel : ViewModelBase
         {
             IsBusy = false;
         }
+    }
+
+    [RunsInOperation("CheckServerAsync runs it inside Operations.RunAsync.")]
+    private async Task<ServerReadiness> ReadReadinessAsync(CancellationToken ct)
+    {
+        var result = await _api.GetReadinessAsync(ct).ConfigureAwait(true);
+        return !result.IsOk ? ServerReadiness.Unreachable
+            : result.Value.Database == Contracts.Health.DatabaseStates.Ready ? ServerReadiness.Ready
+            : ServerReadiness.Waking;
     }
 
     /// <summary>The problem code of an answer that was successful but not a usable sign-in.</summary>

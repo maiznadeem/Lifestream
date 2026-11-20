@@ -58,6 +58,32 @@ public sealed class Part2StaffProfileTests
     }
 
     [Fact]
+    public async Task StaffList_WhileTheServerIsWaking_NoThumbnailRequestStarts_AndTheRowIsFetchedWhenTheServerIsAwake()
+    {
+        // A row that comes into view while a call of the app waits on a waking server (it scrolls in, or the layout changes when a toast leaves after
+        // the user pressed Cancel) must not start a request of its own: no Cancel on screen would stop it. It is fetched once the server answers again.
+        var (rig, vm) = await LoadedStaffAsync();
+        var status = new ServerStatus();
+        vm.Attach(status, rig.Clock);
+        status.Enter(); // a call somewhere in the app is waiting: the server is waking
+
+        await vm.LoadPhotoCommand.ExecuteAsync(vm.Items[1]);
+        Assert.Equal(0, rig.Recorder.CountOf("GetStaffPhotoAsync"));
+        Assert.Null(vm.Items[1].Photo);
+        await vm.LoadPhotoAsync(vm.Items[1]); // shown again while still waking: still no request
+        Assert.Equal(0, rig.Recorder.CountOf("GetStaffPhotoAsync"));
+
+        status.Leave(); // the server answered
+        for (var i = 0; i < 500 && vm.Items[1].Photo is null; i++)
+        {
+            await Task.Delay(10); // the fetch runs on the pool; this waits for its result, at most 5 s
+        }
+
+        Assert.Equal([1, 2, 3], vm.Items[1].Photo);
+        Assert.Equal(1, rig.Recorder.CountOf("GetStaffPhotoAsync")); // once, however often the row was shown meanwhile
+    }
+
+    [Fact]
     public async Task StaffList_PhotoRowChangesNotify_SoTheCellUpdatesWhenTheBytesArrive()
     {
         var (_, vm) = await LoadedStaffAsync();
@@ -253,6 +279,7 @@ public sealed class Part2StaffProfileTests
         Assert.Equal(2, rig.Dialogs.Confirmations.Count);
         Assert.Contains("Selected", rig.Dialogs.Confirmations[1].Body, StringComparison.Ordinal);
         Assert.Contains("You can undo this for a few seconds afterwards", rig.Dialogs.Confirmations[1].Body, StringComparison.Ordinal);
+        Assert.Equal(("Delete staff member", "Keep staff member"), (rig.Dialogs.Confirmations[1].Verb, rig.Dialogs.Confirmations[1].Keep));
         Assert.Equal(1, rig.Recorder.CountOf("DeleteStaffAsync"));
         var toast = Assert.Single(rig.Toasts.Toasts);
         Assert.Equal("Undo", toast.ActionLabel); // FEAT-06: every delete offers a 10-second Undo, staff included
@@ -399,7 +426,7 @@ public sealed class Part2StaffProfileTests
 
         Assert.Equal("Test Admin", vm.DisplayName);
         Assert.Equal("admin", vm.Username);
-        Assert.Equal("Admin", vm.DesignationText);
+        Assert.Equal("Administration", vm.DesignationText); // the Admin job title, worded so it is never read as the Admin role
         Assert.Equal("Full time", vm.ShiftText);
         Assert.False(vm.HasUnsavedChanges);
         Assert.False(vm.SaveCommand.CanExecute(null));
@@ -414,6 +441,22 @@ public sealed class Part2StaffProfileTests
 
         vm.Phone = "  +1-555-0101  "; // spaces around the same value are not a change
         Assert.False(vm.HasUnsavedChanges);
+    }
+
+    [Fact]
+    public async Task Profile_TheAccountHeaderShowsTheSavedName_UntilSave()
+    {
+        var (rig, vm) = await LoadedProfileAsync();
+        rig.Fake.On("UpdateProfileAsync", ApiResult<ProfileResponse>.Ok(Samples2.Profile() with { DisplayName = "Dr. Test Admin", RowVersion = "rv-p2" }));
+        Assert.Equal(("Test Admin", "TA"), (vm.SavedName, vm.Initials));
+
+        vm.DisplayName = "Dr. Test Admin"; // typed, not saved: the header and its avatar keep the saved name
+        Assert.True(vm.HasUnsavedChanges);
+        Assert.Equal(("Test Admin", "TA"), (vm.SavedName, vm.Initials));
+
+        await vm.SaveCommand.ExecuteAsync();
+        Assert.False(vm.HasUnsavedChanges);
+        Assert.Equal("Dr. Test Admin", vm.SavedName);
     }
 
     [Fact]
@@ -535,7 +578,7 @@ public sealed class Part2StaffProfileTests
 
     private sealed class AskingPresenter(List<string> asked, bool answer) : IDialogPresenter
     {
-        public Task<bool> ConfirmAsync(string title, string body, string dangerVerb)
+        public Task<bool> ConfirmAsync(string title, string body, string dangerVerb, string keepVerb)
         {
             asked.Add(title);
             return Task.FromResult(answer);

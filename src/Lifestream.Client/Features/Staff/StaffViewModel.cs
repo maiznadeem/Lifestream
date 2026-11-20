@@ -24,7 +24,10 @@ public sealed partial class StaffViewModel : SortedRecordListViewModel<StaffRow,
     private readonly IFormDialogService _forms;
     private readonly ISessionService _session;
     private readonly SemaphoreSlim _photoGate = new(ConcurrentPhotoRequests);
-    private readonly CancellationTokenSource _photoCts = new();
+    private readonly HashSet<StaffRow> _deferredPhotos = [];
+    private readonly HashSet<StaffRow> _photosInFlight = [];
+    private IServerStatus? _resumeWatch;
+    private CancellationTokenSource _photoCts = new();
 
     public StaffViewModel(ILifestreamApiClient api, IListViewStateStore states, IToastService toasts, IDialogService dialogs, IFormDialogService forms, ISessionService session, IUiDispatcher ui)
         : base(states, "staff", toasts, dialogs, ui)
@@ -34,6 +37,20 @@ public sealed partial class StaffViewModel : SortedRecordListViewModel<StaffRow,
         _session = session;
         ResetPasswordCommand = Command(_ => ResetPasswordAsync(), () => Detail is not null && !IsEditing && CanManageStaff, opensModal: true);
         LoadPhotoCommand = Command((parameter, _) => parameter is StaffRow row ? LoadPhotoAsync(row) : Task.CompletedTask);
+        ClosePanelCommand = Command(async _ =>
+        {
+            if (Editor is { } editor)
+            {
+                await editor.CancelCommand.ExecuteAsync(null).ConfigureAwait(true); // asks "Discard changes?" when there are any
+                if (Editor is not null)
+                {
+                    return; // the user kept editing
+                }
+            }
+
+            SelectedItem = null;
+            await LoadDetailAsync(null).ConfigureAwait(true);
+        });
         PropertyChanged += (_, e) =>
         {
             if (e.PropertyName is nameof(Detail) or nameof(Editor))
@@ -41,6 +58,22 @@ public sealed partial class StaffViewModel : SortedRecordListViewModel<StaffRow,
                 ResetPasswordCommand.RaiseCanExecuteChanged();
                 OnPropertyChanged(nameof(DeleteDisabledReason));
                 OnPropertyChanged(nameof(HasDeleteDisabledReason));
+                OnPropertyChanged(nameof(DetailInitials));
+                OnPropertyChanged(nameof(DetailIsAdmin));
+                OnPropertyChanged(nameof(DetailIsProtected));
+                OnPropertyChanged(nameof(DetailStaffAccessText));
+                OnPropertyChanged(nameof(DetailSubtitle));
+                OnPropertyChanged(nameof(PanelOverline));
+            }
+
+            if (e.PropertyName == nameof(State))
+            {
+                OnStateChangedForPhotos();
+            }
+
+            if (e.PropertyName is nameof(SelectedItem) or nameof(Detail) or nameof(DetailState) or nameof(Editor))
+            {
+                OnPropertyChanged(nameof(IsPanelOpen));
             }
         };
     }
@@ -56,6 +89,38 @@ public sealed partial class StaffViewModel : SortedRecordListViewModel<StaffRow,
     public AsyncRelayCommand ResetPasswordCommand { get; }
 
     public AsyncRelayCommand LoadPhotoCommand { get; }
+
+    /// <summary>Closes the side panel: cancels the form when one is open (asking first when it has changes), then clears the selection.</summary>
+    public AsyncRelayCommand ClosePanelCommand { get; }
+
+    /// <summary>True when the side panel is open: a person is selected or opened by id, or the add or edit form is open.</summary>
+    public bool IsPanelOpen => SelectedItem is not null || Detail is not null || DetailState != LoadState.Ready || Editor is not null;
+
+    /// <summary>
+    /// The panel's header line: "Staff member S-0012", or the record being edited. None for a new person: the form's own title already says "New staff member"
+    /// (design-qa-2 N17), as the other screens' new-record forms have no overline.
+    /// </summary>
+    public string? PanelOverline => Editor is not null
+        ? (Detail is { } editing && IsEditing ? $"Editing {Receipts.RecordCodes.Staff(editing.Id)}" : null)
+        : Detail is { } staff ? $"Staff member {Receipts.RecordCodes.Staff(staff.Id)}" : "Staff member";
+
+    /// <summary>The selected person's initials, for the panel's avatar.</summary>
+    public string DetailInitials => StaffText.Initials(Detail?.DisplayName);
+
+    /// <summary>True when the selected person is an administrator.</summary>
+    public bool DetailIsAdmin => Detail?.Role == Lifestream.Domain.Role.Admin;
+
+    /// <summary>True when the selected person's account is protected (the owner account: it can't be deleted or demoted).</summary>
+    public bool DetailIsProtected => Detail?.IsProtected == true;
+
+    /// <summary>What the selected person can do with staff accounts: the last line of the panel's Access list.</summary>
+    public string DetailStaffAccessText => DetailIsAdmin ? "Staff accounts: add, change and reset passwords" : "Staff list, view only";
+
+    /// <summary>"Doctor, morning shift": what the person does, under their name.</summary>
+    public string DetailSubtitle => Detail is { } s ? $"{StaffText.JobTitle(s.Designation)}, {(s.Shift == Lifestream.Domain.Shift.FullTime ? "full time" : $"{s.Shift.ToString().ToLowerInvariant()} shift")}" : string.Empty;
+
+    /// <summary>The one line the read-only account sees above the list, instead of disabled buttons everywhere.</summary>
+    public bool IsReadOnly => !CanManageStaff;
 
     /// <summary>False for the demo account: it can view staff but not change anything.</summary>
     public bool CanManageStaff => _session.User?.CanManageStaff == true;
@@ -105,6 +170,20 @@ public sealed partial class StaffViewModel : SortedRecordListViewModel<StaffRow,
 
     private int? SalaryTo => ParseDigits(SalaryToText);
 
+    /// <summary>The salary chip's words: "Salary" with no range, else the range ("Salary: 2,000–3,000").</summary>
+    public string SalaryChipText => StaffText.SalaryChip(SalaryFrom, SalaryTo);
+
+    /// <summary>True while a salary range is set (the chip shows it as set).</summary>
+    public bool HasSalaryRange => SalaryFrom is not null || SalaryTo is not null;
+
+    /// <summary>Empties the salary range (the popup's Clear).</summary>
+    public AsyncRelayCommand ClearSalaryCommand => field ??= Command(_ =>
+    {
+        SalaryFromText = string.Empty;
+        SalaryToText = string.Empty;
+        return Task.CompletedTask;
+    });
+
     private bool HasSalaryFilter => SalaryRangeError is null && (SalaryFrom is not null || SalaryTo is not null);
 
     protected override bool HasExtraFilters => HasSalaryFilter || SalaryRangeError is not null;
@@ -133,6 +212,8 @@ public sealed partial class StaffViewModel : SortedRecordListViewModel<StaffRow,
 
     private void SalaryRangeChanged()
     {
+        OnPropertyChanged(nameof(SalaryChipText));
+        OnPropertyChanged(nameof(HasSalaryRange));
         if (SalaryFrom is { } from && SalaryTo is { } to && from > to)
         {
             SalaryRangeError = "From can't be higher than To.";
@@ -174,20 +255,43 @@ public sealed partial class StaffViewModel : SortedRecordListViewModel<StaffRow,
     public async Task LoadPhotoAsync(StaffRow row)
     {
         ArgumentNullException.ThrowIfNull(row);
+        if (_disposed)
+        {
+            return;
+        }
+
+        if (State is LoadState.Loading or LoadState.Waking || IsOperationWaking || CurrentServerStatus?.State == ServerState.Waking)
+        {
+            // No thumbnail request STARTS while the list is (re)loading, a call of this screen waits on the waking server, or the server is waking: a row
+            // that is first shown then (it scrolls into view, an Undo reloads the list, a page is drawn late, the layout changes when a toast leaves)
+            // would add a request after the user pressed Cancel, one that no Cancel on screen stops.
+            // The row waits and is fetched once the list is ready and the server answers again (OnStateChangedForPhotos, OnServerAwake,
+            // OnOperationWakingChanged).
+            _deferredPhotos.Add(row);
+            WatchForServerAwake();
+            return;
+        }
+
         if (!row.ClaimPhotoRequest())
         {
             return;
         }
 
+        var token = _photoCts.Token;
+        _photosInFlight.Add(row);
         try
         {
-            await _photoGate.WaitAsync(_photoCts.Token).ConfigureAwait(true);
+            await _photoGate.WaitAsync(token).ConfigureAwait(true);
             try
             {
-                var result = await RunOperationAsync(ct => _api.GetStaffPhotoAsync(row.Id, ct), _photoCts.Token).ConfigureAwait(true);
+                var result = await RunOperationAsync(ct => _api.GetStaffPhotoAsync(row.Id, ct), token).ConfigureAwait(true);
                 if (result.IsOk)
                 {
                     row.Photo = result.Value;
+                }
+                else if (token.IsCancellationRequested)
+                {
+                    row.ReleasePhotoRequest();
                 }
             }
             finally
@@ -197,7 +301,88 @@ public sealed partial class StaffViewModel : SortedRecordListViewModel<StaffRow,
         }
         catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException)
         {
-            // The screen was left: nobody is waiting for the photo.
+            // A load started (the rows are being replaced), the user cancelled the waiting requests, or the screen was left. The row may ask again.
+            row.ReleasePhotoRequest();
+        }
+        finally
+        {
+            _photosInFlight.Remove(row);
+        }
+    }
+
+    /// <summary>
+    /// Deferred rows are fetched when the server stops waking. (A request already in flight when the server starts waking is an operation of this screen
+    /// like any other: the screen shows its waking notice, and its Cancel stops the request.)
+    /// </summary>
+    private void WatchForServerAwake()
+    {
+        if (_resumeWatch is null && CurrentServerStatus is { State: ServerState.Waking } status)
+        {
+            _resumeWatch = status;
+            status.Changed += OnServerAwake;
+        }
+    }
+
+    /// <summary>
+    /// The screen's waking notice left (the call answered, or the user cancelled it). Rows deferred while it showed are asked for again here when no
+    /// server watch does it; a row asked while the server is still waking is deferred once more, so this starts no request on a waking server.
+    /// </summary>
+    protected override void OnOperationWakingChanged(bool isWaking)
+    {
+        base.OnOperationWakingChanged(isWaking);
+        if (!isWaking && !_disposed && _resumeWatch is null)
+        {
+            OnStateChangedForPhotos();
+        }
+    }
+
+    private void OnServerAwake(object? sender, EventArgs e)
+    {
+        if (_resumeWatch is not { State: not ServerState.Waking } status)
+        {
+            return;
+        }
+
+        status.Changed -= OnServerAwake;
+        _resumeWatch = null;
+        Post(() => OnStateChangedForPhotos());
+    }
+
+    /// <summary>
+    /// A load starting cancels the photo requests in flight (they belong to the rows being replaced, and the load's Cancel must reach every request);
+    /// once the list is ready, the rows that were shown during the load fetch their photos.
+    /// </summary>
+    private void OnStateChangedForPhotos()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        if (State is LoadState.Loading or LoadState.Waking)
+        {
+            if (!_photoCts.IsCancellationRequested)
+            {
+                _photoCts.Cancel();
+            }
+
+            return;
+        }
+
+        if (_photoCts.IsCancellationRequested)
+        {
+            _photoCts.Dispose();
+            _photoCts = new CancellationTokenSource();
+        }
+
+        if (State == LoadState.Ready && _deferredPhotos.Count > 0)
+        {
+            var shown = _deferredPhotos.Where(Items.Contains).ToList();
+            _deferredPhotos.Clear();
+            foreach (var row in shown)
+            {
+                _ = LoadPhotoAsync(row);
+            }
         }
     }
 
@@ -219,8 +404,7 @@ public sealed partial class StaffViewModel : SortedRecordListViewModel<StaffRow,
         List<DetailFact> facts =
         [
             new("Username", s.Username),
-            new("Role", s.Role.ToString()),
-            new("Designation", s.Designation.ToString()),
+            new("Job title", StaffText.JobTitle(s.Designation)),
             new("Shift", StaffText.Shift(s.Shift)),
             new("Gender", s.Gender.ToString()),
             new("Date of birth", Formatting.Date(s.DateOfBirth)),
@@ -276,6 +460,11 @@ public sealed partial class StaffViewModel : SortedRecordListViewModel<StaffRow,
             _photoCts.Cancel();
             _photoCts.Dispose();
             _photoGate.Dispose();
+            if (_resumeWatch is { } status)
+            {
+                status.Changed -= OnServerAwake;
+                _resumeWatch = null;
+            }
         }
 
         base.Dispose(disposing);

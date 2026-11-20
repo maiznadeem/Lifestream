@@ -31,7 +31,7 @@ public sealed class LastWakingGapsTests
     {
         public int Opened { get; private set; }
 
-        public Task<bool> ConfirmAsync(string title, string body, string dangerVerb)
+        public Task<bool> ConfirmAsync(string title, string body, string dangerVerb, string keepVerb)
         {
             Opened++;
             return Task.FromResult(true);
@@ -193,13 +193,14 @@ public sealed class LastWakingGapsTests
     {
         var seen = StaHost.Run(() =>
         {
-            var rig = Part2Harness.NewRig();
+            var clock = new ManualTimeProvider(DateTimeOffset.UtcNow);
+            var rig = Part2Harness.NewRig(clock: clock);
             var forms = new CountingForms();
             var viewer = new CountingViewer();
             rig.Get<DialogService>().Presenter = new Yes();
             rig.Get<FormDialogService>().Presenter = forms;
             var vm = Microsoft.Extensions.DependencyInjection.ActivatorUtilities.CreateInstance<AppointmentsViewModel>(rig.Provider, new FakeNavigation(), viewer);
-            vm.Attach(rig.Get<ServerStatus>(), TimeProvider.System);
+            vm.Attach(rig.Get<ServerStatus>(), clock);
             using var host = Hosted.Create(Part2Harness.OnCanvas(new Lifestream.Desktop.Features.Appointments.AppointmentsView(), vm), 1366, 736);
             Hosted.Await(() => vm.LoadAsync());
             host.Settle(100);
@@ -214,7 +215,7 @@ public sealed class LastWakingGapsTests
             });
             host.Settle(150);
             rig.Get<ServerStatus>().Enter();
-            Hosted.RunDispatcherFor(3600);
+            clock.Advance(TimeSpan.FromMilliseconds(3600)); // over the 3 s waking threshold, on the screen's clock
             host.Settle(100);
             var disabledWhileWaiting = !vm.RecordDonationCommand.CanExecute(null);
             var recordButtons = host.All<Button>().Where(b => b.IsVisible && System.Windows.Automation.AutomationProperties.GetName(b) == "Record donation").ToList();
@@ -260,10 +261,8 @@ public sealed class LastWakingGapsTests
     [Fact]
     public void OnEveryScreen_WhileAnOperationWaits_NoCommandCanOpenAModalDialog_FakeApi()
     {
-        var result = StaHost.Run(() =>
+        (List<string> Found, int ModalCommandsSeen) result;
         {
-            var found = new List<string>();
-            var modalCommandsSeen = 0;
             (Type Type, string Blocker)[] screens =
             [
                 (typeof(DonorsViewModel), "RetryDetailCommand"),
@@ -282,14 +281,20 @@ public sealed class LastWakingGapsTests
                 [typeof(DonorsViewModel)] = ["DeleteCommand"],
                 [typeof(PatientsViewModel)] = ["DeleteCommand"],
                 [typeof(StaffViewModel)] = ["DeleteCommand", nameof(StaffViewModel.ResetPasswordCommand)],
-                [typeof(AppointmentsViewModel)] = ["DeleteCommand", "RecordDonationCommand", "CancelAppointmentCommand", "ViewReceiptCommand"],
+                [typeof(AppointmentsViewModel)] = ["DeleteCommand", "RecordDonationCommand", "RecordDonationForCommand", "CancelAppointmentCommand", "ViewReceiptCommand"],
                 [typeof(RequestsViewModel)] = ["DeleteCommand", "FulfilCommand", "CancelRequestCommand", "ViewReceiptCommand"],
                 [typeof(ReceiptsViewModel)] = ["DeleteCommand", "OpenReceiptCommand"],
                 [typeof(ProfileViewModel)] = ["PickPhotoCommand", nameof(ProfileViewModel.ChangePasswordCommand)],
             };
-            foreach (var (type, blocker) in screens)
+
+            // Each screen on its own rig and clock.
+            var perScreen = StaHost.Run(() => screens.Select(screen =>
             {
-                var rig = Part2Harness.NewRig();
+                var (type, blocker) = screen;
+                var found = new List<string>();
+                var modalCommandsSeen = 0;
+                var clock = new ManualTimeProvider(DateTimeOffset.UtcNow);
+                var rig = Part2Harness.NewRig(clock: clock);
                 var dialogs = new Yes();
                 var forms = new CountingForms();
                 var viewer = new CountingViewer();
@@ -298,7 +303,7 @@ public sealed class LastWakingGapsTests
                 object[] fakes = [new FakeNavigation(), viewer];
                 var wanted = type.GetConstructors().Single().GetParameters().Select(p => p.ParameterType).ToList();
                 var vm = (ViewModelBase)Microsoft.Extensions.DependencyInjection.ActivatorUtilities.CreateInstance(rig.Provider, type, [.. fakes.Where(f => wanted.Any(t => t.IsInstanceOfType(f)))]);
-                vm.Attach(rig.Get<ServerStatus>(), TimeProvider.System);
+                vm.Attach(rig.Get<ServerStatus>(), clock);
                 Hosted.Await(() => vm.LoadAsync());
                 if (type != typeof(ProfileViewModel))
                 {
@@ -332,11 +337,12 @@ public sealed class LastWakingGapsTests
                 if (waiting.Count == 0)
                 {
                     found.Add($"{type.Name}: {blocker} made no API call, so nothing was waiting");
-                    continue;
+                    return (Found: found, ModalCommandsSeen: modalCommandsSeen);
                 }
 
                 rig.Get<ServerStatus>().Enter();
-                Hosted.RunDispatcherFor(3600);
+                clock.Advance(TimeSpan.FromMilliseconds(3600)); // over the 3 s waking threshold, on the screen's clock
+                Hosted.RunDispatcherFor(150);
                 if (!vm.IsOperationWaking)
                 {
                     found.Add($"{type.Name}: the operation is not in the waking state after 3.6 s");
@@ -380,10 +386,11 @@ public sealed class LastWakingGapsTests
                 vm.Operations.Cancel();
                 Hosted.PumpUntil(() => !vm.Operations.IsRunning, 3000);
                 vm.Dispose();
-            }
+                return (Found: found, ModalCommandsSeen: modalCommandsSeen);
+            }).ToArray());
 
-            return (Found: found, ModalCommandsSeen: modalCommandsSeen);
-        });
+            result = (Found: perScreen.SelectMany(r => r.Found).ToList(), ModalCommandsSeen: perScreen.Sum(r => r.ModalCommandsSeen));
+        }
 
         Assert.True(result.ModalCommandsSeen >= 12, $"only {result.ModalCommandsSeen} modal-opening commands were found: the inventory is not walking the screens");
         Assert.True(result.Found.Count == 0, string.Join(Environment.NewLine, result.Found));

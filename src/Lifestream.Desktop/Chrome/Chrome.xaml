@@ -3,14 +3,17 @@
                     xmlns:chrome="clr-namespace:Lifestream.Desktop.Chrome">
   <ResourceDictionary.MergedDictionaries>
     <ResourceDictionary Source="/Lifestream;component/Theme/Tokens.xaml" />
+    <ResourceDictionary Source="/Lifestream;component/Theme/Motion.xaml" />
     <ResourceDictionary Source="/Lifestream;component/Theme/Typography.xaml" />
+    <ResourceDictionary Source="/Lifestream;component/Theme/Images.xaml" />
   </ResourceDictionary.MergedDictionaries>
 
-  <!-- Caption buttons: 46 x 32 DIP. The highlight is the whole button, and that same rectangle is the hit-test region. -->
+  <!-- Caption buttons (direction A): 46 DIP wide, as tall as the title bar. Rest: Ink glyph on nothing; hover: ink at 9 %; pressed: ink at 5 %
+       with the glyph at 70 %; close hover: the Windows close red (Brush.CloseHover) with a white glyph. The highlight is the whole button, and that same rectangle is the hit-test region. -->
   <Style x:Key="CaptionButton" TargetType="Button">
     <Setter Property="Width" Value="{StaticResource Width.CaptionButton}" />
-    <Setter Property="Height" Value="{StaticResource Height.CaptionButton}" />
-    <Setter Property="Foreground" Value="{DynamicResource Brush.TextPrimary}" />
+    <Setter Property="Height" Value="{Binding TitleBarHeight, RelativeSource={RelativeSource TemplatedParent}}" />
+    <Setter Property="Foreground" Value="{DynamicResource Brush.Ink}" />
     <Setter Property="Focusable" Value="False" />
     <Setter Property="IsTabStop" Value="False" />
     <Setter Property="WindowChrome.IsHitTestVisibleInChrome" Value="True" />
@@ -18,14 +21,15 @@
       <Setter.Value>
         <ControlTemplate TargetType="Button">
           <Border x:Name="Bd" Background="Transparent">
-            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+            <ContentPresenter x:Name="Glyph" HorizontalAlignment="Center" VerticalAlignment="Center" />
           </Border>
           <ControlTemplate.Triggers>
             <Trigger Property="IsMouseOver" Value="True">
-              <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.SurfaceHover}" />
+              <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.CaptionHover}" />
             </Trigger>
             <Trigger Property="IsPressed" Value="True">
-              <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.SurfacePressed}" />
+              <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.CaptionPressed}" />
+              <Setter TargetName="Glyph" Property="Opacity" Value="0.7" />
             </Trigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>
@@ -42,12 +46,13 @@
           </Border>
           <ControlTemplate.Triggers>
             <Trigger Property="IsMouseOver" Value="True">
-              <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Primary}" />
-              <Setter Property="Foreground" Value="{DynamicResource Brush.TextOnPrimary}" />
+              <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.CloseHover}" />
+              <Setter Property="Foreground" Value="{DynamicResource Brush.OnCloseHover}" />
             </Trigger>
             <Trigger Property="IsPressed" Value="True">
-              <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.PrimaryPressed}" />
-              <Setter Property="Foreground" Value="{DynamicResource Brush.TextOnPrimary}" />
+              <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.CloseHover}" />
+              <Setter TargetName="Glyph" Property="Opacity" Value="0.7" />
+              <Setter Property="Foreground" Value="{DynamicResource Brush.OnCloseHover}" />
             </Trigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>
@@ -55,75 +60,98 @@
     </Setter>
   </Style>
 
+  <!-- The app mark of direction A: a blood drop with a white stream wave. Scales to any size; the colours follow the theme. -->
+  <Style TargetType="controls:LogoMark">
+    <Setter Property="Width" Value="20" />
+    <Setter Property="Height" Value="20" />
+    <Setter Property="Focusable" Value="False" />
+    <Setter Property="IsTabStop" Value="False" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="controls:LogoMark">
+          <Viewbox Stretch="Uniform">
+            <Canvas Width="32" Height="32">
+              <Path Data="{StaticResource Geometry.LogoDrop}" Fill="{DynamicResource Brush.Blood}" />
+              <Path Data="{StaticResource Geometry.LogoWave}" Stroke="{DynamicResource Brush.OnBlood}" StrokeThickness="2.1" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+            </Canvas>
+          </Viewbox>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
   <Style TargetType="chrome:ChromeWindow">
-    <Setter Property="Background" Value="{DynamicResource Brush.SurfaceCanvas}" />
-    <Setter Property="Foreground" Value="{DynamicResource Brush.TextPrimary}" />
+    <!-- The window paints the Mica fallback; on Windows 11 the window's copy of Brush.Mica is transparent and real Mica shows through. -->
+    <Setter Property="Background" Value="{DynamicResource Brush.Mica}" />
+    <Setter Property="Foreground" Value="{DynamicResource Brush.Ink}" />
     <Setter Property="FontFamily" Value="{DynamicResource Font.Family}" />
     <Setter Property="FontSize" Value="{StaticResource FontSize.Body}" />
     <Setter Property="UseLayoutRounding" Value="True" />
-    <!-- Small text is laid out on whole pixels (GDI-compatible metrics) so 12 to 14 DIP text is crisp with ClearType; the large text styles opt back
-         into Ideal, where sub-pixel positioning looks better (Theme/Typography.xaml). -->
+    <Setter Property="SnapsToDevicePixels" Value="True" />
+    <!-- Small text is laid out on whole pixels (GDI-compatible metrics) so hinted 12 to 15 DIP Onest is crisp with ClearType; the 20 DIP and larger
+         text styles opt back into Ideal, where sub-pixel positioning looks better (Theme/Typography.xaml, Fonts/README.md). -->
     <Setter Property="TextOptions.TextFormattingMode" Value="Display" />
     <Setter Property="TextOptions.TextRenderingMode" Value="ClearType" />
+    <Setter Property="TextOptions.TextHintingMode" Value="Fixed" />
     <!-- The app icon in the title bar, the taskbar and Alt+Tab (the same .ico as the executable's). -->
     <Setter Property="Icon" Value="pack://application:,,,/Lifestream;component/Assets/Lifestream.ico" />
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="chrome:ChromeWindow">
-          <Border x:Name="PART_Root" Background="{TemplateBinding Background}" BorderBrush="{DynamicResource Brush.BorderSubtle}" BorderThickness="1">
+          <controls:CrispBorder x:Name="PART_Root" Background="{TemplateBinding Background}" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="0">
             <Grid>
               <Grid.RowDefinitions>
-                <RowDefinition Height="{StaticResource Grid.Height.Caption}" />
+                <RowDefinition x:Name="CaptionRow" Height="{Binding TitleBarHeight, RelativeSource={RelativeSource TemplatedParent}}" />
                 <RowDefinition Height="*" />
               </Grid.RowDefinitions>
-              <Grid Background="Transparent">
-                <Grid.ColumnDefinitions>
-                  <ColumnDefinition Width="*" />
-                  <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <StackPanel Orientation="Horizontal" Margin="{DynamicResource Inset.L12}" VerticalAlignment="Center">
-                  <Image x:Name="CaptionMark" Source="{DynamicResource Image.LogoSmall}" Width="16" Height="16" Margin="{DynamicResource Inset.R8}" VerticalAlignment="Center"
-                         RenderOptions.BitmapScalingMode="HighQuality" />
-                  <TextBlock Style="{StaticResource Text.Label}" Text="{TemplateBinding Title}" Foreground="{DynamicResource Brush.TextSecondary}"
-                             VerticalAlignment="Center" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" AutomationProperties.Name="Window title" />
-                </StackPanel>
-                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
-                  <Button x:Name="PART_Minimize" Style="{StaticResource CaptionButton}" Command="{x:Static SystemCommands.MinimizeWindowCommand}"
-                          AutomationProperties.Name="Minimize" ToolTip="Minimize">
-                    <controls:IconText Style="{StaticResource Text.Icon}" Text="&#xE921;" FontSize="12" />
-                  </Button>
-                  <!-- Not hit-testable by WPF: Windows answers HTMAXBUTTON for it, which gives Snap Layouts. It highlights from IsMaximizeHovered. -->
-                  <Border x:Name="PART_Maximize" Width="{StaticResource Width.CaptionButton}" Height="{StaticResource Height.CaptionButton}" Background="Transparent"
-                          AutomationProperties.Name="Maximize" AutomationProperties.HelpText="Maximize or restore the window">
-                    <controls:IconText x:Name="MaximizeGlyph" Style="{StaticResource Text.Icon}" Text="&#xE922;" FontSize="12" Foreground="{DynamicResource Brush.TextPrimary}"
-                               HorizontalAlignment="Center" VerticalAlignment="Center" />
-                  </Border>
-                  <Button x:Name="PART_Close" Style="{StaticResource CaptionButton.Close}" Command="{x:Static SystemCommands.CloseWindowCommand}"
-                          AutomationProperties.Name="Close" ToolTip="Close">
-                    <controls:IconText Style="{StaticResource Text.Icon}" Text="&#xE8BB;" FontSize="12" />
-                  </Button>
-                </StackPanel>
-              </Grid>
-              <AdornerDecorator Grid.Row="1">
+              <AdornerDecorator x:Name="ContentHost" Grid.Row="1">
                 <ContentPresenter />
               </AdornerDecorator>
+              <!-- The default caption: the mark and the window title (dialogs). Hidden when the content draws its own title bar. -->
+              <StackPanel x:Name="DefaultCaption" Orientation="Horizontal" Margin="{DynamicResource Inset.L16}" VerticalAlignment="Center">
+                <controls:LogoMark x:Name="CaptionMark" Width="18" Height="18" Margin="{DynamicResource Inset.R10}" VerticalAlignment="Center" />
+                <TextBlock Style="{StaticResource Text.Label}" Text="{TemplateBinding Title}" FontWeight="SemiBold" Foreground="{DynamicResource Brush.Ink}"
+                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" AutomationProperties.Name="Window title" />
+              </StackPanel>
+              <StackPanel x:Name="CaptionButtons" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top" Panel.ZIndex="10">
+                <Button x:Name="PART_Minimize" Style="{StaticResource CaptionButton}" Command="{x:Static SystemCommands.MinimizeWindowCommand}"
+                        AutomationProperties.Name="Minimize" ToolTip="Minimize">
+                  <controls:IconText Style="{StaticResource Text.Icon}" Text="&#xE921;" FontSize="{StaticResource Size.CaptionGlyph}" />
+                </Button>
+                <!-- Not hit-testable by WPF: Windows answers HTMAXBUTTON for it, which gives Snap Layouts. It highlights from IsMaximizeHovered. -->
+                <Border x:Name="PART_Maximize" Width="{StaticResource Width.CaptionButton}" Height="{Binding TitleBarHeight, RelativeSource={RelativeSource TemplatedParent}}" Background="Transparent"
+                        AutomationProperties.Name="Maximize" AutomationProperties.HelpText="Maximize or restore the window">
+                  <controls:IconText x:Name="MaximizeGlyph" Style="{StaticResource Text.Icon}" Text="&#xE922;" FontSize="{StaticResource Size.CaptionGlyph}" Foreground="{DynamicResource Brush.Ink}"
+                                     HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Border>
+                <Button x:Name="PART_Close" Style="{StaticResource CaptionButton.Close}" Command="{x:Static SystemCommands.CloseWindowCommand}"
+                        AutomationProperties.Name="Close" ToolTip="Close">
+                  <controls:IconText Style="{StaticResource Text.Icon}" Text="&#xE8BB;" FontSize="{StaticResource Size.CaptionGlyph}" />
+                </Button>
+              </StackPanel>
             </Grid>
-          </Border>
+          </controls:CrispBorder>
           <ControlTemplate.Triggers>
+            <Trigger Property="ExtendsContentIntoTitleBar" Value="True">
+              <Setter TargetName="ContentHost" Property="Grid.Row" Value="0" />
+              <Setter TargetName="ContentHost" Property="Grid.RowSpan" Value="2" />
+              <Setter TargetName="DefaultCaption" Property="Visibility" Value="Collapsed" />
+            </Trigger>
             <Trigger Property="WindowState" Value="Maximized">
               <Setter TargetName="MaximizeGlyph" Property="Text" Value="&#xE923;" />
               <Setter TargetName="PART_Maximize" Property="AutomationProperties.Name" Value="Restore" />
-              <Setter TargetName="PART_Root" Property="BorderThickness" Value="0" />
             </Trigger>
             <Trigger Property="IsMaximizeHovered" Value="True">
-              <Setter TargetName="PART_Maximize" Property="Background" Value="{DynamicResource Brush.SurfaceHover}" />
+              <Setter TargetName="PART_Maximize" Property="Background" Value="{DynamicResource Brush.CaptionHover}" />
             </Trigger>
             <Trigger Property="IsMaximizePressed" Value="True">
-              <Setter TargetName="PART_Maximize" Property="Background" Value="{DynamicResource Brush.SurfacePressed}" />
+              <Setter TargetName="PART_Maximize" Property="Background" Value="{DynamicResource Brush.CaptionPressed}" />
+              <Setter TargetName="MaximizeGlyph" Property="Opacity" Value="0.7" />
             </Trigger>
             <Trigger Property="IsDialog" Value="True">
               <Setter TargetName="PART_Minimize" Property="Visibility" Value="Collapsed" />
               <Setter TargetName="PART_Maximize" Property="Visibility" Value="Collapsed" />
+              <Setter Property="Background" Value="{DynamicResource Brush.Layer}" />
             </Trigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>

@@ -118,7 +118,7 @@ Describe 'INFRA-19 the screenshots come from the real demo dataset, never from t
 Add-Type -AssemblyName System.Drawing
 `$bmp = New-Object System.Drawing.Bitmap 1366, 768
 `$bmp.Save((Join-Path `$env:LIFESTREAM_CAPTURE_DIR 'login.png'), [System.Drawing.Imaging.ImageFormat]::Png); `$bmp.Dispose()
-'{"dataset":"demo","generator":"DemoDataGenerator","today":"2026-11-19","dashboard":{"Donors":40,"Patients":35}}' | Set-Content (Join-Path `$env:LIFESTREAM_CAPTURE_DIR 'dataset.json')
+'{"dataset":"demo","generator":"DemoDataGenerator","today":"2026-11-19","takenAtUtc":"12:40","timeZone":"UTC","dashboard":{"Donors":40,"Patients":35}}' | Set-Content (Join-Path `$env:LIFESTREAM_CAPTURE_DIR 'dataset.json')
 "@ | Set-Content $fake
         $out = Join-Path $TestDrive 'oD'; $store = Join-Path $TestDrive 'sD'
         $r = Invoke-Shots $fake @('login') '' $out $store
@@ -126,5 +126,8 @@ Add-Type -AssemblyName System.Drawing
         $m = Get-Content (Join-Path $out 'screenshots.json') -Raw | ConvertFrom-Json
         $m.dashboard.Donors | Should -Be 40
         $m.source | Should -Match 'Try the demo'
+        # When the images were taken and whose clock they show: the agenda of today depends on both.
+        $m.source | Should -Match 'data relative to 2026-11-19 as the clinic stood at 12:40 UTC'
+        $m.source | Should -Match "the clinic's own zone \(UTC\)"
     }
 }

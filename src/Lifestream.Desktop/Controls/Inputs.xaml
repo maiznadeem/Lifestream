@@ -7,43 +7,70 @@
     <ResourceDictionary Source="/Lifestream;component/Theme/Typography.xaml" />
   </ResourceDictionary.MergedDictionaries>
 
-  <!-- Text input: the label lives above the field (FormField), never inside it; an optional placeholder (InputAssist.Placeholder) shows
-       inside while the field is empty. Focus turns the border to the accent colour and draws a 2 px accent line along the bottom. The
-       placeholder is not part of the value: there is no Text trick, it is a separate element. -->
+  <!-- Inputs of direction A, "Ward" (the .input CSS): 34 tall, a 1 px Stroke2 border whose bottom edge is StrokeStrong, radius 6, Layer fill. Hover: Layer2 fill. Focus: a 2 px
+       Primary bar along the bottom (faded over Motion.Fast). Error: Critical border and a 2 px Critical bar. Disabled: Layer2 fill, Stroke border, Ink3 text. Read-only looks
+       disabled but keeps Ink text. The label lives above the field (FormField), never inside it; an optional placeholder (InputAssist.Placeholder, Ink3) shows inside while the
+       field is empty. The placeholder is not part of the value: there is no Text trick, it is a separate element. Every layer is its own element so the changes can animate
+       (opacity, not colour) and nothing but a plain border draws the edges. -->
+
+  <!-- Kbd: a small keyboard key ("Ctrl", "F") for hints in search fields, tooltips and menus. Use a Border with this style holding a TextBlock with Kbd.Text. -->
+  <Style x:Key="Kbd" TargetType="Border">
+    <Setter Property="Background" Value="{DynamicResource Brush.Layer}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Brush.Stroke2}" />
+    <Setter Property="BorderThickness" Value="1,1,1,2" />
+    <Setter Property="CornerRadius" Value="{StaticResource Radius.Small}" />
+    <Setter Property="Padding" Value="{DynamicResource Inset.H5}" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="SnapsToDevicePixels" Value="True" />
+  </Style>
+  <Style x:Key="Kbd.Text" TargetType="TextBlock">
+    <Setter Property="FontFamily" Value="{DynamicResource Font.Family}" />
+    <Setter Property="FontSize" Value="{StaticResource FontSize.Kbd}" />
+    <Setter Property="FontWeight" Value="Medium" />
+    <Setter Property="Foreground" Value="{DynamicResource Brush.Ink2}" />
+    <Setter Property="LineHeight" Value="16" />
+    <Setter Property="LineStackingStrategy" Value="BlockLineHeight" />
+    <Setter Property="TextWrapping" Value="NoWrap" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+  </Style>
+
   <Style x:Key="Input.Base" TargetType="Control">
     <Setter Property="FontFamily" Value="{DynamicResource Font.Family}" />
     <Setter Property="FontSize" Value="{StaticResource FontSize.Body}" />
-    <Setter Property="Foreground" Value="{DynamicResource Brush.TextPrimary}" />
-    <Setter Property="Background" Value="{DynamicResource Brush.SurfaceRaised}" />
-    <Setter Property="BorderBrush" Value="{DynamicResource Brush.BorderInput}" />
+    <Setter Property="Foreground" Value="{DynamicResource Brush.Ink}" />
+    <Setter Property="Background" Value="{DynamicResource Brush.Layer}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Brush.Stroke2}" />
     <Setter Property="BorderThickness" Value="1" />
     <Setter Property="MinHeight" Value="{StaticResource Height.Control}" />
-    <Setter Property="Padding" Value="{DynamicResource Inset.H12}" />
+    <Setter Property="Padding" Value="{StaticResource Pad.Field}" />
     <Setter Property="FocusVisualStyle" Value="{x:Null}" />
     <Setter Property="VerticalContentAlignment" Value="Center" />
+    <!-- An error is shown by the field itself (Critical edge and bar) and in words by FormField: WPF's red adorner rectangle is switched off on every input. -->
+    <Setter Property="Validation.ErrorTemplate" Value="{x:Null}" />
   </Style>
 
   <Style x:Key="TextBox.Lifestream" TargetType="TextBox" BasedOn="{StaticResource Input.Base}">
-    <Setter Property="CaretBrush" Value="{DynamicResource Brush.TextPrimary}" />
+    <Setter Property="CaretBrush" Value="{DynamicResource Brush.Ink}" />
     <Setter Property="SelectionBrush" Value="{DynamicResource Brush.Primary}" />
+    <Setter Property="SelectionTextBrush" Value="{DynamicResource Brush.OnPrimary}" />
     <Setter Property="ContextMenu" Value="{DynamicResource ContextMenu.Editor}" />
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="TextBox">
-          <!-- Rest: raised fill and a quiet border. Hover: a lighter fill. Focus: a darker fill, the accent border and a 2 px accent line along
-               the bottom, faded in and out over Motion.Fast. The layers are separate borders so the change can animate (opacity, not colour). -->
           <Grid SnapsToDevicePixels="True">
-            <Border x:Name="Box" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+            <controls:CrispBorder x:Name="Box" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
                     BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="{StaticResource Radius.Control}" />
-            <Border x:Name="HoverFill" Background="{DynamicResource Brush.SurfaceInputHover}" CornerRadius="{StaticResource Radius.Control}" Margin="{DynamicResource Pad.1}" Opacity="0" IsHitTestVisible="False" />
-            <Border x:Name="FocusFill" Background="{DynamicResource Brush.SurfaceInputFocus}" CornerRadius="{StaticResource Radius.Control}" Margin="{DynamicResource Pad.1}" Opacity="0" IsHitTestVisible="False" />
+            <Border x:Name="HoverFill" Background="{DynamicResource Brush.Layer2}" CornerRadius="{StaticResource Radius.Control}" Margin="{StaticResource Pad.1}" Opacity="0" IsHitTestVisible="False" />
+            <Border x:Name="BottomEdge" Height="1" VerticalAlignment="Bottom" Margin="{DynamicResource Inset.H3}" Background="{DynamicResource Brush.StrokeStrong}" IsHitTestVisible="False" />
             <TextBlock x:Name="Placeholder" Text="{TemplateBinding assist:InputAssist.Placeholder}" Margin="{TemplateBinding Padding}" Padding="{DynamicResource Inset.L2}"
-                       VerticalAlignment="Center" Foreground="{DynamicResource Brush.TextMuted}" FontSize="{TemplateBinding FontSize}" FontFamily="{TemplateBinding FontFamily}"
+                       VerticalAlignment="Center" Foreground="{DynamicResource Brush.Ink3}" FontSize="{TemplateBinding FontSize}" FontFamily="{TemplateBinding FontFamily}"
                        TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" IsHitTestVisible="False" Visibility="Collapsed" />
-            <ScrollViewer x:Name="PART_ContentHost" VerticalAlignment="Center"
+            <ScrollViewer x:Name="PART_ContentHost" Style="{x:Null}" VerticalAlignment="Center"
                           Focusable="False" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden" />
             <Border x:Name="Underline" Height="2" VerticalAlignment="Bottom" CornerRadius="{StaticResource Radius.Underline}" Margin="{DynamicResource Inset.H1}"
-                    Background="{DynamicResource Brush.FocusRing}" Opacity="0" IsHitTestVisible="False" />
+                    Background="{DynamicResource Brush.Primary}" Opacity="0" IsHitTestVisible="False" />
+            <Border x:Name="ErrorBar" Height="2" VerticalAlignment="Bottom" CornerRadius="{StaticResource Radius.Underline}" Margin="{DynamicResource Inset.H1}"
+                    Background="{DynamicResource Brush.Critical}" Visibility="Collapsed" IsHitTestVisible="False" />
           </Grid>
           <ControlTemplate.Triggers>
             <Trigger Property="IsMouseOver" Value="True">
@@ -63,11 +90,9 @@
               </Trigger.ExitActions>
             </Trigger>
             <Trigger Property="IsKeyboardFocusWithin" Value="True">
-              <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brush.FocusRing}" />
               <Trigger.EnterActions>
                 <BeginStoryboard>
                   <Storyboard>
-                    <DoubleAnimation Storyboard.TargetName="FocusFill" Storyboard.TargetProperty="Opacity" To="1" Duration="{StaticResource Motion.Fast}" />
                     <DoubleAnimation Storyboard.TargetName="Underline" Storyboard.TargetProperty="Opacity" To="1" Duration="{StaticResource Motion.Fast}" />
                   </Storyboard>
                 </BeginStoryboard>
@@ -75,22 +100,33 @@
               <Trigger.ExitActions>
                 <BeginStoryboard>
                   <Storyboard>
-                    <DoubleAnimation Storyboard.TargetName="FocusFill" Storyboard.TargetProperty="Opacity" To="0" Duration="{StaticResource Motion.Fast}" />
                     <DoubleAnimation Storyboard.TargetName="Underline" Storyboard.TargetProperty="Opacity" To="0" Duration="{StaticResource Motion.Fast}" />
                   </Storyboard>
                 </BeginStoryboard>
               </Trigger.ExitActions>
             </Trigger>
             <Trigger Property="IsReadOnly" Value="True">
-              <Setter TargetName="Box" Property="Background" Value="{DynamicResource Brush.SurfaceCanvas}" />
+              <Setter TargetName="Box" Property="Background" Value="{DynamicResource Brush.Layer2}" />
+              <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brush.Stroke}" />
+              <Setter TargetName="BottomEdge" Property="Background" Value="{DynamicResource Brush.Stroke}" />
+              <Setter TargetName="HoverFill" Property="Visibility" Value="Collapsed" />
             </Trigger>
             <Trigger Property="Validation.HasError" Value="True">
-              <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brush.StatusDanger}" />
-              <Setter TargetName="Underline" Property="Background" Value="{DynamicResource Brush.StatusDanger}" />
+              <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brush.Critical}" />
+              <Setter TargetName="BottomEdge" Property="Background" Value="{DynamicResource Brush.Critical}" />
+              <Setter TargetName="ErrorBar" Property="Visibility" Value="Visible" />
+            </Trigger>
+            <!-- The same look when a FormField around the field shows an error, or the composite input the field is part of has one (InputAssist.HasError, inherited). -->
+            <Trigger Property="assist:InputAssist.HasError" Value="True">
+              <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brush.Critical}" />
+              <Setter TargetName="BottomEdge" Property="Background" Value="{DynamicResource Brush.Critical}" />
+              <Setter TargetName="ErrorBar" Property="Visibility" Value="Visible" />
             </Trigger>
             <Trigger Property="IsEnabled" Value="False">
-              <Setter Property="Foreground" Value="{DynamicResource Brush.TextDisabled}" />
-              <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brush.BorderSubtle}" />
+              <Setter Property="Foreground" Value="{DynamicResource Brush.Ink3}" />
+              <Setter TargetName="Box" Property="Background" Value="{DynamicResource Brush.Layer2}" />
+              <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brush.Stroke}" />
+              <Setter TargetName="BottomEdge" Property="Background" Value="{DynamicResource Brush.Stroke}" />
               <Setter TargetName="HoverFill" Property="Visibility" Value="Collapsed" />
             </Trigger>
             <MultiTrigger>
@@ -108,23 +144,51 @@
     <Setter Property="Validation.ErrorTemplate" Value="{x:Null}" />
   </Style>
 
-  <Style x:Key="PasswordBox.Lifestream" TargetType="PasswordBox" BasedOn="{StaticResource Input.Base}">
-    <Setter Property="CaretBrush" Value="{DynamicResource Brush.TextPrimary}" />
-    <Setter Property="SelectionBrush" Value="{DynamicResource Brush.Primary}" />
-    <Setter Property="ContextMenu" Value="{DynamicResource ContextMenu.Paste}" />
+  <!-- Search: a TextBox with a leading 16 px Search icon (Ink3) and an optional shortcut hint at the right (SearchAssist.Shortcut="Ctrl F" shows two Kbd keys while empty). -->
+  <Style x:Key="TextBox.Search" TargetType="TextBox" BasedOn="{StaticResource TextBox.Lifestream}">
+    <Setter Property="Padding" Value="{DynamicResource Inset.L8R10}" />
     <Setter Property="Template">
       <Setter.Value>
-        <ControlTemplate TargetType="PasswordBox">
-          <!-- Rest: raised fill and a quiet border. Hover: a lighter fill. Focus: a darker fill, the accent border and a 2 px accent line along
-               the bottom, faded in and out over Motion.Fast. The layers are separate borders so the change can animate (opacity, not colour). -->
+        <ControlTemplate TargetType="TextBox">
           <Grid SnapsToDevicePixels="True">
-            <Border x:Name="Box" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+            <controls:CrispBorder x:Name="Box" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
                     BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="{StaticResource Radius.Control}" />
-            <Border x:Name="HoverFill" Background="{DynamicResource Brush.SurfaceInputHover}" CornerRadius="{StaticResource Radius.Control}" Margin="{DynamicResource Pad.1}" Opacity="0" IsHitTestVisible="False" />
-            <Border x:Name="FocusFill" Background="{DynamicResource Brush.SurfaceInputFocus}" CornerRadius="{StaticResource Radius.Control}" Margin="{DynamicResource Pad.1}" Opacity="0" IsHitTestVisible="False" />
-            <ScrollViewer x:Name="PART_ContentHost" VerticalAlignment="Center" Focusable="False" />
+            <Border x:Name="HoverFill" Background="{DynamicResource Brush.Layer2}" CornerRadius="{StaticResource Radius.Control}" Margin="{StaticResource Pad.1}" Opacity="0" IsHitTestVisible="False" />
+            <Border x:Name="BottomEdge" Height="1" VerticalAlignment="Bottom" Margin="{DynamicResource Inset.H3}" Background="{DynamicResource Brush.StrokeStrong}" IsHitTestVisible="False" />
+            <Grid>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+              </Grid.ColumnDefinitions>
+              <controls:Icon x:Name="SearchIcon" Kind="Search" Size="16" Foreground="{DynamicResource Brush.Ink3}" Margin="{DynamicResource Inset.L10}" VerticalAlignment="Center" />
+              <Grid Grid.Column="1">
+                <TextBlock x:Name="Placeholder" Text="{TemplateBinding assist:InputAssist.Placeholder}" Margin="{TemplateBinding Padding}" Padding="{DynamicResource Inset.L2}"
+                           VerticalAlignment="Center" Foreground="{DynamicResource Brush.Ink3}" FontSize="{TemplateBinding FontSize}" FontFamily="{TemplateBinding FontFamily}"
+                           TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" IsHitTestVisible="False" Visibility="Collapsed" />
+                <ScrollViewer x:Name="PART_ContentHost" Style="{x:Null}" VerticalAlignment="Center"
+                              Focusable="False" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden" />
+              </Grid>
+              <ItemsControl x:Name="ShortcutKeys" Grid.Column="2" Margin="{DynamicResource Inset.R8}" VerticalAlignment="Center" Focusable="False" IsHitTestVisible="False" Visibility="Collapsed"
+                            ItemsSource="{Binding Path=(controls:SearchAssist.Keys), RelativeSource={RelativeSource TemplatedParent}}">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <StackPanel Orientation="Horizontal" />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <Border Style="{StaticResource Kbd}" Margin="{DynamicResource Inset.L2}">
+                      <TextBlock Style="{StaticResource Kbd.Text}" Text="{Binding}" />
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </Grid>
             <Border x:Name="Underline" Height="2" VerticalAlignment="Bottom" CornerRadius="{StaticResource Radius.Underline}" Margin="{DynamicResource Inset.H1}"
-                    Background="{DynamicResource Brush.FocusRing}" Opacity="0" IsHitTestVisible="False" />
+                    Background="{DynamicResource Brush.Primary}" Opacity="0" IsHitTestVisible="False" />
+            <Border x:Name="ErrorBar" Height="2" VerticalAlignment="Bottom" CornerRadius="{StaticResource Radius.Underline}" Margin="{DynamicResource Inset.H1}"
+                    Background="{DynamicResource Brush.Critical}" Visibility="Collapsed" IsHitTestVisible="False" />
           </Grid>
           <ControlTemplate.Triggers>
             <Trigger Property="IsMouseOver" Value="True">
@@ -144,11 +208,9 @@
               </Trigger.ExitActions>
             </Trigger>
             <Trigger Property="IsKeyboardFocusWithin" Value="True">
-              <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brush.FocusRing}" />
               <Trigger.EnterActions>
                 <BeginStoryboard>
                   <Storyboard>
-                    <DoubleAnimation Storyboard.TargetName="FocusFill" Storyboard.TargetProperty="Opacity" To="1" Duration="{StaticResource Motion.Fast}" />
                     <DoubleAnimation Storyboard.TargetName="Underline" Storyboard.TargetProperty="Opacity" To="1" Duration="{StaticResource Motion.Fast}" />
                   </Storyboard>
                 </BeginStoryboard>
@@ -156,43 +218,159 @@
               <Trigger.ExitActions>
                 <BeginStoryboard>
                   <Storyboard>
-                    <DoubleAnimation Storyboard.TargetName="FocusFill" Storyboard.TargetProperty="Opacity" To="0" Duration="{StaticResource Motion.Fast}" />
                     <DoubleAnimation Storyboard.TargetName="Underline" Storyboard.TargetProperty="Opacity" To="0" Duration="{StaticResource Motion.Fast}" />
                   </Storyboard>
                 </BeginStoryboard>
               </Trigger.ExitActions>
             </Trigger>
-            <Trigger Property="IsEnabled" Value="False">
-              <Setter Property="Foreground" Value="{DynamicResource Brush.TextDisabled}" />
-              <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brush.BorderSubtle}" />
+            <Trigger Property="IsReadOnly" Value="True">
+              <Setter TargetName="Box" Property="Background" Value="{DynamicResource Brush.Layer2}" />
+              <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brush.Stroke}" />
+              <Setter TargetName="BottomEdge" Property="Background" Value="{DynamicResource Brush.Stroke}" />
               <Setter TargetName="HoverFill" Property="Visibility" Value="Collapsed" />
             </Trigger>
+            <Trigger Property="Validation.HasError" Value="True">
+              <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brush.Critical}" />
+              <Setter TargetName="BottomEdge" Property="Background" Value="{DynamicResource Brush.Critical}" />
+              <Setter TargetName="ErrorBar" Property="Visibility" Value="Visible" />
+            </Trigger>
+            <!-- The same look when a FormField around the field shows an error, or the composite input the field is part of has one (InputAssist.HasError, inherited). -->
+            <Trigger Property="assist:InputAssist.HasError" Value="True">
+              <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brush.Critical}" />
+              <Setter TargetName="BottomEdge" Property="Background" Value="{DynamicResource Brush.Critical}" />
+              <Setter TargetName="ErrorBar" Property="Visibility" Value="Visible" />
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter Property="Foreground" Value="{DynamicResource Brush.Ink3}" />
+              <Setter TargetName="Box" Property="Background" Value="{DynamicResource Brush.Layer2}" />
+              <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brush.Stroke}" />
+              <Setter TargetName="BottomEdge" Property="Background" Value="{DynamicResource Brush.Stroke}" />
+              <Setter TargetName="HoverFill" Property="Visibility" Value="Collapsed" />
+            </Trigger>
+            <MultiTrigger>
+              <MultiTrigger.Conditions>
+                <Condition Property="Text" Value="" />
+                <Condition Property="IsEnabled" Value="True" />
+              </MultiTrigger.Conditions>
+              <Setter TargetName="Placeholder" Property="Visibility" Value="Visible" />
+              <Setter TargetName="ShortcutKeys" Property="Visibility" Value="Visible" />
+            </MultiTrigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>
       </Setter.Value>
     </Setter>
   </Style>
 
-  <!-- Combo box: keyboard focusable, typed items, the popup lists items bound to the ItemsSource. -->
+  <Style x:Key="PasswordBox.Lifestream" TargetType="PasswordBox" BasedOn="{StaticResource Input.Base}">
+    <Setter Property="CaretBrush" Value="{DynamicResource Brush.Ink}" />
+    <Setter Property="SelectionBrush" Value="{DynamicResource Brush.Primary}" />
+    <Setter Property="SelectionTextBrush" Value="{DynamicResource Brush.OnPrimary}" />
+    <Setter Property="ContextMenu" Value="{DynamicResource ContextMenu.Paste}" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="PasswordBox">
+          <Grid SnapsToDevicePixels="True">
+            <controls:CrispBorder x:Name="Box" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="{StaticResource Radius.Control}" />
+            <Border x:Name="HoverFill" Background="{DynamicResource Brush.Layer2}" CornerRadius="{StaticResource Radius.Control}" Margin="{StaticResource Pad.1}" Opacity="0" IsHitTestVisible="False" />
+            <Border x:Name="BottomEdge" Height="1" VerticalAlignment="Bottom" Margin="{DynamicResource Inset.H3}" Background="{DynamicResource Brush.StrokeStrong}" IsHitTestVisible="False" />
+            <ScrollViewer x:Name="PART_ContentHost" Style="{x:Null}" VerticalAlignment="Center" Focusable="False" />
+            <Border x:Name="Underline" Height="2" VerticalAlignment="Bottom" CornerRadius="{StaticResource Radius.Underline}" Margin="{DynamicResource Inset.H1}"
+                    Background="{DynamicResource Brush.Primary}" Opacity="0" IsHitTestVisible="False" />
+            <Border x:Name="ErrorBar" Height="2" VerticalAlignment="Bottom" CornerRadius="{StaticResource Radius.Underline}" Margin="{DynamicResource Inset.H1}"
+                    Background="{DynamicResource Brush.Critical}" Visibility="Collapsed" IsHitTestVisible="False" />
+          </Grid>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Trigger.EnterActions>
+                <BeginStoryboard>
+                  <Storyboard>
+                    <DoubleAnimation Storyboard.TargetName="HoverFill" Storyboard.TargetProperty="Opacity" To="1" Duration="{StaticResource Motion.Fast}" />
+                  </Storyboard>
+                </BeginStoryboard>
+              </Trigger.EnterActions>
+              <Trigger.ExitActions>
+                <BeginStoryboard>
+                  <Storyboard>
+                    <DoubleAnimation Storyboard.TargetName="HoverFill" Storyboard.TargetProperty="Opacity" To="0" Duration="{StaticResource Motion.Fast}" />
+                  </Storyboard>
+                </BeginStoryboard>
+              </Trigger.ExitActions>
+            </Trigger>
+            <Trigger Property="IsKeyboardFocusWithin" Value="True">
+              <Trigger.EnterActions>
+                <BeginStoryboard>
+                  <Storyboard>
+                    <DoubleAnimation Storyboard.TargetName="Underline" Storyboard.TargetProperty="Opacity" To="1" Duration="{StaticResource Motion.Fast}" />
+                  </Storyboard>
+                </BeginStoryboard>
+              </Trigger.EnterActions>
+              <Trigger.ExitActions>
+                <BeginStoryboard>
+                  <Storyboard>
+                    <DoubleAnimation Storyboard.TargetName="Underline" Storyboard.TargetProperty="Opacity" To="0" Duration="{StaticResource Motion.Fast}" />
+                  </Storyboard>
+                </BeginStoryboard>
+              </Trigger.ExitActions>
+            </Trigger>
+            <Trigger Property="Validation.HasError" Value="True">
+              <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brush.Critical}" />
+              <Setter TargetName="BottomEdge" Property="Background" Value="{DynamicResource Brush.Critical}" />
+              <Setter TargetName="ErrorBar" Property="Visibility" Value="Visible" />
+            </Trigger>
+            <!-- The same look when a FormField around the field shows an error, or the composite input the field is part of has one (InputAssist.HasError, inherited). -->
+            <Trigger Property="assist:InputAssist.HasError" Value="True">
+              <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brush.Critical}" />
+              <Setter TargetName="BottomEdge" Property="Background" Value="{DynamicResource Brush.Critical}" />
+              <Setter TargetName="ErrorBar" Property="Visibility" Value="Visible" />
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter Property="Foreground" Value="{DynamicResource Brush.Ink3}" />
+              <Setter TargetName="Box" Property="Background" Value="{DynamicResource Brush.Layer2}" />
+              <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brush.Stroke}" />
+              <Setter TargetName="BottomEdge" Property="Background" Value="{DynamicResource Brush.Stroke}" />
+              <Setter TargetName="HoverFill" Property="Visibility" Value="Collapsed" />
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+    <Setter Property="Validation.ErrorTemplate" Value="{x:Null}" />
+  </Style>
+
+  <!-- Combo box: keyboard focusable, typed items, the popup lists items bound to the ItemsSource. The dropdown is the menu surface (Layer, 1 px Stroke, radius 8, padding 4,
+       the flyout shadow in a Border behind it); the selected item is Selected, SemiBold, with a Check at the right. -->
   <Style x:Key="ComboBoxItem.Lifestream" TargetType="ComboBoxItem">
     <Setter Property="FontFamily" Value="{DynamicResource Font.Family}" />
     <Setter Property="FontSize" Value="{StaticResource FontSize.Body}" />
-    <Setter Property="Foreground" Value="{DynamicResource Brush.TextPrimary}" />
-    <Setter Property="MinHeight" Value="{StaticResource Height.Compact}" />
-    <Setter Property="Padding" Value="{DynamicResource Inset.H12V4}" />
+    <Setter Property="Foreground" Value="{DynamicResource Brush.Ink}" />
+    <Setter Property="MinHeight" Value="{StaticResource Height.Control}" />
+    <Setter Property="Padding" Value="{StaticResource Pad.Field}" />
     <Setter Property="FocusVisualStyle" Value="{x:Null}" />
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="ComboBoxItem">
-          <Border x:Name="Bd" Background="Transparent" Padding="{TemplateBinding Padding}" CornerRadius="{StaticResource Radius.Control}">
-            <ContentPresenter VerticalAlignment="Center" />
+          <Border x:Name="Bd" Background="Transparent" Padding="{TemplateBinding Padding}" CornerRadius="{StaticResource Radius.Small}" MinHeight="{TemplateBinding MinHeight}" SnapsToDevicePixels="True">
+            <Grid>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+              </Grid.ColumnDefinitions>
+              <ContentPresenter VerticalAlignment="Center" />
+              <controls:Icon x:Name="Check" Grid.Column="1" Kind="Check" Size="15" Margin="{DynamicResource Inset.L12}" VerticalAlignment="Center" Visibility="Collapsed" />
+            </Grid>
           </Border>
           <ControlTemplate.Triggers>
             <Trigger Property="IsHighlighted" Value="True">
-              <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.SurfaceHover}" />
+              <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Hover}" />
             </Trigger>
             <Trigger Property="IsSelected" Value="True">
-              <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.SurfaceSelected}" />
+              <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Selected}" />
+              <Setter TargetName="Check" Property="Visibility" Value="Visible" />
+              <Setter Property="FontWeight" Value="SemiBold" />
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter Property="Foreground" Value="{DynamicResource Brush.Ink3}" />
             </Trigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>
@@ -204,6 +382,7 @@
     <Setter Property="ItemContainerStyle" Value="{StaticResource ComboBoxItem.Lifestream}" />
     <Setter Property="IsTabStop" Value="True" />
     <Setter Property="Focusable" Value="True" />
+    <Setter Property="Validation.ErrorTemplate" Value="{x:Null}" />
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="ComboBox">
@@ -212,24 +391,42 @@
                           AutomationProperties.Name="{Binding (AutomationProperties.Name), RelativeSource={RelativeSource TemplatedParent}, StringFormat='{}{0} options'}">
               <ToggleButton.Template>
                 <ControlTemplate TargetType="ToggleButton">
-                  <Grid>
-                    <Border x:Name="Box" Background="{Binding Background, RelativeSource={RelativeSource AncestorType=ComboBox}}"
+                  <Grid SnapsToDevicePixels="True">
+                    <controls:CrispBorder x:Name="Box" Background="{Binding Background, RelativeSource={RelativeSource AncestorType=ComboBox}}"
                             BorderBrush="{Binding BorderBrush, RelativeSource={RelativeSource AncestorType=ComboBox}}"
                             BorderThickness="1" CornerRadius="{StaticResource Radius.Control}" />
+                    <Border x:Name="BottomEdge" Height="1" VerticalAlignment="Bottom" Margin="{DynamicResource Inset.H3}" Background="{DynamicResource Brush.StrokeStrong}" IsHitTestVisible="False" />
                     <Border x:Name="Underline" Height="2" VerticalAlignment="Bottom" CornerRadius="{StaticResource Radius.Underline}" Margin="{DynamicResource Inset.H1}"
-                            Background="{DynamicResource Brush.FocusRing}" Visibility="Collapsed" />
+                            Background="{DynamicResource Brush.Primary}" Visibility="Collapsed" IsHitTestVisible="False" />
+                    <Border x:Name="ErrorBar" Height="2" VerticalAlignment="Bottom" CornerRadius="{StaticResource Radius.Underline}" Margin="{DynamicResource Inset.H1}"
+                            Background="{DynamicResource Brush.Critical}" Visibility="Collapsed" IsHitTestVisible="False" />
                   </Grid>
                   <ControlTemplate.Triggers>
                     <Trigger Property="IsMouseOver" Value="True">
-                      <Setter TargetName="Box" Property="Background" Value="{DynamicResource Brush.SurfaceInputHover}" />
+                      <Setter TargetName="Box" Property="Background" Value="{DynamicResource Brush.Layer2}" />
                     </Trigger>
-                    <DataTrigger Binding="{Binding IsDropDownOpen, RelativeSource={RelativeSource AncestorType=ComboBox}}" Value="True">
-                      <Setter TargetName="Box" Property="Background" Value="{DynamicResource Brush.SurfaceInputFocus}" />
-                    </DataTrigger>
                     <DataTrigger Binding="{Binding IsKeyboardFocusWithin, RelativeSource={RelativeSource AncestorType=ComboBox}}" Value="True">
-                      <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brush.FocusRing}" />
                       <Setter TargetName="Underline" Property="Visibility" Value="Visible" />
                     </DataTrigger>
+                    <DataTrigger Binding="{Binding IsDropDownOpen, RelativeSource={RelativeSource AncestorType=ComboBox}}" Value="True">
+                      <Setter TargetName="Underline" Property="Visibility" Value="Visible" />
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding (Validation.HasError), RelativeSource={RelativeSource AncestorType=ComboBox}}" Value="True">
+                      <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brush.Critical}" />
+                      <Setter TargetName="BottomEdge" Property="Background" Value="{DynamicResource Brush.Critical}" />
+                      <Setter TargetName="ErrorBar" Property="Visibility" Value="Visible" />
+                    </DataTrigger>
+                    <!-- And inside a FormField that shows an error (InputAssist.HasError, inherited). -->
+                    <Trigger Property="assist:InputAssist.HasError" Value="True">
+                      <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brush.Critical}" />
+                      <Setter TargetName="BottomEdge" Property="Background" Value="{DynamicResource Brush.Critical}" />
+                      <Setter TargetName="ErrorBar" Property="Visibility" Value="Visible" />
+                    </Trigger>
+                    <Trigger Property="IsEnabled" Value="False">
+                      <Setter TargetName="Box" Property="Background" Value="{DynamicResource Brush.Layer2}" />
+                      <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brush.Stroke}" />
+                      <Setter TargetName="BottomEdge" Property="Background" Value="{DynamicResource Brush.Stroke}" />
+                    </Trigger>
                   </ControlTemplate.Triggers>
                 </ControlTemplate>
               </ToggleButton.Template>
@@ -239,24 +436,58 @@
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
               </Grid.ColumnDefinitions>
+              <TextBlock x:Name="Placeholder" Text="{TemplateBinding assist:InputAssist.Placeholder}" VerticalAlignment="Center" Foreground="{DynamicResource Brush.Ink3}"
+                         FontSize="{TemplateBinding FontSize}" FontFamily="{TemplateBinding FontFamily}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" Visibility="Collapsed" />
               <ContentPresenter Content="{TemplateBinding SelectionBoxItem}" ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
-                                VerticalAlignment="Center" TextElement.Foreground="{TemplateBinding Foreground}" />
-              <controls:IconText Grid.Column="1" Style="{StaticResource Text.Icon}" Text="&#xE70D;" Foreground="{DynamicResource Brush.TextSecondary}" VerticalAlignment="Center" />
+                                ContentStringFormat="{TemplateBinding SelectionBoxItemStringFormat}" VerticalAlignment="Center" TextElement.Foreground="{TemplateBinding Foreground}" />
+              <controls:Icon x:Name="Chevron" Grid.Column="1" Kind="Chevd" Size="16" Foreground="{DynamicResource Brush.Ink3}" Margin="{DynamicResource Inset.L8}" VerticalAlignment="Center"
+                             RenderTransformOrigin="0.5,0.5">
+                <controls:Icon.RenderTransform>
+                  <RotateTransform x:Name="ChevronRotate" Angle="0" />
+                </controls:Icon.RenderTransform>
+              </controls:Icon>
             </Grid>
-            <Popup x:Name="PART_Popup" IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom" HorizontalOffset="-8" AllowsTransparency="True" Focusable="False"
+            <Popup x:Name="PART_Popup" IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom" HorizontalOffset="-12" VerticalOffset="-4" AllowsTransparency="True" Focusable="False"
                    PopupAnimation="None" StaysOpen="False">
-              <controls:Card MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}" MaxHeight="{TemplateBinding MaxDropDownHeight}"
-                             Background="{DynamicResource Brush.SurfaceRaised}" BorderBrush="{DynamicResource Brush.BorderCard}" BorderThickness="1" Elevation="2"
-                             CornerRadius="{StaticResource Radius.Card}" Padding="{DynamicResource Pad.4}" Margin="{DynamicResource Inset.Popup}">
-                <ScrollViewer>
-                  <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained" />
-                </ScrollViewer>
-              </controls:Card>
+              <Grid Margin="{DynamicResource Inset.L12T8R12B24}" SnapsToDevicePixels="True">
+                <Border Background="{DynamicResource Brush.Layer}" CornerRadius="{StaticResource Radius.Panel}" IsHitTestVisible="False">
+                  <Border.Effect>
+                    <DropShadowEffect BlurRadius="{StaticResource Elevation.Flyout.Blur}" ShadowDepth="{StaticResource Elevation.Flyout.Offset}" Direction="270"
+                                      Opacity="{StaticResource Elevation.Flyout.Opacity}" Color="{DynamicResource Color.Shadow}" />
+                  </Border.Effect>
+                </Border>
+                <controls:CrispBorder MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}" MaxHeight="{TemplateBinding MaxDropDownHeight}"
+                        Background="{DynamicResource Brush.Layer}" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="1"
+                        CornerRadius="{StaticResource Radius.Panel}" Padding="{StaticResource Pad.4}">
+                  <ScrollViewer>
+                    <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained" />
+                  </ScrollViewer>
+                </controls:CrispBorder>
+              </Grid>
             </Popup>
           </Grid>
           <ControlTemplate.Triggers>
+            <Trigger Property="SelectedIndex" Value="-1">
+              <Setter TargetName="Placeholder" Property="Visibility" Value="Visible" />
+            </Trigger>
+            <Trigger Property="IsDropDownOpen" Value="True">
+              <Trigger.EnterActions>
+                <BeginStoryboard>
+                  <Storyboard>
+                    <DoubleAnimation Storyboard.TargetName="ChevronRotate" Storyboard.TargetProperty="Angle" To="180" Duration="{StaticResource Motion.Fast}" />
+                  </Storyboard>
+                </BeginStoryboard>
+              </Trigger.EnterActions>
+              <Trigger.ExitActions>
+                <BeginStoryboard>
+                  <Storyboard>
+                    <DoubleAnimation Storyboard.TargetName="ChevronRotate" Storyboard.TargetProperty="Angle" To="0" Duration="{StaticResource Motion.Fast}" />
+                  </Storyboard>
+                </BeginStoryboard>
+              </Trigger.ExitActions>
+            </Trigger>
             <Trigger Property="IsEnabled" Value="False">
-              <Setter Property="Foreground" Value="{DynamicResource Brush.TextDisabled}" />
+              <Setter Property="Foreground" Value="{DynamicResource Brush.Ink3}" />
             </Trigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>
@@ -264,61 +495,120 @@
     </Setter>
   </Style>
 
+  <!-- Check box: 18 x 18, radius 4. Checked: Primary fill and a 13 px Check in OnPrimary; indeterminate: an 8 x 2 bar; the label is 13 px Ink2 with an 8 px gap. -->
   <Style x:Key="CheckBox.Lifestream" TargetType="CheckBox">
+    <Setter Property="Validation.ErrorTemplate" Value="{x:Null}" />
     <Setter Property="FontFamily" Value="{DynamicResource Font.Family}" />
-    <Setter Property="FontSize" Value="{StaticResource FontSize.Body}" />
-    <Setter Property="Foreground" Value="{DynamicResource Brush.TextPrimary}" />
+    <Setter Property="FontSize" Value="{StaticResource FontSize.Label}" />
+    <Setter Property="Foreground" Value="{DynamicResource Brush.Ink2}" />
     <Setter Property="MinHeight" Value="{StaticResource Height.Compact}" />
     <Setter Property="FocusVisualStyle" Value="{x:Null}" />
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="CheckBox">
-          <Grid Background="Transparent">
+          <Grid Background="Transparent" SnapsToDevicePixels="True">
             <Grid.ColumnDefinitions>
               <ColumnDefinition Width="Auto" />
               <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
-            <Border x:Name="Box" Width="20" Height="20" BorderThickness="1" BorderBrush="{DynamicResource Brush.BorderInput}"
-                    Background="{DynamicResource Brush.SurfaceRaised}" CornerRadius="{StaticResource Radius.Control}" VerticalAlignment="Center">
-              <controls:IconText x:Name="Mark" Style="{StaticResource Text.Icon}" Text="&#xE73E;" FontSize="{StaticResource FontSize.Body}"
-                         Foreground="{DynamicResource Brush.TextOnPrimary}" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed" />
-            </Border>
-            <ContentPresenter Grid.Column="1" Margin="{DynamicResource Inset.L8}" VerticalAlignment="Center" RecognizesAccessKey="True" />
+            <Grid VerticalAlignment="Center">
+              <controls:CrispBorder x:Name="Box" Width="18" Height="18" BorderThickness="1" BorderBrush="{DynamicResource Brush.Stroke2}"
+                      Background="{DynamicResource Brush.Layer}" CornerRadius="{StaticResource Radius.Small}">
+                <Grid>
+                  <controls:Icon x:Name="Mark" Kind="Check" Size="13" StrokeWidth="2.4" Foreground="{DynamicResource Brush.OnPrimary}"
+                                 HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed" />
+                  <Border x:Name="Bar" Width="8" Height="2" CornerRadius="{DynamicResource Radius.1}" Background="{DynamicResource Brush.OnPrimary}"
+                          HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed" />
+                </Grid>
+              </controls:CrispBorder>
+              <controls:CrispBorder x:Name="FocusRing" Margin="{DynamicResource Inset.Neg4}" CornerRadius="{StaticResource Radius.FocusRing}" BorderThickness="{StaticResource Thickness.FocusRing}"
+                      BorderBrush="{DynamicResource Brush.Focus}" Visibility="Collapsed" IsHitTestVisible="False" />
+            </Grid>
+            <ContentPresenter x:Name="Label" Grid.Column="1" Margin="{DynamicResource Inset.L8}" VerticalAlignment="Center" RecognizesAccessKey="True" />
           </Grid>
           <ControlTemplate.Triggers>
+            <Trigger Property="HasContent" Value="False">
+              <Setter TargetName="Label" Property="Margin" Value="0" />
+            </Trigger>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter TargetName="Box" Property="Background" Value="{DynamicResource Brush.Layer2}" />
+              <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brush.StrokeStrong}" />
+            </Trigger>
             <Trigger Property="IsChecked" Value="True">
               <Setter TargetName="Box" Property="Background" Value="{DynamicResource Brush.Primary}" />
+              <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brush.Primary}" />
               <Setter TargetName="Mark" Property="Visibility" Value="Visible" />
             </Trigger>
-            <Trigger Property="IsKeyboardFocused" Value="True">
-              <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brush.FocusRing}" />
-              <Setter TargetName="Box" Property="BorderThickness" Value="2" />
+            <Trigger Property="IsChecked" Value="{x:Null}">
+              <Setter TargetName="Box" Property="Background" Value="{DynamicResource Brush.Primary}" />
+              <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brush.Primary}" />
+              <Setter TargetName="Bar" Property="Visibility" Value="Visible" />
+            </Trigger>
+            <MultiTrigger>
+              <MultiTrigger.Conditions>
+                <Condition Property="IsMouseOver" Value="True" />
+                <Condition Property="IsChecked" Value="True" />
+              </MultiTrigger.Conditions>
+              <Setter TargetName="Box" Property="Background" Value="{DynamicResource Brush.PrimaryHover}" />
+              <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brush.PrimaryHover}" />
+            </MultiTrigger>
+            <MultiTrigger>
+              <MultiTrigger.Conditions>
+                <Condition Property="IsMouseOver" Value="True" />
+                <Condition Property="IsChecked" Value="{x:Null}" />
+              </MultiTrigger.Conditions>
+              <Setter TargetName="Box" Property="Background" Value="{DynamicResource Brush.PrimaryHover}" />
+              <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brush.PrimaryHover}" />
+            </MultiTrigger>
+            <Trigger Property="assist:FocusAssist.ShowRing" Value="True">
+              <Setter TargetName="FocusRing" Property="Visibility" Value="Visible" />
             </Trigger>
             <Trigger Property="IsEnabled" Value="False">
-              <Setter Property="Foreground" Value="{DynamicResource Brush.TextDisabled}" />
+              <Setter Property="Foreground" Value="{DynamicResource Brush.Ink3}" />
+              <Setter TargetName="Box" Property="Background" Value="{DynamicResource Brush.Layer2}" />
+              <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brush.Stroke}" />
             </Trigger>
+            <MultiTrigger>
+              <MultiTrigger.Conditions>
+                <Condition Property="IsEnabled" Value="False" />
+                <Condition Property="IsChecked" Value="True" />
+              </MultiTrigger.Conditions>
+              <Setter TargetName="Box" Property="Background" Value="{DynamicResource Brush.Stroke2}" />
+              <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brush.Stroke2}" />
+            </MultiTrigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>
       </Setter.Value>
     </Setter>
   </Style>
 
+  <!-- Tooltip: the menu surface with padding 6 10 and 13 Medium text. A shortcut hint goes after the text as a TextBlock in Ink3 (or Kbd keys). -->
   <Style x:Key="ToolTip.Lifestream" TargetType="ToolTip">
     <Setter Property="FontFamily" Value="{DynamicResource Font.Family}" />
-    <Setter Property="FontSize" Value="{StaticResource FontSize.Caption}" />
-    <Setter Property="Foreground" Value="{DynamicResource Brush.TextPrimary}" />
-    <Setter Property="Background" Value="{DynamicResource Brush.SurfacePressed}" />
-    <Setter Property="BorderBrush" Value="{DynamicResource Brush.BorderInput}" />
+    <Setter Property="FontSize" Value="{StaticResource FontSize.Label}" />
+    <Setter Property="FontWeight" Value="Medium" />
+    <Setter Property="Foreground" Value="{DynamicResource Brush.Ink}" />
+    <Setter Property="Background" Value="{DynamicResource Brush.Layer}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Brush.Stroke}" />
     <Setter Property="BorderThickness" Value="1" />
-    <Setter Property="Padding" Value="{DynamicResource Inset.H8V4}" />
-    <Setter Property="MaxWidth" Value="360" />
+    <Setter Property="Padding" Value="{DynamicResource Inset.H10V6}" />
+    <Setter Property="MaxWidth" Value="380" />
+    <Setter Property="HasDropShadow" Value="False" />
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="ToolTip">
-          <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
-                  CornerRadius="{StaticResource Radius.Control}" Padding="{TemplateBinding Padding}">
-            <ContentPresenter TextElement.Foreground="{TemplateBinding Foreground}" />
-          </Border>
+          <Grid Margin="{DynamicResource Inset.L12T6R12B20}" SnapsToDevicePixels="True">
+            <Border Background="{DynamicResource Brush.Layer}" CornerRadius="{StaticResource Radius.Control}" IsHitTestVisible="False">
+              <Border.Effect>
+                <DropShadowEffect BlurRadius="{StaticResource Elevation.Flyout.Blur}" ShadowDepth="{StaticResource Elevation.Flyout.Offset}" Direction="270"
+                                  Opacity="{StaticResource Elevation.Flyout.Opacity}" Color="{DynamicResource Color.Shadow}" />
+              </Border.Effect>
+            </Border>
+            <controls:CrispBorder Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
+                    CornerRadius="{StaticResource Radius.Control}" Padding="{TemplateBinding Padding}">
+              <ContentPresenter TextElement.Foreground="{TemplateBinding Foreground}" />
+            </controls:CrispBorder>
+          </Grid>
         </ControlTemplate>
       </Setter.Value>
     </Setter>
@@ -336,8 +626,8 @@
     <Setter Property="Control.Template">
       <Setter.Value>
         <ControlTemplate>
-          <Rectangle Margin="{DynamicResource Inset.Neg3}" RadiusX="9" RadiusY="9" StrokeThickness="{StaticResource Size.FocusRing}"
-                     Stroke="{DynamicResource Brush.FocusRing}" SnapsToDevicePixels="True" IsHitTestVisible="False" />
+          <Rectangle Margin="{DynamicResource Inset.Neg3}" RadiusX="11" RadiusY="11" StrokeThickness="{StaticResource Size.FocusRing}"
+                     Stroke="{DynamicResource Brush.Focus}" SnapsToDevicePixels="True" IsHitTestVisible="False" />
         </ControlTemplate>
       </Setter.Value>
     </Setter>

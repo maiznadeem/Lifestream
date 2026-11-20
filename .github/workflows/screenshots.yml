@@ -2,14 +2,13 @@ name: Screenshots
 
 # Regenerates the README and Microsoft Store screenshots from the demo dataset only, off-screen (no window is shown), and
 # uploads them with their manifest as a workflow artifact. The owner copies them into the repository or the Store listing.
+#
+# Manual only (no push trigger): the generation creates its demo database on a SQL Server at localhost, which a GitHub-hosted
+# Windows runner does not have, so every run started by a push to master failed. The screenshots are regenerated locally with
+# tools/generate-screenshots.ps1 (it writes docs/screenshots and packaging/store/screenshots) and committed. Run this workflow
+# by hand only on a runner that has a local SQL Server.
 on:
   workflow_dispatch:
-  push:
-    branches: [master]
-    paths:
-      - 'src/Lifestream.Desktop/**'
-      - 'src/Lifestream.Client/**'
-      - 'tools/generate-screenshots.ps1'
 
 permissions:
   contents: read

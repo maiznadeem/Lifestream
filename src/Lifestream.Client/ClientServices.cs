@@ -40,6 +40,9 @@ public static class ClientServices
         services.AddSingleton<IListViewStateStore, ListViewStateStore>();
         services.AddSingleton<INavigationService, NavigationService>();
         services.AddSingleton<IAppFlow, AppFlow>();
+        // Display preferences (theme, density, the collapsed sidebar, the remembered user name); the Desktop registers the file store first.
+        services.TryAddSingleton<IPreferencesStore>(_ => new MemoryPreferencesStore());
+        services.AddSingleton<UiPreferences>();
         services.AddSingleton(p => new UpdateService(p.GetRequiredService<IUpdateSource>(), appVersion, p.GetRequiredService<Microsoft.Extensions.Logging.ILogger<UpdateService>>()));
 
         services.AddTransient<LoginViewModel>();

@@ -14,10 +14,10 @@
     <lists:RecordEditorChrome.Fields>
       <StackPanel>
         <TextBlock Style="{DynamicResource Text.Heading}" Text="Personal details" feat:Edge.Bottom="{DynamicResource Space.12}" AutomationProperties.HeadingLevel="Level2" />
-        <controls:FormField Label="Full name (required)" IsRequired="True" controls:FormFocus.FieldName="DisplayName" Error="{Binding [DisplayName]}">
+        <controls:FormField Label="Full name" IsRequired="True" controls:FormFocus.FieldName="DisplayName" Error="{Binding [DisplayName]}">
           <TextBox Text="{Binding DisplayName, UpdateSourceTrigger=PropertyChanged}" MaxLength="100" AutomationProperties.Name="Full name" />
         </controls:FormField>
-        <controls:FormField Label="Username (required)" IsRequired="True" Hint="Letters, digits, dot, underscore and dash" controls:FormFocus.FieldName="Username" Error="{Binding [Username]}">
+        <controls:FormField Label="Username" IsRequired="True" Hint="Letters, digits, dot, underscore and dash" controls:FormFocus.FieldName="Username" Error="{Binding [Username]}">
           <TextBox Text="{Binding Username, UpdateSourceTrigger=PropertyChanged}" MaxLength="50" IsReadOnly="{Binding IsUsernameReadOnly, Mode=OneWay}" AutomationProperties.Name="Username" />
         </controls:FormField>
         <Grid>
@@ -26,7 +26,7 @@
             <ColumnDefinition Width="16" />
             <ColumnDefinition Width="*" MinWidth="150" />
           </Grid.ColumnDefinitions>
-          <controls:FormField Label="Date of birth (required)" IsRequired="True" Hint="Format: 05 Mar 2022" controls:FormFocus.FieldName="DateOfBirth">
+          <controls:FormField Label="Date of birth" IsRequired="True" Hint="Format: 05 Mar 2022" controls:FormFocus.FieldName="DateOfBirth">
             <controls:FormField.Error>
               <MultiBinding Converter="{StaticResource FirstNonEmpty}">
                 <Binding Path="[DateOfBirth]" />
@@ -35,7 +35,7 @@
             </controls:FormField.Error>
             <controls:DateField SelectedDate="{Binding DateOfBirth, Mode=TwoWay}" MaxDate="{Binding LatestDateOfBirth}" AutomationProperties.Name="Date of birth" />
           </controls:FormField>
-          <controls:FormField Grid.Column="2" Label="Gender (required)" IsRequired="True" controls:FormFocus.FieldName="Gender" Error="{Binding [Gender]}">
+          <controls:FormField Grid.Column="2" Label="Gender" IsRequired="True" controls:FormFocus.FieldName="Gender" Error="{Binding [Gender]}">
             <ComboBox ItemsSource="{Binding GenderChoices}" DisplayMemberPath="Display" SelectedValuePath="Value" SelectedValue="{Binding Gender, Mode=TwoWay}" AutomationProperties.Name="Gender" />
           </controls:FormField>
         </Grid>
@@ -47,10 +47,10 @@
             <ColumnDefinition Width="16" />
             <ColumnDefinition Width="*" MinWidth="150" />
           </Grid.ColumnDefinitions>
-          <controls:FormField Label="Designation (required)" IsRequired="True" controls:FormFocus.FieldName="Designation" Error="{Binding [Designation]}">
-            <ComboBox ItemsSource="{Binding DesignationChoices}" DisplayMemberPath="Display" SelectedValuePath="Value" SelectedValue="{Binding Designation, Mode=TwoWay}" AutomationProperties.Name="Designation" />
+          <controls:FormField Label="Job title" IsRequired="True" controls:FormFocus.FieldName="Designation" Error="{Binding [Designation]}">
+            <ComboBox ItemsSource="{Binding DesignationChoices}" DisplayMemberPath="Display" SelectedValuePath="Value" SelectedValue="{Binding Designation, Mode=TwoWay}" AutomationProperties.Name="Job title" />
           </controls:FormField>
-          <controls:FormField Grid.Column="2" Label="Shift (required)" IsRequired="True" controls:FormFocus.FieldName="Shift" Error="{Binding [Shift]}">
+          <controls:FormField Grid.Column="2" Label="Shift" IsRequired="True" controls:FormFocus.FieldName="Shift" Error="{Binding [Shift]}">
             <ComboBox ItemsSource="{Binding ShiftChoices}" DisplayMemberPath="Display" SelectedValuePath="Value" SelectedValue="{Binding Shift, Mode=TwoWay}" AutomationProperties.Name="Shift" />
           </controls:FormField>
         </Grid>
@@ -60,24 +60,24 @@
             <ColumnDefinition Width="16" />
             <ColumnDefinition Width="*" MinWidth="150" />
           </Grid.ColumnDefinitions>
-          <controls:FormField Label="Role (required)" IsRequired="True" controls:FormFocus.FieldName="Role" Error="{Binding [Role]}">
+          <controls:FormField Label="Role" IsRequired="True" controls:FormFocus.FieldName="Role" Error="{Binding [Role]}">
             <ComboBox ItemsSource="{Binding RoleChoices}" DisplayMemberPath="Display" SelectedValuePath="Value" SelectedValue="{Binding Role, Mode=TwoWay}" AutomationProperties.Name="Role" />
           </controls:FormField>
-          <controls:FormField Grid.Column="2" Label="Salary" Hint="Digits only" controls:FormFocus.FieldName="SalaryText" Error="{Binding [SalaryText]}">
+          <controls:FormField Grid.Column="2" Label="Salary (optional)" Hint="Digits only" controls:FormFocus.FieldName="SalaryText" Error="{Binding [SalaryText]}">
             <TextBox Text="{Binding SalaryText, UpdateSourceTrigger=PropertyChanged}" MaxLength="8" feat:DigitsOnly.IsEnabled="True" AutomationProperties.Name="Salary" />
           </controls:FormField>
         </Grid>
-        <controls:FormField Label="Phone" Hint="Digits only; a leading + is allowed" controls:FormFocus.FieldName="Phone" Error="{Binding [Phone]}">
+        <controls:FormField Label="Phone (optional)" Hint="Include the country code, for example +1 555 0175" controls:FormFocus.FieldName="Phone" Error="{Binding [Phone]}">
           <TextBox Text="{Binding Phone, UpdateSourceTrigger=PropertyChanged}" MaxLength="21" AutomationProperties.Name="Phone" />
         </controls:FormField>
 
         <StackPanel Visibility="{Binding ShowPasswordFields, Converter={StaticResource BoolToVisibility}}">
           <TextBlock Style="{DynamicResource Text.Heading}" Text="Sign-in" feat:Edge.Top="{DynamicResource Space.16}" feat:Edge.Bottom="{DynamicResource Space.12}" AutomationProperties.HeadingLevel="Level2" />
-          <controls:FormField Label="Password (required)" IsRequired="True" Hint="{Binding PasswordHint}" controls:FormFocus.FieldName="Password" Error="{Binding [Password]}">
+          <controls:FormField Label="Password" IsRequired="True" Hint="{Binding PasswordHint}" controls:FormFocus.FieldName="Password" Error="{Binding [Password]}">
             <controls:PasswordField Password="{Binding Password, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Password" />
           </controls:FormField>
-          <controls:FormField Label="Confirm password (required)" IsRequired="True" controls:FormFocus.FieldName="ConfirmPassword" Error="{Binding [ConfirmPassword]}">
-            <controls:PasswordField Password="{Binding ConfirmPassword, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" ShowToggle="False" AutomationProperties.Name="Confirm password" />
+          <controls:FormField Label="Confirm password" IsRequired="True" controls:FormFocus.FieldName="ConfirmPassword" Error="{Binding [ConfirmPassword]}">
+            <controls:PasswordField Password="{Binding ConfirmPassword, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Confirm password" />
           </controls:FormField>
         </StackPanel>
       </StackPanel>

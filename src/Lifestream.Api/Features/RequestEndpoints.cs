@@ -32,25 +32,26 @@ public static class RequestEndpoints
     }
 
     // RequestQuery carries no dates, so the date filters arrive as two extra optional query values (fromUtc, toUtc) on the placed date.
-    private static async Task<PagedResult<RequestListItem>> ListAsync([AsParameters] RequestQuery q, [FromQuery] DateTime? fromUtc, [FromQuery] DateTime? toUtc, LifestreamDbContext db, CancellationToken ct)
+    // The saved view (Open, DueSoon, Fulfilled, Cancelled) arrives as two more optional query values: the view and the caller's offset from UTC (direction A).
+    // The open views list the request needed first at the top (overdue first) unless the caller sorts.
+    private static async Task<PagedResult<RequestListItem>> ListAsync(
+        [AsParameters] RequestQuery q,
+        [FromQuery] DateTime? fromUtc,
+        [FromQuery] DateTime? toUtc,
+        [FromQuery] RequestView? view,
+        [FromQuery] int? utcOffsetMinutes,
+        LifestreamDbContext db,
+        TimeProvider time,
+        CancellationToken ct)
     {
         var (page, size) = Lists.Normalize(q.Page, q.PageSize);
-        IQueryable<Request> filtered = db.Requests.AsNoTracking();
-        if (q.PatientId is { } patientId)
-        {
-            filtered = filtered.Where(r => r.PatientId == patientId);
-        }
-
+        var filtered = ListScreenEndpoints.InView(Filter(db, q.Search, q.PatientId, q.BloodType), view, time, utcOffsetMinutes);
         if (q.Status is { } status)
         {
             filtered = filtered.Where(r => r.Status == status);
         }
 
-        if (q.BloodType is { } type)
-        {
-            filtered = filtered.Where(r => r.BloodType == type);
-        }
-
+        var sort = q.Sort ?? (view is RequestView.Open or RequestView.DueSoon ? SortKeys.RequiredBy : null);
         var (start, end) = Lists.DayRange(fromUtc, toUtc);
         if (start is { } s)
         {
@@ -62,7 +63,31 @@ public static class RequestEndpoints
             filtered = filtered.Where(r => r.PlacedAtUtc < e);
         }
 
-        if (Lists.CleanSearch(q.Search) is { } term)
+        var total = Lists.Total(filtered);
+        var rows = await (from r in Sorts.Apply(filtered, sort).Skip((page - 1) * size).Take(size).ForSearch(q.Search)
+                          from t in total
+                          select new ListRow<RequestListItem>(
+                              new RequestListItem(r.Id, r.PatientId, r.Patient!.Name, r.BloodType, r.Units, r.PlacedAtUtc, r.RequiredBy, r.Status),
+                              t))
+            .ToListAsync(ct);
+        return await Lists.BuildAsync(rows, page, size, () => filtered.CountAsync(ct));
+    }
+
+    /// <summary>The list's patient, blood group and search filters (shared by the list and the counts of its saved views).</summary>
+    internal static IQueryable<Request> Filter(LifestreamDbContext db, string? search, int? patientId, BloodType? bloodType)
+    {
+        IQueryable<Request> filtered = db.Requests.AsNoTracking();
+        if (patientId is { } patient)
+        {
+            filtered = filtered.Where(r => r.PatientId == patient);
+        }
+
+        if (bloodType is { } type)
+        {
+            filtered = filtered.Where(r => r.BloodType == type);
+        }
+
+        if (Lists.CleanSearch(search) is { } term)
         {
             // Patient ids by name (and phone, for a term long enough to be one: prefix seeks), then the requests of those patients; a term that is a whole number also matches the id.
             var parsed = SearchQueries.ParseTerm(term);
@@ -72,14 +97,7 @@ public static class RequestEndpoints
                 : filtered.Where(r => patientIds.Contains(r.PatientId));
         }
 
-        var total = Lists.Total(filtered);
-        var rows = await (from r in Sorts.Apply(filtered, q.Sort).Skip((page - 1) * size).Take(size).ForSearch(q.Search)
-                          from t in total
-                          select new ListRow<RequestListItem>(
-                              new RequestListItem(r.Id, r.PatientId, r.Patient!.Name, r.BloodType, r.Units, r.PlacedAtUtc, r.RequiredBy, r.Status),
-                              t))
-            .ToListAsync(ct);
-        return await Lists.BuildAsync(rows, page, size, () => filtered.CountAsync(ct));
+        return filtered;
     }
 
     internal static async Task<RequestDetail> LoadDetailAsync(LifestreamDbContext db, int id, CancellationToken ct)

@@ -9,7 +9,7 @@ using SkiaSharp;
 
 namespace Lifestream.Desktop.Tests;
 
-/// <summary>SHELL-26: chart text (axis labels, axis names, legend) is drawn with the bundled Inter, not the system font. Real Dashboard view, fake API, off-screen render.</summary>
+/// <summary>SHELL-26: chart text (axis labels, axis names, legend) is drawn with the bundled Onest, not the system font. Real Dashboard view, fake API, off-screen render.</summary>
 [Collection("Wpf")]
 public sealed class ChartFontTests
 {
@@ -30,9 +30,9 @@ public sealed class ChartFontTests
     }
 
     [Fact]
-    public void DashboardCharts_RenderTheirTextInTheBundledInter_NotSegoeUi_FakeApi()
+    public void DashboardCharts_RenderTheirTextInTheBundledOnest_NotSegoeUi_FakeApi()
     {
-        var (asShipped, explicitInter, explicitSegoe, defaultFamily, bundledFamily) = StaHost.Run(() =>
+        var (asShipped, explicitOnest, explicitSegoe, defaultFamily, bundledFamily) = StaHost.Run(() =>
         {
             using var rig = FeatureHarness.NewRig();
             var vm = FeatureHarness.Create<DashboardViewModel>(rig);
@@ -42,24 +42,24 @@ public sealed class ChartFontTests
             host.Settle(600);
             var chart = view.DonationChart;
             var shipped = host.Pixels();
-            _ = host.Capture("Dashboard_ChartText_Inter.png");
+            _ = host.Capture("Dashboard_ChartText_Onest.png");
 
-            Restyle(chart, ChartFont.Inter);
+            Restyle(chart, ChartFont.Typeface);
             host.Settle(600);
-            var inter = host.Pixels();
+            var onest = host.Pixels();
 
             Restyle(chart, SKTypeface.FromFamilyName("Segoe UI"));
             host.Settle(600);
             var segoe = host.Pixels();
             _ = host.Capture("Dashboard_ChartText_SegoeUi_control.png");
             ChartFont.Apply();
-            return (shipped, inter, segoe, SKTypeface.Default.FamilyName, ChartFont.Inter.FamilyName);
+            return (shipped, onest, segoe, SKTypeface.Default.FamilyName, ChartFont.Typeface.FamilyName);
         });
 
-        var againstInter = Hosted.Differences(asShipped, explicitInter);
+        var againstOnest = Hosted.Differences(asShipped, explicitOnest);
         var againstSegoe = Hosted.Differences(asShipped, explicitSegoe);
-        Assert.Contains("Inter", bundledFamily, StringComparison.Ordinal);
+        Assert.Contains("Onest", bundledFamily, StringComparison.Ordinal);
         Assert.True(againstSegoe > 200, $"control: Segoe UI must render visibly different glyphs ({againstSegoe} pixels differ; the Skia default is {defaultFamily})");
-        Assert.True(againstInter == 0, $"the chart as shipped differs from an explicit Inter render by {againstInter} pixels (and from Segoe UI by {againstSegoe}): its text is not drawn in the bundled Inter");
+        Assert.True(againstOnest == 0, $"the chart as shipped differs from an explicit Onest render by {againstOnest} pixels (and from Segoe UI by {againstSegoe}): its text is not drawn in the bundled Onest");
     }
 }

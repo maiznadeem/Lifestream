@@ -82,7 +82,6 @@ public sealed class WritePlanApiFixture : ApiFixture
 /// with more than 5,000 rows. The fulfil statement is additionally replayed with its actual plan inside a transaction that is rolled back.
 /// Set LIFESTREAM_PLAN_CAPTURE to a file path to write one line per statement.
 /// </summary>
-[Collection("Scale datasets: one class at a time")]
 public sealed partial class ApiWritePlanMatrixTests(WritePlanApiFixture fx) : IClassFixture<WritePlanApiFixture>
 {
     private const int BigTableRows = 5_000;
@@ -320,6 +319,20 @@ public sealed partial class ApiWritePlanMatrixTests(WritePlanApiFixture fx) : IC
     [Fact]
     public async Task EveryWriteAndDetailEndpoint_AtScale_SendsNoStatementThatScansABigTable()
     {
+        // The plans are read back from the plan cache, which a RESTORE (another class's copy of the 100x database) would empty mid-run.
+        await ScaleDatabaseFixture.PlanCacheGate.WaitAsync(Ct);
+        try
+        {
+            await EveryWriteAndDetailEndpointAsync();
+        }
+        finally
+        {
+            ScaleDatabaseFixture.PlanCacheGate.Release();
+        }
+    }
+
+    private async Task EveryWriteAndDetailEndpointAsync()
+    {
         var sizes = await SizesAsync();
         var admin = await fx.AddStaffAsync(Role.Admin, "writeplanadmin");
         var c = admin.Client;
@@ -395,9 +408,13 @@ public sealed partial class ApiWritePlanMatrixTests(WritePlanApiFixture fx) : IC
         // Detail reads.
         await Run(ApiRoutes.DonorById, "GET donor detail", () => c.GetApi(ApiRoutes.DonorById, someDonor), false);
         await Run(ApiRoutes.DonorEligibility, "GET donor eligibility", () => c.GetApi(ApiRoutes.DonorEligibility, someDonor), false);
+        await Run(ApiRoutes.DonorDonations, "GET donor donations (the donor with the most appointments)", () => c.GetApi(ApiRoutes.DonorDonations, someDonor), false);
         await Run(ApiRoutes.PatientById, "GET patient detail", () => c.GetApi(ApiRoutes.PatientById, somePatient), false);
         await Run(ApiRoutes.AppointmentById, "GET appointment detail (with receipt)", () => c.GetApi(ApiRoutes.AppointmentById, someAppointmentWithReceipt), false);
         await Run(ApiRoutes.RequestById, "GET request detail (fulfilled)", () => c.GetApi(ApiRoutes.RequestById, someRequest), false);
+        var somePendingRequest = await fx.Db.ScalarAsync<int>("SELECT TOP 1 Id FROM Request WHERE Status = 'Pending' ORDER BY Units DESC, Id", Ct);
+        await Run(ApiRoutes.RequestBags, "GET request bags (the bags a fulfil would issue, a pending request)", () => c.GetApi(ApiRoutes.RequestBags, somePendingRequest), false);
+        await Run(ApiRoutes.RequestBags, "GET request bags (a fulfilled request)", () => c.GetApi(ApiRoutes.RequestBags, someRequest), false);
         await Run(ApiRoutes.ReceiptById, "GET receipt detail", () => c.GetApi(ApiRoutes.ReceiptById, someReceipt), false);
         await Run(ApiRoutes.StaffById, "GET staff detail", () => c.GetApi(ApiRoutes.StaffById, someStaff), false);
         await Run(ApiRoutes.StaffPhoto, "GET staff photo", () => c.GetApi(ApiRoutes.StaffPhoto, someStaff), false, HttpStatusCode.OK, HttpStatusCode.NotFound);

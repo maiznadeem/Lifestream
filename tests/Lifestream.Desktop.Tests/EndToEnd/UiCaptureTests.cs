@@ -120,6 +120,93 @@ public sealed class UiCaptureTests
         });
     }
 
+    /// <summary>
+    /// Corner and edge crops of a button, an input and a card rendered at 100, 125, 150 and 175 % display scaling (layout rounding on, as in a
+    /// window), each 16x16 device pixels blown up 8x with nearest-neighbour sampling, so soft (half-pixel) strokes are visible. Writes
+    /// <c>corners.png</c> into <c>LIFESTREAM_UI_CAPTURE_DIR</c>.
+    /// </summary>
+    [Fact]
+    [Trait("Category", "Captures")]
+    public void Capture_CornersAtEveryScale()
+    {
+        var dir = Environment.GetEnvironmentVariable("LIFESTREAM_UI_CAPTURE_DIR");
+        Assert.SkipWhen(string.IsNullOrEmpty(dir), "LIFESTREAM_UI_CAPTURE_DIR is not set");
+        Directory.CreateDirectory(dir!);
+        StaHost.Run(() =>
+        {
+            double[] scales = [1.0, 1.25, 1.5, 1.75];
+            const int Crop = 16, Zoom = 8, Gap = 8;
+            var columns = 6; // button corner, button edge, input corner, input edge, card corner, card edge
+            var sheet = new byte[(columns * ((Crop * Zoom) + Gap)) * (scales.Length * ((Crop * Zoom) + Gap)) * 4];
+            var sheetWidth = columns * ((Crop * Zoom) + Gap);
+            var row = 0;
+            foreach (var scale in scales)
+            {
+                var canvas = new Canvas { Width = 320, Height = 160, UseLayoutRounding = true };
+                canvas.SetResourceReference(Panel.BackgroundProperty, "Brush.SurfaceCanvas");
+                var button = new Button { Content = "Cancel", Width = 140 };
+                button.SetResourceReference(FrameworkElement.StyleProperty, "Button.Secondary");
+                var box = new TextBox { Text = "Ayşe", Width = 140 };
+                var card = new Card { Width = 120, Height = 110, BorderThickness = new Thickness(1) };
+                card.SetResourceReference(Border.BackgroundProperty, "Brush.SurfaceRaised");
+                card.SetResourceReference(Border.BorderBrushProperty, "Brush.BorderCard");
+                card.SetResourceReference(Border.CornerRadiusProperty, "Radius.Card");
+                Canvas.SetLeft(button, 21); Canvas.SetTop(button, 21);
+                Canvas.SetLeft(box, 21); Canvas.SetTop(box, 91);
+                Canvas.SetLeft(card, 181); Canvas.SetTop(card, 21);
+                canvas.Children.Add(button); canvas.Children.Add(box); canvas.Children.Add(card);
+                // A standalone tree whose root DPI is the scale, as a window on a monitor at that scale has: layout rounding then snaps to that
+                // monitor's device pixels (an HwndSource here would lay out at the system DPI and only the bitmap would be scaled).
+                canvas.Resources.MergedDictionaries.Add(Lifestream.Desktop.Theme.ThemeLoader.Resources);
+                VisualTreeHelper.SetRootDpi(canvas, new DpiScale(scale, scale));
+                canvas.Measure(new Size(320, 160));
+                canvas.Arrange(new Rect(0, 0, 320, 160));
+                canvas.UpdateLayout();
+                StaHost.Settle(100);
+                var w = (int)Math.Round(320 * scale);
+                var h = (int)Math.Round(160 * scale);
+                var bitmap = new System.Windows.Media.Imaging.RenderTargetBitmap(w, h, 96 * scale, 96 * scale, PixelFormats.Pbgra32);
+                bitmap.Render(canvas);
+                var pixels = new byte[w * h * 4];
+                bitmap.CopyPixels(pixels, w * 4, 0);
+                var col = 0;
+                foreach (var element in new FrameworkElement[] { button, box, card })
+                {
+                    var origin = element.TranslatePoint(new Point(0, 0), canvas);
+                    var px = (int)Math.Floor(origin.X * scale) - 3;
+                    var py = (int)Math.Floor(origin.Y * scale) - 3;
+                    var mid = (int)Math.Floor((origin.Y + (element.ActualHeight / 2)) * scale) - (Crop / 2);
+                    foreach (var (cx, cy) in new[] { (px, py), (px, mid) })
+                    {
+                        for (var y = 0; y < Crop * Zoom; y++)
+                        {
+                            for (var x = 0; x < Crop * Zoom; x++)
+                            {
+                                var sx = Math.Clamp(cx + (x / Zoom), 0, w - 1);
+                                var sy = Math.Clamp(cy + (y / Zoom), 0, h - 1);
+                                var dx = (col * ((Crop * Zoom) + Gap)) + x;
+                                var dy = (row * ((Crop * Zoom) + Gap)) + y;
+                                Array.Copy(pixels, ((sy * w) + sx) * 4, sheet, ((dy * sheetWidth) + dx) * 4, 4);
+                            }
+                        }
+
+                        col++;
+                    }
+                }
+
+                row++;
+            }
+
+            var sheetHeight = scales.Length * ((Crop * Zoom) + Gap);
+            var image = System.Windows.Media.Imaging.BitmapSource.Create(sheetWidth, sheetHeight, 96, 96, PixelFormats.Pbgra32, null, sheet, sheetWidth * 4);
+            var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
+            encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(image));
+            using var file = File.Create(Path.Combine(dir!, "corners.png"));
+            encoder.Save(file);
+            return 0;
+        });
+    }
+
     private static string Describe(TextBlock text)
     {
         var face = new Typeface(text.FontFamily, text.FontStyle, text.FontWeight, text.FontStretch);

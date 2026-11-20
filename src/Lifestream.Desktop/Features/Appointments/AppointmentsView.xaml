@@ -3,161 +3,403 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="clr-namespace:Lifestream.Desktop.Controls"
              xmlns:feat="clr-namespace:Lifestream.Desktop.Features"
+             xmlns:appts="clr-namespace:Lifestream.Desktop.Features.Appointments"
              xmlns:lists="clr-namespace:Lifestream.Desktop.Features.ListScreens"
              xmlns:services="clr-namespace:Lifestream.Desktop.Services"
+             controls:ShellPage.OwnsHeader="True"
              Focusable="False">
-  <!-- Appointments: filters on top, the list (donor name with the id as secondary text, local time, status chip) with its page count, and on the right the appointment's actions and facts or the booking form. -->
+  <!-- Appointments (direction A): the page header with the count, "Book appointment" (secondary while an appointment is open) and the saved views (Today, Upcoming,
+       Past, Cancelled, with their counts); the search with the blood group chip and the "+ Donor" chip (it opens the donor search); the table grouped by day under quiet
+       day headings (today's in SemiBold, never red); on the Today tab the day's agenda, with Next, first-time donors, an emphasised "Record donation" on the next appointment and a quiet "Record
+       donation" on the later ones; and the selected appointment (or the booking form) in the side panel: the donor and time, [Record donation] [Reschedule] [...],
+       the donor's eligibility on that day, and the details. The rows come from the code-behind's day-grouped view of the view model's Items. -->
   <UserControl.Resources>
     <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
-    <feat:BloodTypeTextConverter x:Key="BloodTypeText" />
     <feat:NullToCollapsedConverter x:Key="NullToCollapsed" />
     <feat:NullToVisibleConverter x:Key="NullToVisible" />
     <feat:AppointmentStatusKindConverter x:Key="StatusKind" />
     <feat:AppointmentStatusTextConverter x:Key="StatusText" />
-    <feat:LocalWhenConverter x:Key="LocalWhen" />
-    <feat:IdTextConverter x:Key="IdText" />
-    <Style x:Key="RecordLink" TargetType="Hyperlink">
-      <Setter Property="Foreground" Value="{DynamicResource Brush.StatusInfo}" />
-      <Setter Property="TextDecorations" Value="Underline" />
+    <lists:TypographicBloodTypeConverter x:Key="BloodGroup" />
+    <lists:InitialsConverter x:Key="Initials" />
+    <lists:RecordCodeConverter x:Key="Code" />
+    <lists:CompactCollapsedConverter x:Key="CompactCollapsed" />
+    <lists:CountTextConverter x:Key="CountText" />
+    <lists:DataProxy x:Key="Model" Data="{Binding}" />
+    <appts:DayHeadingConverter x:Key="DayHeading" />
+    <appts:IsTodayConverter x:Key="IsToday" />
+    <appts:AppointmentCountConverter x:Key="Count" />
+    <appts:SlotTimeConverter x:Key="SlotTime" />
+    <appts:UtcDayConverter x:Key="UtcDay" />
+    <appts:AgendaVisibleConverter x:Key="Agenda" />
+    <Thickness x:Key="Appts.ToolbarGap">0,20,0,16</Thickness>
+    <Thickness x:Key="Appts.NameGap">10,0,0,0</Thickness>
+    <Thickness x:Key="Appts.HeaderGap">14,0,12,0</Thickness>
+    <Thickness x:Key="Appts.DayPad">16,0,16,0</Thickness>
+    <Thickness x:Key="Appts.ChipGap">0,0,8,0</Thickness>
+    <Thickness x:Key="Appts.PillGap">6,0,0,0</Thickness>
+    <Style x:Key="DonorLink" TargetType="Hyperlink">
+      <Setter Property="Foreground" Value="{DynamicResource Brush.Ink}" />
+      <Setter Property="TextDecorations" Value="{x:Null}" />
+      <Style.Triggers>
+        <Trigger Property="IsMouseOver" Value="True">
+          <Setter Property="TextDecorations" Value="Underline" />
+        </Trigger>
+      </Style.Triggers>
     </Style>
   </UserControl.Resources>
   <Grid>
-    <Grid.RowDefinitions>
-      <RowDefinition Height="Auto" />
-      <RowDefinition Height="Auto" />
-      <RowDefinition Height="*" />
-    </Grid.RowDefinitions>
+    <Grid.ColumnDefinitions>
+      <ColumnDefinition Width="*" MinWidth="360" />
+      <ColumnDefinition Width="Auto" />
+      <ColumnDefinition Width="Auto" />
+    </Grid.ColumnDefinitions>
 
-    <DockPanel KeyboardNavigation.TabNavigation="Local">
-      <Button x:Name="AddButton" DockPanel.Dock="Right" Style="{DynamicResource Button.Primary}" Command="{Binding AddCommand}" VerticalAlignment="Bottom" feat:Edge.Bottom="{DynamicResource Space.16}"
-              AutomationProperties.Name="Book appointment" ToolTip="Ctrl+N">
-        <StackPanel Orientation="Horizontal">
-          <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE710;" feat:Edge.Right="{DynamicResource Space.8}" VerticalAlignment="Center" />
-          <TextBlock Text="Book appointment" VerticalAlignment="Center" />
-        </StackPanel>
-      </Button>
-      <WrapPanel>
-        <controls:FormField Label="Search" feat:Edge.Right="{DynamicResource Space.16}" MinWidth="200">
-          <TextBox x:Name="SearchBox" Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" MaxLength="100" AutomationProperties.Name="Search appointments by donor name">
-            <TextBox.InputBindings>
-              <KeyBinding Key="Enter" Command="{Binding SearchNowCommand}" />
-            </TextBox.InputBindings>
-          </TextBox>
-        </controls:FormField>
-        <controls:FormField Label="Status" feat:Edge.Right="{DynamicResource Space.16}">
-          <ComboBox x:Name="StatusBox" ItemsSource="{Binding StatusOptions}" SelectedItem="{Binding StatusFilter, Mode=TwoWay}" DisplayMemberPath="Display" MinWidth="150" AutomationProperties.Name="Status" />
-        </controls:FormField>
-        <controls:FormField Label="Blood type" feat:Edge.Right="{DynamicResource Space.16}">
-          <ComboBox x:Name="BloodTypeBox" ItemsSource="{Binding BloodTypeOptions}" SelectedItem="{Binding BloodTypeFilter, Mode=TwoWay}" DisplayMemberPath="Display" MinWidth="150" AutomationProperties.Name="Blood type" />
-        </controls:FormField>
-        <controls:FormField Label="Donor" feat:Edge.Right="{DynamicResource Space.16}" MinWidth="280">
-          <controls:RecordPicker x:Name="DonorFilterBox" Kind="Donor" Label="Donor" EmptyText="Any donor" SelectedOption="{Binding DonorFilter, Mode=TwoWay}" />
-        </controls:FormField>
-        <Button Style="{DynamicResource Button.Ghost}" Content="Clear filters" Command="{Binding ClearFiltersCommand}" VerticalAlignment="Bottom" feat:Edge.Bottom="{DynamicResource Space.16}"
-                Visibility="{Binding HasActiveFilters, Converter={StaticResource BoolToVisibility}}" AutomationProperties.Name="Clear filters" />
-      </WrapPanel>
-    </DockPanel>
-
-    <lists:ScreenWakingNotice Grid.Row="1" />
-    <Grid Grid.Row="2">
-      <Grid.ColumnDefinitions>
-        <ColumnDefinition Width="*" MinWidth="360" />
-        <ColumnDefinition Width="16" />
-        <ColumnDefinition Width="400" />
-      </Grid.ColumnDefinitions>
-      <controls:LoadSurface x:Name="ListSurface" State="{Binding State}" SkeletonKind="List" SkeletonColumns="2*,100,*,130"
+    <!-- The list -->
+    <Grid x:Name="ListColumn">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto" />
+        <RowDefinition Height="Auto" />
+        <RowDefinition Height="Auto" />
+        <RowDefinition Height="*" />
+      </Grid.RowDefinitions>
+      <controls:PageHeader x:Name="Header" Title="{Binding PageTitle}" Count="{Binding HeaderCount}">
+        <controls:PageHeader.Actions>
+          <Button x:Name="AddButton" Style="{DynamicResource Button.Primary}" lists:HeaderAction.IsDemoted="{Binding IsDetailOpen}" Command="{Binding AddCommand}"
+                  AutomationProperties.Name="Book appointment" ToolTip="Book appointment (Ctrl+N)">
+            <StackPanel Orientation="Horizontal">
+              <controls:Icon Kind="Calplus" Size="16" VerticalAlignment="Center" />
+              <TextBlock x:Name="AddLabel" Text="Book appointment" VerticalAlignment="Center" Margin="{DynamicResource Inset.L8}">
+                <TextBlock.Style>
+                  <Style TargetType="TextBlock">
+                    <Style.Triggers>
+                      <DataTrigger Binding="{Binding (controls:Responsive.Breakpoint), RelativeSource={RelativeSource Self}}" Value="{x:Static controls:Breakpoint.Compact}">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                      </DataTrigger>
+                    </Style.Triggers>
+                  </Style>
+                </TextBlock.Style>
+              </TextBlock>
+            </StackPanel>
+          </Button>
+        </controls:PageHeader.Actions>
+        <controls:PageHeader.Tabs>
+          <Border Style="{DynamicResource Tabs.Strip}">
+            <StackPanel x:Name="Tabs" Orientation="Horizontal" Margin="{DynamicResource Inset.BN1}">
+              <RadioButton x:Name="TodayTab" Style="{DynamicResource Tab.Option}" GroupName="AppointmentView" IsChecked="{Binding IsTodayView, Mode=TwoWay}" AutomationProperties.Name="Today">
+                <TextBlock><Run Text="Today" /><Run Text=" " /><Run Text="{Binding ViewCounts.Today, Mode=OneWay, Converter={StaticResource CountText}}" Foreground="{DynamicResource Brush.Ink3}" /></TextBlock>
+              </RadioButton>
+              <RadioButton x:Name="UpcomingTab" Style="{DynamicResource Tab.Option}" GroupName="AppointmentView" IsChecked="{Binding IsUpcomingView, Mode=TwoWay}" AutomationProperties.Name="Upcoming">
+                <TextBlock><Run Text="Upcoming" /><Run Text=" " /><Run Text="{Binding ViewCounts.Upcoming, Mode=OneWay, Converter={StaticResource CountText}}" Foreground="{DynamicResource Brush.Ink3}" /></TextBlock>
+              </RadioButton>
+              <RadioButton x:Name="PastTab" Style="{DynamicResource Tab.Option}" GroupName="AppointmentView" IsChecked="{Binding IsPastView, Mode=TwoWay}" AutomationProperties.Name="Past">
+                <TextBlock><Run Text="Past" /><Run Text=" " /><Run Text="{Binding ViewCounts.Past, Mode=OneWay, Converter={StaticResource CountText}}" Foreground="{DynamicResource Brush.Ink3}" /></TextBlock>
+              </RadioButton>
+              <RadioButton x:Name="CancelledTab" Style="{DynamicResource Tab.Option}" GroupName="AppointmentView" IsChecked="{Binding IsCancelledView, Mode=TwoWay}" AutomationProperties.Name="Cancelled">
+                <TextBlock><Run Text="Cancelled" /><Run Text=" " /><Run Text="{Binding ViewCounts.Cancelled, Mode=OneWay, Converter={StaticResource CountText}}" Foreground="{DynamicResource Brush.Ink3}" /></TextBlock>
+              </RadioButton>
+            </StackPanel>
+          </Border>
+        </controls:PageHeader.Tabs>
+      </controls:PageHeader>
+      <lists:ListToolbar x:Name="Toolbar" Grid.Row="1" Margin="{StaticResource Appts.ToolbarGap}" SearchPlaceholder="Search donors" SearchWidth="280">
+        <lists:ListToolbar.Filters>
+          <StackPanel Orientation="Horizontal">
+            <!-- One donor's appointments (also set by "Book appointment" on a donor): a chip that opens the donor search -->
+            <lists:RecordFilterChip AutomationProperties.AutomationId="DonorFilterChip" Kind="Donor" Label="Donor" SelectedOption="{Binding DonorFilter, Mode=TwoWay}" Margin="{StaticResource Appts.ChipGap}" />
+            <!-- The status chip only while a link from another screen has set a status (the tabs replace it otherwise), so it can be cleared -->
+            <lists:FilterChip Label="Status" ItemsSource="{Binding StatusOptions}" SelectedItem="{Binding StatusFilter, Mode=TwoWay}" DisplayMemberPath="Display"
+                              Margin="{StaticResource Appts.ChipGap}" AutomationProperties.Name="Status filter" Visibility="{Binding HasStatusFilter, Converter={StaticResource BoolToVisibility}}" />
+          </StackPanel>
+        </lists:ListToolbar.Filters>
+      </lists:ListToolbar>
+      <lists:ScreenWakingNotice Grid.Row="2" />
+      <!-- The table's frame is inside the load surface: an error or empty state stands alone as one card, not inside an empty framed panel -->
+      <controls:LoadSurface x:Name="ListSurface" Grid.Row="3" State="{Binding State}" SkeletonKind="List" SkeletonColumns="80,2*,80,*,*"
                             ErrorMessage="{Binding ErrorMessage}" ErrorDetail="{Binding ErrorDetail}" RetryCommand="{Binding RetryCommand}"
                             EmptyGlyph="&#xE787;" EmptyTitle="{Binding EmptyTitle}" EmptyMessage="{Binding EmptyMessage}" EmptyActionText="{Binding EmptyActionText}"
                             EmptyActionCommand="{Binding EmptyActionCommand}">
-        <Grid>
-          <Grid.RowDefinitions>
-            <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
-          </Grid.RowDefinitions>
-          <controls:LifestreamDataGrid x:Name="Grid" ItemsSource="{Binding Items}" SelectedItem="{Binding SelectedItem, Mode=TwoWay}" SortCommand="{Binding SortCommand}"
-                                       SortColumn="{Binding SortColumn, Mode=OneWay}" SortDescending="{Binding SortDescending, Mode=OneWay}"
-                                       AutomationProperties.Name="Appointments">
-            <DataGrid.Columns>
-              <DataGridTemplateColumn Header="Donor" Width="2*" MinWidth="170" CanUserSort="False">
-                <DataGridTemplateColumn.CellTemplate>
-                  <DataTemplate>
-                    <StackPanel VerticalAlignment="Center" feat:Edge.Left="{DynamicResource Space.12}" feat:Edge.Right="{DynamicResource Space.12}">
-                      <TextBlock TextTrimming="CharacterEllipsis" TextWrapping="NoWrap">
-                        <Hyperlink Style="{StaticResource RecordLink}" Command="{Binding DataContext.OpenDonorCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}" CommandParameter="{Binding}"
-                                   AutomationProperties.Name="Open donor">
-                          <Run Text="{Binding DonorName, Mode=OneWay}" />
-                        </Hyperlink>
+        <Border x:Name="TablePanel" Background="{DynamicResource Brush.Layer}" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="1"
+                CornerRadius="{DynamicResource Radius.Panel}" SnapsToDevicePixels="True">
+          <Grid>
+            <Grid.RowDefinitions>
+              <RowDefinition Height="*" />
+              <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <controls:LifestreamDataGrid x:Name="Grid" SelectedItem="{Binding SelectedItem, Mode=TwoWay}" SortCommand="{Binding SortCommand}"
+                                         SortColumn="{Binding SortColumn, Mode=OneWay}" SortDescending="{Binding SortDescending, Mode=OneWay}"
+                                         VirtualizingPanel.IsVirtualizingWhenGrouping="True"
+                                         lists:ListColumns.IsResponsive="True" lists:ListKeys.Panel="{Binding ElementName=Panel}"
+                                         AutomationProperties.Name="Appointments">
+              <DataGrid.GroupStyle>
+                <GroupStyle>
+                  <!-- The day's rows run flush with the table's edges, like the header and the day row (WPF's own group item indents them by 5: design-qa-2 N7) -->
+                  <GroupStyle.ContainerStyle>
+                    <Style TargetType="GroupItem">
+                      <Setter Property="Template">
+                        <Setter.Value>
+                          <ControlTemplate TargetType="GroupItem">
+                            <StackPanel>
+                              <ContentPresenter />
+                              <ItemsPresenter />
+                            </StackPanel>
+                          </ControlTemplate>
+                        </Setter.Value>
+                      </Setter>
+                    </Style>
+                  </GroupStyle.ContainerStyle>
+                  <GroupStyle.HeaderTemplate>
+                    <DataTemplate>
+                      <!-- One day, the same quiet header for every day ("Today, Thu 19 Nov" only in SemiBold Ink); the count at the right. -->
+                      <Border x:Name="Day" Height="{DynamicResource Height.HeaderRow}" Background="{DynamicResource Brush.Layer2}" BorderBrush="{DynamicResource Brush.Stroke}"
+                              BorderThickness="0,0,0,1" SnapsToDevicePixels="True">
+                        <Grid Margin="{StaticResource Appts.DayPad}" VerticalAlignment="Center">
+                          <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                          </Grid.ColumnDefinitions>
+                          <TextBlock x:Name="DayText" Style="{DynamicResource Text.Label}" AutomationProperties.HeadingLevel="Level3">
+                            <TextBlock.Text>
+                              <MultiBinding Converter="{StaticResource DayHeading}">
+                                <Binding Path="Name" />
+                                <Binding Path="DataContext" RelativeSource="{RelativeSource AncestorType=DataGrid}" />
+                              </MultiBinding>
+                            </TextBlock.Text>
+                          </TextBlock>
+                          <TextBlock Grid.Column="1" Style="{DynamicResource Text.Caption}" Text="{Binding ItemCount, Converter={StaticResource Count}}" />
+                        </Grid>
+                      </Border>
+                      <DataTemplate.Triggers>
+                        <DataTrigger Value="True">
+                          <DataTrigger.Binding>
+                            <MultiBinding Converter="{StaticResource IsToday}">
+                              <Binding Path="Name" />
+                              <Binding Path="DataContext.Today" RelativeSource="{RelativeSource AncestorType=DataGrid}" />
+                            </MultiBinding>
+                          </DataTrigger.Binding>
+                          <Setter TargetName="DayText" Property="Foreground" Value="{DynamicResource Brush.Ink}" />
+                          <Setter TargetName="DayText" Property="FontWeight" Value="SemiBold" />
+                        </DataTrigger>
+                      </DataTemplate.Triggers>
+                    </DataTemplate>
+                  </GroupStyle.HeaderTemplate>
+                </GroupStyle>
+              </DataGrid.GroupStyle>
+              <DataGrid.Columns>
+                <DataGridTemplateColumn Header="Time" Width="76" SortMemberPath="slot">
+                  <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate>
+                      <StackPanel VerticalAlignment="Center">
+                        <TextBlock Style="{DynamicResource DataGrid.TextCell}" FontWeight="Medium">
+                          <TextBlock.Text>
+                            <MultiBinding Converter="{StaticResource SlotTime}">
+                              <Binding Path="SlotStartUtc" />
+                              <Binding Path="DataContext.DisplayZone" RelativeSource="{RelativeSource AncestorType=DataGrid}" />
+                            </MultiBinding>
+                          </TextBlock.Text>
+                        </TextBlock>
+                        <!-- The agenda's next appointment: a dot and "Next" in Info under the time -->
+                        <StackPanel Orientation="Horizontal">
+                          <StackPanel.Visibility>
+                            <MultiBinding Converter="{StaticResource Agenda}" ConverterParameter="Next">
+                              <Binding />
+                              <Binding Path="DataContext" RelativeSource="{RelativeSource AncestorType=DataGrid}" />
+                              <Binding Path="DataContext.AgendaVersion" RelativeSource="{RelativeSource AncestorType=DataGrid}" />
+                            </MultiBinding>
+                          </StackPanel.Visibility>
+                          <Ellipse Width="6" Height="6" Fill="{DynamicResource Brush.Info}" VerticalAlignment="Center" Margin="{DynamicResource Inset.R4}" />
+                          <TextBlock Style="{DynamicResource Text.Caption}" Foreground="{DynamicResource Brush.Info}" FontWeight="SemiBold" Text="Next" />
+                        </StackPanel>
+                      </StackPanel>
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="Donor" Width="Auto" MinWidth="180" MaxWidth="320" CanUserSort="False">
+                  <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate>
+                      <Grid VerticalAlignment="Center">
+                        <Grid.ColumnDefinitions>
+                          <ColumnDefinition Width="Auto" />
+                          <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <controls:Avatar Initials="{Binding DonorName, Converter={StaticResource Initials}}" Size="28" VerticalAlignment="Center" />
+                        <StackPanel Grid.Column="1" Margin="{StaticResource Appts.NameGap}" VerticalAlignment="Center">
+                          <TextBlock Style="{DynamicResource Text.Body}" FontWeight="Medium" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" ToolTip="{Binding DonorName}">
+                            <Hyperlink Style="{StaticResource DonorLink}" Command="{Binding DataContext.OpenDonorCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}" CommandParameter="{Binding}"
+                                       AutomationProperties.Name="Open donor">
+                              <Run Text="{Binding DonorName, Mode=OneWay}" />
+                            </Hyperlink>
+                          </TextBlock>
+                          <TextBlock Style="{DynamicResource DataGrid.SecondaryLine}" Text="{Binding DonorId, Converter={StaticResource Code}, ConverterParameter=D}" />
+                        </StackPanel>
+                      </Grid>
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="Group" Width="68" CanUserSort="False">
+                  <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate>
+                      <controls:BloodGroupTag Text="{Binding DonorBloodType, Converter={StaticResource BloodGroup}}" HorizontalAlignment="Left" VerticalAlignment="Center" />
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="Status" Width="*" MinWidth="218" MaxWidth="300" CanUserSort="False">
+                  <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate>
+                      <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <controls:StatusChip Status="{Binding Status, Converter={StaticResource StatusKind}}" Label="{Binding Status, Converter={StaticResource StatusText}}" VerticalAlignment="Center" />
+                        <controls:Badge Text="First-time" Kind="Info" Icon="Info" VerticalAlignment="Center" Margin="{StaticResource Appts.PillGap}"
+                                        Visibility="{Binding DonorFirstTime, Converter={StaticResource BoolToVisibility}}" />
+                      </StackPanel>
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <!-- Today's agenda only: Record donation on every appointment still to come, emphasised (secondary) on the "Next" one and quiet on the later ones.
+                     There is no "Check in": the API keeps no check-in state, so a button with that name could only open the appointment. -->
+                <DataGridTemplateColumn x:Name="AgendaColumn" Header="Next step" Width="*" MinWidth="170" MaxWidth="260" CanUserSort="False" lists:ListColumns.HideBelow="700"
+                                        lists:ListColumns.IsShown="{Binding Data.IsAgenda, Source={StaticResource Model}}">
+                  <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate>
+                      <Grid VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal">
+                          <StackPanel.Visibility>
+                            <MultiBinding Converter="{StaticResource Agenda}" ConverterParameter="Next">
+                              <Binding />
+                              <Binding Path="DataContext" RelativeSource="{RelativeSource AncestorType=DataGrid}" />
+                              <Binding Path="DataContext.AgendaVersion" RelativeSource="{RelativeSource AncestorType=DataGrid}" />
+                            </MultiBinding>
+                          </StackPanel.Visibility>
+                          <Button Style="{DynamicResource Button.Secondary.Small}" Command="{Binding DataContext.RecordDonationForCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                  CommandParameter="{Binding}" controls:ButtonAssist.BusyText="" AutomationProperties.Name="Record donation" ToolTip="Record this donor's donation">
+                            <StackPanel Orientation="Horizontal">
+                              <controls:Icon Kind="Drop" Size="14" VerticalAlignment="Center" />
+                              <TextBlock Text="Record donation" VerticalAlignment="Center" Margin="{DynamicResource Inset.L6}" />
+                            </StackPanel>
+                          </Button>
+                        </StackPanel>
+                        <Button Style="{DynamicResource Button.Subtle.Small}" HorizontalAlignment="Left" Command="{Binding DataContext.RecordDonationForCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                CommandParameter="{Binding}" controls:ButtonAssist.BusyText="" AutomationProperties.Name="Record donation" ToolTip="Record this donor's donation">
+                          <Button.Visibility>
+                            <MultiBinding Converter="{StaticResource Agenda}" ConverterParameter="Waiting">
+                              <Binding />
+                              <Binding Path="DataContext" RelativeSource="{RelativeSource AncestorType=DataGrid}" />
+                              <Binding Path="DataContext.AgendaVersion" RelativeSource="{RelativeSource AncestorType=DataGrid}" />
+                            </MultiBinding>
+                          </Button.Visibility>
+                          <StackPanel Orientation="Horizontal">
+                            <controls:Icon Kind="Drop" Size="14" VerticalAlignment="Center" />
+                            <TextBlock Text="Record donation" VerticalAlignment="Center" Margin="{DynamicResource Inset.L6}" />
+                          </StackPanel>
+                        </Button>
+                      </Grid>
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="Booked on" Width="*" MinWidth="120" MaxWidth="240" CanUserSort="False" lists:ListColumns.HideBelow="760">
+                  <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate>
+                      <TextBlock Style="{DynamicResource DataGrid.TextCell}" Foreground="{DynamicResource Brush.Ink2}">
+                        <TextBlock.Text>
+                          <MultiBinding Converter="{StaticResource UtcDay}">
+                            <Binding Path="PlacedAtUtc" />
+                            <Binding Path="DataContext.DisplayZone" RelativeSource="{RelativeSource AncestorType=DataGrid}" />
+                          </MultiBinding>
+                        </TextBlock.Text>
                       </TextBlock>
-                      <TextBlock Style="{DynamicResource DataGrid.SecondaryLine}" Foreground="{DynamicResource Brush.TextMuted}" Text="{Binding DonorId, Converter={StaticResource IdText}}" />
-                    </StackPanel>
-                  </DataTemplate>
-                </DataGridTemplateColumn.CellTemplate>
-              </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Blood type" Width="100" CanUserSort="False">
-                <DataGridTemplateColumn.CellTemplate>
-                  <DataTemplate>
-                    <TextBlock Text="{Binding DonorBloodType, Converter={StaticResource BloodTypeText}}" Style="{DynamicResource DataGrid.TextCell}" />
-                  </DataTemplate>
-                </DataGridTemplateColumn.CellTemplate>
-              </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Appointment" Width="*" MinWidth="150" SortMemberPath="slot">
-                <DataGridTemplateColumn.CellTemplate>
-                  <DataTemplate>
-                    <TextBlock Text="{Binding SlotStartUtc, Converter={StaticResource LocalWhen}}" Style="{DynamicResource DataGrid.TextCell}" />
-                  </DataTemplate>
-                </DataGridTemplateColumn.CellTemplate>
-              </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Status" Width="130" CanUserSort="False">
-                <DataGridTemplateColumn.CellTemplate>
-                  <DataTemplate>
-                    <controls:StatusChip Status="{Binding Status, Converter={StaticResource StatusKind}}" Label="{Binding Status, Converter={StaticResource StatusText}}" feat:Edge.Left="{DynamicResource Space.12}" />
-                  </DataTemplate>
-                </DataGridTemplateColumn.CellTemplate>
-              </DataGridTemplateColumn>
-            </DataGrid.Columns>
-          </controls:LifestreamDataGrid>
-          <lists:ListFooter Grid.Row="1" />
-        </Grid>
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+              </DataGrid.Columns>
+            </controls:LifestreamDataGrid>
+            <lists:ListFooter Grid.Row="1" />
+          </Grid>
+        </Border>
       </controls:LoadSurface>
+    </Grid>
 
-      <Grid Grid.Column="2">
-        <lists:ActionDetailPane Visibility="{Binding Editor, Converter={StaticResource NullToVisible}}">
+    <!-- The gap before the side panel, only while it is open -->
+    <Border Grid.Column="1" Width="{DynamicResource Space.24}" Visibility="{Binding IsDetailOpen, Converter={StaticResource BoolToVisibility}}" />
+
+    <!-- The selected appointment, or the booking (or rescheduling) form -->
+    <controls:SidePanel x:Name="Panel" Grid.Column="2" IsOpen="{Binding IsDetailOpen, Mode=OneWay}" CloseCommand="{Binding CloseDetailCommand}" Overline="{Binding DetailCode}"
+                        lists:PanelBleed.IsEnabled="True" lists:DetailPaneFrame.IsInPanel="True">
+      <Grid>
+        <lists:ActionDetailPane x:Name="DetailPane" FactsSource="{Binding PanelFacts}" Visibility="{Binding Editor, Converter={StaticResource NullToVisible}}">
+          <lists:ActionDetailPane.Header>
+            <Grid>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+              </Grid.ColumnDefinitions>
+              <controls:Avatar Initials="{Binding DetailInitials}" IsBlood="True" Size="52" VerticalAlignment="Center" />
+              <StackPanel Grid.Column="1" Margin="{StaticResource Appts.HeaderGap}" VerticalAlignment="Center">
+                <TextBlock Style="{DynamicResource Text.Section}" Text="{Binding Detail.DonorName}" TextWrapping="Wrap" AutomationProperties.HeadingLevel="Level2" />
+                <TextBlock Style="{DynamicResource Text.Secondary}" Text="{Binding DetailWhen}" TextWrapping="Wrap" />
+              </StackPanel>
+              <controls:BloodGroupTag Grid.Column="2" Text="{Binding DetailBloodGroup}" IsLarge="True" VerticalAlignment="Top" />
+            </Grid>
+          </lists:ActionDetailPane.Header>
           <lists:ActionDetailPane.Actions>
-            <WrapPanel>
-              <Button Style="{DynamicResource Button.Primary}" Command="{Binding RecordDonationCommand}" feat:Edge.Right="{DynamicResource Space.8}" feat:Edge.Bottom="{DynamicResource Space.8}"
-                      AutomationProperties.Name="Record donation" controls:ButtonAssist.IsBusy="{Binding RecordDonationCommand.IsRunning}" controls:ButtonAssist.BusyText="Recording...">
+            <!-- The action row (one layout on every screen): [Record donation] [Reschedule] [...]; cancelling is in the menu with its full label -->
+            <Grid AutomationProperties.AutomationId="ActionsRow">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+              </Grid.ColumnDefinitions>
+              <Grid Margin="{DynamicResource Inset.R8}">
+                <Button AutomationProperties.AutomationId="RecordButton" Style="{DynamicResource Button.Primary}" Command="{Binding RecordDonationCommand}" HorizontalAlignment="Stretch" AutomationProperties.Name="Record donation"
+                        controls:ButtonAssist.IsBusy="{Binding RecordDonationCommand.IsRunning}" controls:ButtonAssist.BusyText="Recording"
+                        Visibility="{Binding IsPendingDetail, Converter={StaticResource BoolToVisibility}}">
+                  <StackPanel Orientation="Horizontal">
+                    <controls:Icon Kind="Drop" Size="16" VerticalAlignment="Center" />
+                    <TextBlock Text="Record donation" VerticalAlignment="Center" Margin="{DynamicResource Inset.L8}" />
+                  </StackPanel>
+                </Button>
+                <Button AutomationProperties.AutomationId="ReceiptButton" Style="{DynamicResource Button.Primary}" Command="{Binding ViewReceiptCommand}" HorizontalAlignment="Stretch" AutomationProperties.Name="View receipt"
+                        Visibility="{Binding Detail.ReceiptId, Converter={StaticResource NullToCollapsed}}">
+                  <StackPanel Orientation="Horizontal">
+                    <controls:Icon Kind="Receipt" Size="16" VerticalAlignment="Center" />
+                    <TextBlock Text="View receipt" VerticalAlignment="Center" Margin="{DynamicResource Inset.L8}" />
+                  </StackPanel>
+                </Button>
+              </Grid>
+              <Button AutomationProperties.AutomationId="RescheduleButton" Grid.Column="1" Style="{DynamicResource Button.Secondary}" Command="{Binding RescheduleCommand}" controls:ButtonAssist.BusyText=""
+                      AutomationProperties.Name="Reschedule" ToolTip="Reschedule" Visibility="{Binding IsPendingDetail, Converter={StaticResource BoolToVisibility}}">
                 <StackPanel Orientation="Horizontal">
-                  <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xEB52;" feat:Edge.Right="{DynamicResource Space.8}" VerticalAlignment="Center" />
-                  <TextBlock Text="Record donation" VerticalAlignment="Center" />
+                  <!-- A clock (a new time), not the calendar of the header's "Book appointment": in a compact window both are icon-only (design-qa-2 N14) -->
+                  <controls:Icon Kind="Clock" Size="16" VerticalAlignment="Center" />
+                  <TextBlock Text="Reschedule" VerticalAlignment="Center" Margin="{DynamicResource Inset.L8}"
+                             Visibility="{Binding (controls:Responsive.Breakpoint), RelativeSource={RelativeSource Self}, Converter={StaticResource CompactCollapsed}}" />
                 </StackPanel>
               </Button>
-              <Button Style="{DynamicResource Button.Secondary}" Command="{Binding RescheduleCommand}" feat:Edge.Right="{DynamicResource Space.8}" feat:Edge.Bottom="{DynamicResource Space.8}"
-                      AutomationProperties.Name="Reschedule">
-                <StackPanel Orientation="Horizontal">
-                  <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE787;" feat:Edge.Right="{DynamicResource Space.8}" VerticalAlignment="Center" />
-                  <TextBlock Text="Reschedule" VerticalAlignment="Center" />
-                </StackPanel>
-              </Button>
-              <Button Style="{DynamicResource Button.Danger}" Command="{Binding CancelAppointmentCommand}" feat:Edge.Right="{DynamicResource Space.8}" feat:Edge.Bottom="{DynamicResource Space.8}"
-                      AutomationProperties.Name="Cancel appointment" controls:ButtonAssist.IsBusy="{Binding CancelAppointmentCommand.IsRunning}" controls:ButtonAssist.BusyText="Cancelling...">
-                <StackPanel Orientation="Horizontal">
-                  <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE711;" feat:Edge.Right="{DynamicResource Space.8}" VerticalAlignment="Center" />
-                  <TextBlock Text="Cancel appointment" VerticalAlignment="Center" />
-                </StackPanel>
-              </Button>
-              <Button Style="{DynamicResource Button.Secondary}" Command="{Binding ViewReceiptCommand}" feat:Edge.Right="{DynamicResource Space.8}" feat:Edge.Bottom="{DynamicResource Space.8}"
-                      AutomationProperties.Name="View receipt">
-                <StackPanel Orientation="Horizontal">
-                  <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE8A5;" feat:Edge.Right="{DynamicResource Space.8}" VerticalAlignment="Center" />
-                  <TextBlock Text="View receipt" VerticalAlignment="Center" />
-                </StackPanel>
-              </Button>
-            </WrapPanel>
+              <lists:MenuButton AutomationProperties.AutomationId="MoreButton" Grid.Column="2" Style="{DynamicResource Button.Icon}" Margin="{DynamicResource Inset.L8}" AutomationProperties.Name="More actions" ToolTip="More actions">
+                <controls:Icon Kind="More" Size="18" />
+                <lists:MenuButton.ContextMenu>
+                  <ContextMenu>
+                    <MenuItem Header="Open donor" Command="{Binding OpenDonorCommand}" CommandParameter="{Binding Detail}">
+                      <MenuItem.Icon>
+                        <controls:Icon Kind="Donor" Size="16" />
+                      </MenuItem.Icon>
+                    </MenuItem>
+                    <MenuItem AutomationProperties.AutomationId="CancelItem" Header="Cancel appointment" Command="{Binding CancelAppointmentCommand}" Foreground="{DynamicResource Brush.Critical}"
+                              Visibility="{Binding IsPendingDetail, Converter={StaticResource BoolToVisibility}}">
+                      <MenuItem.Icon>
+                        <controls:Icon Kind="X" Size="16" />
+                      </MenuItem.Icon>
+                    </MenuItem>
+                  </ContextMenu>
+                </lists:MenuButton.ContextMenu>
+              </lists:MenuButton>
+            </Grid>
           </lists:ActionDetailPane.Actions>
+          <lists:ActionDetailPane.Body>
+            <appts:EligibilityBannerView DataContext="{Binding DonorEligibility}" />
+          </lists:ActionDetailPane.Body>
         </lists:ActionDetailPane>
-        <ContentControl Content="{Binding Editor}" ContentTemplateSelector="{x:Static services:ViewLocator.Instance}" IsTabStop="False" Focusable="False"
+        <ContentControl x:Name="EditorHost" Content="{Binding Editor}" ContentTemplateSelector="{x:Static services:ViewLocator.Instance}" IsTabStop="False" Focusable="False"
                         HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" Visibility="{Binding Editor, Converter={StaticResource NullToCollapsed}}" />
       </Grid>
-    </Grid>
+    </controls:SidePanel>
   </Grid>
 </UserControl>

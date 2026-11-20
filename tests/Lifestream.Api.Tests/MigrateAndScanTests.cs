@@ -110,6 +110,84 @@ public sealed class MigrateTests
         Assert.Contains(logs.Lines, l => l.StartsWith("[" + LogLevel.Warning + "]", StringComparison.Ordinal) && l.Contains("Owner:AdminPassword", StringComparison.Ordinal));
     }
 
+    /// <summary>What a release before 2.1 left behind: a demo that was reset today and has no appointment today.</summary>
+    private static async Task RemoveTodaysAppointmentsAsync(EmptyDatabaseFixture db, DateTime nowUtc)
+    {
+        var day = $"SlotStartUtc >= '{nowUtc:yyyy-MM-dd}' AND SlotStartUtc < '{nowUtc.AddDays(1):yyyy-MM-dd}'";
+        await db.ExecuteAsync(
+            $"DELETE FROM BloodBag WHERE DonationReceiptId IN (SELECT r.Id FROM Receipt r JOIN Appointment a ON a.Id = r.AppointmentId WHERE {day.Replace("SlotStartUtc", "a.SlotStartUtc", StringComparison.Ordinal)}); "
+            + $"DELETE FROM Receipt WHERE AppointmentId IN (SELECT Id FROM Appointment WHERE {day}); DELETE FROM Appointment WHERE {day};",
+            Ct);
+        Assert.Equal(0, await db.ScalarAsync<int>($"SELECT COUNT(*) FROM Appointment WHERE {day}", Ct));
+    }
+
+    private static Task<int> TodaysAppointmentsAsync(EmptyDatabaseFixture db, DateTime nowUtc) =>
+        db.ScalarAsync<int>($"SELECT COUNT(*) FROM Appointment WHERE SlotStartUtc >= '{nowUtc:yyyy-MM-dd}' AND SlotStartUtc < '{nowUtc.AddDays(1):yyyy-MM-dd}'", Ct);
+
+    [Fact]
+    public async Task Migrate_ADemoThatWasResetTodayAndHasNoAppointmentsToday_IsRebuiltNow_AndThenLeftAlone()
+    {
+        await using var db = await NewEmptyAsync();
+        var clock = new TestClock();
+        clock.Set(new DateTime(2031, 5, 6, 11, 0, 0, DateTimeKind.Utc));
+        var now = clock.GetUtcNow().UtcDateTime;
+        var password = TestSecrets.OwnerPrefix + Guid.NewGuid().ToString("N");
+        Assert.Equal(0, await Migrator.RunAsync(Args(db, password), clock));
+
+        // The migrate job seeds the clinic as it stands at that moment: a clinic day today, part of it done.
+        Assert.Equal(DemoClinicDay.Appointments, await TodaysAppointmentsAsync(db, now));
+        Assert.True(await db.ScalarAsync<int>($"SELECT COUNT(*) FROM Appointment WHERE Status = 'Completed' AND SlotStartUtc >= '{now:yyyy-MM-dd}'", Ct) > 0);
+        Assert.Equal(0, await db.ScalarAsync<int>($"SELECT COUNT(*) FROM Receipt WHERE CreatedAtUtc > '{now:yyyy-MM-ddTHH:mm:ss}'", Ct));
+
+        await RemoveTodaysAppointmentsAsync(db, now);
+        var firstDonor = await db.ScalarAsync<int>("SELECT MIN(Id) FROM Donor", Ct);
+        var ownerId = await db.ScalarAsync<int>("SELECT Id FROM Staff WHERE IsProtected = 1", Ct);
+
+        // The deploy's migrate job, later the same UTC day: today is missing, so the demo is rebuilt now instead of at the next UTC midnight.
+        clock.Advance(TimeSpan.FromMinutes(40));
+        using var logs = new CapturingLoggerProvider();
+        Assert.Equal(0, await Migrator.RunAsync(Args(db, password), clock, logs));
+        Assert.Equal(DemoClinicDay.Appointments, await TodaysAppointmentsAsync(db, now));
+        Assert.Equal(SeedSizes.Appointments, await db.ScalarAsync<int>("SELECT COUNT(*) FROM Appointment", Ct));
+        Assert.Equal(SeedSizes.Receipts, await db.ScalarAsync<int>("SELECT COUNT(*) FROM Receipt", Ct));
+        Assert.True(await db.ScalarAsync<int>("SELECT MIN(Id) FROM Donor", Ct) > firstDonor, "the demo rows were not rebuilt");
+        Assert.Equal(ownerId, await db.ScalarAsync<int>("SELECT Id FROM Staff WHERE IsProtected = 1", Ct));
+        Assert.Contains(logs.Lines, l => l.Contains("had no appointments today", StringComparison.Ordinal));
+
+        // And again: nothing is missing now, so nothing is touched.
+        var rebuiltDonor = await db.ScalarAsync<int>("SELECT MIN(Id) FROM Donor", Ct);
+        clock.Advance(TimeSpan.FromMinutes(5));
+        Assert.Equal(0, await Migrator.RunAsync(Args(db, password), clock));
+        Assert.Equal(rebuiltDonor, await db.ScalarAsync<int>("SELECT MIN(Id) FROM Donor", Ct));
+    }
+
+    [Fact]
+    public async Task Migrate_DoesNotRebuild_WhenTheLastResetWasAnotherDay_OrTheDemoIsSwitchedOff()
+    {
+        await using var db = await NewEmptyAsync();
+        var clock = new TestClock();
+        clock.Set(new DateTime(2031, 5, 6, 11, 0, 0, DateTimeKind.Utc));
+        var seededAt = clock.GetUtcNow().UtcDateTime;
+        Assert.Equal(0, await Migrator.RunAsync(Args(db, null), clock));
+        await RemoveTodaysAppointmentsAsync(db, seededAt);
+        var firstDonor = await db.ScalarAsync<int>("SELECT MIN(Id) FROM Donor", Ct);
+        var appointments = await db.ScalarAsync<int>("SELECT COUNT(*) FROM Appointment", Ct);
+
+        // The demo is switched off (a clinic with its own data): the migrate job never rebuilds.
+        Assert.Equal(0, await Migrator.RunAsync([.. Args(db, null), "--Demo:Enabled=false"], clock));
+        Assert.Equal(firstDonor, await db.ScalarAsync<int>("SELECT MIN(Id) FROM Donor", Ct));
+        Assert.Equal(appointments, await db.ScalarAsync<int>("SELECT COUNT(*) FROM Appointment", Ct));
+
+        // Days later (the last reset is not today's): the migrate job leaves the data alone, whatever today holds; the daily reset is the API's.
+        clock.Set(seededAt.AddDays(3));
+        Assert.Equal(0, await db.ScalarAsync<int>($"SELECT COUNT(*) FROM Appointment WHERE SlotStartUtc >= '{seededAt.AddDays(3):yyyy-MM-dd}' AND SlotStartUtc < '{seededAt.AddDays(4):yyyy-MM-dd}' AND Status <> 'Pending'", Ct));
+        await db.ExecuteAsync($"DELETE FROM Appointment WHERE SlotStartUtc >= '{seededAt.AddDays(3):yyyy-MM-dd}' AND SlotStartUtc < '{seededAt.AddDays(4):yyyy-MM-dd}'", Ct);
+        appointments = await db.ScalarAsync<int>("SELECT COUNT(*) FROM Appointment", Ct);
+        Assert.Equal(0, await Migrator.RunAsync(Args(db, null), clock));
+        Assert.Equal(firstDonor, await db.ScalarAsync<int>("SELECT MIN(Id) FROM Donor", Ct));
+        Assert.Equal(appointments, await db.ScalarAsync<int>("SELECT COUNT(*) FROM Appointment", Ct));
+    }
+
     [Fact]
     public async Task Migrate_WithAnUnreachableDatabase_ExitsNonZero()
     {

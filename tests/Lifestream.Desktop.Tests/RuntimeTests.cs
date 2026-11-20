@@ -23,7 +23,7 @@ public sealed class RuntimeTests
     {
         public List<(string Title, string Message, string? Details)> Errors { get; } = [];
 
-        public Task<bool> ConfirmAsync(string title, string body, string dangerVerb) => Task.FromResult(false);
+        public Task<bool> ConfirmAsync(string title, string body, string dangerVerb, string keepVerb) => Task.FromResult(false);
 
         public Task ShowErrorAsync(string title, string message, string? details)
         {
@@ -241,7 +241,7 @@ public sealed class RuntimeTests
     // Window chrome (SHELL-19, SHELL-20, SHELL-23)
 
     [Fact]
-    public void Chrome_CaptionButtons_Are46x32_AndTheMaximizeHighlightIsItsHitArea()
+    public void Chrome_CaptionButtons_Are46x44_AndTheMaximizeHighlightIsItsHitArea()
     {
         var (min, max, close, hit) = StaHost.Run(() =>
         {
@@ -261,9 +261,10 @@ public sealed class RuntimeTests
             return ((minimize.Width, minimize.Height), (maximize.Width, maximize.Height), (closeButton.Width, closeButton.Height), (inside, outside));
         });
 
-        Assert.Equal((46.0, 32.0), min);
-        Assert.Equal((46.0, 32.0), max);
-        Assert.Equal((46.0, 32.0), close);
+        // Direction A: the buttons are the height of the 44 DIP title bar (Height.CaptionButton), 46 wide.
+        Assert.Equal((46.0, 44.0), min);
+        Assert.Equal((46.0, 44.0), max);
+        Assert.Equal((46.0, 44.0), close);
         Assert.True(hit.inside);
         Assert.False(hit.outside);
     }
@@ -284,8 +285,8 @@ public sealed class RuntimeTests
         });
 
         Assert.True(resize.Left >= 6 && resize.Top >= 6 && resize.Right >= 6 && resize.Bottom >= 6); // edge and corner resizing
-        Assert.Equal(32, captionHeight); // a drag area the height of the caption buttons; double-click on it maximizes
-        Assert.False(aero); // the caption buttons are ours (46 x 32)
+        Assert.Equal(44, captionHeight); // a drag area the height of the title bar and its caption buttons; double-click on it maximizes
+        Assert.False(aero); // the caption buttons are ours (46 x 44)
         Assert.True(altSpace);
         Assert.Equal(WindowStyle.SingleBorderWindow, noStyleKey); // keeps the system menu, Snap and Alt+Space
         Assert.Equal(ResizeMode.CanResize, content);
@@ -352,7 +353,7 @@ public sealed class RuntimeTests
 
         Assert.Equal("Lifestream", loginTitle);
         Assert.True(mainTitle == "Lifestream", $"main window initial title was '{mainTitle}' (after navigation '{afterNavigation}')");
-        Assert.Equal("Lifestream - Donors", afterNavigation);
+        Assert.Equal("Lifestream, Donors", afterNavigation);
         Assert.Equal(1024, minWidth);
         Assert.Equal(640, minHeight);
     }

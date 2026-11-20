@@ -38,6 +38,13 @@ public abstract partial class PagedListViewModel<TItem> : ViewModelBase
         ArgumentNullException.ThrowIfNull(ui);
         _ui = ui;
         ViewState = states.GetState(stateKey);
+        PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(State))
+            {
+                OnPropertyChanged(nameof(HeaderCount));
+            }
+        };
         _restoring = true;
         SearchText = ViewState.Search ?? string.Empty;
         _restoring = false;
@@ -101,17 +108,20 @@ public abstract partial class PagedListViewModel<TItem> : ViewModelBase
     public partial string SearchText { get; set; } = string.Empty;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(RangeText), nameof(HasPreviousPage), nameof(HasNextPage))]
+    [NotifyPropertyChangedFor(nameof(RangeText), nameof(HasPreviousPage), nameof(HasNextPage), nameof(PageCountText))]
     public partial int Page { get; set; } = 1;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(RangeText), nameof(HasNextPage), nameof(PageCountText))]
+    [NotifyPropertyChangedFor(nameof(RangeText), nameof(HasNextPage), nameof(PageCountText), nameof(HeaderCount))]
     public partial int Total { get; set; }
+
+    /// <summary>The page header's count: the total once the list has loaded (or is empty), and nothing while it loads or after it failed, when a number would be false.</summary>
+    public string? HeaderCount => State is LoadState.Ready or LoadState.Empty ? Total.ToString("N0", System.Globalization.CultureInfo.CurrentCulture) : null;
 
     /// <summary>The search text to send: null when the box is empty or only spaces, so an empty search never filters (FEAT-02).</summary>
     public string? EffectiveSearch => string.IsNullOrWhiteSpace(SearchText) ? null : SearchText.Trim();
 
-    /// <summary>"Showing 1-50 of 1,230" (FEAT-01).</summary>
+    /// <summary>"Showing 1–50 of 1,230" (FEAT-01), with an en dash.</summary>
     public string RangeText
     {
         get
@@ -122,11 +132,12 @@ public abstract partial class PagedListViewModel<TItem> : ViewModelBase
             }
 
             var first = ((Page - 1) * ListDefaults.PageSize) + 1;
-            return $"Showing {first:N0}-{first + Items.Count - 1:N0} of {Total:N0}";
+            return $"Showing {first:N0}\u2013{first + Items.Count - 1:N0} of {Total:N0}";
         }
     }
 
-    public string PageCountText => Total <= ListDefaults.PageSize ? string.Empty : $"Page {Page} of {LastPage}";
+    /// <summary>"Page 1 of 3": shown whenever the list has rows, also when there is only one page (every list shows the same footer), empty when it has none.</summary>
+    public string PageCountText => Total == 0 ? string.Empty : $"Page {Page} of {LastPage}";
 
     public bool HasPreviousPage => Page > 1;
 
@@ -148,7 +159,10 @@ public abstract partial class PagedListViewModel<TItem> : ViewModelBase
     /// <summary>Plural name used in the empty state, such as "donors".</summary>
     protected abstract string PluralName { get; }
 
-    public string EmptyTitle => HasActiveFilters ? $"No {PluralName} match these filters" : $"No {PluralName} yet";
+    public string EmptyTitle => HasActiveFilters ? $"No {PluralName} match these filters" : EmptyNoFilterTitle;
+
+    /// <summary>The empty-state title when nothing is filtered ("No donors yet"); a screen with saved views names the view ("No cancelled requests").</summary>
+    protected virtual string EmptyNoFilterTitle => $"No {PluralName} yet";
 
     public string EmptyMessage => HasActiveFilters ? "Try a different search, or clear the filters to see everyone." : EmptyAddMessage;
 

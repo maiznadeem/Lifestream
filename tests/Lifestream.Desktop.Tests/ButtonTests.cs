@@ -26,7 +26,7 @@ public sealed class ButtonTests
     private static Grid Stage(Button button)
     {
         var grid = new Grid { Width = 320, Height = 120 };
-        grid.SetResourceReference(Panel.BackgroundProperty, "Brush.SurfaceCanvas");
+        grid.SetResourceReference(Panel.BackgroundProperty, "Brush.Canvas");
         grid.Children.Add(button);
         return grid;
     }
@@ -157,12 +157,19 @@ public sealed class ButtonTests
     [Fact]
     public void Button_MinimumSizes_MeetTheDesign()
     {
+        // Direction A (docs/design-system.md 5.1): controls are 34 tall, the Small variants 28; icon buttons are square at the same sizes. Short labels
+        // do not make a button shorter than its minimum, and these labels are short enough not to make it taller.
         var sizes = StaHost.Run(() =>
         {
             var result = new Dictionary<string, Size>();
-            foreach (var variant in new[] { "Primary", "Secondary", "Ghost", "Danger", "Icon" })
+            foreach (var variant in new[] { "Primary", "Secondary", "Ghost", "Danger", "Icon", "Primary.Small", "Secondary.Small", "Danger.Small", "Icon.Small" })
             {
-                var button = Create(variant, "OK");
+                var button = Create(variant.StartsWith("Icon", StringComparison.Ordinal) ? "Icon" : variant, "OK");
+                if (variant == "Icon.Small")
+                {
+                    button.SetResourceReference(FrameworkElement.StyleProperty, "Button.Icon.Small");
+                }
+
                 using var host = Hosted.Create(Stage(button), 320, 120);
                 host.Settle();
                 result[variant] = new Size(button.ActualWidth, button.ActualHeight);
@@ -171,11 +178,76 @@ public sealed class ButtonTests
             return result;
         });
 
-        Assert.True(sizes["Primary"].Height >= 40);
-        Assert.True(sizes["Secondary"].Height >= 32);
-        Assert.True(sizes["Ghost"].Height >= 32);
-        Assert.True(sizes["Danger"].Height >= 32);
-        Assert.True(sizes["Icon"].Width >= 32 && sizes["Icon"].Height >= 32);
+        foreach (var variant in new[] { "Primary", "Secondary", "Ghost", "Danger" })
+        {
+            Assert.Equal(34, sizes[variant].Height, 0.5);
+            Assert.True(sizes[variant].Width >= 34, $"{variant} is {sizes[variant].Width} wide");
+        }
+
+        Assert.Equal(34, sizes["Icon"].Width, 0.5);
+        Assert.Equal(34, sizes["Icon"].Height, 0.5);
+
+        foreach (var variant in new[] { "Primary.Small", "Secondary.Small", "Danger.Small" })
+        {
+            Assert.Equal(28, sizes[variant].Height, 0.5);
+            Assert.True(sizes[variant].Width >= 28, $"{variant} is {sizes[variant].Width} wide");
+        }
+
+        Assert.Equal(28, sizes["Icon.Small"].Width, 0.5);
+        Assert.Equal(28, sizes["Icon.Small"].Height, 0.5);
+    }
+
+    [Fact]
+    public void Button_ThatShowsOnlyAnIcon_IsAsWideAsItsIcon_BusyOrNot_AndGetsTheBusyTextBackWithItsLabel()
+    {
+        // A list screen's "Add" button folds to its icon in a narrow window (its label is collapsed). The busy layer ("Working...") is measured with the
+        // label so a button never changes width when it turns busy; for a button that shows no text that made a 44 DIP button about 115 wide.
+        var f = StaHost.Run(() =>
+        {
+            var label = new TextBlock { Text = "Add donor", VerticalAlignment = VerticalAlignment.Center, Visibility = Visibility.Collapsed };
+            var content = new StackPanel { Orientation = Orientation.Horizontal };
+            content.Children.Add(new Icon { Kind = IconKind.Userplus, Size = 16, VerticalAlignment = VerticalAlignment.Center });
+            content.Children.Add(label);
+            var button = new Button { Content = content, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+            button.SetResourceReference(FrameworkElement.StyleProperty, "Button.Primary"); // the style's own busy text, "Working..."
+            using var host = Hosted.Create(Stage(button), 320, 120);
+            host.Settle();
+            var busyLabel = (TextBlock)button.Template.FindName("BusyLabel", button);
+            var spinner = (FrameworkElement)button.Template.FindName("Spinner", button);
+            var padding = button.Padding.Left + button.Padding.Right;
+
+            var iconOnly = button.ActualWidth;
+            ButtonAssist.SetIsBusy(button, true);
+            host.Settle();
+            var iconOnlyBusy = (Width: button.ActualWidth, Label: busyLabel.IsVisible, Spinner: spinner.IsVisible, HasLabel: ButtonAssist.GetHasLabel(button));
+            ButtonAssist.SetIsBusy(button, false);
+
+            label.Visibility = Visibility.Visible; // the window got wider
+            host.Settle();
+            var labelled = button.ActualWidth;
+            ButtonAssist.SetIsBusy(button, true);
+            host.Settle();
+            var labelledBusy = (Width: button.ActualWidth, Label: busyLabel.IsVisible, Text: busyLabel.Text, Spinner: spinner.IsVisible, HasLabel: ButtonAssist.GetHasLabel(button));
+            ButtonAssist.SetIsBusy(button, false);
+
+            label.Visibility = Visibility.Collapsed; // and narrow again
+            host.Settle();
+            return (IconOnly: iconOnly, IconOnlyBusy: iconOnlyBusy, Labelled: labelled, LabelledBusy: labelledBusy, Again: button.ActualWidth, Padding: padding);
+        });
+
+        Assert.Equal(16 + f.Padding, f.IconOnly, 0.5); // the icon and the button's padding, nothing else
+        Assert.Equal(f.IconOnly, f.IconOnlyBusy.Width, 0.5);
+        Assert.False(f.IconOnlyBusy.HasLabel);
+        Assert.False(f.IconOnlyBusy.Label, "an icon-only button shows no busy text");
+        Assert.True(f.IconOnlyBusy.Spinner, "an icon-only button still shows the spinner while busy");
+
+        Assert.True(f.Labelled > f.IconOnly + 40, $"with its label the button is {f.Labelled} wide");
+        Assert.Equal(f.Labelled, f.LabelledBusy.Width, 0.5); // the width does not change when it turns busy
+        Assert.True(f.LabelledBusy.HasLabel);
+        Assert.True(f.LabelledBusy.Label && f.LabelledBusy.Spinner);
+        Assert.Equal("Working...", f.LabelledBusy.Text);
+
+        Assert.Equal(f.IconOnly, f.Again, 0.5);
     }
 
     [Fact]

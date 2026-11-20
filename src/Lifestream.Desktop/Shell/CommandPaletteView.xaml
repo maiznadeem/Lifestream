@@ -1,0 +1,110 @@
+<UserControl x:Class="Lifestream.Desktop.Shell.CommandPaletteView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:Lifestream.Desktop.Controls"
+             xmlns:services="clr-namespace:Lifestream.Desktop.Services"
+             xmlns:shell="clr-namespace:Lifestream.Desktop.Shell"
+             Visibility="Collapsed" FontFamily="{DynamicResource Font.Family}" FontSize="{DynamicResource FontSize.Body}" Foreground="{DynamicResource Brush.Ink}" Focusable="False">
+  <UserControl.Resources>
+    <CollectionViewSource x:Key="Grouped" Source="{Binding Items}">
+      <CollectionViewSource.GroupDescriptions>
+        <PropertyGroupDescription PropertyName="Group" />
+      </CollectionViewSource.GroupDescriptions>
+    </CollectionViewSource>
+    <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+    <services:HasTextToVisibilityConverter x:Key="HasTextConverter" />
+    <shell:ShortcutKeysConverter x:Key="KeysConverter" />
+  </UserControl.Resources>
+  <!-- A transparent layer over the window: a click outside the palette closes it. -->
+  <Grid x:Name="Layer" Background="Transparent" MouseDown="OnLayerMouseDown">
+    <!-- Edged in Stroke2 (not Stroke): over the dark page the shadow barely shows, and the edge is what sets the palette apart (design-qa-2 N16) -->
+    <controls:ElevatedSurface x:Name="Surface" Level="Dialog" CornerRadius="{DynamicResource Radius.Panel}" Width="{DynamicResource Width.Palette}" Padding="0" BorderBrush="{DynamicResource Brush.Stroke2}"
+                              HorizontalAlignment="Center" VerticalAlignment="Top" Margin="{DynamicResource Inset.L16T52R16B16}" MouseDown="OnSurfaceMouseDown"
+                              KeyboardNavigation.TabNavigation="Cycle" AutomationProperties.Name="Command palette">
+      <controls:ElevatedSurface.RenderTransform>
+        <ScaleTransform x:Name="OpenScale" ScaleX="1" ScaleY="1" />
+      </controls:ElevatedSurface.RenderTransform>
+      <DockPanel>
+        <!-- The query row: 46 DIP, the search icon, the field, Esc. -->
+        <Border DockPanel.Dock="Top" Height="46" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="0,0,0,1" Padding="{DynamicResource Inset.H14}">
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="Auto" />
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <controls:Icon Kind="Search" Size="18" Foreground="{DynamicResource Brush.Ink3}" VerticalAlignment="Center" Margin="{DynamicResource Inset.R10}" />
+            <Grid Grid.Column="1">
+              <!-- The hint starts where typed text starts (the field's own 2 DIP inset) plus 2, so the caret stands before it, not on its first letter -->
+              <TextBlock x:Name="Hint" Text="Search donors, patients and requests, or type a command" FontSize="15" Foreground="{DynamicResource Brush.Ink3}" VerticalAlignment="Center"
+                         IsHitTestVisible="False" TextTrimming="CharacterEllipsis" Margin="{DynamicResource Inset.L4}" />
+              <TextBox x:Name="QueryBox" Style="{x:Null}" Text="{Binding Query, UpdateSourceTrigger=PropertyChanged}" FontFamily="{DynamicResource Font.Family}" FontSize="15"
+                       Foreground="{DynamicResource Brush.Ink}" CaretBrush="{DynamicResource Brush.Ink}" Background="Transparent" BorderThickness="0" Padding="0" VerticalAlignment="Center"
+                       SelectionBrush="{DynamicResource Brush.Selected}" PreviewKeyDown="OnQueryKeyDown" TextChanged="OnQueryChanged"
+                       AutomationProperties.Name="Search and commands" AutomationProperties.HelpText="Type to search. Up and Down choose, Enter runs, Escape closes." />
+            </Grid>
+            <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+              <controls:Icon Kind="Sync" Size="14" Foreground="{DynamicResource Brush.Ink3}" Margin="{DynamicResource Inset.R10}" Visibility="{Binding IsSearching, Converter={StaticResource BoolToVisibility}}" />
+              <Border Style="{DynamicResource Kbd}">
+                <TextBlock Style="{DynamicResource Kbd.Text}" Text="Esc" />
+              </Border>
+            </StackPanel>
+          </Grid>
+        </Border>
+        <TextBlock x:Name="Empty" DockPanel.Dock="Top" Text="{Binding EmptyText}" Style="{DynamicResource Text.Secondary}" Margin="{DynamicResource Inset.L16T14R16B16}"
+                   Visibility="{Binding EmptyText, Converter={StaticResource HasTextConverter}}" AutomationProperties.LiveSetting="Polite" />
+        <!-- The list keeps 6 DIP below its viewport, so a row it scrolls under is cut above the palette's edge, not flush with it -->
+        <ListBox x:Name="Results" ItemsSource="{Binding Source={StaticResource Grouped}}" SelectedIndex="{Binding SelectedIndex}" MaxHeight="420" Padding="{DynamicResource Pad.6}" Margin="{DynamicResource Inset.B6}"
+                 Background="Transparent" BorderThickness="0" ItemContainerStyle="{DynamicResource PaletteItem}" Focusable="False" KeyboardNavigation.TabNavigation="None"
+                 ScrollViewer.HorizontalScrollBarVisibility="Disabled" MouseLeftButtonUp="OnResultClick" AutomationProperties.Name="Results">
+          <ListBox.Template>
+            <ControlTemplate TargetType="ListBox">
+              <ScrollViewer Padding="{TemplateBinding Padding}" Focusable="False">
+                <ItemsPresenter />
+              </ScrollViewer>
+            </ControlTemplate>
+          </ListBox.Template>
+          <ListBox.GroupStyle>
+            <GroupStyle>
+              <GroupStyle.HeaderTemplate>
+                <DataTemplate>
+                  <TextBlock Text="{Binding Name}" FontSize="{DynamicResource FontSize.Caption}" Foreground="{DynamicResource Brush.Ink3}" Margin="{DynamicResource Inset.L10T8R10B4}" />
+                </DataTemplate>
+              </GroupStyle.HeaderTemplate>
+            </GroupStyle>
+          </ListBox.GroupStyle>
+          <ListBox.ItemTemplate>
+            <DataTemplate>
+              <Grid>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="Auto" />
+                  <ColumnDefinition Width="Auto" />
+                  <ColumnDefinition Width="*" />
+                  <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <controls:Icon Kind="{Binding Icon}" Size="16" Foreground="{DynamicResource Brush.Ink2}" VerticalAlignment="Center" Margin="{DynamicResource Inset.R10}" />
+                <TextBlock Grid.Column="1" Text="{Binding Title}" FontWeight="Medium" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="320" />
+                <TextBlock Grid.Column="2" Text="{Binding Subtitle}" FontSize="{DynamicResource FontSize.Caption}" Foreground="{DynamicResource Brush.Ink3}" VerticalAlignment="Center"
+                           HorizontalAlignment="Right" TextTrimming="CharacterEllipsis" Margin="{DynamicResource Inset.L12}" />
+                <ItemsControl Grid.Column="3" ItemsSource="{Binding Shortcut, Converter={StaticResource KeysConverter}}" Focusable="False" VerticalAlignment="Center" Margin="{DynamicResource Inset.L12}">
+                  <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                      <StackPanel Orientation="Horizontal" />
+                    </ItemsPanelTemplate>
+                  </ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                      <Border Style="{DynamicResource Kbd}" Margin="{DynamicResource Inset.L4}">
+                        <TextBlock Style="{DynamicResource Kbd.Text}" Text="{Binding}" />
+                      </Border>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </Grid>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </DockPanel>
+    </controls:ElevatedSurface>
+  </Grid>
+</UserControl>

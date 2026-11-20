@@ -40,7 +40,10 @@ public sealed class DemoDirectory(IMemoryCache cache) : IDisposable
         return id;
     }
 
-    /// <summary>Runs the daily reset once per UTC day. Cheap (no database call) after the first request of the day.</summary>
+    /// <summary>
+    /// Runs the daily reset once per UTC day. Cheap (no database call) after the first request of the day. The data is built for <paramref name="now"/>:
+    /// the appointments of today that are over by then are completed, the others are still to come.
+    /// </summary>
     public async Task EnsureDailyResetAsync(IServiceProvider services, DateOnly today, DateTime now, CancellationToken ct)
     {
         if (_checkedDay == today)
@@ -58,7 +61,7 @@ public sealed class DemoDirectory(IMemoryCache cache) : IDisposable
 
             using var scope = services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<LifestreamDbContext>();
-            if (await DemoReset.RunIfDueAsync(db, today, ct))
+            if (await DemoReset.RunIfDueAsync(db, now, ct))
             {
                 AfterReset(now);
             }

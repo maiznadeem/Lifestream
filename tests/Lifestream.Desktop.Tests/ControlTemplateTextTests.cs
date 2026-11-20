@@ -14,7 +14,7 @@ namespace Lifestream.Desktop.Tests;
 /// SHELL-26, behavioural inventory (fourth round). The earlier inventories walked the realised views, so text that only exists inside a control's own
 /// template or inside a popup that is closed (the date picker's calendar, a context menu, a drop-down, a tooltip) was never inspected. This renders every
 /// control TEMPLATE that can host text, standalone and off-screen (a presentation source with no window and no popup ever opened), moves the content of
-/// each popup next to it, and walks the retained drawing of the whole tree: every glyph run the control would draw must be the bundled Inter at 12 DIP
+/// each popup next to it, and walks the retained drawing of the whole tree: every glyph run the control would draw must be the bundled Onest at 12 DIP
 /// or more. The control types are all the WPF controls the app uses (found by reading the app's XAML and C#), so a control the app starts to use is
 /// inspected without anyone adding it to a list.
 /// </summary>
@@ -27,9 +27,9 @@ public sealed partial class ControlTemplateTextTests
 
     private static bool IsIconFont(GlyphRun run) => run.GlyphTypeface.Win32FamilyNames.Values.Any(n => n.StartsWith("Segoe Fluent Icons", StringComparison.Ordinal) || n.StartsWith("Segoe MDL2 Assets", StringComparison.Ordinal));
 
-    private static bool IsInter(GlyphRun run) =>
-        run.GlyphTypeface.Win32FamilyNames.Values.Any(n => n.StartsWith("Inter Variable Text", StringComparison.Ordinal))
-        && run.GlyphTypeface.FontUri.AbsolutePath.EndsWith("/Lifestream;component/Fonts/intervariable.ttf", StringComparison.OrdinalIgnoreCase);
+    private static bool IsOnest(GlyphRun run) =>
+        run.GlyphTypeface.Win32FamilyNames.Values.Any(n => n.StartsWith("Onest", StringComparison.Ordinal))
+        && System.Text.RegularExpressions.Regex.IsMatch(run.GlyphTypeface.FontUri.AbsolutePath, @"/Lifestream;component/Fonts/onest-(regular|medium|semibold|bold)\.ttf$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
     /// <summary>Every glyph run that the visual and everything under it draws (the retained drawing of each visual, recursively).</summary>
     private static IEnumerable<(Visual Owner, GlyphRun Run)> GlyphRuns(Visual root)
@@ -189,9 +189,9 @@ public sealed partial class ControlTemplateTextTests
                 problems.Add($"{name} > {owner.GetType().Name} draws text at {run.FontRenderingEmSize:0.##} DIP (minimum {MinimumSize}), e.g. '{text}'");
             }
 
-            if (!IsInter(run) && !IsIconFont(run))
+            if (!IsOnest(run) && !IsIconFont(run))
             {
-                problems.Add($"{name} > {owner.GetType().Name} draws text in {Faces(run)} (not the bundled Inter), e.g. '{text}'");
+                problems.Add($"{name} > {owner.GetType().Name} draws text in {Faces(run)} (not the bundled Onest), e.g. '{text}'");
             }
         }
     }
@@ -271,7 +271,7 @@ public sealed partial class ControlTemplateTextTests
     private static int Variants(Type type) => type == typeof(Calendar) ? 3 : type == typeof(ComboBox) ? 2 : 1;
 
     [Fact]
-    public void EveryTextHostingControlTheAppUses_RenderedStandalone_DrawsOnlyInterAtTwelveDipOrMore()
+    public void EveryTextHostingControlTheAppUses_RenderedStandalone_DrawsOnlyOnestAtTwelveDipOrMore()
     {
         var (types, problems, renderings, seen) = StaHost.Run(() =>
         {
@@ -318,7 +318,7 @@ public sealed partial class ControlTemplateTextTests
     /// real DateField's calendar (the content of its closed popup, never opened) and the right-click menu of a text field, under the app theme.
     /// </summary>
     [Fact]
-    public void TheDateFieldsCalendar_AndTheTextFieldsRightClickMenu_UseInterAtTwelveDipOrMore()
+    public void TheDateFieldsCalendar_AndTheTextFieldsRightClickMenu_UseOnestAtTwelveDipOrMore()
     {
         var (problems, calendarRuns, menuTexts, calendarTexts) = StaHost.Run(() =>
         {

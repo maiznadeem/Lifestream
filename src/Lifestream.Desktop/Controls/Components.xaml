@@ -1,0 +1,547 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:controls="clr-namespace:Lifestream.Desktop.Controls"
+                    xmlns:common="clr-namespace:Lifestream.Client.Common;assembly=Lifestream.Client">
+  <ResourceDictionary.MergedDictionaries>
+    <ResourceDictionary Source="/Lifestream;component/Theme/Tokens.xaml" />
+    <ResourceDictionary Source="/Lifestream;component/Theme/Motion.xaml" />
+    <ResourceDictionary Source="/Lifestream;component/Theme/Typography.xaml" />
+    <ResourceDictionary Source="/Lifestream;component/Controls/Buttons.xaml" />
+    <ResourceDictionary Source="/Lifestream;component/Controls/Inputs.xaml" />
+  </ResourceDictionary.MergedDictionaries>
+
+  <!-- Components of direction A, "Ward" (Controls/Components.cs): Section, PageHeader, Badge, BloodGroupTag, Avatar, ElevatedSurface, SidePanel, DialogSurface, ModalOverlay,
+       plus the ProgressBar and the horizontal separator. Every colour is a DynamicResource brush. A shadow is always its own Border behind the content, never an effect on text. -->
+
+  <!-- Spacing used only here (the shared tokens have no exact match) -->
+  <Thickness x:Key="Components.Pad.Badge">7,0,7,0</Thickness>
+  <Thickness x:Key="Components.Pad.Tag">6,0,6,0</Thickness>
+  <Thickness x:Key="Components.Gap.Subtitle">10,0,0,0</Thickness>
+  <!-- 20 under the content: a form's sticky footer keeps its divider above its buttons and clear air below them. -->
+  <Thickness x:Key="Components.Pad.SidePanel">24,24,24,20</Thickness>
+  <Thickness x:Key="Components.Pad.DialogTitle">24,20,24,0</Thickness>
+  <Thickness x:Key="Components.Pad.DialogFooter">24,16,24,16</Thickness>
+
+  <!-- Section: a Layer panel with a header row (heading, muted subtitle, actions) and the content clipped to the rounded corners (PART_ClipHost, clipped by Section). -->
+  <Style TargetType="controls:Section">
+    <Setter Property="Focusable" Value="False" />
+    <Setter Property="IsTabStop" Value="False" />
+    <Setter Property="Padding" Value="{StaticResource Pad.PanelBody}" />
+    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    <Setter Property="VerticalContentAlignment" Value="Stretch" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="controls:Section">
+          <controls:CrispBorder Background="{DynamicResource Brush.Layer}" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="1"
+                                CornerRadius="{StaticResource Radius.Panel}">
+            <Grid>
+              <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+              </Grid.RowDefinitions>
+              <Grid x:Name="HeaderRow" Margin="{StaticResource Pad.PanelHeader}">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="Auto" />
+                  <ColumnDefinition Width="Auto" />
+                  <ColumnDefinition Width="*" />
+                  <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="HeaderText" Style="{StaticResource Text.Heading}" Text="{TemplateBinding Header}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                           VerticalAlignment="Center" AutomationProperties.HeadingLevel="Level2" />
+                <TextBlock x:Name="SubtitleText" Grid.Column="1" Style="{StaticResource Text.Secondary}" Foreground="{DynamicResource Brush.Ink3}"
+                           Text="{TemplateBinding Subtitle}" TextWrapping="NoWrap" VerticalAlignment="Center" Margin="{StaticResource Components.Gap.Subtitle}" />
+                <ContentPresenter x:Name="ActionsHost" Grid.Column="3" Content="{TemplateBinding HeaderActions}" VerticalAlignment="Center"
+                                  Margin="{StaticResource Inset.L12}" />
+              </Grid>
+              <Grid x:Name="PART_ClipHost" Grid.Row="1">
+                <ContentPresenter Margin="{TemplateBinding Padding}" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                  VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+              </Grid>
+            </Grid>
+          </controls:CrispBorder>
+          <ControlTemplate.Triggers>
+            <Trigger Property="Subtitle" Value="{x:Null}">
+              <Setter TargetName="SubtitleText" Property="Visibility" Value="Collapsed" />
+            </Trigger>
+            <Trigger Property="Subtitle" Value="">
+              <Setter TargetName="SubtitleText" Property="Visibility" Value="Collapsed" />
+            </Trigger>
+            <Trigger Property="HeaderActions" Value="{x:Null}">
+              <Setter TargetName="ActionsHost" Property="Visibility" Value="Collapsed" />
+            </Trigger>
+            <MultiTrigger>
+              <MultiTrigger.Conditions>
+                <Condition Property="Header" Value="" />
+                <Condition Property="HeaderActions" Value="{x:Null}" />
+              </MultiTrigger.Conditions>
+              <Setter TargetName="HeaderRow" Property="Visibility" Value="Collapsed" />
+            </MultiTrigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <!-- PageHeader: overline, title with a count badge, actions bottom-aligned at the right, tabs full width below. -->
+  <Style TargetType="controls:PageHeader">
+    <Setter Property="Focusable" Value="False" />
+    <Setter Property="IsTabStop" Value="False" />
+    <!-- The page's load state, read from the screen's view model when it has one (a view can set State itself): the count is hidden until the list is loaded. -->
+    <Setter Property="State" Value="{Binding State, FallbackValue={x:Static common:LoadState.Ready}}" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="controls:PageHeader">
+          <Grid>
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <TextBlock x:Name="OverlineText" Style="{StaticResource Text.Secondary}" Foreground="{DynamicResource Brush.Ink3}" Text="{TemplateBinding Overline}"
+                       TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Margin="{StaticResource Inset.B4}" />
+            <Grid Grid.Row="1">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+              </Grid.ColumnDefinitions>
+              <StackPanel Orientation="Horizontal" VerticalAlignment="Bottom">
+                <TextBlock x:Name="TitleText" Style="{StaticResource Text.Title}" Text="{TemplateBinding Title}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                           VerticalAlignment="Center" AutomationProperties.HeadingLevel="Level1" />
+                <controls:Badge x:Name="CountBadge" Kind="Neutral" Text="{TemplateBinding Count}" VerticalAlignment="Center" Margin="{StaticResource Components.Gap.Subtitle}" />
+              </StackPanel>
+              <ContentPresenter x:Name="ActionsHost" Grid.Column="1" Content="{TemplateBinding Actions}" VerticalAlignment="Bottom" HorizontalAlignment="Right"
+                                Margin="{StaticResource Inset.L12}" />
+            </Grid>
+            <ContentPresenter x:Name="TabsHost" Grid.Row="2" Content="{TemplateBinding Tabs}" Margin="{StaticResource Inset.T16}" />
+          </Grid>
+          <ControlTemplate.Triggers>
+            <Trigger Property="Overline" Value="{x:Null}">
+              <Setter TargetName="OverlineText" Property="Visibility" Value="Collapsed" />
+            </Trigger>
+            <Trigger Property="Overline" Value="">
+              <Setter TargetName="OverlineText" Property="Visibility" Value="Collapsed" />
+            </Trigger>
+            <Trigger Property="Count" Value="{x:Null}">
+              <Setter TargetName="CountBadge" Property="Visibility" Value="Collapsed" />
+            </Trigger>
+            <Trigger Property="Count" Value="">
+              <Setter TargetName="CountBadge" Property="Visibility" Value="Collapsed" />
+            </Trigger>
+            <!-- While the page is loading, waking the server or failed there is no count to state: a "0" would be false. -->
+            <Trigger Property="State" Value="Loading">
+              <Setter TargetName="CountBadge" Property="Visibility" Value="Collapsed" />
+            </Trigger>
+            <Trigger Property="State" Value="Waking">
+              <Setter TargetName="CountBadge" Property="Visibility" Value="Collapsed" />
+            </Trigger>
+            <Trigger Property="State" Value="Error">
+              <Setter TargetName="CountBadge" Property="Visibility" Value="Collapsed" />
+            </Trigger>
+            <Trigger Property="Actions" Value="{x:Null}">
+              <Setter TargetName="ActionsHost" Property="Visibility" Value="Collapsed" />
+            </Trigger>
+            <Trigger Property="Tabs" Value="{x:Null}">
+              <Setter TargetName="TabsHost" Property="Visibility" Value="Collapsed" />
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <!-- Badge: 22 tall, radius 4, 12 Medium. The kind sets Background, BorderBrush (the same soft colour, so the 1 px edge adds no size) and Foreground; the text, dot and icon inherit
+       the Foreground. Neutral is Layer2 with a 1 px Stroke edge. -->
+  <Style TargetType="controls:Badge">
+    <Setter Property="Focusable" Value="False" />
+    <Setter Property="IsTabStop" Value="False" />
+    <Setter Property="Height" Value="{StaticResource Height.Badge}" />
+    <Setter Property="HorizontalAlignment" Value="Left" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="FontFamily" Value="{DynamicResource Font.Family}" />
+    <Setter Property="FontSize" Value="{StaticResource FontSize.Caption}" />
+    <Setter Property="FontWeight" Value="Medium" />
+    <Setter Property="Background" Value="{DynamicResource Brush.Layer2}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Brush.Stroke}" />
+    <Setter Property="Foreground" Value="{DynamicResource Brush.Ink2}" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="controls:Badge">
+          <controls:CrispBorder Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1"
+                                CornerRadius="{StaticResource Radius.Small}" Padding="{StaticResource Components.Pad.Badge}">
+            <!-- The dot and the icon keep their size; the label takes the rest. A badge is normally as wide as its words (its column is budgeted for it); if it
+                 is ever given less, the label ends in an ellipsis and the badge shows the whole text as its tooltip (Badge.UpdateTrimTip): never cut mid-letter. -->
+            <Grid VerticalAlignment="Center">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <Ellipse x:Name="Dot" Width="6" Height="6" Fill="{TemplateBinding Foreground}" VerticalAlignment="Center" Margin="{StaticResource Inset.R6}" Visibility="Collapsed" />
+              <controls:Icon x:Name="Glyph" Grid.Column="1" Kind="{TemplateBinding Icon}" Size="13" VerticalAlignment="Center" Margin="{StaticResource Inset.R6}" />
+              <TextBlock x:Name="Label" Grid.Column="2" Text="{TemplateBinding Text}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+            </Grid>
+          </controls:CrispBorder>
+          <ControlTemplate.Triggers>
+            <Trigger Property="ShowDot" Value="True">
+              <Setter TargetName="Dot" Property="Visibility" Value="Visible" />
+            </Trigger>
+            <Trigger Property="Icon" Value="None">
+              <Setter TargetName="Glyph" Property="Visibility" Value="Collapsed" />
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+    <Style.Triggers>
+      <Trigger Property="Kind" Value="Success">
+        <Setter Property="Background" Value="{DynamicResource Brush.SuccessSoft}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.SuccessSoft}" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Success}" />
+      </Trigger>
+      <Trigger Property="Kind" Value="Warning">
+        <Setter Property="Background" Value="{DynamicResource Brush.WarningSoft}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.WarningSoft}" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Warning}" />
+      </Trigger>
+      <Trigger Property="Kind" Value="Critical">
+        <Setter Property="Background" Value="{DynamicResource Brush.CriticalSoft}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.CriticalSoft}" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Critical}" />
+      </Trigger>
+      <Trigger Property="Kind" Value="Info">
+        <Setter Property="Background" Value="{DynamicResource Brush.InfoSoft}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.InfoSoft}" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Info}" />
+      </Trigger>
+    </Style.Triggers>
+  </Style>
+
+  <!-- BloodGroupTag: Blood on BloodSoft, 12 SemiBold, min width 34, 22 tall; large: 32 tall, 15, min width 46. Both sizes are Blood text: the text takes the tag's
+       own Foreground, not the text colour of the panel it sits in. -->
+  <Style TargetType="controls:BloodGroupTag">
+    <Setter Property="Focusable" Value="False" />
+    <Setter Property="IsTabStop" Value="False" />
+    <Setter Property="Height" Value="{StaticResource Height.Badge}" />
+    <Setter Property="MinWidth" Value="34" />
+    <Setter Property="HorizontalAlignment" Value="Left" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="FontFamily" Value="{DynamicResource Font.Family}" />
+    <Setter Property="FontSize" Value="{StaticResource FontSize.Caption}" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Background" Value="{DynamicResource Brush.BloodSoft}" />
+    <Setter Property="Foreground" Value="{DynamicResource Brush.Blood}" />
+    <Setter Property="Padding" Value="{StaticResource Components.Pad.Tag}" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="controls:BloodGroupTag">
+          <Border Background="{TemplateBinding Background}" CornerRadius="{StaticResource Radius.Small}" Padding="{TemplateBinding Padding}" SnapsToDevicePixels="True">
+            <TextBlock Text="{TemplateBinding Text}" TextWrapping="NoWrap" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{TemplateBinding Foreground}" />
+          </Border>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+    <Style.Triggers>
+      <Trigger Property="IsLarge" Value="True">
+        <Setter Property="Height" Value="32" />
+        <Setter Property="MinWidth" Value="46" />
+        <Setter Property="FontSize" Value="{StaticResource FontSize.Heading}" />
+        <Setter Property="Padding" Value="{StaticResource Pad.Badge}" />
+      </Trigger>
+    </Style.Triggers>
+  </Style>
+
+  <!-- Avatar: a circle of Size (font size set by the control); initials, or a photo (Photo) over them. -->
+  <Style TargetType="controls:Avatar">
+    <Setter Property="Focusable" Value="False" />
+    <Setter Property="IsTabStop" Value="False" />
+    <Setter Property="Width" Value="{Binding Size, RelativeSource={RelativeSource Self}}" />
+    <Setter Property="Height" Value="{Binding Size, RelativeSource={RelativeSource Self}}" />
+    <Setter Property="HorizontalAlignment" Value="Left" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="FontFamily" Value="{DynamicResource Font.Family}" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Background" Value="{DynamicResource Brush.Selected}" />
+    <Setter Property="Foreground" Value="{DynamicResource Brush.Ink2}" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="controls:Avatar">
+          <Grid SnapsToDevicePixels="True">
+            <Ellipse Fill="{TemplateBinding Background}" />
+            <TextBlock x:Name="InitialsText" Text="{TemplateBinding Initials}" Foreground="{TemplateBinding Foreground}" TextWrapping="NoWrap" HorizontalAlignment="Center" VerticalAlignment="Center" />
+            <Ellipse x:Name="Photo" Visibility="Collapsed">
+              <Ellipse.Fill>
+                <!-- A Binding, not a TemplateBinding: the brush is a Freezable inside the template, where a TemplateBinding does not resolve. -->
+                <ImageBrush ImageSource="{Binding Source, RelativeSource={RelativeSource TemplatedParent}}" Stretch="UniformToFill" />
+              </Ellipse.Fill>
+            </Ellipse>
+          </Grid>
+          <ControlTemplate.Triggers>
+            <Trigger Property="HasPhoto" Value="True">
+              <Setter TargetName="Photo" Property="Visibility" Value="Visible" />
+              <Setter TargetName="InitialsText" Property="Visibility" Value="Collapsed" />
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+    <Style.Triggers>
+      <!-- A selected table row is filled with Selected, the avatar's own colour: there the disc is Layer, so it does not vanish behind its letters. -->
+      <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=DataGridRow}, FallbackValue=False}" Value="True">
+        <Setter Property="Background" Value="{DynamicResource Brush.Layer}" />
+      </DataTrigger>
+      <Trigger Property="IsBlood" Value="True">
+        <Setter Property="Background" Value="{DynamicResource Brush.BloodSoft}" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Blood}" />
+      </Trigger>
+    </Style.Triggers>
+  </Style>
+
+  <!-- ElevatedSurface: Layer, 1 px Stroke, and the shadow of its Level drawn by a Border behind (one per level, only the matching one is visible; none contains text). -->
+  <Style TargetType="controls:ElevatedSurface">
+    <Setter Property="Focusable" Value="False" />
+    <Setter Property="IsTabStop" Value="False" />
+    <Setter Property="Background" Value="{DynamicResource Brush.Layer}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Brush.Stroke}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="{StaticResource Radius.Panel}" />
+    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    <Setter Property="VerticalContentAlignment" Value="Stretch" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="controls:ElevatedSurface">
+          <Grid>
+            <Border x:Name="ShadowFlyout" Visibility="Collapsed" Background="{DynamicResource Brush.Layer}" CornerRadius="{TemplateBinding CornerRadius}" IsHitTestVisible="False">
+              <Border.Effect>
+                <DropShadowEffect Direction="270" Color="{DynamicResource Color.Shadow}" BlurRadius="{StaticResource Elevation.Flyout.Blur}"
+                                  ShadowDepth="{StaticResource Elevation.Flyout.Offset}" Opacity="{StaticResource Elevation.Flyout.Opacity}" />
+              </Border.Effect>
+            </Border>
+            <Border x:Name="ShadowDialog" Visibility="Collapsed" Background="{DynamicResource Brush.Layer}" CornerRadius="{TemplateBinding CornerRadius}" IsHitTestVisible="False">
+              <Border.Effect>
+                <DropShadowEffect Direction="270" Color="{DynamicResource Color.Shadow}" BlurRadius="{StaticResource Elevation.Dialog.Blur}"
+                                  ShadowDepth="{StaticResource Elevation.Dialog.Offset}" Opacity="{StaticResource Elevation.Dialog.Opacity}" />
+              </Border.Effect>
+            </Border>
+            <Border x:Name="ShadowPanel" Visibility="Collapsed" Background="{DynamicResource Brush.Layer}" CornerRadius="{TemplateBinding CornerRadius}" IsHitTestVisible="False">
+              <Border.Effect>
+                <DropShadowEffect Direction="270" Color="{DynamicResource Color.Shadow}" BlurRadius="{StaticResource Elevation.Panel.Blur}"
+                                  ShadowDepth="0" Opacity="{StaticResource Elevation.Panel.Opacity}" />
+              </Border.Effect>
+            </Border>
+            <controls:CrispBorder Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
+                                  CornerRadius="{TemplateBinding CornerRadius}" Padding="{TemplateBinding Padding}">
+              <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+            </controls:CrispBorder>
+          </Grid>
+          <ControlTemplate.Triggers>
+            <Trigger Property="Level" Value="Flyout">
+              <Setter TargetName="ShadowFlyout" Property="Visibility" Value="Visible" />
+            </Trigger>
+            <Trigger Property="Level" Value="Dialog">
+              <Setter TargetName="ShadowDialog" Property="Visibility" Value="Visible" />
+            </Trigger>
+            <Trigger Property="Level" Value="Panel">
+              <Setter TargetName="ShadowPanel" Property="Visibility" Value="Visible" />
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <!-- SidePanel: PART_Host slides and fades (its transform and animations are set by SidePanel in code, so animations off means no motion); PART_Close is the close button. -->
+  <Style TargetType="controls:SidePanel">
+    <Setter Property="Focusable" Value="False" />
+    <Setter Property="IsTabStop" Value="False" />
+    <Setter Property="Width" Value="{Binding PanelWidth, RelativeSource={RelativeSource Self}}" />
+    <Setter Property="Padding" Value="{StaticResource Components.Pad.SidePanel}" />
+    <Setter Property="PanelWidth" Value="{StaticResource Width.Panel}" />
+    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    <Setter Property="VerticalContentAlignment" Value="Stretch" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="controls:SidePanel">
+          <Grid x:Name="PART_Host">
+            <Border x:Name="Shadow" Background="{DynamicResource Brush.Layer}" IsHitTestVisible="False">
+              <Border.Effect>
+                <DropShadowEffect Direction="180" Color="{DynamicResource Color.Shadow}" BlurRadius="{StaticResource Elevation.Panel.Blur}" ShadowDepth="8"
+                                  Opacity="{StaticResource Elevation.Panel.Opacity}" />
+              </Border.Effect>
+            </Border>
+            <Border Background="{DynamicResource Brush.Layer}" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="1,0,0,0" UseLayoutRounding="True" SnapsToDevicePixels="True"
+                    Padding="{TemplateBinding Padding}">
+              <Grid>
+                <Grid.RowDefinitions>
+                  <RowDefinition Height="Auto" />
+                  <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                <Grid x:Name="HeaderRow" Margin="{StaticResource Inset.B12}">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                  </Grid.ColumnDefinitions>
+                  <TextBlock x:Name="OverlineText" Style="{StaticResource Text.Secondary}" Foreground="{DynamicResource Brush.Ink3}" Text="{TemplateBinding Overline}"
+                             TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                  <ContentPresenter x:Name="ActionsHost" Grid.Column="1" Content="{TemplateBinding HeaderActions}" VerticalAlignment="Center" Margin="{StaticResource Inset.R4}" />
+                  <Button x:Name="PART_Close" Grid.Column="2" Style="{StaticResource Button.Icon.Small}" AutomationProperties.Name="Close panel" ToolTip="Close (Esc)">
+                    <controls:Icon Kind="X" Size="15" />
+                  </Button>
+                </Grid>
+                <ContentPresenter Grid.Row="1" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+              </Grid>
+            </Border>
+          </Grid>
+          <ControlTemplate.Triggers>
+            <Trigger Property="HeaderActions" Value="{x:Null}">
+              <Setter TargetName="ActionsHost" Property="Visibility" Value="Collapsed" />
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+    <Style.Triggers>
+      <!-- A compact window (below 1280 DIP) narrows the panel; a view that sets PanelWidth itself keeps its own width. -->
+      <Trigger Property="controls:Responsive.Breakpoint" Value="Compact">
+        <Setter Property="PanelWidth" Value="{StaticResource Width.PanelCompact}" />
+      </Trigger>
+    </Style.Triggers>
+  </Style>
+
+  <!-- DialogSurface: Layer, radius 12, 1 px Stroke, the dialog shadow in a Border behind, title / body / footer. -->
+  <Style TargetType="controls:DialogSurface">
+    <Setter Property="Focusable" Value="False" />
+    <Setter Property="IsTabStop" Value="False" />
+    <Setter Property="MaxWidth" Value="560" />
+    <Setter Property="Padding" Value="{StaticResource Pad.24}" />
+    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    <Setter Property="VerticalContentAlignment" Value="Stretch" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="controls:DialogSurface">
+          <Grid>
+            <Border x:Name="Shadow" Background="{DynamicResource Brush.Layer}" CornerRadius="{StaticResource Radius.Dialog}" IsHitTestVisible="False">
+              <Border.Effect>
+                <DropShadowEffect Direction="270" Color="{DynamicResource Color.Shadow}" BlurRadius="{StaticResource Elevation.Dialog.Blur}"
+                                  ShadowDepth="{StaticResource Elevation.Dialog.Offset}" Opacity="{StaticResource Elevation.Dialog.Opacity}" />
+              </Border.Effect>
+            </Border>
+            <controls:CrispBorder Background="{DynamicResource Brush.Layer}" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="1" CornerRadius="{StaticResource Radius.Dialog}">
+              <Grid>
+                <Grid.RowDefinitions>
+                  <RowDefinition Height="Auto" />
+                  <RowDefinition Height="*" />
+                  <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <TextBlock x:Name="TitleText" Style="{StaticResource Text.Section}" Text="{TemplateBinding Title}" Margin="{StaticResource Components.Pad.DialogTitle}"
+                           AutomationProperties.HeadingLevel="Level2" />
+                <ContentPresenter Grid.Row="1" Margin="{TemplateBinding Padding}" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                  VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                <Border x:Name="FooterBar" Grid.Row="2" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="0,1,0,0" UseLayoutRounding="True" SnapsToDevicePixels="True"
+                        Padding="{StaticResource Components.Pad.DialogFooter}">
+                  <ContentPresenter Content="{TemplateBinding Footer}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                </Border>
+              </Grid>
+            </controls:CrispBorder>
+          </Grid>
+          <ControlTemplate.Triggers>
+            <Trigger Property="Title" Value="">
+              <Setter TargetName="TitleText" Property="Visibility" Value="Collapsed" />
+            </Trigger>
+            <Trigger Property="Footer" Value="{x:Null}">
+              <Setter TargetName="FooterBar" Property="Visibility" Value="Collapsed" />
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <!-- ModalOverlay: scrim (PART_Scrim, a click closes), content centred in PART_Host (scaled by ModalOverlay in code), PART_Root fades. Tab cycles inside PART_Host. -->
+  <Style TargetType="controls:ModalOverlay">
+    <Setter Property="Focusable" Value="False" />
+    <Setter Property="IsTabStop" Value="False" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="controls:ModalOverlay">
+          <Grid x:Name="PART_Root">
+            <Rectangle x:Name="PART_Scrim" Fill="{DynamicResource Brush.Scrim}" />
+            <Grid x:Name="PART_Host" HorizontalAlignment="Center" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5"
+                  KeyboardNavigation.TabNavigation="Cycle" KeyboardNavigation.ControlTabNavigation="Cycle">
+              <ContentPresenter />
+            </Grid>
+          </Grid>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <!-- ProgressBar: a 4 tall Well track with a Primary fill, radius 2. Indeterminate: a 30 % segment slides left to right over 1.4 s (a gradient brush with hard stops whose
+       RelativeTransform moves); with animations off it rests in the middle. -->
+  <Style TargetType="ProgressBar">
+    <Setter Property="Height" Value="4" />
+    <Setter Property="Minimum" Value="0" />
+    <Setter Property="Maximum" Value="100" />
+    <Setter Property="IsTabStop" Value="False" />
+    <Setter Property="Background" Value="{DynamicResource Brush.Well}" />
+    <Setter Property="Foreground" Value="{DynamicResource Brush.Primary}" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="ProgressBar">
+          <Grid x:Name="Root" ClipToBounds="True" SnapsToDevicePixels="True">
+            <Border x:Name="PART_Track" Background="{TemplateBinding Background}" CornerRadius="{StaticResource Radius.2}" />
+            <Border x:Name="PART_Indicator" HorizontalAlignment="Left" Background="{TemplateBinding Foreground}" CornerRadius="{StaticResource Radius.2}" />
+            <Border x:Name="Segment" Visibility="Collapsed" CornerRadius="{StaticResource Radius.2}" IsHitTestVisible="False">
+              <Border.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                  <LinearGradientBrush.RelativeTransform>
+                    <TranslateTransform x:Name="SegmentSlide" X="0" />
+                  </LinearGradientBrush.RelativeTransform>
+                  <GradientStop Color="Transparent" Offset="0.35" />
+                  <GradientStop Color="{DynamicResource Color.Primary}" Offset="0.35" />
+                  <GradientStop Color="{DynamicResource Color.Primary}" Offset="0.65" />
+                  <GradientStop Color="Transparent" Offset="0.65" />
+                </LinearGradientBrush>
+              </Border.Background>
+            </Border>
+          </Grid>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsIndeterminate" Value="True">
+              <Setter TargetName="PART_Indicator" Property="Visibility" Value="Collapsed" />
+              <Setter TargetName="Segment" Property="Visibility" Value="Visible" />
+              <Trigger.EnterActions>
+                <BeginStoryboard x:Name="SlideStoryboard">
+                  <Storyboard>
+                    <DoubleAnimation Storyboard.TargetName="SegmentSlide" Storyboard.TargetProperty="X" From="-0.65" To="0.65" Duration="{StaticResource Motion.Shimmer}"
+                                     RepeatBehavior="{StaticResource Motion.SpinnerRepeat}" FillBehavior="Stop" />
+                  </Storyboard>
+                </BeginStoryboard>
+              </Trigger.EnterActions>
+              <Trigger.ExitActions>
+                <StopStoryboard BeginStoryboardName="SlideStoryboard" />
+              </Trigger.ExitActions>
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <!-- A 1 px horizontal rule in Stroke. -->
+  <Style x:Key="Separator.Horizontal" TargetType="Separator">
+    <Setter Property="Focusable" Value="False" />
+    <Setter Property="IsTabStop" Value="False" />
+    <Setter Property="Height" Value="1" />
+    <Setter Property="Background" Value="{DynamicResource Brush.Stroke}" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="Separator">
+          <Border Background="{TemplateBinding Background}" SnapsToDevicePixels="True" UseLayoutRounding="True" />
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+</ResourceDictionary>

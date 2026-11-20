@@ -25,6 +25,22 @@ public static class SeedSizes
     public const int Receipts = CompletedAppointments + FulfilledRequests;
 }
 
+/// <summary>
+/// The clinic days around a reset. Yesterday, today and tomorrow (UTC) each hold one appointment in every hour the clinic is open, so a viewer in any time zone
+/// finds a clinic day in their own "today"; and what is over at the reset instant is decided by <see cref="DonationMinutes"/>.
+/// </summary>
+public static class DemoClinicDay
+{
+    /// <summary>The appointments each of yesterday, today and tomorrow is sure to hold: one per clinic hour (09 to 16 UTC), on the hour or the half hour.</summary>
+    public const int Appointments = 8;
+
+    /// <summary>
+    /// A donation is recorded at most this many minutes after its slot started. An appointment whose slot started this long or longer before the reset is over
+    /// (completed, or the day's one no-show); any other is pending.
+    /// </summary>
+    public const int DonationMinutes = 45;
+}
+
 /// <summary>Everything one generator run produces. Entities reference each other by navigation; ids are assigned by the database.</summary>
 public sealed class DemoDataSet
 {
@@ -51,13 +67,33 @@ public sealed class DemoDataSet
 }
 
 /// <summary>
-/// Builds a synthetic clinic whose dates are relative to <c>today</c>, deterministically: the same date and factor always
-/// give the same rows, in the same order. It is the single place seed data comes from (see <see cref="SyntheticVocabulary"/>).
+/// Builds a synthetic clinic as it stands at one instant (the moment the demo is reset), deterministically: the same instant and factor
+/// always give the same rows, in the same order. It is the single place seed data comes from (see <see cref="SyntheticVocabulary"/>).
+/// <para>
+/// The people and the random draws depend on the UTC date only; the time of day decides how far the clinic's day has got. The three
+/// clinic days around the instant (yesterday, today and tomorrow, in UTC) each hold a full day of appointments, so a viewer in any time zone
+/// has appointments in their own "today" (see <see cref="AroundToday"/>). An appointment is over (<see cref="AppointmentStatus.Completed"/>
+/// with its receipt and bags, or the day's one no-show) only when its slot started <see cref="DonationMinutes"/> or more before the instant;
+/// no row carries a time after the instant.
+/// </para>
 /// </summary>
 internal static class SyntheticDataBuilder
 {
-    // Clinic day: 16 half-hour slots from 09:00 to 16:30 UTC.
+    // Clinic day: 16 half-hour slots from 09:00 to 16:30 UTC (the API's default Clinic:Hours, Clinic:SlotMinutes and Clinic:TimeZone).
     private const int SlotsPerDay = 16;
+
+    /// <summary>The clinic's opening hour in UTC.</summary>
+    private const int OpeningHourUtc = 9;
+
+    private const int AppointmentsPerClinicDay = DemoClinicDay.Appointments;
+
+    private const int DonationMinutes = DemoClinicDay.DonationMinutes;
+
+    /// <summary>Donors who have never donated: the last appointment of today and of tomorrow is theirs (a first-time donor still to come).</summary>
+    private const int FirstTimeDonors = 2;
+
+    /// <summary>Mixed into the seed for the random stream of the days around today.</summary>
+    private const ulong AroundTodayStream = 0x5EED_70DA_C11E_1C00UL;
 
     /// <summary>The demo history reaches this far back: the twelve months of the dashboard chart plus the part of the month before them.</summary>
     internal const int HistoryDays = 365;
@@ -73,10 +109,19 @@ internal static class SyntheticDataBuilder
     // Blood type frequencies, in BloodType enum order: A+, A-, B+, B-, AB+, AB-, O+, O-.
     private static readonly int[] TypeWeights = [34, 6, 9, 2, 3, 1, 37, 8];
 
-    public static DemoDataSet Build(DateOnly today, int factor)
+    /// <summary>The clinic as it stands at 00:00 UTC of <paramref name="today"/>: the appointments of that day are all still to come.</summary>
+    public static DemoDataSet Build(DateOnly today, int factor) => Build(today.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc), factor);
+
+    /// <summary>The clinic as it stands at <paramref name="nowUtc"/> (the reset instant).</summary>
+    public static DemoDataSet Build(DateTime nowUtc, int factor)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(factor, 1);
-        var rng = new DeterministicRandom(((ulong)today.DayNumber << 16) ^ (ulong)factor);
+        nowUtc = DateTime.SpecifyKind(nowUtc, DateTimeKind.Utc);
+        var today = DateOnly.FromDateTime(nowUtc);
+        var seed = ((ulong)today.DayNumber << 16) ^ (ulong)factor;
+        var rng = new DeterministicRandom(seed);
+        // The days around today draw from a stream of their own, so the history's draws do not depend on them.
+        var aroundRng = new DeterministicRandom(seed ^ AroundTodayStream);
         var set = new DemoDataSet();
         // At least a full year of history, so the dashboard's twelve monthly buckets all have data; bigger scale datasets keep their longer span.
         var pastDays = Math.Max(HistoryDays, 110 * ((factor + 5) / 6));
@@ -84,9 +129,9 @@ internal static class SyntheticDataBuilder
 
         BuildStaff(set, rng, today, factor);
         BuildPeople(set, rng, today, factor);
-        var donationAppointments = BuildAppointments(set, rng, today, factor, pastDays, futureDays);
+        var donationAppointments = BuildAppointments(set, rng, aroundRng, nowUtc, factor, pastDays, futureDays);
         BuildDonations(set, rng, donationAppointments);
-        BuildRequestsAndIssues(set, rng, today, factor, pastDays);
+        BuildRequestsAndIssues(set, rng, nowUtc, factor, pastDays);
         SetDonorHistory(set);
         return set;
     }
@@ -151,20 +196,35 @@ internal static class SyntheticDataBuilder
         }
     }
 
-    /// <summary>Creates every appointment with a unique slot and returns the completed ones (each gets a donation receipt).</summary>
-    private static List<Appointment> BuildAppointments(DemoDataSet set, DeterministicRandom rng, DateOnly today, int factor, int pastDays, int futureDays)
+    /// <summary>
+    /// Creates every appointment with a unique slot and returns the completed ones (each gets a donation receipt). The history ends two days ago and the
+    /// open bookings start the day after tomorrow; yesterday, today and tomorrow are the full clinic days of <see cref="AroundToday"/>. The rows of those
+    /// three days come out of the same totals, so the dataset holds exactly <see cref="SeedSizes"/> times the factor of every status at any time of day.
+    /// </summary>
+    private static List<Appointment> BuildAppointments(DemoDataSet set, DeterministicRandom rng, DeterministicRandom aroundRng, DateTime nowUtc, int factor, int pastDays, int futureDays)
     {
         var completed = new List<Appointment>();
-        var pastCount = (SeedSizes.CompletedAppointments + SeedSizes.CancelledAppointments + SeedSizes.NoShowAppointments) * factor;
-        var todayStart = today.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
-        var pastSlots = SlotsOverMonths(pastCount, rng, todayStart.AddDays(-pastDays), pastDays);
+        var todayStart = nowUtc.Date;
+        var donors = DonorRoles.Assign(set.Donors, aroundRng);
+        var around = AroundToday(aroundRng, nowUtc, donors);
+
+        var completedInHistory = (SeedSizes.CompletedAppointments * factor) - around.Count(a => a.Status == AppointmentStatus.Completed);
+        var noShowsInHistory = (SeedSizes.NoShowAppointments * factor) - around.Count(a => a.Status == AppointmentStatus.NoShow);
+        var cancelled = SeedSizes.CancelledAppointments * factor;
+        var pastCount = completedInHistory + cancelled + noShowsInHistory;
+        var historyStart = todayStart.AddDays(-pastDays);
+        var recent = todayStart.AddDays(-Eligibility.MinDaysBetweenDonations);
+        var pastSlots = SlotsOverMonths(pastCount, rng, historyStart, pastDays - 1);
         for (var i = 0; i < pastCount; i++)
         {
-            var status = i < SeedSizes.CompletedAppointments * factor ? AppointmentStatus.Completed
-                : i < (SeedSizes.CompletedAppointments + SeedSizes.CancelledAppointments) * factor ? AppointmentStatus.Cancelled
+            var status = i < completedInHistory ? AppointmentStatus.Completed
+                : i < completedInHistory + cancelled ? AppointmentStatus.Cancelled
                 : AppointmentStatus.NoShow;
-            var slot = SlotTime(todayStart.AddDays(-pastDays), pastSlots[i]);
-            var donor = rng.Pick(set.Donors);
+            var slot = SlotTime(historyStart, pastSlots[i]);
+            // A donor who comes in today or tomorrow has not given blood in the 90 days before; one who comes for the first time never has.
+            var donor = status != AppointmentStatus.Completed ? rng.Pick(set.Donors)
+                : slot >= recent ? rng.Pick(donors.Regulars)
+                : rng.Pick(donors.Returning);
             var appointment = new Appointment
             {
                 Donor = donor,
@@ -181,7 +241,10 @@ internal static class SyntheticDataBuilder
             }
         }
 
-        var pendingCount = SeedSizes.PendingAppointments * factor;
+        set.Appointments.AddRange(around);
+        completed.AddRange(around.Where(a => a.Status == AppointmentStatus.Completed));
+
+        var pendingCount = (SeedSizes.PendingAppointments * factor) - around.Count(a => a.Status == AppointmentStatus.Pending);
         var futureSlots = Shuffled(pendingCount, rng, modulus: futureDays * SlotsPerDay);
         for (var i = 0; i < pendingCount; i++)
         {
@@ -190,8 +253,8 @@ internal static class SyntheticDataBuilder
             {
                 Donor = donor,
                 DonorBloodType = donor.BloodType,
-                SlotStartUtc = SlotTime(todayStart.AddDays(1), futureSlots[i]),
-                PlacedAtUtc = todayStart.AddDays(-rng.Between(0, 6)).AddMinutes(rng.Between(0, 59)),
+                SlotStartUtc = SlotTime(todayStart.AddDays(2), futureSlots[i]),
+                PlacedAtUtc = NotAfter(DuringTheWorkingDay(todayStart.AddDays(-rng.Between(0, 6)), rng.Between(0, WorkingMinutes - 1)), nowUtc),
                 Status = AppointmentStatus.Pending,
             });
         }
@@ -199,13 +262,84 @@ internal static class SyntheticDataBuilder
         return completed;
     }
 
+    /// <summary>
+    /// The clinic days of yesterday, today and tomorrow (UTC), oldest first: in each, one appointment in every hour the clinic is open, on the hour or the half hour.
+    /// <para>
+    /// Why three days: the data of a reset is seen while the UTC date is still the reset's, and a viewer's local day is a 24-hour window around "now", so it lies inside
+    /// those three days. A 24-hour window holds every time of day once, so it holds one appointment for each clinic hour (at least 7 of the 8: local midnight can fall
+    /// between an hour and its half hour and split one pair). None of them is cancelled, so the Today view, the dashboard and the sidebar count all have them.
+    /// </para>
+    /// <para>
+    /// Status: yesterday is over (seven donations and one no-show). Today, an appointment whose slot started <see cref="DonationMinutes"/> or more before
+    /// <paramref name="nowUtc"/> is over; the others, and all of tomorrow's, are pending. The last appointment of today and of tomorrow is a first-time donor's.
+    /// </para>
+    /// </summary>
+    private static List<Appointment> AroundToday(DeterministicRandom rng, DateTime nowUtc, DonorRoles donors)
+    {
+        var appointments = new List<Appointment>(3 * AppointmentsPerClinicDay);
+        var todayStart = nowUtc.Date;
+        var yesterday = Shuffled(AppointmentsPerClinicDay, rng, donors.Regulars.Count);
+        for (var day = -1; day <= 1; day++)
+        {
+            // One of the day's appointments (never the first, never one of the last two) is a no-show once its time has passed.
+            var noShow = rng.Between(1, AppointmentsPerClinicDay - 3);
+            for (var hour = 0; hour < AppointmentsPerClinicDay; hour++)
+            {
+                var slot = todayStart.AddDays(day).AddHours(OpeningHourUtc + hour).AddMinutes(30 * rng.Next(2));
+                var isOver = slot.AddMinutes(DonationMinutes) <= nowUtc;
+                var donor = day < 0 ? donors.Regulars[yesterday[hour]]
+                    : hour == AppointmentsPerClinicDay - 1 ? donors.FirstTime[day]
+                    : donors.Eligible[(day * (AppointmentsPerClinicDay - 1)) + hour];
+                appointments.Add(new Appointment
+                {
+                    Donor = donor,
+                    DonorBloodType = donor.BloodType,
+                    SlotStartUtc = slot,
+                    // Booked on an earlier day: two days or more before the slot is before today for tomorrow's appointments too.
+                    PlacedAtUtc = slot.AddDays(-rng.Between(2, 14)).AddMinutes(rng.Between(-120, 120)),
+                    Status = !isOver ? AppointmentStatus.Pending : hour == noShow ? AppointmentStatus.NoShow : AppointmentStatus.Completed,
+                });
+            }
+        }
+
+        return appointments;
+    }
+
+    /// <summary>
+    /// Which donors the days around today draw on. <see cref="FirstTime"/> never appear in a completed appointment of the history; <see cref="Eligible"/> (today's and
+    /// tomorrow's other donors) have none in the last <see cref="Eligibility.MinDaysBetweenDonations"/> days; <see cref="Regulars"/> are everybody else, and
+    /// <see cref="Returning"/> is everybody who has donated before. The first eight donors (one per blood group) stay regulars, so every group keeps a donor who
+    /// gives blood all year.
+    /// </summary>
+    private sealed record DonorRoles(List<Donor> FirstTime, List<Donor> Eligible, List<Donor> Regulars, List<Donor> Returning)
+    {
+        public static DonorRoles Assign(List<Donor> all, DeterministicRandom rng)
+        {
+            var groups = BloodTypeExtensions.All.Count;
+            var eligible = 2 * (AppointmentsPerClinicDay - 1);
+            var order = Shuffled(FirstTimeDonors + eligible, rng, all.Count - groups);
+            var firstTime = order[..FirstTimeDonors].Select(i => all[groups + i]).ToList();
+            var today = order[FirstTimeDonors..].Select(i => all[groups + i]).ToList();
+            var taken = new HashSet<Donor>(firstTime.Concat(today));
+            return new DonorRoles(firstTime, today, [.. all.Where(d => !taken.Contains(d))], [.. all.Where(d => !firstTime.Contains(d))]);
+        }
+    }
+
+    /// <summary>The clinic's working day in minutes (09:00 to 17:00 UTC): bookings and requests are made in it, not in the night.</summary>
+    private const int WorkingMinutes = SlotsPerDay * 30;
+
+    private static DateTime DuringTheWorkingDay(DateTime day, int minute) => day.AddHours(OpeningHourUtc).AddMinutes(minute);
+
+    /// <summary>The time itself, or the same time a day earlier when it would be after the reset: nothing in the dataset is stamped in the future.</summary>
+    private static DateTime NotAfter(DateTime time, DateTime nowUtc) => time <= nowUtc ? time : time.AddDays(-1);
+
     private static void BuildDonations(DemoDataSet set, DeterministicRandom rng, List<Appointment> completed)
     {
         var staff = set.Staff.Where(s => !s.IsDemo).ToList();
         foreach (var appointment in completed)
         {
             var units = rng.Chance(0.5) ? 1 : 2;
-            var when = appointment.SlotStartUtc.AddMinutes(rng.Between(15, 45));
+            var when = appointment.SlotStartUtc.AddMinutes(rng.Between(15, DonationMinutes));
             var receipt = new Receipt
             {
                 CreatedAtUtc = when,
@@ -232,9 +366,10 @@ internal static class SyntheticDataBuilder
         DonationReceipt = donation,
     };
 
-    private static void BuildRequestsAndIssues(DemoDataSet set, DeterministicRandom rng, DateOnly today, int factor, int pastDays)
+    private static void BuildRequestsAndIssues(DemoDataSet set, DeterministicRandom rng, DateTime nowUtc, int factor, int pastDays)
     {
-        var todayStart = today.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+        var todayStart = nowUtc.Date;
+        var today = DateOnly.FromDateTime(nowUtc);
         var staff = set.Staff.Where(s => !s.IsDemo).ToList();
         var patientsByType = set.Patients.GroupBy(p => p.BloodType).ToDictionary(g => g.Key, g => g.ToList());
 
@@ -255,30 +390,49 @@ internal static class SyntheticDataBuilder
             .Order()
             .ToList();
 
-        foreach (var issuedAt in issueDays)
+        // The stock as it stands at a moment: every bag collected by then, less the ones that have expired.
+        List<BloodType> InStockAt(DateTime moment)
         {
-            while (next < bags.Count && bags[next].CollectedAtUtc <= issuedAt)
+            while (next < bags.Count && bags[next].CollectedAtUtc <= moment)
             {
                 queues[bags[next].BloodType].Enqueue(bags[next]);
                 next++;
             }
 
-            var issueDate = DateOnly.FromDateTime(issuedAt);
+            var date = DateOnly.FromDateTime(moment);
             foreach (var queue in queues.Values)
             {
-                while (queue.Count > 0 && queue.Peek().ExpiresOn < issueDate)
+                while (queue.Count > 0 && queue.Peek().ExpiresOn < date)
                 {
                     queue.Dequeue();
                 }
             }
 
-            var candidates = queues.Where(q => q.Value.Count > 0).Select(q => q.Key).ToList();
+            return [.. queues.Where(q => q.Value.Count > 0).Select(q => q.Key)];
+        }
+
+        var lastIssue = DateTime.MinValue;
+        foreach (var planned in issueDays)
+        {
+            // Issues stay in time order (one that had to wait pushes the ones planned before its new time back to it).
+            var issuedAt = planned < lastIssue ? lastIssue : planned;
+            var candidates = InStockAt(issuedAt);
+            if (candidates.Count == 0 && next < bags.Count && bags[next].CollectedAtUtc.AddMinutes(30) <= nowUtc)
+            {
+                // No stock at all at that moment (it happens on a few dates a year): the request is fulfilled half an hour after the next donation comes in,
+                // as a clinic would do it. Without this the row would stay a pending request, and the dataset would hold a receipt fewer than it says.
+                issuedAt = bags[next].CollectedAtUtc.AddMinutes(30);
+                candidates = InStockAt(issuedAt);
+            }
+
             if (candidates.Count == 0)
             {
-                // No stock at all on that day: the request stays Pending and never reaches the receipt count.
+                // No stock and no donation left to wait for: the request stays Pending and never reaches the receipt count.
                 set.Requests.Add(NewRequest(rng, rng.Pick(set.Patients), issuedAt.AddDays(-1), RequestStatus.Pending));
                 continue;
             }
+
+            lastIssue = issuedAt;
 
             var type = PickWeighted(rng, candidates);
             var units = Math.Min(rng.Chance(0.75) ? 1 : 2, queues[type].Count);
@@ -315,12 +469,12 @@ internal static class SyntheticDataBuilder
 
         for (var i = 0; i < SeedSizes.PendingRequests * factor; i++)
         {
-            set.Requests.Add(NewRequest(rng, rng.Pick(set.Patients), todayStart.AddDays(-rng.Between(0, 10)).AddMinutes(rng.Between(0, 59)), RequestStatus.Pending, today));
+            set.Requests.Add(NewRequest(rng, rng.Pick(set.Patients), NotAfter(DuringTheWorkingDay(todayStart.AddDays(-rng.Between(0, 10)), rng.Between(0, WorkingMinutes - 1)), nowUtc), RequestStatus.Pending, today));
         }
 
         for (var i = 0; i < SeedSizes.CancelledRequests * factor; i++)
         {
-            set.Requests.Add(NewRequest(rng, rng.Pick(set.Patients), todayStart.AddDays(-rng.Between(5, pastDays - IssueFreeDays)), RequestStatus.Cancelled));
+            set.Requests.Add(NewRequest(rng, rng.Pick(set.Patients), DuringTheWorkingDay(todayStart.AddDays(-rng.Between(5, pastDays - IssueFreeDays)), i * 37 % WorkingMinutes), RequestStatus.Cancelled));
         }
     }
 

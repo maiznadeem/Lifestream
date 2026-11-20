@@ -71,14 +71,21 @@ public sealed class ShellScreenTests
                 _ = shell.StartAsync();
                 host.Settle(500);
                 var result = new List<(string Title, Type? View, string Heading)>();
+                // The call each screen makes for its own data. In direction A the shell (sidebar counts, read once at start) and the dashboard (stock
+                // meters) call some of the same routes, so the calls are counted per visit: what the route's count grew by while the screen opened.
+                var loads = new Dictionary<string, string> { ["Dashboard"] = "GetDashboardAsync", ["Donors"] = "GetDonorsAsync", ["Patients"] = "GetPatientsAsync", ["Stock"] = "GetStockAsync" };
+                var visits = new Dictionary<string, int>();
                 foreach (var screen in Screens)
                 {
                     var item = shell.Items.Single(i => i.Destination.Title == screen.Title);
+                    var before = screen.Title == "Dashboard" ? 0 : rig.Api.CountOf(loads[screen.Title]); // the dashboard is the start page: its visit began with the shell
                     if (screen.Title != "Dashboard")
                     {
                         Hosted.Await(() => shell.OpenAsync(item.Destination));
                         host.Settle(500);
                     }
+
+                    visits[screen.Title] = rig.Api.CountOf(loads[screen.Title]) - before;
 
                     var page = host.Find<ContentControl>("PageHost");
                     var view = host.All<FrameworkElement>().FirstOrDefault(e => e.GetType() == screen.View);
@@ -88,13 +95,16 @@ public sealed class ShellScreenTests
                     Assert.NotNull(page);
                 }
 
-                return (result, Dashboard: rig.Api.CountOf("GetDashboardAsync"), Donors: rig.Api.CountOf("GetDonorsAsync"), Patients: rig.Api.CountOf("GetPatientsAsync"), Stock: rig.Api.CountOf("GetStockAsync"));
+                // Nothing loads a screen's data again after its visit: the routes only a screen calls are still at one call each at the end.
+                return (result, Dashboard: visits["Dashboard"], Donors: visits["Donors"], Patients: visits["Patients"], Stock: visits["Stock"],
+                    Totals: (rig.Api.CountOf("GetDashboardAsync"), rig.Api.CountOf("GetDonorsAsync"), rig.Api.CountOf("GetPatientsAsync")));
             }
         });
 
         Assert.Equal(Screens.Select(s => s.Title), facts.result.Select(r => r.Title));
         Assert.All(facts.result, r => Assert.Equal(r.Title, r.Heading));
         Assert.Equal((1, 1, 1, 1), (facts.Dashboard, facts.Donors, facts.Patients, facts.Stock)); // exactly one call per data set per visit
+        Assert.Equal((1, 1, 1), facts.Totals);
     }
 
     [Fact]

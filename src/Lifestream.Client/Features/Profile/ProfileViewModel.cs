@@ -45,6 +45,7 @@ public sealed partial class ProfileViewModel : FormViewModelBase, INavigationPar
 
     protected override IToastService? SessionToasts => _toasts;
     private readonly IChangePasswordPrompt _passwords;
+    private readonly UiPreferences? _preferences;
     private ProfileResponse? _fetched;
     private byte[]? _fetchedPhoto;
     private string _rowVersion = string.Empty;
@@ -53,9 +54,16 @@ public sealed partial class ProfileViewModel : FormViewModelBase, INavigationPar
     private byte[]? _replacedPhoto;
     private bool _openPasswordDialog;
 
-    public ProfileViewModel(ILifestreamApiClient api, IToastService toasts, IPhotoPicker photos, IChangePasswordPrompt passwords)
+    /// <summary>Creates the screen; <paramref name="preferences"/> holds the appearance choice (light, dark or match Windows), which the app applies at once (without it the Appearance section is hidden).</summary>
+    public ProfileViewModel(ILifestreamApiClient api, IToastService toasts, IPhotoPicker photos, IChangePasswordPrompt passwords, UiPreferences? preferences = null)
     {
         _api = api;
+        _preferences = preferences;
+        if (preferences is not null)
+        {
+            preferences.PropertyChanged += OnPreferencesChanged;
+        }
+
         _toasts = toasts;
         _photos = photos;
         _passwords = passwords;
@@ -95,6 +103,19 @@ public sealed partial class ProfileViewModel : FormViewModelBase, INavigationPar
     public string? this[string field] => GetError(field);
 
     public string SaveText => "Save changes";
+
+    /// <summary>The keyboard shortcuts of the main window, for the Shortcuts section (the same keys the shell binds).</summary>
+    public IReadOnlyList<ShortcutInfo> Shortcuts { get; } =
+    [
+        new(["Ctrl", "K"], "Search records or run a command"),
+        new(["Ctrl", "F"], "Search the list on this page"),
+        new(["Ctrl", "N"], "Add a record on this page"),
+        new(["Ctrl", "D"], "Record a donation for the next appointment today"),
+        new(["Ctrl", "B"], "Collapse or expand the sidebar"),
+        new(["Alt", "1–8"], "Open a page of the sidebar"),
+        new(["F6"], "Move between the title bar, the sidebar and the page"),
+        new(["Esc"], "Close the side panel, the dialog or the palette"),
+    ];
 
     public string SaveBusyText => "Saving...";
 
@@ -142,6 +163,63 @@ public sealed partial class ProfileViewModel : FormViewModelBase, INavigationPar
 
     public bool PhotoWasReplaced => _replacedPhoto is not null;
 
+    /// <summary>The account header's name: the saved one, so an unsaved edit of the name field does not show there before Save (design-qa-2 N18).</summary>
+    public string SavedName => _baselineName;
+
+    /// <summary>The avatar's letters when there is no photo, from the saved name like the header beside it.</summary>
+    public string Initials => Staff.StaffText.Initials(_baselineName);
+
+    /// <summary>True when the avatar shows a photo (the stored one or a new one).</summary>
+    public bool HasPhoto => PhotoBytes is { Length: > 0 };
+
+    // ---- appearance -------------------------------------------------------------------------------------------------
+
+    /// <summary>True when this screen can change the appearance (the app gave it the preferences).</summary>
+    public bool CanChooseTheme => _preferences is not null;
+
+    /// <summary>The light theme.</summary>
+    public bool IsLightTheme
+    {
+        get => _preferences?.Theme == ThemeMode.Light;
+        set => SetTheme(value, ThemeMode.Light, nameof(IsLightTheme));
+    }
+
+    /// <summary>The dark theme.</summary>
+    public bool IsDarkTheme
+    {
+        get => _preferences?.Theme == ThemeMode.Dark;
+        set => SetTheme(value, ThemeMode.Dark, nameof(IsDarkTheme));
+    }
+
+    /// <summary>Follow the Windows app mode (the default).</summary>
+    public bool IsSystemTheme
+    {
+        get => _preferences is null || _preferences.Theme == ThemeMode.System;
+        set => SetTheme(value, ThemeMode.System, nameof(IsSystemTheme));
+    }
+
+    private void SetTheme(bool chosen, ThemeMode mode, string option)
+    {
+        if (chosen && _preferences is not null && _preferences.Theme != mode)
+        {
+            _preferences.Theme = mode; // saved at once; the app swaps the colours of every open window
+        }
+        else
+        {
+            OnPropertyChanged(option); // unchecked by its group, or nothing to change: re-read
+        }
+    }
+
+    private void OnPreferencesChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(UiPreferences.Theme))
+        {
+            OnPropertyChanged(nameof(IsLightTheme));
+            OnPropertyChanged(nameof(IsDarkTheme));
+            OnPropertyChanged(nameof(IsSystemTheme));
+        }
+    }
+
     public override bool HasUnsavedChanges => IsDirty;
 
     private bool IsDirty => State == LoadState.Ready && (DisplayName.Trim() != _baselineName || NormalisePhone(Phone) != _baselinePhone || _replacedPhoto is not null);
@@ -179,12 +257,14 @@ public sealed partial class ProfileViewModel : FormViewModelBase, INavigationPar
 
         _rowVersion = profile.RowVersion;
         Username = profile.Username;
-        DesignationText = profile.Designation.ToString();
+        DesignationText = StaffText.JobTitle(profile.Designation);
         ShiftText = StaffText.Shift(profile.Shift);
         DateOfBirthText = profile.DateOfBirth == default ? NotRecorded : Formatting.Date(profile.DateOfBirth);
         MemberSinceText = profile.MemberSinceUtc == default ? NotRecorded : Formatting.Date(DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(profile.MemberSinceUtc, DateTimeKind.Utc), TimeZoneInfo.Local)));
         _baselineName = profile.DisplayName.Trim();
         _baselinePhone = profile.Phone?.Trim() ?? string.Empty;
+        OnPropertyChanged(nameof(SavedName));
+        OnPropertyChanged(nameof(Initials));
         DisplayName = _baselineName;
         Phone = _baselinePhone;
         _replacedPhoto = null;
@@ -202,6 +282,8 @@ public sealed partial class ProfileViewModel : FormViewModelBase, INavigationPar
     protected override void OnBusyChanged(bool isBusy) => RaiseCommandStates();
 
     // ---- editing ----------------------------------------------------------------------------------------------------
+
+    partial void OnPhotoBytesChanged(byte[]? value) => OnPropertyChanged(nameof(HasPhoto));
 
     partial void OnDisplayNameChanged(string value)
     {
@@ -359,6 +441,8 @@ public sealed partial class ProfileViewModel : FormViewModelBase, INavigationPar
             _rowVersion = profile.RowVersion;
             _baselineName = profile.DisplayName.Trim();
             _baselinePhone = profile.Phone?.Trim() ?? string.Empty;
+            OnPropertyChanged(nameof(SavedName));
+            OnPropertyChanged(nameof(Initials));
         }
 
         if (photoSaved)
@@ -408,8 +492,18 @@ public sealed partial class ProfileViewModel : FormViewModelBase, INavigationPar
         if (disposing)
         {
             _replacedPhoto = null;
+            if (_preferences is not null)
+            {
+                _preferences.PropertyChanged -= OnPreferencesChanged;
+            }
         }
 
         base.Dispose(disposing);
     }
+}
+
+/// <summary>One keyboard shortcut: its keys ("Ctrl", "K") and what it does.</summary>
+public sealed record ShortcutInfo(IReadOnlyList<string> Keys, string Action)
+{
+    public string AutomationName => $"{string.Join(" ", Keys)}: {Action}";
 }

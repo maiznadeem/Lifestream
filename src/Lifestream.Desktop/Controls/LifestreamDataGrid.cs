@@ -170,6 +170,15 @@ public sealed class LifestreamDataGrid : DataGrid
             }
 
             column.CanUserSort = !string.IsNullOrEmpty(column.SortMemberPath);
+
+            // A header that sits over right-aligned numbers: the grid's own header style with the alignment changed (ColumnAssist.HeaderAlignment).
+            var alignment = ColumnAssist.GetHeaderAlignment(column);
+            if (alignment != HorizontalAlignment.Left && column.ReadLocalValue(DataGridColumn.HeaderStyleProperty) == DependencyProperty.UnsetValue && ColumnHeaderStyle is { } headerStyle)
+            {
+                var aligned = new Style(typeof(System.Windows.Controls.Primitives.DataGridColumnHeader), headerStyle);
+                aligned.Setters.Add(new Setter(HorizontalContentAlignmentProperty, alignment));
+                column.HeaderStyle = aligned;
+            }
         }
 
         ShowSortIndicator();
@@ -221,6 +230,8 @@ public static class TruncationTooltip
             new System.Windows.Media.Typeface(block.FontFamily, block.FontStyle, block.FontWeight, block.FontStretch),
             block.FontSize,
             System.Windows.Media.Brushes.Black,
+            null,
+            System.Windows.Media.TextOptions.GetTextFormattingMode(block), // as the block itself is drawn: Display in the app's windows
             System.Windows.Media.VisualTreeHelper.GetDpi(block).PixelsPerDip);
         return formatted.WidthIncludingTrailingWhitespace > block.ActualWidth + 0.5;
     }
@@ -281,4 +292,19 @@ public static class TruncationTooltip
             e.Handled = true; // text fits: no tooltip
         }
     }
+}
+
+/// <summary>
+/// Per-column settings of the shared data grid. <c>controls:ColumnAssist.HeaderAlignment="Right"</c> on a column puts its header over right-aligned
+/// numbers; the grid applies it when it loads (a column has no style of its own to base one on, and a view cannot name the grid's header style
+/// before it is in a window).
+/// </summary>
+public static class ColumnAssist
+{
+    public static readonly DependencyProperty HeaderAlignmentProperty =
+        DependencyProperty.RegisterAttached("HeaderAlignment", typeof(HorizontalAlignment), typeof(ColumnAssist), new PropertyMetadata(HorizontalAlignment.Left));
+
+    public static HorizontalAlignment GetHeaderAlignment(DependencyObject column) => (HorizontalAlignment)(column ?? throw new ArgumentNullException(nameof(column))).GetValue(HeaderAlignmentProperty);
+
+    public static void SetHeaderAlignment(DependencyObject column, HorizontalAlignment value) => (column ?? throw new ArgumentNullException(nameof(column))).SetValue(HeaderAlignmentProperty, value);
 }

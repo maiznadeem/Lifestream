@@ -14,15 +14,26 @@ public partial class RecordEditorChrome : UserControl
 {
     public static readonly DependencyProperty FieldsProperty = DependencyProperty.Register(nameof(Fields), typeof(object), typeof(RecordEditorChrome), new PropertyMetadata(null));
 
+    public static readonly DependencyProperty ShowFrameProperty =
+        DependencyProperty.Register(nameof(ShowFrame), typeof(bool), typeof(RecordEditorChrome), new PropertyMetadata(true, (d, _) => ((RecordEditorChrome)d).UpdateFrame()));
+
     public RecordEditorChrome()
     {
         InitializeComponent();
+        UpdateFrame();
         AddHandler(LostFocusEvent, new RoutedEventHandler(OnFieldLostFocus));
         FormFocus.SetIsEnabled(this, true);
     }
 
     /// <summary>The form's fields (placed in a scroll area above the actions).</summary>
     public object? Fields { get => GetValue(FieldsProperty); set => SetValue(FieldsProperty, value); }
+
+    /// <summary>Draws the form as its own panel (on by default); off inside a side panel, which is the surface.</summary>
+    public bool ShowFrame { get => (bool)GetValue(ShowFrameProperty); set => SetValue(ShowFrameProperty, value); }
+
+    private void UpdateFrame() => DetailPaneFrame.Apply(Frame, ShowFrame && !DetailPaneFrame.GetIsInPanel(this));
+
+    internal void RefreshFrame() => UpdateFrame();
 
     private void OnFieldLostFocus(object sender, RoutedEventArgs e)
     {

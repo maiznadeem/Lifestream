@@ -2,32 +2,36 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
   <ResourceDictionary.MergedDictionaries>
     <ResourceDictionary Source="/Lifestream;component/Theme/Tokens.xaml" />
+    <ResourceDictionary Source="/Lifestream;component/Theme/Motion.xaml" />
     <ResourceDictionary Source="/Lifestream;component/Theme/Typography.xaml" />
   </ResourceDictionary.MergedDictionaries>
 
-  <!-- The date field's calendar (SHELL-26). WPF's own Calendar templates set Verdana at 9.5, 10 and 10.5 DIP in their day names, headers and day buttons, so every part
-       of it is themed here: the day names, the month header and its arrows, the day buttons and the month and year buttons all use Inter from the type scale
-       (body 14 for the days, label 13 for the day names, nothing under 12). -->
+  <!-- The date field's calendar (SHELL-26) of direction A. WPF's own Calendar templates set Verdana at 9.5, 10 and 10.5 DIP in their day names, headers and day buttons, so every part
+       of it is themed here from the type scale: 13 SemiBold month header, 13 Medium day names, 13 days in 32 x 32 buttons (radius 4). Today is a 1 px Primary ring, the selected day
+       a Primary fill with OnPrimary text, hover is Hover, days of the other months are Ink3. The arrows are small subtle icon buttons (28 x 28, Chevl / Chevr).
+       Calendar.Lifestream is the bare calendar (the date field wraps it in its own surface); Calendar.Popup draws the menu surface itself (Layer, 1 px Stroke, radius 8, the flyout
+       shadow in a Border behind it) and is what the DatePicker gives its calendar. -->
   <Style x:Key="CalendarNavButton.Lifestream" TargetType="Button">
     <Setter Property="Focusable" Value="False" />
-    <Setter Property="MinWidth" Value="{StaticResource Height.Compact}" />
-    <Setter Property="MinHeight" Value="{StaticResource Height.Compact}" />
-    <Setter Property="Foreground" Value="{DynamicResource Brush.TextPrimary}" />
+    <Setter Property="Width" Value="{StaticResource Height.Compact}" />
+    <Setter Property="Height" Value="{StaticResource Height.Compact}" />
+    <Setter Property="Foreground" Value="{DynamicResource Brush.Ink2}" />
+    <Setter Property="Cursor" Value="Hand" />
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="Button">
-          <Border x:Name="Bd" Background="Transparent" CornerRadius="{StaticResource Radius.Control}">
+          <Border x:Name="Bd" Background="Transparent" CornerRadius="{StaticResource Radius.Control}" SnapsToDevicePixels="True">
             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
           </Border>
           <ControlTemplate.Triggers>
             <Trigger Property="IsMouseOver" Value="True">
-              <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.SurfaceHover}" />
+              <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Hover}" />
             </Trigger>
             <Trigger Property="IsPressed" Value="True">
-              <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.SurfacePressed}" />
+              <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Selected}" />
             </Trigger>
             <Trigger Property="IsEnabled" Value="False">
-              <Setter Property="Foreground" Value="{DynamicResource Brush.TextDisabled}" />
+              <Setter Property="Foreground" Value="{DynamicResource Brush.Ink3}" />
             </Trigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>
@@ -37,25 +41,27 @@
 
   <Style x:Key="CalendarHeaderButton.Lifestream" TargetType="Button" BasedOn="{StaticResource CalendarNavButton.Lifestream}">
     <Setter Property="FontFamily" Value="{DynamicResource Font.Family}" />
-    <Setter Property="FontSize" Value="{StaticResource FontSize.Body}" />
+    <Setter Property="FontSize" Value="{StaticResource FontSize.Label}" />
     <Setter Property="FontWeight" Value="SemiBold" />
-    <Setter Property="Padding" Value="{DynamicResource Inset.H12}" />
+    <Setter Property="Foreground" Value="{DynamicResource Brush.Ink}" />
+    <Setter Property="Width" Value="NaN" />
+    <Setter Property="Padding" Value="{DynamicResource Inset.H10}" />
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="Button">
-          <Border x:Name="Bd" Background="Transparent" CornerRadius="{StaticResource Radius.Control}" Padding="{TemplateBinding Padding}">
+          <Border x:Name="Bd" Background="Transparent" CornerRadius="{StaticResource Radius.Control}" Padding="{TemplateBinding Padding}" SnapsToDevicePixels="True">
             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" TextElement.FontFamily="{TemplateBinding FontFamily}" TextElement.FontSize="{TemplateBinding FontSize}"
                               TextElement.FontWeight="{TemplateBinding FontWeight}" TextElement.Foreground="{TemplateBinding Foreground}" />
           </Border>
           <ControlTemplate.Triggers>
             <Trigger Property="IsMouseOver" Value="True">
-              <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.SurfaceHover}" />
+              <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Hover}" />
             </Trigger>
             <Trigger Property="IsPressed" Value="True">
-              <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.SurfacePressed}" />
+              <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Selected}" />
             </Trigger>
             <Trigger Property="IsEnabled" Value="False">
-              <Setter Property="Foreground" Value="{DynamicResource Brush.TextDisabled}" />
+              <Setter Property="Foreground" Value="{DynamicResource Brush.Ink3}" />
             </Trigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>
@@ -65,43 +71,52 @@
 
   <Style x:Key="CalendarDayButton.Lifestream" TargetType="CalendarDayButton">
     <Setter Property="FontFamily" Value="{DynamicResource Font.Family}" />
-    <Setter Property="FontSize" Value="{StaticResource FontSize.Body}" />
-    <Setter Property="Foreground" Value="{DynamicResource Brush.TextPrimary}" />
-    <Setter Property="MinWidth" Value="{StaticResource Height.Compact}" />
-    <Setter Property="MinHeight" Value="{StaticResource Height.Compact}" />
+    <Setter Property="FontSize" Value="{StaticResource FontSize.Label}" />
+    <Setter Property="Foreground" Value="{DynamicResource Brush.Ink}" />
+    <Setter Property="MinWidth" Value="32" />
+    <Setter Property="MinHeight" Value="32" />
     <Setter Property="HorizontalContentAlignment" Value="Center" />
     <Setter Property="VerticalContentAlignment" Value="Center" />
     <Setter Property="FocusVisualStyle" Value="{x:Null}" />
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="CalendarDayButton">
-          <Border x:Name="Bd" Background="Transparent" BorderBrush="Transparent" BorderThickness="1" CornerRadius="{StaticResource Radius.Control}" SnapsToDevicePixels="True">
+          <controls:CrispBorder x:Name="Bd" Background="Transparent" BorderBrush="Transparent" BorderThickness="1" CornerRadius="{StaticResource Radius.Small}" SnapsToDevicePixels="True">
             <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
                               TextElement.FontFamily="{TemplateBinding FontFamily}" TextElement.FontSize="{TemplateBinding FontSize}" TextElement.Foreground="{TemplateBinding Foreground}" />
-          </Border>
+          </controls:CrispBorder>
           <ControlTemplate.Triggers>
             <Trigger Property="IsToday" Value="True">
-              <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Brush.BorderInput}" />
+              <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Brush.Primary}" />
             </Trigger>
             <Trigger Property="IsInactive" Value="True">
-              <Setter Property="Foreground" Value="{DynamicResource Brush.TextMuted}" />
+              <Setter Property="Foreground" Value="{DynamicResource Brush.Ink3}" />
             </Trigger>
             <Trigger Property="IsMouseOver" Value="True">
-              <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.SurfaceHover}" />
+              <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Hover}" />
             </Trigger>
             <Trigger Property="IsSelected" Value="True">
               <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Primary}" />
-              <Setter Property="Foreground" Value="{DynamicResource Brush.TextOnPrimary}" />
+              <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Brush.Primary}" />
+              <Setter Property="Foreground" Value="{DynamicResource Brush.OnPrimary}" />
             </Trigger>
             <Trigger Property="IsKeyboardFocused" Value="True">
-              <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Brush.FocusRing}" />
+              <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Brush.Focus}" />
+              <Setter TargetName="Bd" Property="BorderThickness" Value="2" />
             </Trigger>
+            <MultiTrigger>
+              <MultiTrigger.Conditions>
+                <Condition Property="IsKeyboardFocused" Value="True" />
+                <Condition Property="IsSelected" Value="True" />
+              </MultiTrigger.Conditions>
+              <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Brush.OnPrimary}" />
+            </MultiTrigger>
             <Trigger Property="IsBlackedOut" Value="True">
-              <Setter Property="Foreground" Value="{DynamicResource Brush.TextDisabled}" />
+              <Setter Property="Foreground" Value="{DynamicResource Brush.Ink3}" />
               <Setter TargetName="Bd" Property="Background" Value="Transparent" />
             </Trigger>
             <Trigger Property="IsEnabled" Value="False">
-              <Setter Property="Foreground" Value="{DynamicResource Brush.TextDisabled}" />
+              <Setter Property="Foreground" Value="{DynamicResource Brush.Ink3}" />
             </Trigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>
@@ -111,8 +126,8 @@
 
   <Style x:Key="CalendarButton.Lifestream" TargetType="CalendarButton">
     <Setter Property="FontFamily" Value="{DynamicResource Font.Family}" />
-    <Setter Property="FontSize" Value="{StaticResource FontSize.Body}" />
-    <Setter Property="Foreground" Value="{DynamicResource Brush.TextPrimary}" />
+    <Setter Property="FontSize" Value="{StaticResource FontSize.Label}" />
+    <Setter Property="Foreground" Value="{DynamicResource Brush.Ink}" />
     <Setter Property="MinWidth" Value="64" />
     <Setter Property="MinHeight" Value="{StaticResource Height.Control}" />
     <Setter Property="HorizontalContentAlignment" Value="Center" />
@@ -121,24 +136,33 @@
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="CalendarButton">
-          <Border x:Name="Bd" Background="Transparent" BorderBrush="Transparent" BorderThickness="1" CornerRadius="{StaticResource Radius.Control}" SnapsToDevicePixels="True">
+          <controls:CrispBorder x:Name="Bd" Background="Transparent" BorderBrush="Transparent" BorderThickness="1" CornerRadius="{StaticResource Radius.Control}" SnapsToDevicePixels="True">
             <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
                               TextElement.FontFamily="{TemplateBinding FontFamily}" TextElement.FontSize="{TemplateBinding FontSize}" TextElement.Foreground="{TemplateBinding Foreground}" />
-          </Border>
+          </controls:CrispBorder>
           <ControlTemplate.Triggers>
             <Trigger Property="IsInactive" Value="True">
-              <Setter Property="Foreground" Value="{DynamicResource Brush.TextMuted}" />
+              <Setter Property="Foreground" Value="{DynamicResource Brush.Ink3}" />
             </Trigger>
             <Trigger Property="IsMouseOver" Value="True">
-              <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.SurfaceHover}" />
+              <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Hover}" />
             </Trigger>
             <Trigger Property="HasSelectedDays" Value="True">
               <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Primary}" />
-              <Setter Property="Foreground" Value="{DynamicResource Brush.TextOnPrimary}" />
+              <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Brush.Primary}" />
+              <Setter Property="Foreground" Value="{DynamicResource Brush.OnPrimary}" />
             </Trigger>
             <Trigger Property="IsKeyboardFocused" Value="True">
-              <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Brush.FocusRing}" />
+              <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Brush.Focus}" />
+              <Setter TargetName="Bd" Property="BorderThickness" Value="2" />
             </Trigger>
+            <MultiTrigger>
+              <MultiTrigger.Conditions>
+                <Condition Property="IsKeyboardFocused" Value="True" />
+                <Condition Property="HasSelectedDays" Value="True" />
+              </MultiTrigger.Conditions>
+              <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Brush.OnPrimary}" />
+            </MultiTrigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>
       </Setter.Value>
@@ -148,16 +172,16 @@
   <!-- The month view (day names and days) and the year view (the twelve months or the years) are filled in by WPF into the two grids of this template. -->
   <Style x:Key="CalendarItem.Lifestream" TargetType="CalendarItem">
     <Setter Property="FontFamily" Value="{DynamicResource Font.Family}" />
-    <Setter Property="FontSize" Value="{StaticResource FontSize.Body}" />
-    <Setter Property="Foreground" Value="{DynamicResource Brush.TextPrimary}" />
-    <Setter Property="Margin" Value="{DynamicResource Pad.4}" />
+    <Setter Property="FontSize" Value="{StaticResource FontSize.Label}" />
+    <Setter Property="Foreground" Value="{DynamicResource Brush.Ink}" />
+    <Setter Property="Margin" Value="{StaticResource Pad.4}" />
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="CalendarItem">
           <ControlTemplate.Resources>
             <!-- The day names (S M T W T F S): WPF looks this template up by key in the template's own resources. -->
             <DataTemplate x:Key="{x:Static CalendarItem.DayTitleTemplateResourceKey}">
-              <TextBlock Text="{Binding}" Style="{DynamicResource Text.Label}" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{DynamicResource Inset.V4}" />
+              <TextBlock Text="{Binding}" Style="{DynamicResource Text.Label}" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{StaticResource Inset.V4}" />
             </DataTemplate>
           </ControlTemplate.Resources>
           <Grid x:Name="PART_Root">
@@ -170,12 +194,12 @@
               <ColumnDefinition Width="*" />
               <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <Button x:Name="PART_PreviousButton" Style="{StaticResource CalendarNavButton.Lifestream}" AutomationProperties.Name="Previous">
-              <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE76B;" />
+            <Button x:Name="PART_PreviousButton" Style="{StaticResource CalendarNavButton.Lifestream}" Margin="{StaticResource Inset.B4}" AutomationProperties.Name="Previous">
+              <controls:Icon Kind="Chevl" Size="16" />
             </Button>
-            <Button x:Name="PART_HeaderButton" Grid.Column="1" Style="{StaticResource CalendarHeaderButton.Lifestream}" AutomationProperties.Name="Change view" />
-            <Button x:Name="PART_NextButton" Grid.Column="2" Style="{StaticResource CalendarNavButton.Lifestream}" AutomationProperties.Name="Next">
-              <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE76C;" />
+            <Button x:Name="PART_HeaderButton" Grid.Column="1" Style="{StaticResource CalendarHeaderButton.Lifestream}" Margin="{StaticResource Inset.B4}" AutomationProperties.Name="Change view" />
+            <Button x:Name="PART_NextButton" Grid.Column="2" Style="{StaticResource CalendarNavButton.Lifestream}" Margin="{StaticResource Inset.B4}" AutomationProperties.Name="Next">
+              <controls:Icon Kind="Chevr" Size="16" />
             </Button>
             <Grid x:Name="PART_MonthView" Grid.Row="1" Grid.ColumnSpan="3" HorizontalAlignment="Center" Visibility="Visible">
               <Grid.ColumnDefinitions>
@@ -201,9 +225,9 @@
 
   <Style x:Key="Calendar.Lifestream" TargetType="Calendar">
     <Setter Property="FontFamily" Value="{DynamicResource Font.Family}" />
-    <Setter Property="FontSize" Value="{StaticResource FontSize.Body}" />
-    <Setter Property="Foreground" Value="{DynamicResource Brush.TextPrimary}" />
-    <Setter Property="Background" Value="{DynamicResource Brush.SurfaceRaised}" />
+    <Setter Property="FontSize" Value="{StaticResource FontSize.Label}" />
+    <Setter Property="Foreground" Value="{DynamicResource Brush.Ink}" />
+    <Setter Property="Background" Value="{DynamicResource Brush.Layer}" />
     <Setter Property="BorderThickness" Value="0" />
     <Setter Property="CalendarItemStyle" Value="{StaticResource CalendarItem.Lifestream}" />
     <Setter Property="CalendarDayButtonStyle" Value="{StaticResource CalendarDayButton.Lifestream}" />
@@ -220,12 +244,134 @@
     </Setter>
   </Style>
 
-  <!-- The standard WPF date picker builds its own calendar in code, so it is told which style to give it (the app's DateField hosts a Calendar directly). -->
+  <!-- The calendar inside a popup that has no surface of its own (the DatePicker's): the menu surface with the shadow behind it, room for the blur in the margin. -->
+  <Style x:Key="Calendar.Popup" TargetType="Calendar" BasedOn="{StaticResource Calendar.Lifestream}">
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="Calendar">
+          <Grid x:Name="PART_Root" Margin="{DynamicResource Inset.L12T6R12B20}" SnapsToDevicePixels="True">
+            <Border Background="{DynamicResource Brush.Layer}" CornerRadius="{StaticResource Radius.Panel}" IsHitTestVisible="False">
+              <Border.Effect>
+                <DropShadowEffect BlurRadius="{StaticResource Elevation.Flyout.Blur}" ShadowDepth="{StaticResource Elevation.Flyout.Offset}" Direction="270"
+                                  Opacity="{StaticResource Elevation.Flyout.Opacity}" Color="{DynamicResource Color.Shadow}" />
+              </Border.Effect>
+            </Border>
+            <controls:CrispBorder Background="{DynamicResource Brush.Layer}" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="1" CornerRadius="{StaticResource Radius.Panel}"
+                    Padding="{StaticResource Pad.4}">
+              <CalendarItem x:Name="PART_CalendarItem" Style="{TemplateBinding CalendarItemStyle}" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}" />
+            </controls:CrispBorder>
+          </Grid>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <!-- The text of the standard date picker: no chrome of its own (the picker draws the field), the placeholder ("Select a date") in Ink3. -->
+  <Style x:Key="DatePickerTextBox.Lifestream" TargetType="DatePickerTextBox">
+    <Setter Property="FontFamily" Value="{DynamicResource Font.Family}" />
+    <Setter Property="FontSize" Value="{StaticResource FontSize.Body}" />
+    <Setter Property="Foreground" Value="{DynamicResource Brush.Ink}" />
+    <Setter Property="CaretBrush" Value="{DynamicResource Brush.Ink}" />
+    <Setter Property="SelectionBrush" Value="{DynamicResource Brush.Primary}" />
+    <Setter Property="SelectionTextBrush" Value="{DynamicResource Brush.OnPrimary}" />
+    <Setter Property="Padding" Value="{StaticResource Pad.Field}" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+    <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="DatePickerTextBox">
+          <Grid Background="Transparent" SnapsToDevicePixels="True">
+            <VisualStateManager.VisualStateGroups>
+              <VisualStateGroup x:Name="WatermarkStates">
+                <VisualState x:Name="Unwatermarked" />
+                <VisualState x:Name="Watermarked">
+                  <Storyboard>
+                    <ObjectAnimationUsingKeyFrames Storyboard.TargetName="PART_Watermark" Storyboard.TargetProperty="Visibility">
+                      <DiscreteObjectKeyFrame KeyTime="{StaticResource Motion.Start}" Value="{x:Static Visibility.Visible}" />
+                    </ObjectAnimationUsingKeyFrames>
+                  </Storyboard>
+                </VisualState>
+              </VisualStateGroup>
+            </VisualStateManager.VisualStateGroups>
+            <ContentControl x:Name="PART_Watermark" Focusable="False" IsHitTestVisible="False" Visibility="Collapsed" Margin="{TemplateBinding Padding}" Padding="{DynamicResource Inset.L2}"
+                            VerticalAlignment="Center" Foreground="{DynamicResource Brush.Ink3}" />
+            <ScrollViewer x:Name="PART_ContentHost" Style="{x:Null}" Margin="0" VerticalAlignment="Center" Focusable="False" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden" />
+          </Grid>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <!-- The standard date picker: the input look (Layer fill, Stroke2 border with a StrokeStrong bottom edge, radius 6, a 2 px Primary bar on focus, Critical on error) with a Cal icon
+       button at the right; its calendar is the menu surface. (The app's DateField hosts a Calendar directly and has its own field.) -->
   <Style x:Key="DatePicker.Lifestream" TargetType="DatePicker">
     <Setter Property="FontFamily" Value="{DynamicResource Font.Family}" />
     <Setter Property="FontSize" Value="{StaticResource FontSize.Body}" />
-    <Setter Property="Foreground" Value="{DynamicResource Brush.TextPrimary}" />
-    <Setter Property="CalendarStyle" Value="{StaticResource Calendar.Lifestream}" />
+    <Setter Property="Foreground" Value="{DynamicResource Brush.Ink}" />
+    <Setter Property="MinHeight" Value="{StaticResource Height.Control}" />
+    <Setter Property="IsTabStop" Value="False" />
+    <Setter Property="CalendarStyle" Value="{StaticResource Calendar.Popup}" />
+    <Setter Property="Validation.ErrorTemplate" Value="{x:Null}" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="DatePicker">
+          <Grid x:Name="PART_Root" SnapsToDevicePixels="True">
+            <controls:CrispBorder x:Name="Box" Background="{DynamicResource Brush.Layer}" BorderBrush="{DynamicResource Brush.Stroke2}" BorderThickness="1"
+                    CornerRadius="{StaticResource Radius.Control}" />
+            <Border x:Name="HoverFill" Background="{DynamicResource Brush.Layer2}" CornerRadius="{StaticResource Radius.Control}" Margin="{StaticResource Pad.1}" Opacity="0" IsHitTestVisible="False" />
+            <Border x:Name="BottomEdge" Height="1" VerticalAlignment="Bottom" Margin="{DynamicResource Inset.H3}" Background="{DynamicResource Brush.StrokeStrong}" IsHitTestVisible="False" />
+            <DatePickerTextBox x:Name="PART_TextBox" Style="{StaticResource DatePickerTextBox.Lifestream}" Margin="{DynamicResource Inset.R34}" Focusable="{TemplateBinding Focusable}"
+                               HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalContentAlignment="Center" />
+            <Button x:Name="PART_Button" Style="{StaticResource CalendarNavButton.Lifestream}" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="{DynamicResource Inset.R3}"
+                    Foreground="{DynamicResource Brush.Ink3}" AutomationProperties.Name="Open calendar" ToolTip="Open calendar">
+              <controls:Icon Kind="Cal" Size="16" />
+            </Button>
+            <Border x:Name="Underline" Height="2" VerticalAlignment="Bottom" CornerRadius="{StaticResource Radius.Underline}" Margin="{DynamicResource Inset.H1}"
+                    Background="{DynamicResource Brush.Primary}" Visibility="Collapsed" IsHitTestVisible="False" />
+            <Border x:Name="ErrorBar" Height="2" VerticalAlignment="Bottom" CornerRadius="{StaticResource Radius.Underline}" Margin="{DynamicResource Inset.H1}"
+                    Background="{DynamicResource Brush.Critical}" Visibility="Collapsed" IsHitTestVisible="False" />
+            <Popup x:Name="PART_Popup" AllowsTransparency="True" Placement="Bottom" PlacementTarget="{Binding ElementName=PART_Root}" HorizontalOffset="-12" VerticalOffset="-4" StaysOpen="False" />
+          </Grid>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Trigger.EnterActions>
+                <BeginStoryboard>
+                  <Storyboard>
+                    <DoubleAnimation Storyboard.TargetName="HoverFill" Storyboard.TargetProperty="Opacity" To="1" Duration="{StaticResource Motion.Fast}" />
+                  </Storyboard>
+                </BeginStoryboard>
+              </Trigger.EnterActions>
+              <Trigger.ExitActions>
+                <BeginStoryboard>
+                  <Storyboard>
+                    <DoubleAnimation Storyboard.TargetName="HoverFill" Storyboard.TargetProperty="Opacity" To="0" Duration="{StaticResource Motion.Fast}" />
+                  </Storyboard>
+                </BeginStoryboard>
+              </Trigger.ExitActions>
+            </Trigger>
+            <Trigger Property="IsKeyboardFocusWithin" Value="True">
+              <Setter TargetName="Underline" Property="Visibility" Value="Visible" />
+            </Trigger>
+            <Trigger Property="IsDropDownOpen" Value="True">
+              <Setter TargetName="Underline" Property="Visibility" Value="Visible" />
+            </Trigger>
+            <Trigger Property="Validation.HasError" Value="True">
+              <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brush.Critical}" />
+              <Setter TargetName="BottomEdge" Property="Background" Value="{DynamicResource Brush.Critical}" />
+              <Setter TargetName="ErrorBar" Property="Visibility" Value="Visible" />
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter Property="Foreground" Value="{DynamicResource Brush.Ink3}" />
+              <Setter TargetName="Box" Property="Background" Value="{DynamicResource Brush.Layer2}" />
+              <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brush.Stroke}" />
+              <Setter TargetName="BottomEdge" Property="Background" Value="{DynamicResource Brush.Stroke}" />
+              <Setter TargetName="HoverFill" Property="Visibility" Value="Collapsed" />
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
   </Style>
 
   <Style TargetType="DatePicker" BasedOn="{StaticResource DatePicker.Lifestream}" />

@@ -23,6 +23,19 @@ public partial class FormDialogWindow : ChromeWindow
     }
 
     /// <summary>
+    /// The window draws no caption of its own: the dialog's title row and close button (DialogFrame) stand in for it, so the window chrome's caption
+    /// buttons are hidden. Esc, the frame's close button and Alt+F4 all reach <see cref="OnClosing"/>.
+    /// </summary>
+    public override void OnApplyTemplate()
+    {
+        base.OnApplyTemplate();
+        if (GetTemplateChild("CaptionButtons") is System.Windows.UIElement buttons)
+        {
+            buttons.Visibility = System.Windows.Visibility.Collapsed;
+        }
+    }
+
+    /// <summary>
     /// The window's X (and Alt+F4) takes the same road as Esc and the Cancel button: it is held back and runs the dialog's cancel command, which
     /// cancels a request in flight, asks "Discard changes?" when there is unsaved input, and only then asks this window to close (SHELL-24).
     /// </summary>

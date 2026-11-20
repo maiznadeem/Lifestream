@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Storage;
 namespace Lifestream.Data.Seed;
 
 /// <summary>
-/// Restores the demo data without a timer: the API calls <see cref="RunIfDueAsync"/> on the first authenticated request of each
+/// Restores the demo data without a timer: the API calls <see cref="RunIfDueAsync(LifestreamDbContext, DateTime, CancellationToken)"/> on the first authenticated request of each
 /// UTC day. An application lock (<c>sp_getapplock</c>) taken inside a serializable transaction makes sure exactly one caller
 /// does the work, however many arrive at once. Protected staff rows (the owner admin) and their audit rows are kept; every other
 /// table is rebuilt from <see cref="DemoDataGenerator"/>.
@@ -18,16 +18,45 @@ public static class DemoReset
     /// <summary>A manual "Reset demo data" is allowed at most once in this time, for everyone together.</summary>
     public static readonly TimeSpan ForceCooldown = TimeSpan.FromMinutes(10);
 
-    /// <summary>Resets when the last reset was before <paramref name="todayUtc"/>. Returns true for the one caller that did it.</summary>
+    /// <summary>
+    /// Resets when the last reset was before the UTC date of <paramref name="nowUtc"/> (the caller's clock). Returns true for the one caller that did it.
+    /// The data is built for that instant: what is over by then is completed, the rest of the day is still to come (<see cref="IDemoDataGenerator"/>).
+    /// </summary>
+    public static Task<bool> RunIfDueAsync(LifestreamDbContext db, DateTime nowUtc, CancellationToken cancellationToken) =>
+        ResetAsync(db, DateTime.SpecifyKind(nowUtc, DateTimeKind.Utc), Mode.Daily, cancellationToken);
+
+    /// <summary>The same, with the clinic as it stands at 00:00 UTC of <paramref name="todayUtc"/>.</summary>
     public static Task<bool> RunIfDueAsync(LifestreamDbContext db, DateOnly todayUtc, CancellationToken cancellationToken) =>
-        ResetAsync(db, todayUtc, force: false, cancellationToken);
+        RunIfDueAsync(db, todayUtc.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc), cancellationToken);
 
     /// <summary>Resets now unless a manual reset already happened in the last <see cref="ForceCooldown"/>. Returns false inside the cooldown.</summary>
-    public static Task<bool> ForceAsync(LifestreamDbContext db, DateOnly todayUtc, CancellationToken cancellationToken) =>
-        ResetAsync(db, todayUtc, force: true, cancellationToken);
+    public static Task<bool> ForceAsync(LifestreamDbContext db, DateTime nowUtc, CancellationToken cancellationToken) =>
+        ResetAsync(db, DateTime.SpecifyKind(nowUtc, DateTimeKind.Utc), Mode.Forced, cancellationToken);
 
-    private static async Task<bool> ResetAsync(LifestreamDbContext db, DateOnly todayUtc, bool force, CancellationToken ct)
+    /// <summary>The same, with the clinic as it stands at 00:00 UTC of <paramref name="todayUtc"/>.</summary>
+    public static Task<bool> ForceAsync(LifestreamDbContext db, DateOnly todayUtc, CancellationToken cancellationToken) =>
+        ForceAsync(db, todayUtc.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc), cancellationToken);
+
+    /// <summary>
+    /// Rebuilds a demo that was already reset on the UTC date of <paramref name="nowUtc"/> but holds no appointment on that date: data written by a release
+    /// whose generator left today empty (before 2.1). The migrate job calls it, so a deploy does not leave the Today view empty until the next UTC midnight.
+    /// A dataset of this generator always has appointments today, so this does nothing to it; it does nothing either when the last reset was on another day
+    /// (the daily reset, or nobody's: a database whose demo is switched off keeps its data).
+    /// </summary>
+    public static Task<bool> RunIfTodayIsMissingAsync(LifestreamDbContext db, DateTime nowUtc, CancellationToken cancellationToken) =>
+        ResetAsync(db, DateTime.SpecifyKind(nowUtc, DateTimeKind.Utc), Mode.TodayMissing, cancellationToken);
+
+    private enum Mode
     {
+        Daily,
+        Forced,
+        TodayMissing,
+    }
+
+    private static async Task<bool> ResetAsync(LifestreamDbContext db, DateTime nowUtc, Mode mode, CancellationToken ct)
+    {
+        var todayUtc = DateOnly.FromDateTime(nowUtc);
+        var force = mode == Mode.Forced;
         var previousAudit = db.AuditEnabled;
         db.AuditEnabled = false;
         try
@@ -42,9 +71,12 @@ public static class DemoReset
                 var state = await db.DemoState.SingleOrDefaultAsync(ct);
                 // A raw query returns Kind=Unspecified; the server clock is UTC by definition.
                 var serverNow = DateTime.SpecifyKind(await db.Database.SqlQuery<DateTime>($"SELECT SYSUTCDATETIME() AS [Value]").SingleAsync(ct), DateTimeKind.Utc);
-                var due = force
-                    ? state?.LastForcedResetAtUtc is not { } last || serverNow - last >= ForceCooldown
-                    : state?.LastResetDate is not { } lastDate || lastDate < todayUtc;
+                var due = mode switch
+                {
+                    Mode.Forced => state?.LastForcedResetAtUtc is not { } last || serverNow - last >= ForceCooldown,
+                    Mode.TodayMissing => state?.LastResetDate == todayUtc && !await HasAppointmentsOnAsync(db, todayUtc, ct),
+                    _ => state?.LastResetDate is not { } lastDate || lastDate < todayUtc,
+                };
                 if (!due)
                 {
                     await transaction.CommitAsync(ct);
@@ -52,7 +84,7 @@ public static class DemoReset
                 }
 
                 await WipeAsync(db, ct);
-                new DemoDataGenerator().Generate(todayUtc).AddTo(db);
+                new DemoDataGenerator().Generate(nowUtc).AddTo(db);
                 if (state is null)
                 {
                     state = new Entities.DemoState();
@@ -95,6 +127,13 @@ public static class DemoReset
         {
             throw new InvalidOperationException($"Could not take the demo reset lock (sp_getapplock returned {result.Value}).");
         }
+    }
+
+    private static Task<bool> HasAppointmentsOnAsync(LifestreamDbContext db, DateOnly dayUtc, CancellationToken ct)
+    {
+        var start = dayUtc.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+        var end = start.AddDays(1);
+        return db.Appointments.AnyAsync(a => a.SlotStartUtc >= start && a.SlotStartUtc < end, ct);
     }
 
     /// <summary>Set-based deletes in foreign-key order. Protected staff, their tokens, photos and audit rows stay.</summary>

@@ -2,61 +2,113 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="clr-namespace:Lifestream.Desktop.Controls"
-             xmlns:feat="clr-namespace:Lifestream.Desktop.Features"
-             xmlns:dialogs="clr-namespace:Lifestream.Desktop.Features.Dialogs"
+             xmlns:lists="clr-namespace:Lifestream.Desktop.Features.ListScreens"
              Focusable="False" IsTabStop="False">
-  <!-- The "Fulfil request" dialog: what will be issued, and how much of that blood is in stock (a warning when it is short). The data context is the FulfilRequestDialogViewModel. -->
+  <!-- The fulfil step of a request, in the Requests side panel (direction A, audit R3): what will be issued, the bags that will go (oldest first: order, bag, where it
+       came from, use-by date), how much of that blood is in stock (amber when it is short), the server's message when it refuses, and "Fulfil request" with "Not now",
+       which keeps the request as it is. Esc is "Not now" (it leaves the step, not the panel). The data context is the FulfilRequestDialogViewModel.
+       "Fulfil request" and "Not now" are a footer that stays in view: when the panel is short (1024 x 700) the step's content scrolls above them. Each bag is two
+       lines: its code with the use-by date, then where it came from. -->
   <UserControl.Resources>
     <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+    <lists:HasContentToVisibleConverter x:Key="HasContent" />
+    <lists:FalseToVisibleConverter x:Key="NotVisible" />
+    <Thickness x:Key="Fulfil.Pad">16</Thickness>
+    <Thickness x:Key="Fulfil.CardPad">12,10,12,10</Thickness>
+    <Thickness x:Key="Fulfil.Gap">0,0,0,12</Thickness>
+    <Thickness x:Key="Fulfil.IconGap">0,0,8,0</Thickness>
+    <Thickness x:Key="Fulfil.BagRow">0,0,0,8</Thickness>
+    <Thickness x:Key="Fulfil.OrderGap">0,0,10,0</Thickness>
   </UserControl.Resources>
-  <dialogs:DialogFrame>
-    <dialogs:DialogFrame.Fields>
-      <StackPanel>
-        <TextBlock Style="{DynamicResource Text.Body}" Foreground="{DynamicResource Brush.TextSecondary}" TextWrapping="Wrap" feat:Edge.Bottom="{DynamicResource Space.16}"
-                   Text="The oldest unexpired bags of this blood type are issued, and a receipt is made. If there isn't enough stock, nothing is changed." />
-        <Grid feat:Edge.Bottom="{DynamicResource Space.16}">
-          <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="*" />
-            <ColumnDefinition Width="Auto" />
-            <ColumnDefinition Width="Auto" />
-            <ColumnDefinition Width="Auto" />
-          </Grid.ColumnDefinitions>
-          <StackPanel>
-            <TextBlock Style="{DynamicResource Text.Caption}" Foreground="{DynamicResource Brush.TextMuted}" Text="Patient" />
-            <TextBlock Style="{DynamicResource Text.Body}" Text="{Binding PatientName}" TextWrapping="Wrap" />
+  <UserControl.InputBindings>
+    <KeyBinding Key="Escape" Command="{Binding CancelCommand}" />
+  </UserControl.InputBindings>
+  <Border x:Name="Frame" Background="{DynamicResource Brush.Layer2}" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="1" CornerRadius="{DynamicResource Radius.Panel}"
+          Padding="{StaticResource Fulfil.Pad}" SnapsToDevicePixels="True" AutomationProperties.Name="Fulfil request" VerticalAlignment="Top">
+    <Grid>
+      <Grid.RowDefinitions>
+        <RowDefinition Height="*" />
+        <RowDefinition Height="Auto" />
+        <RowDefinition Height="Auto" />
+      </Grid.RowDefinitions>
+      <!-- The viewer reaches 14 into the card's right padding and insets its content by the same, so its scroll bar never lies over the text (5.27) -->
+      <ScrollViewer x:Name="BodyScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False" Margin="{DynamicResource Inset.RN14}">
+        <StackPanel Margin="{DynamicResource Inset.R14}">
+          <TextBlock Style="{DynamicResource Text.Heading}" Text="Fulfil this request" Margin="{StaticResource Fulfil.Gap}" AutomationProperties.HeadingLevel="Level3" />
+          <!-- A server that is waking up (the stock check or the fulfil call waits on it): say so, with Cancel -->
+          <controls:WakingNotice IsActive="{Binding IsOperationWaking}" CancelCommand="{Binding CancelOperationCommand}" Margin="{StaticResource Fulfil.Gap}" />
+          <TextBlock Style="{DynamicResource Text.Body}" TextWrapping="Wrap" Margin="{StaticResource Fulfil.Gap}">
+            <Run Text="Issue" /> <Run Text="{Binding UnitsText, Mode=OneWay}" FontWeight="SemiBold" /> <Run Text="of" /> <Run Text="{Binding BloodTypeText, Mode=OneWay}" FontWeight="SemiBold" />
+            <Run Text="to" /> <Run Text="{Binding PatientName, Mode=OneWay}" /><Run Text=", needed by" /> <Run Text="{Binding RequiredByText, Mode=OneWay}" /><Run Text="." />
+          </TextBlock>
+          <!-- The stock of that blood: a plain line with an icon (amber when short), not a box -->
+          <StackPanel x:Name="Stock" Orientation="Horizontal" Margin="{StaticResource Fulfil.Gap}" AutomationProperties.LiveSetting="Polite" AutomationProperties.Name="Stock">
+            <controls:Icon x:Name="StockIcon" Size="16" VerticalAlignment="Center" Margin="{StaticResource Fulfil.IconGap}">
+              <controls:Icon.Style>
+                <Style TargetType="controls:Icon">
+                  <Setter Property="Kind" Value="Stock" />
+                  <Setter Property="Foreground" Value="{DynamicResource Brush.Ink2}" />
+                  <Style.Triggers>
+                    <DataTrigger Binding="{Binding StockIsShort}" Value="True">
+                      <Setter Property="Kind" Value="Alert" />
+                      <Setter Property="Foreground" Value="{DynamicResource Brush.Warning}" />
+                    </DataTrigger>
+                  </Style.Triggers>
+                </Style>
+              </controls:Icon.Style>
+            </controls:Icon>
+            <Grid>
+              <TextBlock x:Name="StockLine" Style="{DynamicResource Text.Secondary}" Text="{Binding StockText}" TextWrapping="Wrap" VerticalAlignment="Center"
+                         Visibility="{Binding StockIsShort, Converter={StaticResource NotVisible}}" />
+              <TextBlock x:Name="StockShortLine" Style="{DynamicResource Text.Secondary}" Foreground="{DynamicResource Brush.Warning}" Text="{Binding StockText}" TextWrapping="Wrap"
+                         VerticalAlignment="Center" Visibility="{Binding StockIsShort, Converter={StaticResource BoolToVisibility}}" />
+            </Grid>
           </StackPanel>
-          <StackPanel Grid.Column="1" feat:Edge.Left="{DynamicResource Space.24}">
-            <TextBlock Style="{DynamicResource Text.Caption}" Foreground="{DynamicResource Brush.TextMuted}" Text="Blood type" />
-            <TextBlock Style="{DynamicResource Text.Body}" Text="{Binding BloodTypeText}" />
-          </StackPanel>
-          <StackPanel Grid.Column="2" feat:Edge.Left="{DynamicResource Space.24}">
-            <TextBlock Style="{DynamicResource Text.Caption}" Foreground="{DynamicResource Brush.TextMuted}" Text="Units" />
-            <TextBlock Style="{DynamicResource Text.Body}" Text="{Binding UnitsText}" />
-          </StackPanel>
-          <StackPanel Grid.Column="3" feat:Edge.Left="{DynamicResource Space.24}">
-            <TextBlock Style="{DynamicResource Text.Caption}" Foreground="{DynamicResource Brush.TextMuted}" Text="Needed by" />
-            <TextBlock Style="{DynamicResource Text.Body}" Text="{Binding RequiredByText}" />
-          </StackPanel>
-        </Grid>
-        <Border feat:Edge.PadX="{DynamicResource Space.12}" feat:Edge.PadY="{DynamicResource Space.8}" Background="{DynamicResource Brush.SurfacePressed}" BorderThickness="1" CornerRadius="{DynamicResource Radius.Control}"
-                AutomationProperties.LiveSetting="Polite" AutomationProperties.Name="Stock">
-          <Border.Style>
-            <Style TargetType="Border">
-              <Setter Property="BorderBrush" Value="{DynamicResource Brush.BorderSubtle}" />
-              <Style.Triggers>
-                <DataTrigger Binding="{Binding StockIsShort}" Value="True">
-                  <Setter Property="BorderBrush" Value="{DynamicResource Brush.StatusWarning}" />
-                </DataTrigger>
-              </Style.Triggers>
-            </Style>
-          </Border.Style>
-          <StackPanel Orientation="Horizontal">
-            <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE7BA;" Foreground="{DynamicResource Brush.StatusWarning}" VerticalAlignment="Center" feat:Edge.Right="{DynamicResource Space.8}"
-                               Visibility="{Binding StockIsShort, Converter={StaticResource BoolToVisibility}}" />
-            <TextBlock Style="{DynamicResource Text.Body}" Text="{Binding StockText}" TextWrapping="Wrap" VerticalAlignment="Center" />
-          </StackPanel>
-        </Border>
-      </StackPanel>
-    </dialogs:DialogFrame.Fields>
-  </dialogs:DialogFrame>
+          <!-- The bags that will be issued, in the order the server takes them -->
+          <TextBlock x:Name="BagsNote" Style="{DynamicResource Text.Label}" Text="{Binding BagsNote}" TextWrapping="Wrap" Margin="{DynamicResource Inset.B8}"
+                     Visibility="{Binding BagsNote, Converter={StaticResource HasContent}}" />
+          <ItemsControl x:Name="BagList" ItemsSource="{Binding Bags}" Focusable="False" Margin="{StaticResource Fulfil.Gap}" AutomationProperties.Name="Bags to issue"
+                        Visibility="{Binding Bags, Converter={StaticResource HasContent}}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <Border Background="{DynamicResource Brush.Layer}" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="1" CornerRadius="{DynamicResource Radius.Control}"
+                        Padding="{StaticResource Fulfil.CardPad}" Margin="{StaticResource Fulfil.BagRow}" SnapsToDevicePixels="True">
+                  <Grid>
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="Auto" />
+                      <ColumnDefinition Width="*" />
+                      <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                      <RowDefinition Height="Auto" />
+                      <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <TextBlock Style="{DynamicResource Text.Caption}" Text="{Binding Order}" VerticalAlignment="Center" Margin="{StaticResource Fulfil.OrderGap}" Typography.NumeralAlignment="Tabular" />
+                    <TextBlock Grid.Column="1" Style="{DynamicResource Text.BodyStrong}" Text="{Binding Code}" VerticalAlignment="Center" Typography.NumeralAlignment="Tabular" />
+                    <TextBlock Grid.Column="2" Style="{DynamicResource Text.Secondary}" Text="{Binding UseBy}" VerticalAlignment="Center" Margin="{DynamicResource Inset.L12}" TextWrapping="NoWrap" />
+                    <!-- Where the bag came from, on one line under the code (the full text is the tooltip when the panel is narrow) -->
+                    <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Style="{DynamicResource Text.Caption}" Text="{Binding Origin}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                               controls:TruncationTooltip.IsEnabled="True" />
+                  </Grid>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </ScrollViewer>
+      <!-- The server's refusal, next to the buttons so it is in view whatever the content above has scrolled to -->
+      <Border Grid.Row="1" Background="{DynamicResource Brush.CriticalSoft}" BorderBrush="{DynamicResource Brush.CriticalStroke}" BorderThickness="1" CornerRadius="{DynamicResource Radius.Control}"
+              Padding="{StaticResource Fulfil.CardPad}" Margin="{StaticResource Fulfil.Gap}" Visibility="{Binding HasFormError, Converter={StaticResource BoolToVisibility}}"
+              AutomationProperties.LiveSetting="Assertive">
+        <TextBlock x:Name="FormErrorText" Style="{DynamicResource Text.Body}" Foreground="{DynamicResource Brush.Critical}" Text="{Binding FormError}" TextWrapping="Wrap" />
+      </Border>
+      <!-- The footer: always in view, under the content that scrolls -->
+      <UniformGrid x:Name="Footer" Grid.Row="2" Columns="2">
+        <Button x:Name="PrimaryButton" Style="{DynamicResource Button.Primary}" Command="{Binding PrimaryCommand}" Content="{Binding PrimaryText}" Margin="{DynamicResource Inset.R8}"
+                controls:ButtonAssist.IsBusy="{Binding IsBusy}" controls:ButtonAssist.BusyText="Issuing" AutomationProperties.Name="{Binding PrimaryText}" />
+        <Button x:Name="CancelButton" Style="{DynamicResource Button.Secondary}" Command="{Binding CancelCommand}" Content="{Binding CancelText}" AutomationProperties.Name="{Binding CancelText}"
+                ToolTip="Keep the request as it is (Esc)" />
+      </UniformGrid>
+    </Grid>
+  </Border>
 </UserControl>

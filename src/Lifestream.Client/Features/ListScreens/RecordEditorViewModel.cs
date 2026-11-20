@@ -216,7 +216,7 @@ public abstract partial class RecordEditorViewModel : FormViewModelBase
             return;
         }
 
-        if (HasUnsavedChanges && !await _dialogs.ConfirmAsync("Discard changes?", $"You have unsaved changes to this {RecordType}. If you cancel now they will be lost.", "Discard changes").ConfigureAwait(true))
+        if (HasUnsavedChanges && !await _dialogs.ConfirmAsync("Discard changes?", $"You have unsaved changes to this {RecordType}. If you cancel now they will be lost.", "Discard changes", "Keep editing").ConfigureAwait(true))
         {
             return;
         }

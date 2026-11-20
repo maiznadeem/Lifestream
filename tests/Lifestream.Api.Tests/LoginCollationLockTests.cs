@@ -62,7 +62,10 @@ public sealed class LoginCollationLockTests(ApiFixture fx) : IClassFixture<ApiFi
     private async Task RunRoundAsync()
     {
         var stem = "ghost-coll-" + Guid.NewGuid().ToString("N")[..8];
-        var groups = Pairs.Select(p => p(stem + Random.Shared.Next(100, 999))).ToArray();
+        // The names of each group start with the group's own index. Without it, the two groups built on the bare stem (the case pair and the
+        // trailing-NUL pair) were one account whenever they drew the same random number (1 in 900 a round): eight guesses at one name, and the
+        // last three were locked out (429).
+        var groups = Pairs.Select((p, g) => p(stem + g + Random.Shared.Next(100, 999))).ToArray();
         Assert.Equal(Groups, groups.Length);
 
         // 32 requests: every group gets 4 wrong guesses, alternating between its two spellings, all released at once.

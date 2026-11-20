@@ -1,6 +1,6 @@
 name: Release
 
-# On a version tag (v2.0.1): gate, publish the desktop app self-contained for win-x64 with ReadyToRun, scan it, pack the
+# On a version tag (v2.1.0): gate, publish the desktop app self-contained for win-x64 with ReadyToRun, scan it, pack the
 # Velopack installer and update packages, scan those, upload to a GitHub Release with SHA-256 checksums, and build the
 # Microsoft Store MSIX as an extra workflow artifact. Unsigned unless a signing certificate secret is configured.
 on:

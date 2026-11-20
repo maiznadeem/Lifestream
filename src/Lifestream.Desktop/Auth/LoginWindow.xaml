@@ -3,6 +3,10 @@
                      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                      xmlns:chrome="clr-namespace:Lifestream.Desktop.Chrome"
                      xmlns:auth="clr-namespace:Lifestream.Desktop.Auth"
-                     Title="Lifestream" Width="1040" Height="700" MinWidth="440" MinHeight="600" WindowStartupLocation="CenterScreen">
+                     Title="Lifestream" Width="1240" Height="800" MinWidth="440" MinHeight="600" WindowStartupLocation="CenterScreen" ExtendsContentIntoTitleBar="True">
+  <chrome:ChromeWindow.TaskbarItemInfo>
+    <!-- Indeterminate progress on the taskbar button while the server wakes, so a minimized window still says it is working. -->
+    <TaskbarItemInfo ProgressState="{Binding IsServerWaking, Converter={x:Static auth:LoginWindow.WakingToProgress}}" />
+  </chrome:ChromeWindow.TaskbarItemInfo>
   <auth:LoginView />
 </chrome:ChromeWindow>

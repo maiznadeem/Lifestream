@@ -128,7 +128,8 @@ public sealed class Part3FeatureViewTests
             return (
                 ReceiptDates: receiptDates.Count,
                 ReceiptTrimmed: receiptDates.Where(IsClipped).Select(t => t.Text).ToList(),
-                ReceiptDateWithTime: receiptDates.Any(t => t.Text.Contains(':', StringComparison.Ordinal)),
+                // The time is its own line under the date ("18 Nov 2026" over "16:42"), so neither is cut.
+                ReceiptDateWithTime: receiptsHost.All<TextBlock>().Any(t => t.IsVisible && t.DataContext is ReceiptRow && System.Text.RegularExpressions.Regex.IsMatch(t.Text, @"^\d{2}:\d{2}$") && !IsClipped(t)),
                 NeededByDates: neededBy.Count,
                 NeededByTrimmed: neededBy.Where(IsClipped).Select(t => t.Text).ToList());
         });
@@ -188,7 +189,7 @@ public sealed class Part3FeatureViewTests
     }
 
     [Fact]
-    public void ReceiptDocument_OnScreenAndInPrint_IsSetInTheBundledInter_FakeApi()
+    public void ReceiptDocument_OnScreenAndInPrint_IsSetInTheBundledOnest_FakeApi()
     {
         var facts = StaHost.Run(() =>
         {
@@ -197,7 +198,7 @@ public sealed class Part3FeatureViewTests
             var viewer = new FlowDocumentScrollViewer { Document = flow };
             using var host = Hosted.Create(viewer, Width, Height);
             host.Settle(300);
-            Part2Harness.Save(host, "ReceiptDocument_Inter.png");
+            Part2Harness.Save(host, "ReceiptDocument_Onest.png");
 
             static string Resolve(FontFamily family, FontStyle style, FontWeight weight, FontStretch stretch)
             {
@@ -236,12 +237,12 @@ public sealed class Part3FeatureViewTests
                 Pages: paginator.PageCount);
         });
 
-        static bool IsBundledInter(string face) =>
-            face.StartsWith("Inter Variable Text", StringComparison.Ordinal) && face.EndsWith("|/Lifestream;component/Fonts/intervariable.ttf", StringComparison.OrdinalIgnoreCase);
+        static bool IsBundledOnest(string face) =>
+            face.StartsWith("Onest", StringComparison.Ordinal) && System.Text.RegularExpressions.Regex.IsMatch(face, @"/Lifestream;component/Fonts/onest-(regular|medium|semibold|bold)\.ttf$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
-        Assert.True(IsBundledInter(facts.Document), facts.Document);
+        Assert.True(IsBundledOnest(facts.Document), facts.Document);
         Assert.True(facts.RunCount >= 5, "the receipt's text runs were not found");
-        Assert.All(facts.Runs, face => Assert.True(IsBundledInter(face), face));
+        Assert.All(facts.Runs, face => Assert.True(IsBundledOnest(face), face));
         Assert.DoesNotContain("Segoe", facts.Source, StringComparison.OrdinalIgnoreCase);
         Assert.True(facts.Pages >= 1);
     }

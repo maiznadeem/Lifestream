@@ -484,7 +484,7 @@ public sealed class Part2AppointmentTests
         var row = vm.Items.Single();
 
         Assert.Equal("Omar Haddad", row.DonorName);
-        Assert.Equal("#42", RecordFormatting.IdText(row.DonorId));
+        Assert.Equal("D-0042", Lifestream.Client.Features.Receipts.RecordCodes.Donor(row.DonorId)); // the one code style, never "#42"
 
         await vm.OpenDonorCommand.ExecuteAsync(row);
 
@@ -561,7 +561,7 @@ public sealed class Part2AppointmentTests
         Assert.Equal(5, rig.Recorder.Calls.Single(c => c.Name == "RecordDonationAsync").Args[0]); // exactly that appointment
         var toast = Assert.Single(rig.Toasts.Toasts);
         Assert.Contains("Omar Haddad", toast.Message, StringComparison.Ordinal);
-        Assert.Contains("#91", toast.Message, StringComparison.Ordinal);
+        Assert.Contains("RC-0091", toast.Message, StringComparison.Ordinal);
         Assert.Equal("View receipt", toast.ActionLabel);
         Assert.Equal(2, rig.Recorder.CountOf("GetAppointmentsAsync")); // the list was refreshed
         await toast.ActionCommand.ExecuteAsync();
@@ -606,8 +606,10 @@ public sealed class Part2AppointmentTests
         await vm.CancelAppointmentCommand.ExecuteAsync();
 
         Assert.Equal(2, rig.Dialogs.Confirmations.Count);
-        Assert.Contains("Omar Haddad", rig.Dialogs.Confirmations[1].Body, StringComparison.Ordinal);
+        Assert.StartsWith("Omar Haddad's appointment on ", rig.Dialogs.Confirmations[1].Body, StringComparison.Ordinal);
+        Assert.EndsWith(" will be cancelled, and the slot becomes free.", rig.Dialogs.Confirmations[1].Body, StringComparison.Ordinal);
         Assert.Equal("Cancel appointment", rig.Dialogs.Confirmations[1].Verb);
+        Assert.Equal("Keep appointment", rig.Dialogs.Confirmations[1].Keep); // never "Cancel" beside "Cancel appointment"
         Assert.Equal(1, rig.Recorder.CountOf("CancelAppointmentAsync"));
         Assert.Contains("Omar Haddad", Assert.Single(rig.Toasts.Toasts).Message, StringComparison.Ordinal);
     }

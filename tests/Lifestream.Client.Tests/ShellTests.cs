@@ -73,7 +73,7 @@ public sealed class ShellTests
         {
             Assert.InRange(shell.Items.Count(), 1, 8);
             Assert.InRange(shell.Groups.Count, 2, 5);
-            Assert.Equal(["Overview", "Donations", "Transfusions", "Inventory", "Administration"], shell.Groups.Select(g => g.Title));
+            Assert.Equal(["", "Donations", "Transfusions", "Inventory", "Administration"], shell.Groups.Select(g => g.Title)); // direction A: Dashboard sits on its own, without a heading
             foreach (var destination in NavigationCatalog.Default)
             {
                 var viewModel = (ViewModelBase)rig.Provider.GetRequiredService(destination.ViewModelType);
@@ -102,8 +102,8 @@ public sealed class ShellTests
             await shell.NavigateCommand.ExecuteAsync(shell.Items.First(i => i.Title == "Donors"));
             await shell.NavigateCommand.ExecuteAsync(shell.Items.First(i => i.Title == "Stock"));
 
-            Assert.Equal(["Lifestream - Dashboard", "Lifestream - Donors", "Lifestream - Stock"], titles);
-            Assert.Equal("Lifestream - Stock", shell.WindowTitle);
+            Assert.Equal(["Lifestream, Dashboard", "Lifestream, Donors", "Lifestream, Stock"], titles);
+            Assert.Equal("Lifestream, Stock", shell.WindowTitle);
             Assert.True(shell.Items.First(i => i.Title == "Stock").IsSelected);
             Assert.False(shell.Items.First(i => i.Title == "Donors").IsSelected);
         }
@@ -313,7 +313,7 @@ public sealed class ShellTests
 
     private sealed class StubPresenter(Func<string, string, bool> confirm) : IDialogPresenter
     {
-        public Task<bool> ConfirmAsync(string title, string body, string dangerVerb) => Task.FromResult(confirm(title, dangerVerb));
+        public Task<bool> ConfirmAsync(string title, string body, string dangerVerb, string keepVerb) => Task.FromResult(confirm(title, dangerVerb));
 
         public Task ShowErrorAsync(string title, string message, string? details) => Task.CompletedTask;
     }

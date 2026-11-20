@@ -11,6 +11,10 @@ public partial class DialogFrame : UserControl
 {
     public static readonly DependencyProperty FieldsProperty = DependencyProperty.Register(nameof(Fields), typeof(object), typeof(DialogFrame), new PropertyMetadata(null));
 
+    public static readonly DependencyProperty FooterStartProperty = DependencyProperty.Register(nameof(FooterStart), typeof(object), typeof(DialogFrame), new PropertyMetadata(null));
+
+    public static readonly DependencyProperty FooterEndProperty = DependencyProperty.Register(nameof(FooterEnd), typeof(object), typeof(DialogFrame), new PropertyMetadata(null));
+
     public DialogFrame()
     {
         InitializeComponent();
@@ -20,6 +24,12 @@ public partial class DialogFrame : UserControl
 
     /// <summary>The dialog's fields (placed in a scroll area above the actions).</summary>
     public object? Fields { get => GetValue(FieldsProperty); set => SetValue(FieldsProperty, value); }
+
+    /// <summary>Extra footer actions before Cancel (a viewer's "Save as PDF").</summary>
+    public object? FooterStart { get => GetValue(FooterStartProperty); set => SetValue(FooterStartProperty, value); }
+
+    /// <summary>A viewer's own primary action, last in the footer where the primary always sits (the receipt's Print); for a dialog without <c>PrimaryText</c>.</summary>
+    public object? FooterEnd { get => GetValue(FooterEndProperty); set => SetValue(FooterEndProperty, value); }
 
     private void OnFieldLostFocus(object sender, RoutedEventArgs e)
     {

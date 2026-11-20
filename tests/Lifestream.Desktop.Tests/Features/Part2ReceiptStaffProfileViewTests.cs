@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
@@ -17,7 +17,6 @@ using Lifestream.Desktop.Features;
 using Lifestream.Desktop.Features.Profile;
 using Lifestream.Desktop.Features.Receipts;
 using Lifestream.Desktop.Features.Staff;
-using Lifestream.Desktop.Services;
 using Lifestream.Desktop.Theme;
 using Lifestream.Domain;
 
@@ -51,6 +50,14 @@ public sealed class Part2ReceiptStaffProfileViewTests
 
     private static Button ButtonNamed(Hosted host, string name) => host.All<Button>().First(b => b.IsVisible && AutomationProperties.GetName(b) == name);
 
+    /// <summary>The panel's "Delete staff member" item of its "..." menu, bound to the screen's model before the menu opens (it is not opened here).</summary>
+    private static MenuItem DeleteItem(StaffView view)
+    {
+        var item = (MenuItem)view.FindName("DeleteItem");
+        Assert.Equal("Delete staff member", item.Header);
+        return item;
+    }
+
     private static double Luminance(Color c)
     {
         static double Channel(byte v)
@@ -82,30 +89,34 @@ public sealed class Part2ReceiptStaffProfileViewTests
             using var host = Hosted.Create(Part2Harness.OnCanvas(new ReceiptsView(), vm), Width, Height);
             Hosted.Await(() => vm.LoadAsync());
             host.Settle(300);
+            // With no panel open the table is wide enough for "Issued by": the staff names show in full.
+            var staffInList = host.All<TextBlock>().Where(t => t.IsVisible).Count(t => t.Text.StartsWith("Dr. ", StringComparison.Ordinal));
             Hosted.Await(() => { vm.SelectedItem = vm.Items[0]; return vm.PendingDetail; });
             host.Settle(300);
             Part2Harness.Save(host, "ReceiptsView_Loaded.png");
 
             var grid = host.Find<LifestreamDataGrid>("Grid");
-            var texts = host.All<TextBlock>().Where(t => t.IsVisible).Select(t => t.Text).ToList();
+            var texts = host.All<TextBlock>().Where(t => t.IsVisible).Select(t => new TextRange(t.ContentStart, t.ContentEnd).Text).ToList();
             return (
                 Headers: grid.Columns.Select(c => c.Header?.ToString()).ToList(),
                 Sortable: grid.Columns.Where(c => c.CanUserSort).Select(c => c.SortMemberPath).ToList(),
                 Keys: vm.SortKeys,
-                Staff: texts.Count(t => t.StartsWith("Dr. ", StringComparison.Ordinal)),
+                Staff: staffInList,
+                IssuedByInPanel: texts.Any(t => t.StartsWith("Issued by Dr. ", StringComparison.Ordinal)),
                 Party: texts.Contains(DemoData.Name(1)),
-                Source: texts.Any(t => Regex.IsMatch(t, @"^(Appointment|Request) #\d+$")),
+                Source: texts.Any(t => Regex.IsMatch(t, @"^(Appointment A|Request R)-\d{4}$")),
                 Search: host.All<TextBox>().Any(t => t.IsVisible && AutomationProperties.GetName(t) == "Search receipts"),
                 Add: host.All<Button>().Any(b => b.IsVisible && (AutomationProperties.GetName(b) ?? string.Empty).StartsWith("Add", StringComparison.Ordinal)),
-                Open: host.All<Button>().Any(b => b.IsVisible && AutomationProperties.GetName(b) == "Open receipt to print"));
+                Open: host.All<Button>().Any(b => b.IsVisible && AutomationProperties.GetName(b) == "Print a copy"));
         });
 
-        Assert.Equal(["Date", "Receipt", "Donor or patient", "Blood", "Units", "Issued by"], facts.Headers);
+        Assert.Equal(["Date", "Receipt", "Donor or patient", "Group", "Units", "Issued by"], facts.Headers); // "Group", as on every other list
         Assert.Equal(["date"], facts.Sortable);
         Assert.All(facts.Sortable, key => Assert.Contains(key, facts.Keys));
-        Assert.True(facts.Staff > 3); // the staff name, with the id only underneath
+        Assert.True(facts.Staff > 3); // the staff name in full, with no id line
+        Assert.True(facts.IssuedByInPanel); // and in the panel, whatever the width
         Assert.True(facts.Party);
-        Assert.True(facts.Source); // "Appointment #301" / "Request #403": the record the receipt belongs to
+        Assert.True(facts.Source); // "Appointment A-0301" / "Request R-0403": the record the receipt belongs to
         Assert.True(facts.Search);
         Assert.False(facts.Add); // receipts are issued, never added
         Assert.True(facts.Open);
@@ -167,7 +178,7 @@ public sealed class Part2ReceiptStaffProfileViewTests
         });
 
         Assert.True(facts.skeletonWhileLoading);
-        Assert.Contains("Donation receipt #1", facts.text, StringComparison.Ordinal);
+        Assert.Contains("Donation receipt RC-0001", facts.text, StringComparison.Ordinal);
         Assert.Contains(DemoData.Name(1), facts.text, StringComparison.Ordinal); // the donor's name
         Assert.Contains("Dr. ", facts.text, StringComparison.Ordinal); // the staff member's name
         Assert.Contains("Duplicate copy printed", facts.text, StringComparison.Ordinal);
@@ -182,7 +193,7 @@ public sealed class Part2ReceiptStaffProfileViewTests
     // ---- Staff ------------------------------------------------------------------------------------------------------
 
     [Fact]
-    public void StaffView_Loaded_NoPasswordColumn_ThumbnailsLoadLazily_DefaultAvatarIsShared_FakeApi()
+    public void StaffView_Loaded_NoPasswordColumn_ThumbnailsLoadLazily_RowsWithoutAPhotoShowInitials_FakeApi()
     {
         var facts = StaHost.Run(() =>
         {
@@ -194,8 +205,8 @@ public sealed class Part2ReceiptStaffProfileViewTests
             Part2Harness.Save(host, "StaffView_Loaded.png");
 
             var grid = host.Find<LifestreamDataGrid>("Grid");
-            var avatars = host.All<System.Windows.Shapes.Ellipse>().Where(e => e.IsVisible && e.DataContext is StaffRow).ToList();
-            var withoutPhoto = avatars.Where(a => !((StaffRow)a.DataContext).HasPhoto).Select(a => ((ImageBrush)a.Fill).ImageSource).ToList();
+            var avatars = host.All<Avatar>().Where(a => a.IsVisible && a.DataContext is StaffRow).ToList();
+            var withoutPhoto = avatars.Where(a => !((StaffRow)a.DataContext).HasPhoto).ToList();
             var withPhoto = avatars.Where(a => ((StaffRow)a.DataContext).HasPhoto).ToList();
             return (
                 Headers: grid.Columns.Select(c => c.Header?.ToString()).ToList(),
@@ -205,22 +216,23 @@ public sealed class Part2ReceiptStaffProfileViewTests
                 RowsWithPhotoTotal: vm.Items.Count(i => i.HasPhoto),
                 PhotoCalls: rig.Api.CountOf("GetStaffPhotoAsync"),
                 ListCalls: rig.Api.CountOf("GetStaffAsync"),
-                DefaultIsShared: withoutPhoto.Count > 0 && withoutPhoto.All(s => ReferenceEquals(s, DefaultAvatar.Image)),
+                // A person without a photo gets their initials, never a drawn or per-user picture.
+                InitialsWithoutPhoto: withoutPhoto.Count > 0 && withoutPhoto.All(a => a.Source is null && a.Initials == ((StaffRow)a.DataContext).Initials && a.Initials.Length is 1 or 2),
                 LoadedPhotos: vm.Items.Count(i => i.Photo is not null),
                 VisibleWithPhoto: withPhoto.Count,
                 Count: host.All<TextBlock>().Where(t => t.IsVisible).Select(t => t.Text).First(t => t.StartsWith("Showing", StringComparison.Ordinal)));
         });
 
-        Assert.Equal(["Name", "Designation", "Shift", "Role"], facts.Headers); // salary and phone are never in the list payload: they are in the detail pane (admin only)
+        Assert.Equal(["Name", "Job title", "Shift", "Role"], facts.Headers); // salary and phone are never in the list payload: they are in the detail pane (admin only)
         Assert.DoesNotContain(facts.Headers, h => h!.Contains("assword", StringComparison.Ordinal));
         Assert.Equal(1, facts.Sortable); // only the name column sorts: the API sorts staff by name or username (Contracts SortKeys)
         Assert.Equal(0, facts.PasswordControls);
         Assert.Equal(1, facts.ListCalls);
-        Assert.Equal("Showing 1-50 of 110", facts.Count);
+        Assert.Equal("Showing 1–50 of 110", facts.Count);
         Assert.True(facts.PhotoCalls > 0);
         Assert.True(facts.PhotoCalls < facts.RowsWithPhotoTotal, $"photo requests {facts.PhotoCalls} must be fewer than the {facts.RowsWithPhotoTotal} rows that have one: only shown rows ask"); // lazy
         Assert.Equal(facts.PhotoCalls, facts.LoadedPhotos);
-        Assert.True(facts.DefaultIsShared); // one frozen default avatar for every row without a photo
+        Assert.True(facts.InitialsWithoutPhoto); // initials (no image) for every row without a photo
     }
 
     [Fact]
@@ -230,19 +242,20 @@ public sealed class Part2ReceiptStaffProfileViewTests
         {
             using var rig = Part2Harness.NewRig();
             var vm = Part2Harness.Create<StaffViewModel>(rig);
-            using var host = Hosted.Create(Part2Harness.OnCanvas(new StaffView(), vm), Width, Height);
+            var view = new StaffView();
+            using var host = Hosted.Create(Part2Harness.OnCanvas(view, vm), Width, Height);
             Hosted.Await(() => vm.LoadAsync());
             rig.Api.On("GetStaffMemberAsync", ApiResult<StaffDetail>.Ok(DemoData2.StaffDetail(1))); // the signed-in admin's own record
             Hosted.Await(() => { vm.SelectedItem = vm.Items[0]; return vm.PendingDetail; });
             host.Settle(400);
-            var delete = ButtonNamed(host, "Delete");
+            var delete = DeleteItem(view);
             var own = (delete.IsEnabled, Tip: delete.ToolTip as string, Show: ToolTipService.GetShowOnDisabled(delete));
             Part2Harness.Save(host, "StaffView_OwnRecord.png");
 
             rig.Api.On("GetStaffMemberAsync", ApiResult<StaffDetail>.Ok(DemoData2.StaffDetail(2)));
             Hosted.Await(() => { vm.SelectedItem = vm.Items[1]; return vm.PendingDetail; });
             host.Settle(400);
-            var other = ButtonNamed(host, "Delete");
+            var other = DeleteItem(view);
             return (own, Other: (other.IsEnabled, Tip: other.ToolTip), Reset: ButtonNamed(host, "Reset password").IsEnabled);
         });
 
@@ -261,12 +274,13 @@ public sealed class Part2ReceiptStaffProfileViewTests
         {
             using var rig = Part2Harness.NewRig(Role.Staff, demo: true);
             var vm = Part2Harness.Create<StaffViewModel>(rig);
-            using var host = Hosted.Create(Part2Harness.OnCanvas(new StaffView(), vm), Width, Height);
+            var view = new StaffView();
+            using var host = Hosted.Create(Part2Harness.OnCanvas(view, vm), Width, Height);
             Hosted.Await(() => vm.LoadAsync());
             Hosted.Await(() => { vm.SelectedItem = vm.Items[1]; return vm.PendingDetail; });
             host.Settle(400);
             Part2Harness.Save(host, "StaffView_DemoReadOnly.png");
-            return (Add: ButtonNamed(host, "Add staff member").IsEnabled, Edit: ButtonNamed(host, "Edit").IsEnabled, Reset: ButtonNamed(host, "Reset password").IsEnabled, Delete: ButtonNamed(host, "Delete").IsEnabled,
+            return (Add: ButtonNamed(host, "Add staff member").IsEnabled, Edit: ButtonNamed(host, "Edit").IsEnabled, Reset: ButtonNamed(host, "Reset password").IsEnabled, Delete: DeleteItem(view).IsEnabled,
                 Notice: host.All<TextBlock>().Any(t => t.IsVisible && t.Text.Contains("demo account", StringComparison.Ordinal)));
         });
 
@@ -387,16 +401,17 @@ public sealed class Part2ReceiptStaffProfileViewTests
             host.Settle(500);
             Part2Harness.Save(host, "ProfileView_Loaded.png");
 
-            var save = ButtonNamed(host, "Save changes");
-            var before = save.IsEnabled;
+            // Save and Discard show only while something has changed (the save bar), and Save is enabled then.
+            var save = host.Find<Button>("SaveButton");
+            var before = save.IsVisible || save.IsEnabled;
             vm.DisplayName = "Test User Changed";
             host.Settle(150);
-            var after = save.IsEnabled;
+            var after = save.IsVisible && save.IsEnabled && host.Find<Button>("DiscardButton").IsVisible;
             Part2Harness.Save(host, "ProfileView_Changed.png");
 
             var username = host.Find<TextBlock>("UsernameValue");
             var designation = host.Find<TextBlock>("DesignationValue");
-            var labels = host.All<TextBlock>().Where(t => t.IsVisible && t.Text is "Username" or "Designation" or "Shift").ToList();
+            var labels = host.All<TextBlock>().Where(t => t.IsVisible && t.Text is "Username" or "Job title" or "Shift").ToList();
             var raised = Token("Color.SurfaceRaised");
             return (
                 before, after,
@@ -411,7 +426,7 @@ public sealed class Part2ReceiptStaffProfileViewTests
 
         Assert.False(facts.before);
         Assert.True(facts.after);
-        Assert.Equal(("tuser", "Admin", "Full time"), facts.Values);
+        Assert.Equal(("tuser", "Administration", "Full time"), facts.Values); // the Admin designation is a job, never confused with the Admin role
         Assert.False(facts.ReadOnlyAreTextBoxes);
         Assert.True(facts.ValueContrast >= 4.5, $"value contrast {facts.ValueContrast:F2}");
         Assert.Equal(3, facts.LabelCount);
@@ -443,13 +458,13 @@ public sealed class Part2ReceiptStaffProfileViewTests
             Hosted.Await(() => load);
             host.Settle(400);
             Part2Harness.Save(host, "ProfileView_NoPhoto.png");
-            var avatar = host.All<System.Windows.Shapes.Ellipse>().Where(e => e.IsVisible && e.Width == 96).Select(e => ((ImageBrush)e.Fill).ImageSource).Single();
-            return (skeleton, PhotoCalls: rig.Api.CountOf("GetMyPhotoAsync"), DefaultAvatarShown: ReferenceEquals(avatar, DefaultAvatar.Image));
+            var avatar = host.All<Avatar>().Single(a => a.IsVisible && a.Name == "ProfileAvatar");
+            return (skeleton, PhotoCalls: rig.Api.CountOf("GetMyPhotoAsync"), InitialsShown: avatar.Source is null && avatar.Initials == vm.Initials && avatar.Initials.Length is 1 or 2);
         });
 
         Assert.True(facts.skeleton);
         Assert.Equal(0, facts.PhotoCalls);
-        Assert.True(facts.DefaultAvatarShown); // the shared default avatar, never a per-user drawing
+        Assert.True(facts.InitialsShown); // the person's initials until they add a photo, never a made-up picture
     }
 
     [Fact]

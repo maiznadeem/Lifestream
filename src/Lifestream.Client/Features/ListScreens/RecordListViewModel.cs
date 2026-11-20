@@ -38,8 +38,6 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
     private int? _selectedId;
     private int? _openedId; // a record another screen asked to open by id: kept selected while it is not on the loaded page
     private bool _applying;
-    private TDetail? _fetchedDetail;
-    private IReadOnlyList<DetailFact> _fetchedExtraFacts = [];
     private FilterOption<BloodType> _bloodTypeFilter;
 
     protected RecordListViewModel(IListViewStateStore states, string stateKey, IToastService toasts, IDialogService dialogs, IUiDispatcher ui)
@@ -151,15 +149,54 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
 
     /// <summary>The selected row. Selecting loads that record's detail; selecting nothing clears the pane.</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsDetailOpen))]
     public partial TItem? SelectedItem { get; set; }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasDetail), nameof(ShowDetailSkeleton), nameof(HasDetailError), nameof(DetailTitle))]
+    [NotifyPropertyChangedFor(nameof(HasDetail), nameof(ShowDetailSkeleton), nameof(HasDetailError), nameof(DetailTitle), nameof(IsDetailOpen))]
     public partial TDetail? Detail { get; set; }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasDetail), nameof(ShowDetailSkeleton), nameof(HasDetailError), nameof(IsDetailWaking), nameof(ShowWakingNotice))]
+    [NotifyPropertyChangedFor(nameof(HasDetail), nameof(ShowDetailSkeleton), nameof(HasDetailError), nameof(IsDetailWaking), nameof(ShowWakingNotice), nameof(IsDetailOpen))]
     public partial LoadState DetailState { get; set; } = LoadState.Ready;
+
+    /// <summary>
+    /// True while the side panel has something to show: a selected record (loading, loaded or failed) or an open editor. Selecting nothing and closing the editor closes it
+    /// (direction A, list and side panel).
+    /// </summary>
+    public bool IsDetailOpen => SelectedItem is not null || Detail is not null || DetailState != LoadState.Ready || Editor is not null;
+
+    /// <summary>
+    /// The side panel's close button and Esc: an open editor is cancelled first (it asks before discarding changes); otherwise the selection is cleared and the panel
+    /// closes. It makes no API call of its own.
+    /// </summary>
+    public System.Windows.Input.ICommand CloseDetailCommand => _closeDetailCommand ??= new CommunityToolkit.Mvvm.Input.RelayCommand(CloseDetail);
+
+    private System.Windows.Input.ICommand? _closeDetailCommand;
+
+    private void CloseDetail()
+    {
+        if (Editor is { } editor)
+        {
+            if (editor.CancelCommand.CanExecute(null))
+            {
+                editor.CancelCommand.Execute(null);
+            }
+
+            return;
+        }
+
+        _openedId = null;
+        _selectedId = null;
+        if (SelectedItem is null)
+        {
+            ClearDetail();
+        }
+        else
+        {
+            SelectedItem = null;
+        }
+    }
 
     /// <summary>True while the detail request is waiting on a waking server (after 3 s): the pane shows "Waking up the server" with Cancel (SHELL-07).</summary>
     public bool IsDetailWaking => DetailState == LoadState.Waking;
@@ -173,7 +210,7 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
 
     /// <summary>The open editor (the drawer), or null.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsEditing))]
+    [NotifyPropertyChangedFor(nameof(IsEditing), nameof(IsDetailOpen))]
     public partial RecordEditorViewModel? Editor { get; set; }
 
     public bool IsEditing => Editor is not null;
@@ -343,19 +380,21 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
         WatchDetailWaking(cts);
         try
         {
-            await RunOperationAsync(async ct =>
+            // Each load keeps what it fetched to itself: a load replaced by a newer selection may still finish its call afterwards, and must never hand its
+            // record to the newer load (the panel would show another record than the selected row).
+            var (fetched, extraFacts) = await RunOperationAsync(async ct =>
             {
                 var result = await GetDetailAsync(recordId, ct).ConfigureAwait(false);
-                _fetchedDetail = result.Unwrap();
-                _fetchedExtraFacts = await GetExtraFactsAsync(recordId, ct).ConfigureAwait(false);
+                var record = result.Unwrap();
+                return (record, await GetExtraFactsAsync(recordId, ct).ConfigureAwait(false));
             }, cts.Token).ConfigureAwait(true);
-            if (cts.IsCancellationRequested || _fetchedDetail is not { } detail)
+            if (cts.IsCancellationRequested || fetched is not { } detail)
             {
                 return;
             }
 
             Detail = detail;
-            DetailFacts = [.. FactsOf(detail), .. _fetchedExtraFacts];
+            DetailFacts = [.. FactsOf(detail), .. extraFacts];
             DetailState = LoadState.Ready;
         }
         catch (OperationCanceledException)
@@ -425,7 +464,7 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
     private async Task AddAsync()
     {
         if (HasUnsavedChanges
-            && !await Dialogs.ConfirmAsync("Discard changes?", $"You have unsaved changes to this {RecordType}. If you start a new one now they will be lost.", "Discard changes").ConfigureAwait(true))
+            && !await Dialogs.ConfirmAsync("Discard changes?", $"You have unsaved changes to this {RecordType}. If you start a new one now they will be lost.", "Discard changes", "Keep editing").ConfigureAwait(true))
         {
             return;
         }
@@ -487,9 +526,10 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
         var confirmed = await Dialogs.ConfirmAsync(
             $"Delete {RecordType}?",
             SupportsUndo
-                ? $"{Capitalise(RecordType)} '{name}' will be removed from the list. You can undo this for a few seconds afterwards."
-                : $"{Capitalise(RecordType)} '{name}' will be removed. This can't be undone.",
-            $"Delete {RecordType}").ConfigureAwait(true);
+                ? $"{name} will be removed from the list. You can undo this for a few seconds afterwards."
+                : $"{name} will be removed. This can't be undone.",
+            $"Delete {RecordType}",
+            $"Keep {RecordType}").ConfigureAwait(true);
         if (!confirmed)
         {
             return;

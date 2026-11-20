@@ -1,14 +1,21 @@
 <UserControl x:Class="Lifestream.Desktop.Features.ListScreens.RecordEditorChrome"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:feat="clr-namespace:Lifestream.Desktop.Features"
              xmlns:controls="clr-namespace:Lifestream.Desktop.Controls"
              Focusable="False" IsTabStop="False">
-  <!-- The shell of every record form: title, the form-wide messages, the fields, and the actions bottom-right with Cancel always enabled (FEAT-08). -->
+  <!-- The frame of every record form (direction A): the title, the form-wide messages, the fields in a scroll area, and a footer under a 1 px line with Cancel (always
+       enabled) and the primary Save on the right (FEAT-08). ShowFrame (on by default) draws it as its own panel; inside a SidePanel set it off. -->
   <UserControl.Resources>
     <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+    <Thickness x:Key="Editor.Messages">0,12,0,4</Thickness>
+    <Thickness x:Key="Editor.Notice">12,10,12,10</Thickness>
+    <Thickness x:Key="Editor.Footer">0,16,0,0</Thickness>
+    <Thickness x:Key="Editor.FieldsPad">0,4,0,16</Thickness>
   </UserControl.Resources>
-  <controls:Card Background="{DynamicResource Brush.SurfaceRaised}" CornerRadius="{DynamicResource Radius.Card}" Padding="{DynamicResource Pad.16}" AutomationProperties.Name="Record form" BorderBrush="{DynamicResource Brush.BorderCard}" BorderThickness="1">
+  <UserControl.InputBindings>
+    <KeyBinding Key="S" Modifiers="Control" Command="{Binding SaveCommand}" />
+  </UserControl.InputBindings>
+  <Border x:Name="Frame" SnapsToDevicePixels="True" AutomationProperties.Name="Record form">
     <Grid>
       <Grid.RowDefinitions>
         <RowDefinition Height="Auto" />
@@ -16,40 +23,50 @@
         <RowDefinition Height="*" />
         <RowDefinition Height="Auto" />
       </Grid.RowDefinitions>
-      <TextBlock Style="{DynamicResource Text.Title}" Text="{Binding Title}" TextWrapping="Wrap" AutomationProperties.HeadingLevel="Level1" />
-      <StackPanel Grid.Row="1" feat:Edge.Top="{DynamicResource Space.8}" feat:Edge.Bottom="{DynamicResource Space.8}">
+      <TextBlock x:Name="TitleText" Style="{DynamicResource Text.Section}" Text="{Binding Title}" TextWrapping="Wrap" AutomationProperties.HeadingLevel="Level1" />
+      <StackPanel Grid.Row="1" Margin="{StaticResource Editor.Messages}">
         <!-- A save or a reload is waiting on a waking server: say so, and let the user cancel the request (SHELL-07). -->
-        <controls:WakingNotice x:Name="Waking" IsActive="{Binding IsOperationWaking}" CancelCommand="{Binding CancelOperationCommand}" feat:Edge.Bottom="{DynamicResource Space.8}" />
+        <controls:WakingNotice x:Name="Waking" IsActive="{Binding IsOperationWaking}" CancelCommand="{Binding CancelOperationCommand}" Margin="{DynamicResource Inset.B12}" />
         <!-- Someone else changed the record (409): reload, never overwrite. -->
-        <Border feat:Edge.PadX="{DynamicResource Space.12}" feat:Edge.PadY="{DynamicResource Space.8}" feat:Edge.Bottom="{DynamicResource Space.8}" Background="{DynamicResource Brush.SurfacePressed}" BorderBrush="{DynamicResource Brush.StatusWarning}" BorderThickness="1"
-                CornerRadius="{DynamicResource Radius.Control}" Visibility="{Binding HasConflict, Converter={StaticResource BoolToVisibility}}" AutomationProperties.LiveSetting="Assertive">
-          <StackPanel>
-            <StackPanel Orientation="Horizontal">
-              <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE7BA;" Foreground="{DynamicResource Brush.StatusWarning}" VerticalAlignment="Top" feat:Edge.Top="{DynamicResource Space.4}" feat:Edge.Right="{DynamicResource Space.12}" />
-              <TextBlock Style="{DynamicResource Text.Body}" Text="{Binding ConflictMessage}" TextWrapping="Wrap" MaxWidth="360" />
+        <controls:CrispBorder Padding="{StaticResource Editor.Notice}" Margin="{DynamicResource Inset.B12}" Background="{DynamicResource Brush.WarningSoft}"
+                              CornerRadius="{DynamicResource Radius.Control}" Visibility="{Binding HasConflict, Converter={StaticResource BoolToVisibility}}" AutomationProperties.LiveSetting="Assertive">
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="Auto" />
+              <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <controls:Icon Kind="Alert" Size="16" Foreground="{DynamicResource Brush.Warning}" VerticalAlignment="Top" Margin="{DynamicResource Inset.R8}" />
+            <StackPanel Grid.Column="1">
+              <TextBlock Style="{DynamicResource Text.Body}" Text="{Binding ConflictMessage}" TextWrapping="Wrap" />
+              <Button Style="{DynamicResource Button.Secondary.Small}" Content="Reload" Command="{Binding ReloadCommand}" HorizontalAlignment="Left" Margin="{DynamicResource Inset.T8}"
+                      AutomationProperties.Name="Reload the latest version" />
             </StackPanel>
-            <Button Style="{DynamicResource Button.Secondary}" Content="Reload" Command="{Binding ReloadCommand}" HorizontalAlignment="Left" MinHeight="32" feat:Edge.Top="{DynamicResource Space.8}"
-                    AutomationProperties.Name="Reload the latest version" />
-          </StackPanel>
-        </Border>
-        <Border feat:Edge.PadX="{DynamicResource Space.12}" feat:Edge.PadY="{DynamicResource Space.8}" feat:Edge.Bottom="{DynamicResource Space.8}" Background="{DynamicResource Brush.SurfacePressed}" BorderBrush="{DynamicResource Brush.StatusDanger}" BorderThickness="1"
-                CornerRadius="{DynamicResource Radius.Control}" Visibility="{Binding HasFormError, Converter={StaticResource BoolToVisibility}}" AutomationProperties.LiveSetting="Assertive">
-          <StackPanel Orientation="Horizontal">
-            <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE783;" Foreground="{DynamicResource Brush.StatusDanger}" VerticalAlignment="Top" feat:Edge.Top="{DynamicResource Space.4}" feat:Edge.Right="{DynamicResource Space.12}" />
-            <TextBlock Style="{DynamicResource Text.Body}" Text="{Binding FormError}" TextWrapping="Wrap" MaxWidth="360" />
-          </StackPanel>
-        </Border>
-        <TextBlock Style="{DynamicResource Text.Caption}" Foreground="{DynamicResource Brush.StatusDanger}" Text="{Binding ErrorSummary}" AutomationProperties.LiveSetting="Assertive" />
+          </Grid>
+        </controls:CrispBorder>
+        <controls:CrispBorder Padding="{StaticResource Editor.Notice}" Margin="{DynamicResource Inset.B12}" Background="{DynamicResource Brush.CriticalSoft}"
+                              CornerRadius="{DynamicResource Radius.Control}" Visibility="{Binding HasFormError, Converter={StaticResource BoolToVisibility}}" AutomationProperties.LiveSetting="Assertive">
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="Auto" />
+              <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <controls:Icon Kind="Alert" Size="16" Foreground="{DynamicResource Brush.Critical}" VerticalAlignment="Top" Margin="{DynamicResource Inset.R8}" />
+            <TextBlock Grid.Column="1" Style="{DynamicResource Text.Body}" Text="{Binding FormError}" TextWrapping="Wrap" />
+          </Grid>
+        </controls:CrispBorder>
+        <TextBlock Style="{DynamicResource Text.Caption}" Foreground="{DynamicResource Brush.Critical}" Text="{Binding ErrorSummary}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Assertive" />
       </StackPanel>
-      <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Focusable="False">
-        <ContentControl Focusable="False" IsTabStop="False" Content="{Binding Fields, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+      <ScrollViewer x:Name="FieldsScroll" Grid.Row="2" Style="{DynamicResource ScrollViewer.Panel}" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+        <ContentControl Focusable="False" IsTabStop="False" Margin="{StaticResource Editor.FieldsPad}" Content="{Binding Fields, RelativeSource={RelativeSource AncestorType=UserControl}}" />
       </ScrollViewer>
-      <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" feat:Edge.Top="{DynamicResource Space.16}">
-        <Button x:Name="CancelButton" Style="{DynamicResource Button.Secondary}" Content="Cancel" Command="{Binding CancelCommand}" IsCancel="True" feat:Edge.Right="{DynamicResource Space.8}"
-                AutomationProperties.Name="Cancel" />
-        <Button x:Name="SaveButton" Style="{DynamicResource Button.Primary}" Content="{Binding SaveText}" Command="{Binding SaveCommand}" IsDefault="True"
-                controls:ButtonAssist.IsBusy="{Binding SaveCommand.IsRunning}" controls:ButtonAssist.BusyText="{Binding SaveBusyText}" AutomationProperties.Name="{Binding SaveText}" />
-      </StackPanel>
+      <Border Grid.Row="3" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="0,1,0,0" Padding="{StaticResource Editor.Footer}" SnapsToDevicePixels="True">
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+          <Button x:Name="CancelButton" Style="{DynamicResource Button.Secondary}" Content="Cancel" Command="{Binding CancelCommand}" IsCancel="True" Margin="{DynamicResource Inset.R8}"
+                  AutomationProperties.Name="Cancel" ToolTip="Cancel (Esc)" />
+          <Button x:Name="SaveButton" Style="{DynamicResource Button.Primary}" Content="{Binding SaveText}" Command="{Binding SaveCommand}" IsDefault="True" ToolTip="Ctrl+S"
+                  controls:ButtonAssist.IsBusy="{Binding SaveCommand.IsRunning}" controls:ButtonAssist.BusyText="{Binding SaveBusyText}" AutomationProperties.Name="{Binding SaveText}" />
+        </StackPanel>
+      </Border>
     </Grid>
-  </controls:Card>
+  </Border>
 </UserControl>

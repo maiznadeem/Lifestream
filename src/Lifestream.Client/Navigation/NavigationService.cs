@@ -74,7 +74,7 @@ public sealed class NavigationService(IServiceProvider services, IDialogService 
 
     public async Task<bool> ConfirmDiscardAsync() =>
         !HasUnsavedChanges
-        || await dialogs.ConfirmAsync("Discard changes?", "You have unsaved changes on this screen. If you leave now they will be lost.", "Discard changes").ConfigureAwait(true);
+        || await dialogs.ConfirmAsync("Discard changes?", "You have unsaved changes on this screen. If you leave now they will be lost.", "Discard changes", "Keep editing").ConfigureAwait(true);
 
     public Task ReloadCurrentAsync() => _current?.LoadAsync() ?? Task.CompletedTask;
 

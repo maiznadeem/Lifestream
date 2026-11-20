@@ -120,7 +120,8 @@ public sealed class InputTests
     {
         foreach (var file in Directory.EnumerateFiles(Lifestream.Client.Tests.RepoPaths.Find("src/Lifestream.Desktop"), "*.xaml", SearchOption.AllDirectories).Where(f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)))
         {
-            Assert.DoesNotContain("<DatePicker", File.ReadAllText(file), StringComparison.Ordinal);
+            // The element itself, not "<DatePickerTextBox", which the theme's DatePicker template (Controls/Calendar.xaml) uses for the built-in picker's own text part.
+            Assert.DoesNotMatch(@"<DatePicker[\s/>]", File.ReadAllText(file));
         }
     }
 

@@ -5,10 +5,11 @@ namespace Lifestream.Client.Common;
 public interface IDialogService
 {
     /// <summary>
-    /// Asks the user to confirm a destructive action. The title and body name the record; focus starts on Cancel; Esc cancels;
-    /// the danger button reads <paramref name="dangerVerb"/> (for example "Delete donor"). Returns true only for the danger button.
+    /// Asks the user to confirm a destructive action. The title and body name the record; focus starts on the keep button; Esc keeps.
+    /// The danger button reads <paramref name="dangerVerb"/> ("Cancel appointment") and the other button says what it keeps,
+    /// <paramref name="keepVerb"/> ("Keep appointment"), never a bare "Cancel" beside a "Cancel ..." action. Returns true only for the danger button.
     /// </summary>
-    Task<bool> ConfirmAsync(string title, string body, string dangerVerb);
+    Task<bool> ConfirmAsync(string title, string body, string dangerVerb, string keepVerb);
 
     /// <summary>Shows a friendly error dialog; <paramref name="details"/> sits behind a "Details" control.</summary>
     Task ShowErrorAsync(string title, string message, string? details = null);
@@ -17,7 +18,7 @@ public interface IDialogService
 /// <summary>The view side of <see cref="IDialogService"/>; the Desktop project registers the WPF implementation.</summary>
 public interface IDialogPresenter
 {
-    Task<bool> ConfirmAsync(string title, string body, string dangerVerb);
+    Task<bool> ConfirmAsync(string title, string body, string dangerVerb, string keepVerb);
 
     Task ShowErrorAsync(string title, string message, string? details);
 }
@@ -26,8 +27,8 @@ public sealed class DialogService : IDialogService
 {
     public IDialogPresenter? Presenter { get; set; }
 
-    public Task<bool> ConfirmAsync(string title, string body, string dangerVerb) =>
-        Presenter is null ? Task.FromResult(false) : Presenter.ConfirmAsync(title, body, dangerVerb);
+    public Task<bool> ConfirmAsync(string title, string body, string dangerVerb, string keepVerb) =>
+        Presenter is null ? Task.FromResult(false) : Presenter.ConfirmAsync(title, body, dangerVerb, keepVerb);
 
     public Task ShowErrorAsync(string title, string message, string? details = null) =>
         Presenter?.ShowErrorAsync(title, message, details) ?? Task.CompletedTask;
