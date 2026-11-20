@@ -35,7 +35,8 @@ namespace Lifestream.Desktop.Tests.EndToEnd;
 /// closes the window at once and fails.
 /// </para>
 /// <para>
-/// Runs only when <c>LIFESTREAM_REALWINDOW_DIR</c> is set (the folder for the images), so a normal test run and CI never create a window.
+/// Runs only when <c>LIFESTREAM_REALWINDOW_DIR</c> is set (the folder for the images), so a normal test run and CI never create a window, and
+/// only on an isolated desktop (<see cref="Lifestream.Desktop.Services.IsolatedDesktop"/>), where the windows are drawn in software.
 /// <c>LIFESTREAM_REALWINDOW_SETUPS</c> may name setups to compare, separated by ';', each <c>tag|font folder#family|formatting|rendering|kerning</c> (kerning: <c>kern</c> or <c>nokern</c>) with empty parts
 /// meaning "as the app ships": <c>shipped|||;ideal|||Ideal|;other|C:\fonts\x#Some Family|Ideal|Grayscale</c>.
 /// </para>
@@ -133,6 +134,7 @@ public sealed class RealWindowTextTests
     public void SignInWindow_AsTheCompositorDrawsIt(string theme)
     {
         Assert.SkipWhen(OutputFolder is null, "LIFESTREAM_REALWINDOW_DIR is not set");
+        Assert.SkipWhen(RealWindows.RealWindow.Unavailable is not null, RealWindows.RealWindow.Unavailable ?? string.Empty);
         var mica = Environment.GetEnvironmentVariable("LIFESTREAM_REALWINDOW_MICA") == "1";
         foreach (var setup in Setup.FromEnvironment())
         {
@@ -162,6 +164,7 @@ public sealed class RealWindowTextTests
     public void DonorsList_InTheShell_AsTheCompositorDrawsIt(string theme)
     {
         Assert.SkipWhen(OutputFolder is null, "LIFESTREAM_REALWINDOW_DIR is not set");
+        Assert.SkipWhen(RealWindows.RealWindow.Unavailable is not null, RealWindows.RealWindow.Unavailable ?? string.Empty);
         foreach (var setup in Setup.FromEnvironment())
         {
             var report = StaHost.Run(() =>
@@ -207,6 +210,7 @@ public sealed class RealWindowTextTests
     public void TextLadder_EverySetup_AsTheCompositorDrawsIt(string theme)
     {
         Assert.SkipWhen(OutputFolder is null, "LIFESTREAM_REALWINDOW_DIR is not set");
+        Assert.SkipWhen(RealWindows.RealWindow.Unavailable is not null, RealWindows.RealWindow.Unavailable ?? string.Empty);
         // A window is never taller than the screen, so the setups go five to a window.
         var pages = Setup.FromEnvironment().Chunk(5).ToList();
         for (var page = 0; page < pages.Count; page++)
@@ -279,6 +283,12 @@ internal static class RealWindow
 
     public static Report ShowCaptureClose(Window window, string path, RealWindowTextTests.Setup? setup, Action load)
     {
+        if (RealWindows.RealWindow.Unavailable is { } why)
+        {
+            throw new InvalidOperationException("No real window is shown: " + why);
+        }
+
+        Lifestream.Desktop.Services.IsolatedDesktop.UseSoftwareRendering();
         // The virtual screen is every monitor together. The window goes far outside it, and is checked there before anything is captured.
         var screen = new Rect(SystemParameters.VirtualScreenLeft, SystemParameters.VirtualScreenTop, SystemParameters.VirtualScreenWidth, SystemParameters.VirtualScreenHeight);
         Assert.False(screen.IntersectsWith(new Rect(OffScreen, OffScreen, window.Width, window.Height)), $"{OffScreen},{OffScreen} is on the virtual screen {screen}: no window is shown");

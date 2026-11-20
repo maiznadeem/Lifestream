@@ -1,0 +1,4 @@
+<Project>
+  <!-- The isolated-desktop tools are plain programs, not test projects: they take the repository defaults and skip tests/Directory.Build.props. -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../../'))" />
+</Project>
