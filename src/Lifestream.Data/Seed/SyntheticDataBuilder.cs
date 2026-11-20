@@ -7,8 +7,9 @@ namespace Lifestream.Data.Seed;
 public static class SeedSizes
 {
     public const int Staff = 11;
-    // Close to the old database's 32 donors and 35 patients, so the 100x dataset keeps their proportions (3,500 each).
-    public const int Donors = 40;
+    // Enough donors for a year of the demo's donations at the rule's pace (Eligibility.MinDaysBetweenDonations): with 40, each would have had to give
+    // blood more often than the rule allows, or the history would have had to be twice as long and half as busy.
+    public const int Donors = 100;
     public const int Patients = 35;
     public const int CompletedAppointments = 180;
     public const int CancelledAppointments = 30;
@@ -100,11 +101,8 @@ internal static class SyntheticDataBuilder
     /// <summary>Mixed into the seed for the random stream of the days around today.</summary>
     private const ulong AroundTodayStream = 0x5EED_70DA_C11E_1C00UL;
 
-    /// <summary>
-    /// The demo history reaches this far back: two years. One year (the twelve months of the dashboard chart) cannot hold it: the demo's donors would each have to
-    /// give blood more often than once in <see cref="Eligibility.MinDaysBetweenDonations"/> days to reach its number of donations.
-    /// </summary>
-    internal const int HistoryDays = 2 * 365;
+    /// <summary>The demo history reaches this far back: the twelve months of the dashboard chart plus the part of the month before them.</summary>
+    internal const int HistoryDays = 365;
 
     /// <summary>The reason an appointment carries when its donor was not eligible on the day. Nothing the generator plans needs it (see <see cref="AssignDonors"/>).</summary>
     private const string EarlyDonationReason = "Physician approved an early donation.";
@@ -134,8 +132,7 @@ internal static class SyntheticDataBuilder
         // The days around today draw from a stream of their own, so the history's draws do not depend on them.
         var aroundRng = new DeterministicRandom(seed ^ AroundTodayStream);
         var set = new DemoDataSet();
-        // Two years of history at least: the dashboard's twelve monthly buckets all have data, and the donors have the time between donations
-        // that the rule asks for. Bigger scale datasets keep their longer span.
+        // At least a full year of history, so the dashboard's twelve monthly buckets all have data; bigger scale datasets keep their longer span.
         var pastDays = Math.Max(HistoryDays, 110 * ((factor + 5) / 6));
         var futureDays = 30 * ((factor + 3) / 4);
 
@@ -261,9 +258,10 @@ internal static class SyntheticDataBuilder
     /// The open bookings after tomorrow, <paramref name="count"/> of them. A booking is for a day on which the donor is eligible, as the API judges a booking, and
     /// it keeps the rule's distance from the donor's other open booking too, so recording one donation never makes another booking of that donor a day the rule forbids.
     /// <para>
-    /// Everybody books once before anybody books twice (an appointment still to come today or tomorrow is a booking): from the day after tomorrow for a donor
-    /// who is eligible now, otherwise from the day the rule allows, in both cases within the booking window after it. The bookings that are left are second ones,
-    /// for the donors who come soonest, <see cref="Eligibility.MinDaysBetweenDonations"/> days or more after their first.
+    /// Nobody books twice while somebody has not booked (an appointment still to come today or tomorrow is a booking). The donors who can come soonest book,
+    /// three in every four of them, so some donors who are eligible now have no appointment yet: from the day after tomorrow for a donor who is eligible now,
+    /// otherwise from the day the rule allows, in both cases within the booking window after it. Should there be more bookings than donors, the rest are
+    /// second ones, <see cref="Eligibility.MinDaysBetweenDonations"/> days or more after the donor's first.
     /// </para>
     /// </summary>
     private static void BookAhead(DemoDataSet set, DeterministicRandom rng, DateTime nowUtc, int count, int futureDays, Dictionary<Donor, DateTime[]> donationDays, List<Appointment> around)
@@ -282,8 +280,9 @@ internal static class SyntheticDataBuilder
             booked.Add(appointment.Donor!);
         }
 
+        // Whoever can come soonest first (a stable sort: donors who can come on the same day stay in their drawn order), every fourth passed over.
         var everybody = Shuffled(set.Donors.Count, rng).Select(i => set.Donors[i]).ToList();
-        var round = everybody.Where(d => !booked.Contains(d)).ToList();
+        var round = everybody.Where(d => !booked.Contains(d)).OrderBy(d => latest.GetValueOrDefault(d)).Where((_, i) => i % 4 != 3).ToList();
         while (count > 0)
         {
             foreach (var donor in round.Take(count))
@@ -301,7 +300,7 @@ internal static class SyntheticDataBuilder
             }
 
             count -= Math.Min(count, round.Count);
-            // The next round: everybody, whoever comes soonest first (a stable sort: donors who come on the same day stay in their drawn order).
+            // The next round: everybody, whoever comes soonest first.
             round = [.. everybody.OrderBy(d => latest.GetValueOrDefault(d))];
         }
     }
@@ -318,56 +317,30 @@ internal static class SyntheticDataBuilder
     /// The slots of the history's donations, as slot indexes from <paramref name="historyStart"/>, oldest first. They are placed so that there is always a donor
     /// who may give blood: in any <see cref="Eligibility.MinDaysBetweenDonations"/> consecutive days there are fewer donations than donors who can donate.
     /// <para>
-    /// The last days before yesterday (as many as the rule's gap, less one) are the tight part: whoever comes in yesterday, today or tomorrow gives no blood in
-    /// them, so they hold at most one donation for each of the other donors. Before that, each calendar month holds at most its share of one donation per
-    /// donor and gap, and a month's donations are spread over its days (one in each equal part of the month), so no run of days is busier than the month.
-    /// Within those limits the months vary (<see cref="MonthLadder"/>).
+    /// Each calendar month holds at most its share of one donation per donor and gap, and a month's donations are spread over its days (one in each equal
+    /// part of the month), so no run of days is busier than its months. The months that reach into the last days before yesterday (as many days as the
+    /// rule's gap, less one) are tighter: whoever comes in yesterday, today or tomorrow gives no blood in those days, so the limit there counts only the
+    /// other donors. Within those limits the months vary as every other row of the history does (<see cref="MonthShares"/>).
     /// </para>
     /// </summary>
     private static List<int> DonationSlots(int count, DeterministicRandom rng, DateTime historyStart, int pastDays, DonorRoles donors)
     {
         var gap = Eligibility.MinDaysBetweenDonations;
-        var recentDays = gap - 1;
-        var olderDays = pastDays - 1 - recentDays;
+        var firstRecentDay = pastDays - gap;
         // Donations a day that the donors can keep up for ever, with two to spare for the ends of a run of days that cuts two months.
         var perDay = (donors.Donating - 2) / (double)gap;
-        var evenShare = (int)((long)count * recentDays / (pastDays - 1));
-        var recent = Math.Max(0, Math.Min(Math.Min(count, evenShare), Math.Min(donors.Donating - donors.AroundToday, (int)(perDay * recentDays))));
+        var perRecentDay = Math.Max(0, Math.Min(perDay, (donors.Donating - donors.AroundToday - 2) / (double)(gap - 1)));
 
+        var months = MonthRanges(historyStart, pastDays - 1);
+        var perMonth = MonthShares(count, rng, months, capacities: [.. months.Select(m =>
+            Math.Min((m.End - m.Start) * SlotsPerDay, (int)((m.End > firstRecentDay ? perRecentDay : perDay) * (m.End - m.Start))))]);
         var slots = new List<int>(count);
-        var months = MonthRanges(historyStart, olderDays);
-        var perMonth = Shares(count - recent, MonthLadder(months, historyStart, rng), capacities: [.. months.Select(m => Math.Min((m.End - m.Start) * SlotsPerDay, (int)(perDay * (m.End - m.Start))))]);
         for (var m = 0; m < months.Count; m++)
         {
             slots.AddRange(SpreadEvenly(perMonth[m], rng, (months[m].End - months[m].Start) * SlotsPerDay).Select(i => (months[m].Start * SlotsPerDay) + i));
         }
 
-        slots.AddRange(SpreadEvenly(recent, rng, recentDays * SlotsPerDay).Select(i => (olderDays * SlotsPerDay) + i));
         return slots;
-    }
-
-    /// <summary>The steps of <see cref="MonthLadder"/>: a month's donations as a multiple of an even month's. Their mean is one.</summary>
-    private static readonly double[] LadderSteps = [0.35, 0.61, 0.87, 1.13, 1.39, 1.65];
-
-    /// <summary>
-    /// The weight of each month of the donation history: the month-to-month variation. The rule leaves room for only a few donations a month, and factors
-    /// drawn one by one would leave many months with the same count, which looks as made up as a flat line. So the months take the steps of a ladder: any
-    /// run of as many months as there are steps takes each step once, in an order drawn for the dataset. A month that is only partly in the history weighs
-    /// its part.
-    /// </summary>
-    private static double[] MonthLadder(List<(int Start, int End)> months, DateTime firstDay, DeterministicRandom rng)
-    {
-        var order = Shuffled(LadderSteps.Length, rng);
-        var weights = new double[months.Count];
-        for (var m = 0; m < months.Count; m++)
-        {
-            var month = firstDay.AddDays(months[m].Start);
-            // Counted back from the newest month, so the months the dashboard shows are whole runs of the ladder.
-            var step = LadderSteps[order[(months.Count - 1 - m) % LadderSteps.Length]];
-            weights[m] = step * (months[m].End - months[m].Start) / DateTime.DaysInMonth(month.Year, month.Month);
-        }
-
-        return weights;
     }
 
     /// <summary><paramref name="count"/> values from [0, range), ascending: the range is cut into that many equal parts and one value is drawn from each.</summary>
@@ -786,8 +759,8 @@ internal static class SyntheticDataBuilder
 
     /// <summary>
     /// How many of <paramref name="total"/> rows fall in each month: proportional to the days the month has, times a deterministic factor between 0.65 and 1.35 for that month
-    /// (the month-to-month variation) and a gentle rise towards the present (a clinic that is growing), but never fewer than a quarter of an even share and never fewer than one, so no
-    /// month is empty, and never more than its <paramref name="capacities"/> allow. The shares add up to exactly <paramref name="total"/>.
+    /// (the month-to-month variation) and a gentle rise towards the present (a clinic that is growing), but never fewer than a quarter of an even share, so no month is empty, and never
+    /// more than its <paramref name="capacities"/> allow. The shares add up to exactly <paramref name="total"/>.
     /// </summary>
     private static int[] MonthShares(int total, DeterministicRandom rng, List<(int Start, int End)> months, int[]? capacities)
     {
@@ -798,19 +771,10 @@ internal static class SyntheticDataBuilder
             weights[m] = (months[m].End - months[m].Start) * (rng.Between(65, 135) / 100.0) * (0.85 + (0.3 * progress));
         }
 
-        return Shares(total, weights, capacities);
-    }
-
-    /// <summary>
-    /// <paramref name="total"/> rows shared out by <paramref name="weights"/>: each share at least a quarter of an even one and at least one (as far as
-    /// its capacity goes), never more than its capacity, the rest by weight. The shares add up to exactly <paramref name="total"/>.
-    /// </summary>
-    private static int[] Shares(int total, double[] weights, int[]? capacities)
-    {
-        var shares = new int[weights.Length];
-        var floor = Math.Max(total >= weights.Length ? 1 : 0, total / (weights.Length * 4));
+        var shares = new int[months.Count];
+        var floor = total / (months.Count * 4);
         var remaining = total;
-        for (var m = 0; m < weights.Length; m++)
+        for (var m = 0; m < months.Count; m++)
         {
             shares[m] = Math.Min(floor, capacities?[m] ?? int.MaxValue);
             remaining -= shares[m];
@@ -819,7 +783,7 @@ internal static class SyntheticDataBuilder
         // Hand out the rest by weight, largest remainder first; a month that reaches its capacity closes and the surplus goes to the others.
         while (remaining > 0)
         {
-            var open = Enumerable.Range(0, weights.Length).Where(m => capacities is null || shares[m] < capacities[m]).ToList();
+            var open = Enumerable.Range(0, months.Count).Where(m => capacities is null || shares[m] < capacities[m]).ToList();
             if (open.Count == 0)
             {
                 throw new InvalidOperationException("The demo history has no room for that many rows.");
