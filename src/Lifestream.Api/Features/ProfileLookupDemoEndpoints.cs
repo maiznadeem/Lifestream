@@ -137,7 +137,8 @@ public static class ProfileEndpoints
     }
 }
 
-/// <summary>Pickers and the command palette: a short list of id + title + subtitle, found by the same rule as the lists (<see cref="SearchQueries"/>). Never more than 20 rows.</summary>
+/// <summary>Pickers and the command palette: a short list of id + title + subtitle, found by the same rule as the lists (<see cref="SearchQueries"/>). Never more than 20 rows.
+/// The subtitle is display text: a blood group in it is written as the badges write it, "O−" (<see cref="BloodTypeExtensions.ToTypographic"/>).</summary>
 public static class LookupEndpoints
 {
     private const int Take = 20;
@@ -156,14 +157,14 @@ public static class LookupEndpoints
     {
         var rows = await DonorEndpoints.Filter(db.Donors.AsNoTracking(), search, null).OrderBy(d => d.Name).ThenBy(d => d.Id).Take(Take)
             .Select(d => new { d.Id, d.Name, d.BloodType, d.Phone }).ToListAsync(ct);
-        return [.. rows.Select(d => new RecordOption(d.Id, d.Name, $"{d.BloodType.ToDisplay()}{(d.Phone is null ? "" : " · " + d.Phone)}"))];
+        return [.. rows.Select(d => new RecordOption(d.Id, d.Name, $"{d.BloodType.ToTypographic()}{(d.Phone is null ? "" : " · " + d.Phone)}"))];
     }
 
     private static async Task<List<RecordOption>> PatientsAsync([FromQuery] string? search, LifestreamDbContext db, CancellationToken ct)
     {
         var rows = await PatientEndpoints.Filter(db.Patients.AsNoTracking(), search, null).OrderBy(p => p.Name).ThenBy(p => p.Id).Take(Take)
             .Select(p => new { p.Id, p.Name, p.BloodType, p.Phone }).ToListAsync(ct);
-        return [.. rows.Select(p => new RecordOption(p.Id, p.Name, $"{p.BloodType.ToDisplay()}{(p.Phone is null ? "" : " · " + p.Phone)}"))];
+        return [.. rows.Select(p => new RecordOption(p.Id, p.Name, $"{p.BloodType.ToTypographic()}{(p.Phone is null ? "" : " · " + p.Phone)}"))];
     }
 
     private static async Task<List<RecordOption>> StaffAsync([FromQuery] string? search, LifestreamDbContext db, CurrentUser user, CancellationToken ct)
@@ -199,7 +200,7 @@ public static class LookupEndpoints
         }
 
         var rows = await query.OrderBy(r => r.RequiredBy).ThenBy(r => r.Id).Take(Take).Select(r => new { r.Id, Patient = r.Patient!.Name, r.BloodType, r.Units }).ToListAsync(ct);
-        return [.. rows.Select(r => new RecordOption(r.Id, r.Patient, $"{r.Units} x {r.BloodType.ToDisplay()}"))];
+        return [.. rows.Select(r => new RecordOption(r.Id, r.Patient, $"{r.Units} x {r.BloodType.ToTypographic()}"))];
     }
 }
 
