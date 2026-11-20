@@ -16,8 +16,14 @@ The gate runs the whole suite at the same time, so a shape that misses the budge
 counts; threshold unchanged): a scan or a slow query misses every round, a burst of load from elsewhere does not. The tables below
 were produced on a quiet machine and every shape met the budget in its first round.
 
-Every list answers with one SQL command (items and total count together); name searches are prefix matches on indexed columns.
-The execution plans of the same queries are checked separately by `ApiPlanMatrixTests` (see `docs/database.md`).
+Every list answers with one SQL command (items and total count together). The execution plans of the same queries are checked
+separately by `ApiPlanMatrixTests` (see `docs/database.md`).
+
+**The tables below predate the search of `SearchQueries`** (a word anywhere in a name, a part of a phone number; see
+`docs/database.md`, "Search"): when they were measured a search was a prefix of the full name and "a" matched 13 % of the names,
+where it now matches 91 %. They have not been measured again on a quiet machine; the search rows of the test now also time a last
+name, a part of a name, a part of a phone number, two words, a blood group and a text nobody has. Measured side by side on a busy
+machine (old and new code turn about, 100x), see "Search before and after" at the end.
 
 ### List endpoints at 1x demo size (warm, local SQL Server)
 
@@ -119,7 +125,63 @@ Server: Microsoft SQL Server 2025 (RTM) - 17.0.1000.7 (X64)
 
 Notes
 - The query shapes behind these numbers are in `docs/database.md` (covering indexes, one-row cross-join total, id-set search,
-  `OPTION (RECOMPILE)` for the donor, patient, appointment and request searches). No threshold, page size or data was changed to reach them.
-- A search term of one letter ("a") matches most names, which is the worst case for a prefix search.
+  and, when the tables were measured, `OPTION (RECOMPILE)` for the donor, patient, appointment and request searches). No threshold, page size or data was changed to reach them.
+- A search term of one letter ("a") matches most names, which is the worst case for a search.
 - Single-machine numbers (dev PC, Windows, SQL Server on the same host): they show the API and query shapes are inside the
   budget with headroom, not what Azure SQL serverless will do after a cold start.
+
+### Search before and after (100x, a busy machine, 2026-11-20)
+
+The same test (Perf_ListEndpoints_P95Under100ms_At100x) run on 2.1.2 and on the search of SearchQueries, turn and turn about on one
+machine that other work was using (a virtual machine, other test runs on the same SQL Server), at below-normal priority on 8 processors;
+the quieter of two rounds each. Not comparable with the tables above, which were measured on a quiet machine; comparable with each other.
+On 2.1.2 "a" and "Ay" were prefixes of the full name; now they match where any word of a name starts, and the rows without a 2.1.2 figure
+found nothing or could not be asked.
+
+| Request | 2.1.2 p50 ms | 2.1.2 p95 ms | now p50 ms | now p95 ms |
+|---|---|---|---|---|
+| GET donors search=a | 10 | 10 | 10 | 12 |
+| GET patients search=a | 21 | 23 | 16 | 18 |
+| GET appointments search=a, date range | 21 | 23 | 4 | 4 |
+| GET appointments search=a sort=slot page 20 | 27 | 30 | 22 | 28 |
+| GET appointments search=Ay sort=slot page 3 | 14 | 14 | 16 | 19 |
+| GET requests search=a | 21 | 24 | 21 | 31 |
+| GET requests search=a page 30 | 20 | 24 | 20 | 25 |
+| GET receipts search=a | 47 | 53 | 71 | 79 |
+| GET receipts search=Ay | 34 | 37 | 54 | 62 |
+| GET receipts search=a page 100 | 46 | 49 | 68 | 75 |
+| GET donors search=eastwood (last name) |  |  | 10 | 11 |
+| GET donors search=ali (inside a name) |  |  | 6 | 7 |
+| GET donors search=0156 (part of a phone) |  |  | 16 | 16 |
+| GET donors search=eastwood selim (two words) |  |  | 5 | 6 |
+| GET donors search=O- (blood group) |  |  | 1 | 1 |
+| GET donors search=zzzz (nobody) |  |  | 5 | 6 |
+| GET patients search=eastwood (last name) |  |  | 15 | 16 |
+| GET patients search=0156 (part of a phone) |  |  | 18 | 22 |
+| GET appointments search=eastwood (last name) |  |  | 10 | 12 |
+| GET appointments search=ali sort=slot (inside a name) |  |  | 13 | 14 |
+| GET appointments search=0156 (part of a phone) |  |  | 15 | 16 |
+| GET appointments search=eastwood selim (two words) |  |  | 6 | 7 |
+| GET appointments search=555 (every phone) |  |  | 50 | 56 |
+| GET appointments search=zzzz (nobody) |  |  | 6 | 7 |
+| GET requests search=eastwood (last name) |  |  | 9 | 10 |
+| GET requests search=0156 (part of a phone) |  |  | 14 | 14 |
+| GET requests search=555 (every phone) |  |  | 37 | 41 |
+| GET requests search=zzzz (nobody) |  |  | 5 | 6 |
+| GET receipts search=eastwood (last name) |  |  | 49 | 52 |
+| GET receipts search=ali (inside a name) |  |  | 52 | 55 |
+| GET receipts search=0156 (part of a phone) |  |  | 96 | 108 |
+| GET receipts search=eastwood selim (two words) |  |  | 95 | 108 |
+| GET receipts search=555 (every phone) |  |  | 106 | 115 |
+| GET receipts search=zzzz (nobody) |  |  | 15 | 17 |
+| GET receipts search=eastwood kind=Donation |  |  | 51 | 56 |
+| GET staff search=eastwood (last name) |  |  | 5 | 6 |
+| GET lookups/donors search=eastwood (palette) |  |  | 2 | 2 |
+| GET lookups/requests search=eastwood (palette) |  |  | 5 | 6 |
+
+- Donors, patients, appointments and requests cost what they cost or less. A name on the receipt list costs what a prefix cost.
+- The receipt list is the slowest search, as it was: one or two letters now find more (71 ms against 47), and a part of a phone
+  number of three to six digits, two words and "555" (every phone of the dataset) take about 100 ms and missed the budget here by 8 to 15 ms
+  (p95 108, 108, 115). At the 1x demo size every search takes 1 to 3 ms, and a part of a phone number on the receipt list 10 to 12 ms.
+- Every search request of the plan matrix reads at most 28,000 pages (5,100 on the receipt list); on 2.1.2 a number typed into the
+  appointment search read 60,204 and "a" on the receipt list 28,964.

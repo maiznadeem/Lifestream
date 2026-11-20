@@ -2,6 +2,7 @@ using System.Data;
 using System.Linq.Expressions;
 using Lifestream.Api.Infrastructure;
 using Lifestream.Contracts;
+using Lifestream.Data.Queries;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 
@@ -34,9 +35,19 @@ public static class Lists
     /// </summary>
     public static IQueryable<int> Total<T>(IQueryable<T> filtered) => filtered.GroupBy(_ => 1).Select(g => g.Count());
 
-    /// <summary>Marks a search query so it is compiled for its actual term (see <see cref="Infrastructure.SearchPlanInterceptor"/>).</summary>
-    public static IQueryable<T> ForSearch<T>(this IQueryable<T> query, string? search) =>
-        CleanSearch(search) is null ? query : query.TagWith(Infrastructure.SearchPlanInterceptor.Tag);
+    /// <summary>The words of a search (<see cref="SearchQueries"/>: what each list finds for them), or null when nothing was typed.</summary>
+    public static SearchQueries.Query? ParseSearch(string? search)
+    {
+        if (CleanSearch(search) is not { } term)
+        {
+            return null;
+        }
+
+        var query = SearchQueries.Parse(term);
+        return query.Words.Count > SearchQueries.MaxWords
+            ? throw ApiException.Validation("search", $"must be at most {SearchQueries.MaxWords} words")
+            : query;
+    }
 
     /// <summary>Builds the response. The total comes from the first row; only an empty result needs a fallback (0, or a count for a page past the end).</summary>
     public static async Task<PagedResult<T>> BuildAsync<T>(IReadOnlyList<ListRow<T>> rows, int page, int size, Func<Task<int>> countWhenEmpty)
@@ -53,9 +64,6 @@ public static class Lists
     public static PagedResult<T> BuildFromTotal<T>(IReadOnlyList<ListRow<T?>> rows, int page, int size)
         where T : class =>
         new([.. rows.Select(r => r.Item).OfType<T>()], rows.Count > 0 ? rows[0].Total : 0, page, size);
-
-    /// <summary>The prefix pattern ("term%", wildcards escaped) from the data module, so every name search seeks the name index.</summary>
-    public static string PrefixPattern(string term) => Lifestream.Data.Queries.SearchQueries.PrefixPattern(term);
 
     public static string? CleanSearch(string? search)
     {

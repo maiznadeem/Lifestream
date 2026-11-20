@@ -154,18 +154,58 @@ erDiagram
   - **The total is a one-row cross join** (`Lists.Total`: `GROUP BY` a constant), not a scalar subquery in the page's select
     list, which SQL Server may work out again for every row. The patient list joins the page back to `Patient` before it counts
     each patient's pending requests, so the count is worked out for 50 rows and not for every row the `OFFSET` skips.
-  - **Name search** is a **prefix** match on the indexed, case- and accent-insensitive name or phone column (contains-search
-    is not offered; `string.StartsWith(variable)` is not seekable and is never used). Appointments and requests filter on
-    `DonorId IN (donor ids matching name or phone)` (and `OR Id = n` for a numeric term). Receipts search through
-    `SearchQueries.ReceiptsMatching`: id, staff name, donor (donor, appointment, receipt) and patient (patient, request,
-    receipt) chains joined by `UNION`, each ending in a foreign-key index that also carries date, kind and blood type, so the
-    matches are filtered by kind, blood type and date, counted and ordered without reading the receipt table; only the 50
-    receipts of the page are then fetched by id.
-  - **Search queries are compiled for their term.** The same SQL text serves a term that matches 3 donors and one that matches
-    1,200, and the plan that suits one scans for the other (the first term compiled decides for all later ones). List queries
-    that carry a search (donors, patients, appointments, requests) are tagged and `SearchPlanInterceptor` appends `OPTION (RECOMPILE)`
-    to them. The receipt search is not: its set-based union plan is the same for every term, and compiling it for each request
-    costs about 35 ms of the 100 ms budget.
+  - **Search** (`SearchQueries`, one rule for every list, the pickers and the command palette). The text is split into words and
+    **every word must match**, in any order; at most five words. A word that is a blood group ("O-", "ab+") matches that blood
+    group on a list that shows one, and nothing else; the list's own record code ("D-0041") matches that record. Any other
+    word matches a name that **contains** it ("eastw" finds "Selim Eastwood", "ali" finds "Aaliyah"), without regard to case or
+    accents (the name columns' collation); a word of one or two characters only where a word of the name **starts** ("a" finds
+    "Aaliyah Mukherjee" and "Selim Abernathy", not "Dalia Novak"). Digits are looked for in names like any word ("Unknown Male
+    3") and also as the record's number and, from three digits, inside phone numbers (the stored number is compared by its
+    digits, and digits typed with spaces are one number: "5550156" and "555 0156" find "+1-555-0156"). Appointments are
+    searched through their donor, requests through their patient, receipts through their donor or patient and the staff member
+    who issued them. Staff are searched by name, user name and code, never by phone: a staff member's phone is private (only
+    an administrator sees it).
+    - *Why it is not a seek.* Until 2.1.2 a search was a prefix of the whole `Name` column, which seeks the name index and is why
+      a last name was never found. A match anywhere after the first letter of the name cannot seek any index there is, a later
+      word's first letter as little as the middle of a word, so both cost the same: the name index of `Donor`, `Patient` or
+      `Staff` is read whole (46, 34 and 8 pages at 100x; 1 to 3 ms). The big tables are never searched by text: they are
+      reached through the ids of the people found.
+    - *Why one and two letters match word starts only.* What a search costs is the rows it finds in the big tables. One letter
+      is inside nine names in ten, so it finds nine receipts in ten and has them joined, counted and sorted: 100 to 135 ms for
+      the receipt list at 100x, against 60 before. At word starts "a" finds a fifth of the names.
+    - *Appointments and requests* are filtered by `DonorId IN (ids of the donors found)`, every word that can only match
+      through the person in ONE subquery. A word of digits may be the row's own number instead: the row with that number and
+      the other rows of the people found, two sets with nothing in common, put together with `UNION ALL`
+      (`Id = n OR DonorId IN (...)`, as it was written before, read 60,000 pages at 100x: SQL Server answers an `OR` over a
+      subquery row by row).
+    - *Receipts* (`SearchQueries.ReceiptsMatching`) have two statements. A search whose longest word is a text, or seven
+      digits or more of a phone, which is nearly every search, starts from the receipts that word finds: three chains that
+      start at the people found (donor, appointment, receipt; patient, request, receipt; staff, receipt), joined by `UNION`,
+      the statement the search had before. Further words are checked on the receipts found, each chain carrying the ids of
+      the receipt's donor or patient and staff member. Any other search (three to six digits, which may be in every phone:
+      an area code; one or two letters with other words) is answered by a statement that costs the same whatever it finds:
+      a receipt has one party, a donation its appointment's donor and an issue its request's patient, so the two kinds are
+      worked out apart and put together with `UNION ALL` (nothing is found twice, nothing has to be made distinct), each
+      half joined to its appointment or request and `LEFT JOIN`ed per word to the ids of the people and staff that match.
+      The chains are not used there because SQL Server sizes the memory of their `UNION` for 9 % of the people, and with 91 %
+      it spills to disk (500 ms). The matches are filtered by blood type and date, counted and ordered as (id, date, kind,
+      blood type) rows, and only the 50 receipts of the page are then fetched by id. The receipt search is the slowest
+      search: it works the matches out twice, once to count and once for the page.
+    - *The plan* (`SearchPlanInterceptor`). SQL Server cannot estimate how many names contain a word: it assumes 9 % of them
+      for every word. With that guess and a page of 50 to fill it reads the big table in the list's order and looks each
+      row's person up until it has 50 matches, which is the whole table when few match (9,000 pages for a last name). Every
+      statement with a search is therefore tagged by the search itself and sent with
+      `OPTION (USE HINT ('DISABLE_OPTIMIZER_ROWGOAL'))`. The appointment and request searches also get `LOOP JOIN`: from the
+      people found, one index seek per person (7 ms for a name where joining the whole index takes 15; the same 31 ms for a
+      word in most names, with more pages read: 28,000 against 400). Recompiling for each term (`OPTION (RECOMPILE)`, the
+      earlier design) chose well for a prefix, which SQL Server can estimate from the index; for "contains" it would compile
+      the same plan every time, 10 ms a request (50 ms and more for the receipt search).
+    - *What would make it a seek.* A migration: a table of name words (person, word) with an index on the word, or a
+      full-text index on the three name columns, for word starts; nothing short of an n-gram index for the middle of a word.
+      Not needed at this size: the read grows with the number of people (not of appointments or receipts) and is 3 ms at 100x.
+      The receipt search would gain most from the donor or patient id being stored on `Receipt` (as `Appointment` stores
+      `DonorBloodType`): its joins to `Appointment` and `Request`, most of its cost, would go, and with them the need for two
+      statements.
   - "Appointments of donors with blood type X" uses `Appointment.DonorBloodType`, a copy of the donor's blood type kept by
     `LifestreamDbContext` (set when an appointment is added; rewritten in the same transaction when the donor's blood type
     changes, with an audit row per rewritten appointment; see Audit). A `BulkUpdateAsync` of `Donor.BloodType` keeps it in
