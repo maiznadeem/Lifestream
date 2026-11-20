@@ -294,7 +294,7 @@
                 <controls:Icon x:Name="StaffAccessIcon" Grid.Row="2" feat:Edge.Right="{DynamicResource Space.12}">
                   <controls:Icon.Style>
                     <Style TargetType="controls:Icon" BasedOn="{StaticResource AccessIcon}">
-                      <Setter Property="Kind" Value="Eye" />
+                      <Setter Property="Kind" Value="Lock" />
                       <Setter Property="Foreground" Value="{DynamicResource Brush.Ink3}" />
                       <Style.Triggers>
                         <DataTrigger Binding="{Binding DetailIsAdmin}" Value="True">
