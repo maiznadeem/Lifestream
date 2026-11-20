@@ -171,6 +171,9 @@ public sealed class ConnectionProbe : DbConnectionInterceptor
     /// <summary>The SQL error number simulated while failing (40613 resuming, -2 connect timeout, 42119 free allowance used up).</summary>
     public int FailNumber { get; set; } = 40613;
 
+    /// <summary>When set, the failure is this exception (for an error with its real text and severity, or with several errors).</summary>
+    public Func<SqlException>? FailWith { get; set; }
+
     /// <summary>When set, opening throws this non-SQL exception instead (an unexpected failure).</summary>
     public bool ThrowGeneric { get; set; }
 
@@ -189,7 +192,7 @@ public sealed class ConnectionProbe : DbConnectionInterceptor
                 FailuresRemaining--;
             }
 
-            throw SqlExceptions.Create(FailNumber);
+            throw FailWith?.Invoke() ?? SqlExceptions.Create(FailNumber);
         }
 
         return base.ConnectionOpeningAsync(connection, eventData, result, cancellationToken);
@@ -199,26 +202,30 @@ public sealed class ConnectionProbe : DbConnectionInterceptor
 public static class SqlExceptions
 {
     /// <summary>Builds a real SqlException with the given error number (the type has no public constructor).</summary>
-    public static SqlException Create(int number)
+    public static SqlException Create(int number) => Create([number]);
+
+    /// <summary>A SqlException that carries several errors, in this order (<see cref="SqlException.Number"/> is the first one's).</summary>
+    public static SqlException Create(int[] numbers, string message = "simulated", byte severity = 20)
     {
         var errorType = typeof(SqlError);
         var errorCtor = errorType.GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public).OrderByDescending(c => c.GetParameters().Length).First();
-        var args = errorCtor.GetParameters().Select(p => p.Name switch
+        object?[] args(int number) => errorCtor.GetParameters().Select(p => p.Name switch
         {
             "infoNumber" => (object?)number,
             "errorState" => (byte)0,
-            "errorClass" => (byte)20,
+            "errorClass" => severity,
             "server" => "test",
-            "errorMessage" => "simulated",
+            "errorMessage" => message,
             "procedure" => "",
             "lineNumber" => 0,
             "win32ErrorCode" => 0,
             _ => p.ParameterType.IsValueType ? Activator.CreateInstance(p.ParameterType) : null,
         }).ToArray();
-        var error = errorCtor.Invoke(args);
-
         var collection = (SqlErrorCollection)Activator.CreateInstance(typeof(SqlErrorCollection), nonPublic: true)!;
-        typeof(SqlErrorCollection).GetMethod("Add", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(collection, [error]);
+        foreach (var number in numbers)
+        {
+            typeof(SqlErrorCollection).GetMethod("Add", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(collection, [errorCtor.Invoke(args(number))]);
+        }
 
         var create = typeof(SqlException).GetMethods(BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public)
             .Where(m => m.Name == "CreateException").OrderBy(m => m.GetParameters().Length).First();

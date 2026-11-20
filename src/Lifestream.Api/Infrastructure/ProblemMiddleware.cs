@@ -63,7 +63,7 @@ public static class DatabaseProblems
     public static TimeSpan RestingRetryAfter() =>
         new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1, 0, 0, 0, DateTimeKind.Utc).AddMonths(1) - DateTime.UtcNow;
 
-    public const string RestingTitle = "The demo is resting until the 1st of next month.";
+    public const string RestingTitle = "The demo database has used its free monthly allowance and is back on the 1st.";
     public const string WakingTitle = "The database is waking up. Try again in a moment.";
     public static readonly TimeSpan WakingRetryAfter = TimeSpan.FromSeconds(15);
 
@@ -131,6 +131,7 @@ public sealed class ProblemMiddleware(RequestDelegate next, ILogger<ProblemMiddl
 
         if (DatabaseErrors.IsResting(exception))
         {
+            logger.LogWarning("The database is paused for the rest of the month: its free allowance is used up (sql {SqlNumber}). It is back on the 1st, 00:00 UTC.", DatabaseErrors.FreeAllowanceExhausted);
             await ProblemWriter.WriteAsync(context, 503, ProblemCodes.DatabaseResting, DatabaseProblems.RestingTitle, retryAfter: DatabaseProblems.RestingRetryAfter());
             return;
         }

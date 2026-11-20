@@ -7,7 +7,12 @@ namespace Lifestream.Api.Infrastructure;
 /// <summary>Classifies database failures: resuming from auto-pause, or paused for the rest of the month.</summary>
 public static class DatabaseErrors
 {
-    /// <summary>The free monthly allowance is used up and the database is paused until the 1st (Azure error 42119).</summary>
+    /// <summary>
+    /// The free monthly allowance is used up and the database is paused until the 1st. Azure refuses the login with error 42119,
+    /// severity 16 (Microsoft Learn, "Database Engine events and errors (41400 to 49999)"): "This database has reached the monthly free
+    /// amount allowance for the month of ... and is paused for the remainder of the month. The free amount will renew at 12:00 AM
+    /// (UTC) on ...". Waiting does not help and trying again changes nothing, so this error is never retried and never reported as waking.
+    /// </summary>
     public const int FreeAllowanceExhausted = 42119;
 
     // 40613 = database not currently available (resuming), 40197/40501/4922x = service busy or reconfiguring,
@@ -18,10 +23,14 @@ public static class DatabaseErrors
     /// <summary>The error numbers the retrying strategy treats as "the database is still starting".</summary>
     public static IReadOnlyList<int> RetryNumbers => WakingList;
 
-    public static bool IsResting(Exception exception) => Find(exception).Any(e => e.Number == FreeAllowanceExhausted);
+    // Every error of every SqlException in the chain is looked at, not only the first one (which is all SqlException.Number shows).
+    public static bool IsResting(Exception exception) => Numbers(exception).Contains(FreeAllowanceExhausted);
 
     public static bool IsWaking(Exception exception) =>
-        exception is RetryLimitExceededException || Find(exception).Any(e => WakingNumbers.Contains(e.Number));
+        !IsResting(exception) && (exception is RetryLimitExceededException || Numbers(exception).Any(WakingNumbers.Contains));
+
+    private static IEnumerable<int> Numbers(Exception exception) =>
+        Find(exception).SelectMany(e => e.Errors.Cast<SqlError>().Select(error => error.Number).Append(e.Number));
 
     private static IEnumerable<SqlException> Find(Exception? exception)
     {
@@ -56,6 +65,9 @@ public sealed class WakeAwareExecutionStrategy(ExecutionStrategyDependencies dep
 {
     private readonly DateTime _started = DateTime.UtcNow;
     private readonly TimeSpan _budget = TimeSpan.FromSeconds(settings.WakeBudgetSeconds);
+
+    /// <summary>A database paused for the rest of the month is not tried again, whatever else the error carries.</summary>
+    protected override bool ShouldRetryOn(Exception exception) => !DatabaseErrors.IsResting(exception) && base.ShouldRetryOn(exception);
 
     protected override TimeSpan? GetNextDelay(Exception lastException)
     {
