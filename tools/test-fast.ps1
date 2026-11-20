@@ -25,8 +25,8 @@ whether this run restored it or had to build it (a change in the generator, the 
 
 The real-window tests of the Desktop project need the compositor drawing: with the display off (it turns off after some
 minutes without input, although the session is not locked) each of them fails after waiting 60 seconds for a drawn
-window. While it runs, this script asks Windows to keep the display on. It does not turn a display on that is already
-off: it says so when that is likely, and -WakeDisplay makes it move the mouse one pixel and back first.
+window. While it runs, this script asks Windows to keep the display on. It never sends input (no pointer movement, no
+keystrokes), so it cannot turn a display on that is already off: it says so when that is likely.
 
 Every test process runs with DOTNET_TieredPGO=0: the same tests and results for about 30 % less processor time (the
 JIT does not instrument code for a profile that a process this short never gets to use).
@@ -65,9 +65,6 @@ param(
     [string]$Out,
     # The class durations file (default: tools/test-fast.durations.json of the checkout, else the one beside this script).
     [string]$Durations,
-    # When the display is probably off (no input for longer than its timeout), wake it with a one-pixel mouse move and back before
-    # the tests: the real-window tests fail on a display that is off. Without this the run only says that they will.
-    [switch]$WakeDisplay,
     # Run Domain and Client by themselves first; Api and the Desktop tests start when both have ended.
     [switch]$DomainAndClientFirst,
     # Skip the build (the Release output must be up to date).
@@ -490,7 +487,6 @@ try {
     try {
         Add-Type -Namespace LifestreamTestFast -Name Desktop -MemberDefinition @'
 [System.Runtime.InteropServices.DllImport("kernel32.dll")] public static extern uint SetThreadExecutionState(uint flags);
-[System.Runtime.InteropServices.DllImport("user32.dll")] public static extern void mouse_event(uint flags, int dx, int dy, uint data, System.UIntPtr extra);
 [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)] public struct LastInput { public uint Size; public uint Time; }
 [System.Runtime.InteropServices.DllImport("user32.dll")] public static extern bool GetLastInputInfo(ref LastInput info);
 public static double IdleSeconds() { var info = new LastInput(); info.Size = (uint)System.Runtime.InteropServices.Marshal.SizeOf(info); GetLastInputInfo(ref info); return unchecked((uint)System.Environment.TickCount - info.Time) / 1000.0; }
@@ -503,15 +499,7 @@ public static double IdleSeconds() { var info = new LastInput(); info.Size = (ui
         }
 
         if ($timeout -gt 0 -and $idle -ge $timeout) {
-            if ($WakeDisplay) {
-                [LifestreamTestFast.Desktop]::mouse_event(1, 1, 0, 0, [UIntPtr]::Zero)
-                [LifestreamTestFast.Desktop]::mouse_event(1, -1, 0, 0, [UIntPtr]::Zero)
-                Start-Sleep -Seconds 2
-                Write-Host ('  display: no input for {0:N0} s, so it was probably off: woken with a one-pixel mouse move and back' -f $idle)
-            }
-            else {
-                Write-Host ('  display: no input for {0:N0} s and it turns off after {1} s, so it is probably off: the real-window tests will then fail, each after 60 s (wake it, or pass -WakeDisplay)' -f $idle, $timeout)
-            }
+            Write-Host ('  display: no input for {0:N0} s and it turns off after {1} s, so it is probably off: the real-window tests need it on' -f $idle, $timeout)
         }
 
         [void][LifestreamTestFast.Desktop]::SetThreadExecutionState([uint32]2147483651) # continuous + system required + display required
