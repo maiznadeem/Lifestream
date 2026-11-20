@@ -10,6 +10,13 @@ public sealed record WakePolicy
     /// <summary>The longest a call keeps retrying a waking server before it gives up.</summary>
     public TimeSpan Budget { get; init; } = TimeSpan.FromSeconds(120);
 
+    /// <summary>
+    /// The longest a call keeps retrying while no connection can be made at all (refused, no network, no such host). That is not a server
+    /// waking up: a waking server accepts the connection and answers late or with 502/503/504. It is retried quietly for this long, in case
+    /// the network or the server is back in a moment, and then reported as unreachable.
+    /// </summary>
+    public TimeSpan UnreachableBudget { get; init; } = TimeSpan.FromSeconds(10);
+
     /// <summary>How long a call may be slow, or be retried, before the "waking up the server" state is shown.</summary>
     public TimeSpan ShowWakingAfter { get; init; } = TimeSpan.FromSeconds(3);
 
@@ -24,9 +31,11 @@ public sealed record WakePolicy
 }
 
 /// <summary>
-/// Retries a call, with exponential backoff, while the server or database is waking up: on a connection failure, an
-/// attempt timeout, a 502/503/504, or a <c>database_waking</c> problem. The retry re-sends the same request headers, so
-/// the Idempotency-Key is identical on every attempt. The caller's cancellation token stops it at any moment.
+/// Retries a call, with exponential backoff, while the server or database is waking up: on an attempt timeout, a 502/503/504, or a
+/// <c>database_waking</c> problem, for up to <see cref="WakePolicy.Budget"/>, showing the waking state after
+/// <see cref="WakePolicy.ShowWakingAfter"/>. A connection that cannot be made at all is a different thing: it is retried quietly for
+/// <see cref="WakePolicy.UnreachableBudget"/> only, never shows the waking state, and then fails as unreachable. The retry re-sends the same
+/// request headers, so the Idempotency-Key is identical on every attempt. The caller's cancellation token stops it at any moment.
 /// </summary>
 public sealed class WakeAwareHandler(WakePolicy policy, ServerStatus status, HttpMessageHandler inner) : DelegatingHandler(inner)
 {
@@ -46,8 +55,10 @@ public sealed class WakeAwareHandler(WakePolicy policy, ServerStatus status, Htt
         byte[]? body = request.Content is null ? null : await request.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
 
         var call = new CallState(status);
-        using var slowTimer = clock.CreateTimer(_ => call.Enter(), null, policy.ShowWakingAfter, Timeout.InfiniteTimeSpan);
+        using var slowTimer = clock.CreateTimer(_ => call.Slow(), null, policy.ShowWakingAfter, Timeout.InfiniteTimeSpan);
         var backoff = policy.FirstBackoff;
+        long? unreachableSince = null;
+        var unreachableBudget = policy.UnreachableBudget < policy.Budget ? policy.UnreachableBudget : policy.Budget;
         try
         {
             while (true)
@@ -84,9 +95,14 @@ public sealed class WakeAwareHandler(WakePolicy policy, ServerStatus status, Htt
                     }
                 }
 
+                // No connection at all (refused, no network) is not "waking": no waking state while it lasts, and a short budget of its own.
+                var unreachable = failure is HttpRequestException;
+                unreachableSince = unreachable ? unreachableSince ?? clock.GetTimestamp() : null;
+                call.Unreachable(unreachable);
+
                 var elapsed = clock.GetElapsedTime(started);
                 var delay = RetryAfter(response) ?? backoff;
-                if (elapsed + delay >= policy.Budget)
+                if (elapsed + delay >= policy.Budget || (unreachableSince is { } since && clock.GetElapsedTime(since) + delay >= unreachableBudget))
                 {
                     if (response is not null)
                     {
@@ -169,38 +185,44 @@ public sealed class WakeAwareHandler(WakePolicy policy, ServerStatus status, Htt
         return copy;
     }
 
-    /// <summary>Tracks whether this call put the server into the waking state, and takes it out again exactly once.</summary>
+    /// <summary>
+    /// Tracks whether this call has the server in the waking state: it does once it has been slow for <see cref="WakePolicy.ShowWakingAfter"/>,
+    /// except while its last attempt could not connect at all, and never after it has ended. Every Enter is balanced by one Leave.
+    /// </summary>
     private sealed class CallState(ServerStatus status)
     {
         private readonly Lock _gate = new();
+        private bool _slow;
+        private bool _unreachable;
         private bool _entered;
         private bool _completed;
 
-        public void Enter()
+        /// <summary>The call has been running for <see cref="WakePolicy.ShowWakingAfter"/>.</summary>
+        public void Slow() => Update(() => _slow = true);
+
+        /// <summary>Whether the last attempt failed without any connection (true), or the server was there (false).</summary>
+        public void Unreachable(bool value) => Update(() => _unreachable = value);
+
+        public void Complete() => Update(() => _completed = true);
+
+        private void Update(Action change)
         {
-            lock (_gate)
-            {
-                if (_entered || _completed)
-                {
-                    return;
-                }
-
-                _entered = true;
-            }
-
-            status.Enter();
-        }
-
-        public void Complete()
-        {
+            bool enter;
             bool leave;
             lock (_gate)
             {
-                _completed = true;
-                leave = _entered;
+                change();
+                var waking = _slow && !_unreachable && !_completed;
+                enter = waking && !_entered;
+                leave = !waking && _entered;
+                _entered = waking;
             }
 
-            if (leave)
+            if (enter)
+            {
+                status.Enter();
+            }
+            else if (leave)
             {
                 status.Leave();
             }
