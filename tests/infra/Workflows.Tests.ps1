@@ -164,6 +164,13 @@ Describe 'INFRA-04 firewall sync is manual only: not in the deploy, not on a sch
         (Run @($script:Deploy.Yaml.jobs.deploy.steps)[$entra]) | Should -Match 'REFUSING TO DEPLOY'
     }
 
+    It 'the docs say so too: no file that describes the sync claims it runs weekly or with every deploy' {
+        $root = Join-Path $script:Dir '..' '..'
+        foreach ($f in '.github/workflows/sync-sql-firewall.yml', 'infra/README.md', 'infra/main.bicep') {
+            (Get-Content -Raw (Join-Path $root $f)) | Should -Not -Match '(?i)\bweekly\b|after every app update|in every `?deploy-api\.yml`? run' -Because $f
+        }
+    }
+
     It 'sync-sql-firewall.yml runs on demand only, signs in with OIDC, and never touches the database' {
         $y = $script:SyncFw.Yaml
         @($y.on.Keys) | Should -Be @('workflow_dispatch')

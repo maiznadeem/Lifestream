@@ -1,8 +1,9 @@
 name: Sync SQL firewall
 
-# Keeps the SQL server firewall equal to the Container Apps environment's outbound addresses (INFRA-04). The addresses are
-# Azure-owned and may change without a deploy, so this runs weekly as well as after every app update (deploy-api.yml). It only
-# edits firewall rules; it never connects to the database. Signs in with GitHub OIDC (no stored cloud secret). The logic is in
+# Makes the SQL server firewall equal to the Container Apps environment's outbound addresses (INFRA-04). Started by hand only:
+# since 2026-11-19 neither deploy-api.yml nor a schedule runs it, because the Consumption environment's shared outbound pool is
+# 170+ addresses and adding them one rule at a time took longer than the deploy job; Entra-only authentication is the access
+# control. Run it when the environment's outbound addresses change. It only edits firewall rules; it never connects to the database. Signs in with GitHub OIDC (no stored cloud secret). The logic is in
 # infra/sync-sql-firewall.ps1 (Pester: tests/infra/SqlFirewall.Tests.ps1).
 on:
   workflow_dispatch:

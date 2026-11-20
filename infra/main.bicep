@@ -4,8 +4,8 @@
 // environment bills a public IP and a load balancer around the clock), minimum replicas 0, no registry (images come from GHCR),
 // no Key Vault, no gateway, no private endpoint, no container log destination. The SQL server and the BloodBank database
 // already exist (serverless free offer); they are declared here so the Entra-only switch, audit, locks and backup settings
-// are code. The SQL firewall is NOT declared here: infra/sync-sql-firewall.ps1 keeps it equal to the environment's outbound
-// addresses (a template cannot delete rules it does not declare). tests/infra/BicepTests.ps1 holds an allow-list of resource
+// are code. The SQL firewall is NOT declared here: infra/sync-sql-firewall.ps1, run by hand, makes it equal to the environment's
+// outbound addresses (a template cannot delete rules it does not declare). tests/infra/BicepTests.ps1 holds an allow-list of resource
 // types that cost nothing at idle; a type outside it fails the build. Nothing in this file is applied by the infra builder;
 // see infra/README.md for the order.
 
@@ -119,7 +119,7 @@ resource sqlServer 'Microsoft.Sql/servers@2023-08-01' = {
   properties: {
     version: '12.0'
     minimalTlsVersion: '1.2'
-    publicNetworkAccess: 'Enabled' // reached over the public endpoint; the firewall holds only the environment's outbound addresses (infra/sync-sql-firewall.ps1)
+    publicNetworkAccess: 'Enabled' // reached over the public endpoint; firewall rules are set by infra/sync-sql-firewall.ps1 (run by hand); Entra-only authentication is the access control
     restrictOutboundNetworkAccess: 'Disabled'
   }
 }
@@ -145,8 +145,8 @@ resource sqlEntraOnly 'Microsoft.Sql/servers/azureADOnlyAuthentications@2023-08-
   }
 }
 
-// No firewallRules resource is declared on purpose. infra/sync-sql-firewall.ps1 (run by deploy-api.yml after every app update
-// and weekly by sync-sql-firewall.yml) makes the rules exactly the environment's outbound addresses, named aca-outbound-<n>, and
+// No firewallRules resource is declared on purpose. infra/sync-sql-firewall.ps1 (run by hand through sync-sql-firewall.yml; since
+// 2026-11-19 neither the deploy nor a schedule runs it) makes the rules exactly the environment's outbound addresses, named aca-outbound-<n>, and
 // deletes everything else, including the legacy "Allow anyone" (0.0.0.0-255.255.255.255) and "AllowAllWindowsAzureIps" rules.
 
 resource sqlDatabase 'Microsoft.Sql/servers/databases@2023-08-01' = {
