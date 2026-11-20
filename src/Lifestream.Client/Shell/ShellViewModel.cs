@@ -114,7 +114,7 @@ public sealed partial class ShellViewModel : ViewModelBase
         // Concurrent on purpose: the sidebar stays usable while a screen loads, and the newer click supersedes the older one (SHELL-07).
         NavigateCommand = Command((parameter, _) => parameter is NavItem item ? OpenAsync(item.Destination) : Task.CompletedTask, allowConcurrent: true);
         ProfileCommand = Command(_ => NavigateToTypeAsync(NavigationCatalog.ProfileViewModelType, "profile"));
-        ChangePasswordCommand = Command(_ => NavigateToTypeAsync(NavigationCatalog.ProfileViewModelType, "change-password"));
+        ChangePasswordCommand = Command(_ => ChangePasswordAsync());
         SignOutCommand = Command(_ => _flow.SignOutAsync());
         ApplyUpdateCommand = Command(async ct =>
         {
@@ -303,6 +303,9 @@ public sealed partial class ShellViewModel : ViewModelBase
     }
 
     public bool IsDemo => _session.User?.IsDemo == true;
+
+    /// <summary>False for the demo account, whose password the server will not change: the account menu and the palette then do not offer "Change password".</summary>
+    public bool CanChangePassword => !IsDemo;
 
     public string? UpdatePrompt => Updates.IsUpdateReady ? Updates.Message : null;
 
@@ -519,6 +522,34 @@ public sealed partial class ShellViewModel : ViewModelBase
     }
 
     private async Task NavigateToTypeAsync(Type type, object parameter) => await Navigation.NavigateTo(type, parameter).ConfigureAwait(true);
+
+    /// <summary>
+    /// "Change password" in the account menu and the palette. On the Profile screen it opens the dialog over the screen as it is: opening the screen again
+    /// would load the profile a second time and throw away what the person was doing there. From any other screen it opens the profile first, and the
+    /// dialog once the profile is on screen.
+    /// </summary>
+    private async Task ChangePasswordAsync()
+    {
+        if (!CanChangePassword)
+        {
+            // The demo account is never offered this (the menu and the palette leave it out). Asked anyway, it gets the profile, whose Security
+            // section says why the password cannot be changed, and no dialog.
+            await NavigateToTypeAsync(NavigationCatalog.ProfileViewModelType, "profile").ConfigureAwait(true);
+            return;
+        }
+
+        if (Navigation.Current is ProfileViewModel profile)
+        {
+            if (profile.ChangePasswordCommand.CanExecute(null))
+            {
+                await profile.ChangePasswordCommand.ExecuteAsync().ConfigureAwait(true);
+            }
+
+            return;
+        }
+
+        await NavigateToTypeAsync(NavigationCatalog.ProfileViewModelType, ProfileViewModel.ChangePasswordParameter).ConfigureAwait(true);
+    }
 
     private void OnServerStatusChanged(object? sender, EventArgs e) => Post(() => OnPropertyChanged(nameof(IsServerWaking)));
 

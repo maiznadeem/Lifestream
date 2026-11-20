@@ -12,8 +12,10 @@
     <ContextMenu x:Key="AccountMenu" Style="{DynamicResource ContextMenu.Lifestream}">
       <MenuItem Style="{DynamicResource MenuItem.Lifestream}" Header="Profile" AutomationProperties.Name="Profile"
                 Command="{Binding PlacementTarget.DataContext.ProfileCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+      <!-- Not offered to the demo account: the server does not change its password. -->
       <MenuItem Style="{DynamicResource MenuItem.Lifestream}" Header="Change password" AutomationProperties.Name="Change password"
-                Command="{Binding PlacementTarget.DataContext.ChangePasswordCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                Command="{Binding PlacementTarget.DataContext.ChangePasswordCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                Visibility="{Binding PlacementTarget.DataContext.CanChangePassword, RelativeSource={RelativeSource AncestorType=ContextMenu}, Converter={StaticResource BoolToVisibility}}" />
       <MenuItem Style="{DynamicResource MenuItem.Lifestream}" Header="Theme" AutomationProperties.Name="Theme">
         <MenuItem Style="{DynamicResource MenuItem.Lifestream}" Header="Light" AutomationProperties.Name="Light theme"
                   Command="{Binding PlacementTarget.DataContext.SetThemeCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" CommandParameter="{x:Static common:ThemeMode.Light}" />

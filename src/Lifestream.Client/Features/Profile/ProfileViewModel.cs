@@ -46,6 +46,7 @@ public sealed partial class ProfileViewModel : FormViewModelBase, INavigationPar
     protected override IToastService? SessionToasts => _toasts;
     private readonly IChangePasswordPrompt _passwords;
     private readonly UiPreferences? _preferences;
+    private readonly Session.ISessionService? _session;
     private ProfileResponse? _fetched;
     private byte[]? _fetchedPhoto;
     private string _rowVersion = string.Empty;
@@ -54,11 +55,15 @@ public sealed partial class ProfileViewModel : FormViewModelBase, INavigationPar
     private byte[]? _replacedPhoto;
     private bool _openPasswordDialog;
 
-    /// <summary>Creates the screen; <paramref name="preferences"/> holds the appearance choice (light, dark or match Windows), which the app applies at once (without it the Appearance section is hidden).</summary>
-    public ProfileViewModel(ILifestreamApiClient api, IToastService toasts, IPhotoPicker photos, IChangePasswordPrompt passwords, UiPreferences? preferences = null)
+    /// <summary>
+    /// Creates the screen; <paramref name="preferences"/> holds the appearance choice (light, dark or match Windows), which the app applies at once (without it
+    /// the Appearance section is hidden); <paramref name="session"/> says whether this is the shared demo account, whose password cannot be changed.
+    /// </summary>
+    public ProfileViewModel(ILifestreamApiClient api, IToastService toasts, IPhotoPicker photos, IChangePasswordPrompt passwords, UiPreferences? preferences = null, Session.ISessionService? session = null)
     {
         _api = api;
         _preferences = preferences;
+        _session = session;
         if (preferences is not null)
         {
             preferences.PropertyChanged += OnPreferencesChanged;
@@ -79,7 +84,7 @@ public sealed partial class ProfileViewModel : FormViewModelBase, INavigationPar
             return Task.CompletedTask;
         }, () => HasUnsavedChanges && !IsBusy);
         PickPhotoCommand = Command(PickPhotoAsync, () => !IsBusy, opensModal: true);
-        ChangePasswordCommand = Command(_ => _passwords.PromptAsync(), () => !IsBusy, opensModal: true);
+        ChangePasswordCommand = Command(_ => _passwords.PromptAsync(), () => CanChangePassword && !IsBusy, opensModal: true);
         RetryCommand = Command(ct => LoadAsync(ct));
         ReloadCommand = Command(ct => LoadAsync(ct));
         ErrorsChanged += (_, _) => OnPropertyChanged("Item[]");
@@ -94,6 +99,18 @@ public sealed partial class ProfileViewModel : FormViewModelBase, INavigationPar
     public AsyncRelayCommand PickPhotoCommand { get; }
 
     public AsyncRelayCommand ChangePasswordCommand { get; }
+
+    /// <summary>
+    /// False for the demo account: everyone who tries the demo shares it, so the server refuses to change its password. The screen then says so
+    /// instead of offering a dialog that could only fail.
+    /// </summary>
+    public bool CanChangePassword => _session?.User?.IsDemo != true;
+
+    /// <summary>What the Security section says instead of offering the button when the password cannot be changed.</summary>
+    public string PasswordUnavailableText => "The demo account is shared by everyone who tries Lifestream, so its password can't be changed.";
+
+    /// <summary>The line under the Security section's heading: what the button does, or why there is none.</summary>
+    public string PasswordSectionText => CanChangePassword ? "Change the password you sign in with. You'll need the current one." : PasswordUnavailableText;
 
     public AsyncRelayCommand RetryCommand { get; }
 
@@ -272,10 +289,18 @@ public sealed partial class ProfileViewModel : FormViewModelBase, INavigationPar
         HasConflict = false;
         FormError = null;
         ChangesChanged();
+    }
+
+    /// <summary>The account menu's "Change password" opens the dialog once the profile is on screen: after the load, never during it.</summary>
+    protected override void OnLoaded()
+    {
         if (_openPasswordDialog)
         {
             _openPasswordDialog = false;
-            ChangePasswordCommand.Execute(null);
+            if (ChangePasswordCommand.CanExecute(null))
+            {
+                ChangePasswordCommand.Execute(null);
+            }
         }
     }
 

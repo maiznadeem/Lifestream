@@ -147,9 +147,11 @@
           </controls:Section>
 
           <!-- Security -->
-          <controls:Section x:Name="PasswordSection" Header="Security" Subtitle="Change the password you sign in with. You'll need the current one." feat:Edge.Top="{DynamicResource Space.16}">
+          <!-- The demo account's password cannot be changed (it is shared): its section says so and offers no button. -->
+          <controls:Section x:Name="PasswordSection" Header="Security" Subtitle="{Binding PasswordSectionText}" feat:Edge.Top="{DynamicResource Space.16}">
             <controls:Section.HeaderActions>
-              <Button x:Name="ChangePasswordButton" Style="{DynamicResource Button.Secondary}" Command="{Binding ChangePasswordCommand}" AutomationProperties.Name="Change password">
+              <Button x:Name="ChangePasswordButton" Style="{DynamicResource Button.Secondary}" Command="{Binding ChangePasswordCommand}" AutomationProperties.Name="Change password"
+                      Visibility="{Binding CanChangePassword, Converter={StaticResource BoolToVisibility}}">
                 <StackPanel Orientation="Horizontal">
                   <controls:Icon Kind="Key" Size="16" VerticalAlignment="Center" feat:Edge.Right="{DynamicResource Space.8}" />
                   <TextBlock Text="Change password" VerticalAlignment="Center" />
