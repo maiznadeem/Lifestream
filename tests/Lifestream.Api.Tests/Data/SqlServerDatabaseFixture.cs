@@ -247,10 +247,11 @@ public sealed class DemoSizeDatabaseFixture : SqlServerDatabaseFixture
 }
 
 /// <summary>
-/// The same database with the 100x dataset loaded, once per class. Loading 100,000 rows and settling the indexes takes about 20 s, so it is done once per
-/// test run into a template database that is backed up and dropped at once; each class then gets its own database restored from that backup (seconds):
-/// the same rows, rebuilt indexes and full-scan statistics as a database loaded for the class alone. Used by the plan and I/O tests and available to
-/// performance tests.
+/// The same database with the 100x dataset loaded, once per class. Loading 100,000 rows and settling the indexes takes about 20 s, so it is done once
+/// into a template database that is backed up and dropped at once; each class then gets its own database restored from that backup (seconds):
+/// the same rows, rebuilt indexes and full-scan statistics as a database loaded for the class alone. The backup is kept between runs and used again
+/// while the sources that decide its content, the day and the server are the same (<see cref="ScaleTemplateCache"/>). Used by the plan and I/O tests
+/// and available to performance tests.
 /// </summary>
 public sealed class ScaleDatabaseFixture : SqlServerDatabaseFixture
 {
@@ -271,17 +272,28 @@ public sealed class ScaleDatabaseFixture : SqlServerDatabaseFixture
 
     protected override async Task CreateAsync(CancellationToken ct)
     {
-        var template = await ScaleTemplate.GetAsync(ct);
-        Today = template.Today;
-        Receipts = template.Receipts;
-        await PlanCacheGate.WaitAsync(ct);
-        try
+        const int cannotOpenBackupDevice = 3201;
+        for (var attempt = 1; ; attempt++)
         {
-            await RestoreAsync(template, ct);
-        }
-        finally
-        {
-            PlanCacheGate.Release();
+            var template = await ScaleTemplate.GetAsync(ct);
+            Today = template.Today;
+            Receipts = template.Receipts;
+            await PlanCacheGate.WaitAsync(ct);
+            try
+            {
+                await RestoreAsync(template, ct);
+                return;
+            }
+            catch (SqlException ex) when (attempt < 3 && ex.Errors.Cast<SqlError>().Any(e => e.Number == cannotOpenBackupDevice))
+            {
+                // The kept backup is gone: a run with other sources replaced it between this run's look at it and this restore. Build it again.
+            }
+            finally
+            {
+                PlanCacheGate.Release();
+            }
+
+            await ScaleTemplate.ForgetAsync(template, ct);
         }
     }
 
@@ -319,21 +331,75 @@ public sealed class ScaleDatabaseFixture : SqlServerDatabaseFixture
             }
         }
 
+        /// <summary>Makes the next <see cref="GetAsync"/> look for the template again, when the one it gave out can no longer be restored from.</summary>
+        public static async Task ForgetAsync(Built gone, CancellationToken ct)
+        {
+            await Gate.WaitAsync(ct);
+            try
+            {
+                if (ReferenceEquals(_built, gone))
+                {
+                    _built = null;
+                }
+            }
+            finally
+            {
+                Gate.Release();
+            }
+        }
+
+        /// <summary>
+        /// The template of this run: the backup an earlier run kept, when it was built from the same sources for the same day (see
+        /// <see cref="ScaleTemplateCache"/>); otherwise built now, and kept for the next run.
+        /// </summary>
         private static async Task<Built> BuildAsync(CancellationToken ct)
         {
             var source = new Loader();
+            var (cache, reason) = await ScaleTemplateCache.OpenAsync(source.MasterConnection, Factor, source.Today, ct);
+            if (cache is null)
+            {
+                return await LoadAndBackUpAsync(source, null, "not kept: " + reason, ct);
+            }
+
+            await using var oneAtATime = await cache.LockAsync(ct);
+            if (await cache.TryReadAsync(ct) is { } kept)
+            {
+                ScaleTemplateCache.Report($"100x template: restored from the kept backup {cache.BackupFile}");
+                return new Built(cache.BackupFile, kept.DataFile, kept.LogFile, kept.Today, kept.Receipts);
+            }
+
+            var built = await LoadAndBackUpAsync(source, cache, "kept as " + cache.BackupFile, ct);
+            await cache.DeleteOthersAsync(ct);
+            return built;
+        }
+
+        private static async Task<Built> LoadAndBackUpAsync(Loader source, ScaleTemplateCache? cache, string note, CancellationToken ct)
+        {
+            var watch = System.Diagnostics.Stopwatch.StartNew();
             await source.InitializeAsync();
             try
             {
-                await DeleteStaleBackupsAsync(source, ct);
                 var files = await source.RowsAsync("SELECT type, name FROM sys.database_files", ct);
                 var dataFile = (string)files.Single(f => Convert.ToInt32(f[0], System.Globalization.CultureInfo.InvariantCulture) == 0)[1]!;
                 var logFile = (string)files.Single(f => Convert.ToInt32(f[0], System.Globalization.CultureInfo.InvariantCulture) == 1)[1]!;
-                var backupDirectory = await source.ScalarAsync<string>("SELECT CAST(SERVERPROPERTY('InstanceDefaultBackupPath') AS nvarchar(4000))", ct);
-                var backupFile = Path.Combine(backupDirectory, source.DatabaseName + ".bak");
-                await source.BackupToAsync(backupFile, ct);
-                var master = source.MasterConnection;
-                AppDomain.CurrentDomain.ProcessExit += (_, _) => DeleteBackup(master, backupFile);
+                string backupFile;
+                if (cache is null)
+                {
+                    // A backup for this run only, in the server's backup folder, deleted when the run ends.
+                    await DeleteStaleBackupsAsync(source, ct);
+                    var backupDirectory = await source.ScalarAsync<string>("SELECT CAST(SERVERPROPERTY('InstanceDefaultBackupPath') AS nvarchar(4000))", ct);
+                    backupFile = Path.Combine(backupDirectory, source.DatabaseName + ".bak");
+                    await source.BackupToAsync(backupFile, "Lifestream test template of one run", ct);
+                    var master = source.MasterConnection;
+                    AppDomain.CurrentDomain.ProcessExit += (_, _) => DeleteBackup(master, backupFile);
+                }
+                else
+                {
+                    backupFile = cache.BackupFile;
+                    await source.BackupToAsync(backupFile, cache.Describe(source.Today, source.Receipts), ct);
+                }
+
+                ScaleTemplateCache.Report(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"100x template: built in {watch.Elapsed.TotalSeconds:0.0} s, {note}"));
                 return new Built(backupFile, dataFile, logFile, source.Today, source.Receipts);
             }
             finally
@@ -388,8 +454,13 @@ public sealed class ScaleDatabaseFixture : SqlServerDatabaseFixture
 
             public int Receipts { get; private set; }
 
-            public Task BackupToAsync(string file, CancellationToken ct) =>
-                ExecuteOnMasterAsync("BACKUP DATABASE @name TO DISK = @file WITH COPY_ONLY, INIT, FORMAT", DatabaseName, ct, new SqlParameter("@file", SqlDbType.NVarChar, 4000) { Value = file });
+            public Task BackupToAsync(string file, string description, CancellationToken ct) =>
+                ExecuteOnMasterAsync(
+                    "BACKUP DATABASE @name TO DISK = @file WITH COPY_ONLY, INIT, FORMAT, DESCRIPTION = @description",
+                    DatabaseName,
+                    ct,
+                    new SqlParameter("@file", SqlDbType.NVarChar, 4000) { Value = file },
+                    new SqlParameter("@description", SqlDbType.NVarChar, 255) { Value = description });
 
             protected override async Task OnMigratedAsync(CancellationToken ct)
             {
