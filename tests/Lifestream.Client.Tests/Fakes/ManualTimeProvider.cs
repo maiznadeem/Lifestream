@@ -7,6 +7,25 @@ public sealed class ManualTimeProvider(DateTimeOffset? start = null) : TimeProvi
     private readonly Lock _gate = new();
     private readonly List<ManualTimer> _timers = [];
     private long _ticks;
+    private long _fired;
+
+    /// <summary>
+    /// How many timers this clock has fired so far. Code that waits on this clock can only move when one of its timers fires, so a test that
+    /// steps the clock knows from this number whether a step woke anything (and so whether there is anything to wait for before the next step).
+    /// </summary>
+    public long TimersFired => Interlocked.Read(ref _fired);
+
+    /// <summary>How many timers are waiting on this clock right now: none until the code under test has reached it.</summary>
+    public int TimersWaiting
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _timers.Count;
+            }
+        }
+    }
 
     public override long TimestampFrequency => TimeSpan.TicksPerSecond;
 
@@ -98,6 +117,7 @@ public sealed class ManualTimeProvider(DateTimeOffset? start = null) : TimeProvi
                 }
             }
 
+            Interlocked.Increment(ref owner._fired);
             callback(state);
         }
 

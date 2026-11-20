@@ -75,9 +75,60 @@ internal sealed class RealWindow : IDisposable
     /// <summary>
     /// Why real windows cannot be created and captured here (the tests skip with this message), or null when they can. They need an interactive
     /// desktop whose compositor is running: not a GitHub runner (set <c>LIFESTREAM_REAL_WINDOW_TESTS=1</c> to try there anyway), not a service
-    /// session, not a locked or disconnected session. <c>LIFESTREAM_REAL_WINDOW_TESTS=0</c> turns them off.
+    /// session, not a locked or disconnected session, and not while the display is off (<see cref="DisplayIsOff"/>).
+    /// <c>LIFESTREAM_REAL_WINDOW_TESTS=0</c> turns them off.
     /// </summary>
     public static string? Unavailable => Reason.Value;
+
+    /// <summary>
+    /// What the tests skip with while the display is off. The display turns off after some minutes without input although the session stays
+    /// unlocked, and the compositor then draws nothing: <c>PrintWindow</c> returns an empty window for as long as a test cares to wait (each of
+    /// them used to fail after 60 s). The test runner of the release gate (tools/test-fast.ps1) counts the tests that carry this message and
+    /// fails the gate unless it is told that a run without them is acceptable, so the checks are never lost silently.
+    /// </summary>
+    public const string DisplayIsOff = "display is off: real-window checks not run";
+
+    /// <summary>How long <see cref="ConsoleDisplayState"/> waits for Windows to say what state the display is in (it answers in a few milliseconds).</summary>
+    public const int DisplayStateWaitMilliseconds = 400;
+
+    /// <summary>The skip message for a display in the given state (0 off, 1 on, 2 dimmed, null not known): only a display that is off skips.</summary>
+    internal static string? DisplayReason(int? consoleDisplayState) => consoleDisplayState == 0 ? DisplayIsOff : null;
+
+    /// <summary>
+    /// The state of the display as Windows reports it (the power setting GUID_CONSOLE_DISPLAY_STATE): 0 off, 1 on, 2 dimmed; null when Windows
+    /// did not say within <see cref="DisplayStateWaitMilliseconds"/>. Subscribing to the setting delivers its current value at once, on a thread
+    /// of the system. It needs no window, reads nothing from the screen and sends no input.
+    /// </summary>
+    internal static int? ConsoleDisplayState()
+    {
+        var answer = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+        PowerSettingCallback callback = (_, _, setting) =>
+        {
+            // POWERBROADCAST_SETTING: the setting's GUID (16 bytes), the length of its data, the data (one DWORD for this setting).
+            if (setting != IntPtr.Zero && Marshal.ReadInt32(setting, 16) >= sizeof(int))
+            {
+                answer.TrySetResult(Marshal.ReadInt32(setting, 20));
+            }
+
+            return 0;
+        };
+        var subscription = new PowerSettingSubscription { Callback = callback, Context = IntPtr.Zero };
+        var consoleDisplayState = new Guid("6fe69556-704a-47a0-8f24-c28d936fda47");
+        if (PowerSettingRegisterNotification(ref consoleDisplayState, DeviceNotifyCallback, ref subscription, out var registration) != 0)
+        {
+            return null;
+        }
+
+        try
+        {
+            return answer.Task.Wait(DisplayStateWaitMilliseconds) ? answer.Task.Result : null;
+        }
+        finally
+        {
+            _ = PowerSettingUnregisterNotification(registration);
+            GC.KeepAlive(callback);
+        }
+    }
 
     public Window Window { get; }
 
@@ -398,7 +449,8 @@ internal sealed class RealWindow : IDisposable
             CloseDesktop(input);
         }
 
-        return null;
+        // Last, the display itself: off after some minutes without input, with the session still unlocked (see DisplayIsOff).
+        return DisplayReason(ConsoleDisplayState());
     }
 
     private static string DesktopName(IntPtr desktop)
@@ -431,6 +483,24 @@ internal sealed class RealWindow : IDisposable
         public int ClrUsed;
         public int ClrImportant;
     }
+
+    private const uint DeviceNotifyCallback = 2;
+
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    private delegate uint PowerSettingCallback(IntPtr context, uint type, IntPtr setting);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct PowerSettingSubscription
+    {
+        public PowerSettingCallback Callback;
+        public IntPtr Context;
+    }
+
+    [DllImport("powrprof.dll")]
+    private static extern uint PowerSettingRegisterNotification(ref Guid setting, uint flags, ref PowerSettingSubscription recipient, out IntPtr registration);
+
+    [DllImport("powrprof.dll")]
+    private static extern uint PowerSettingUnregisterNotification(IntPtr registration);
 
     [DllImport("user32.dll")]
     private static extern int GetSystemMetrics(int index);
