@@ -1002,12 +1002,28 @@ buttons must be exactly 46 x 44 with a click area equal to the highlight, and th
   show the Snap Layouts flyout. Hover and press are tracked from `WM_NCLEFTBUTTONDOWN/UP` and `WM_NCMOUSELEAVE`. The glyph is the restore glyph while
   maximized. Double-click maximizes; Alt+Space opens the system menu.
 - **Resize border** 6 DIP (`Chrome.ResizeBorder`). **Dialogs** (`IsDialog="True"`) have only a close button and cannot be resized or maximized.
-- **Maximized insets:** the root is padded by `SystemParameters.WindowResizeBorderThickness` (the resize frame plus the padded border) so nothing is
-  clipped. A restored window on Windows 11 gets DWM's 1 px border and round corners (build 22000 and later); on Windows 10 the root draws a 1 px `Stroke`.
-- **Mica:** on Windows 11 build 22621 and later (22H2) `Dwm.SetMica` turns on the system backdrop and extends the frame; the window's copy of
-  `Brush.Mica` becomes transparent so real Mica shows through, the composition background is transparent, and `IsMicaActive` is true. Elsewhere
-  (Windows 10, early Windows 11, `LIFESTREAM_NO_MICA=1`, renders in tests) the `Brush.Mica` gradient paints the window, and the content area is
-  `Canvas`. The window also sets the DWM dark frame from `ThemeService.IsDark` and refreshes it on `ThemeService.Changed`.
+- **Drag area:** exactly the title bar. (`WindowChrome` adds its resize border to `CaptionHeight`, so the window answers "client" for the rows
+  right under the title bar itself.) While maximized the title bar starts below the window's own top edge, by the maximized inset.
+- **Maximized insets:** the root is padded by `ChromeWindow.MaximizedInset`, the frame Windows pushes past the screen: the resize frame plus the
+  padded border (`SM_CXSIZEFRAME + SM_CXPADDEDBORDER`, 8 DIP), for the window's own DPI. `SystemParameters.WindowResizeBorderThickness` is the
+  resize frame alone, half of it. A restored window on Windows 11 gets DWM's 1 px border and round corners (build 22000 and later); on Windows 10
+  the root draws a 1 px `Stroke`.
+- **Mica:** on Windows 11 build 22621 and later (22H2) `Dwm.SetMica` turns on the system backdrop and the window chrome extends the frame under
+  the whole window; the window's copy of `Brush.Mica` becomes transparent so real Mica shows through, the composition background is transparent,
+  and `IsMicaActive` is true. Elsewhere (Windows 10, early Windows 11, `LIFESTREAM_NO_MICA=1`, renders in tests) the `Brush.Mica` gradient paints
+  the window, and the content area is `Canvas`. The window also sets the DWM dark frame from `ThemeService.IsDark` and refreshes it on
+  `ThemeService.Changed`.
+- **The frame is never extended from the top** (`Chrome.GlassFrameMica` is `0,0,0,10000`, not `-1`). The window keeps its caption and system-menu
+  styles, because the system menu, Snap and the taskbar depend on them, so Windows still has caption buttons of its own for it. It draws them in the
+  top part of an extended frame, and they show through wherever the title bar is transparent: with a "sheet of glass" (`-1`) 2.1.0 showed two sets
+  of buttons. Extended from the bottom, the frame is under the whole window and Windows has no title bar to draw (Windows Terminal does the same:
+  top margin 0 when Mica is on). `WindowChrome.UseAeroCaptionButtons="False"` only stops those buttons being clickable.
+- **Transparent windows** (`AllowsTransparency`: the dialogs, which draw their own card and shadow) ask Windows for no frame: no round corners
+  (`DWMWCP_DONOTROUND`), no border (`DWMWA_COLOR_NONE`), no extended frame and no root stroke. A window that asks for round corners gets Windows'
+  rounded border around its whole rectangle, shadow room included.
+- **Only a real window shows any of this.** The renders draw elements without a window. `tests/Lifestream.Desktop.Tests/RealWindows` shows the
+  sign-in window, the main window and the dialogs as real windows outside every monitor and checks what Windows draws and answers
+  (`Category=RealWindow`; skipped where there is no interactive desktop, such as a GitHub runner).
 - **Text:** the window sets `UseLayoutRounding`, `SnapsToDevicePixels`, Display formatting, ClearType and fixed hinting for everything inside it.
 - Main window: minimum 1024 x 640, default 1440 x 900, `Title="{Binding WindowTitle}"`.
 
