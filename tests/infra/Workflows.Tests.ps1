@@ -205,6 +205,28 @@ Describe 'INFRA-01 workflows scan every built artifact' {
         $text | Should -Match 'tools/scan-image\.sh lifestream-api:scan'
     }
 
+    # The desktop job of secret-scan.yml was red from 2026-11-19: it published the API without a runtime identifier, which copies
+    # the native libraries of every platform (two macOS sign-in libraries had 66 findings), while the image is built for linux-x64.
+    It 'secret-scan.yml publishes what ships, as it ships: the API exactly as the Dockerfile publishes it, the desktop app for win-x64 self-contained' {
+        $dockerfile = Get-Content (Join-Path $script:Dir '..' '..' 'src' 'Lifestream.Api' 'Dockerfile')
+        $imagePublish = @($dockerfile | Where-Object { $_ -match '^RUN dotnet publish ' })
+        $imagePublish.Count | Should -Be 1
+        $steps = @($script:Scan.Yaml.jobs.desktop.steps)
+        $api = @($steps | Where-Object { (Run $_) -match 'dotnet publish src/Lifestream\.Api\b' })
+        $api.Count | Should -Be 1
+        $command = (Run $api[0]) -replace '\s+', ' '
+        # every switch of the image's publish that decides which files are published (the output folder and --no-restore do not)
+        $switches = @([regex]::Matches($imagePublish[0], '(?<= )(-c \S+|-r \S+|--self-contained \S+|-p:\S+)') | ForEach-Object Value)
+        $switches | Should -Contain '-r linux-x64'
+        $switches | Should -Contain '--self-contained false'
+        foreach ($s in $switches) { $command | Should -Match ([regex]::Escape($s) + '(?= |$)') -Because "the Dockerfile publishes with $s" }
+        $desktop = @($steps | Where-Object { (Run $_) -match 'dotnet publish src/Lifestream\.Desktop\b' })
+        $desktop.Count | Should -Be 1
+        ((Run $desktop[0]) -replace '\s+', ' ') | Should -Match '-r win-x64 --self-contained(?= )'
+        # no publish in the scan workflow may leave the runtime identifier out
+        foreach ($step in $steps) { foreach ($m in [regex]::Matches(((Run $step) -replace '\s+', ' '), 'dotnet publish [^'']*')) { $m.Value | Should -Match ' -r \S+' -Because $m.Value } }
+    }
+
     It 'release.yml scans the publish folder before packing and the installer and update packages before uploading' {
         $steps = @($script:Release.Yaml.jobs.release.steps)
         $scanPublish = StepIndex $script:Release.Yaml.jobs.release { param($s) (Run $s) -match 'scan-artifacts\.ps1.*publish' }

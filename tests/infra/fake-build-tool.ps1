@@ -15,6 +15,9 @@ if ($tool -eq 'dotnet' -and $rest.Count -gt 0 -and $rest[0] -in 'build', 'publis
     for ($i = 1; $i -lt $rest.Count; $i++) {
         $t = [string]$rest[$i]
         if ($t -in $valueOptions) { $i++; continue }
+        # `--self-contained` takes an optional true or false, as the Dockerfile and secret-scan.yml write it (`--self-contained false`);
+        # the real dotnet reads that word as the option's value, not as a second project. Any other word after it is still positional.
+        if ($t -in '--self-contained', '--sc' -and $i + 1 -lt $rest.Count -and [string]$rest[$i + 1] -in 'true', 'false') { $i++; continue }
         if ($t.StartsWith('-')) { continue }
         $positional += $t
     }
