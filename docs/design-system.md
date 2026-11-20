@@ -33,8 +33,8 @@ references when you touch such code.
   behind the content. Never put an `Effect` on an element that contains text; it renders the text through a bitmap and loses ClearType. A test
   enforces this.
 - **Crisp pixels.** `UseLayoutRounding` and `SnapsToDevicePixels` are on for every window. Borders are `controls:CrispBorder`, which snaps its edge to
-  whole device pixels at 100 to 175 % scaling. Radii are whole numbers. Small text (12 to 15 DIP) uses Display text formatting and the hinted Onest
-  files; only 20 DIP and larger text uses Ideal formatting.
+  whole device pixels at 100 to 175 % scaling. Radii are whole numbers. Every text, at every size, uses Display text formatting, grayscale
+  anti-aliasing and the hinted Google Sans Flex files (section 4.1); no style or view sets its own text rendering.
 - **Status is icon plus word, never colour alone.** A status badge always has an icon or a dot and a text label. High contrast and colour vision
   deficiency both depend on this.
 - **The keyboard reaches everything.** Every action has a visible focus ring, a sensible tab order and, for primary actions, a shortcut shown in the
@@ -127,30 +127,31 @@ touch a file. Mapping: `SurfaceRaised` is `Layer`; `SurfaceHover` is `Hover`; `S
 
 ### 2.2 Type ramp
 
-Family: Onest (`Font.Family`). Styles are in `Theme/Typography.xaml`; every style sets `Foreground` to a DynamicResource brush and turns tabular
-figures off unless stated.
+Family: Google Sans Flex (`Font.Family`). Styles are in `Theme/Typography.xaml`; every style sets `Foreground` to a DynamicResource brush and turns
+tabular figures off unless stated. A style sets size, line height, weight and colour, never how text is drawn: that is the same for every style
+(section 4.1).
 
-| Style key | Size / line height | Weight | Colour | Formatting | Use |
-|---|---|---|---|---|---|
-| `Text.Hero` | 34 / 42 | SemiBold | Ink | Ideal | The sign-in compatibility heading only |
-| `Text.Display` | 32 / 40 | SemiBold | Ink | Ideal | The sign-in heading |
-| `Text.Title` | 28 / 36 | SemiBold | Ink | Ideal | Page title (inside `PageHeader`) |
-| `Text.Section` | 20 / 28 | SemiBold | Ink | Ideal | Dialog title, side panel title |
-| `Text.Heading` | 15 / 22 | SemiBold | Ink | Display | Panel heading (inside `Section`) |
-| `Text.Body` | 14 / 20 | Regular | Ink | Display | Body text, table cells, field text |
-| `Text.BodyStrong` | 14 / 20 | SemiBold | Ink | Display | A name, a row title, a toast message |
-| `Text.Secondary` | 13 / 18 | Regular | Ink2 | Display | A second line, descriptions |
-| `Text.Label` | 13 / 18 | Medium | Ink2 | Display | Field labels, column headers |
-| `Text.Caption` | 12 / 16 | Regular | Ink3 | Display | Hints, counts, group headers, axis labels. 12 is the minimum size. |
-| `Text.Numeric` | 14 / 20 | Regular | Ink | Display | A number in a right-aligned column: tabular figures, no wrap |
-| `Text.Icon` | 16 | n/a | n/a | n/a | A glyph from the system icon font. Only for the legacy `IconText`; new code uses `controls:Icon`. |
-| `Kbd.Text` | 11 / 16 | Medium | Ink2 | Display | The text of a key cap (the only text below 12) |
+| Style key | Size / line height | Weight | Colour | Use |
+|---|---|---|---|---|
+| `Text.Hero` | 34 / 42 | SemiBold | Ink | The sign-in compatibility heading only |
+| `Text.Display` | 32 / 40 | SemiBold | Ink | The sign-in heading |
+| `Text.Title` | 28 / 36 | SemiBold | Ink | Page title (inside `PageHeader`) |
+| `Text.Section` | 20 / 28 | SemiBold | Ink | Dialog title, side panel title |
+| `Text.Heading` | 15 / 22 | SemiBold | Ink | Panel heading (inside `Section`) |
+| `Text.Body` | 14 / 20 | Regular | Ink | Body text, table cells, field text |
+| `Text.BodyStrong` | 14 / 20 | SemiBold | Ink | A name, a row title, a toast message |
+| `Text.Secondary` | 13 / 18 | Regular | Ink2 | A second line, descriptions |
+| `Text.Label` | 13 / 18 | Medium | Ink2 | Field labels, column headers |
+| `Text.Caption` | 12 / 16 | Regular | Ink3 | Hints, counts, group headers, axis labels. 12 is the minimum size. |
+| `Text.Numeric` | 14 / 20 | Regular | Ink | A number in a right-aligned column: tabular figures, no wrap |
+| `Text.Icon` | 16 | n/a | n/a | A glyph from the system icon font. Only for the legacy `IconText`; new code uses `controls:Icon`. |
+| `Kbd.Text` | 11 / 16 | Medium | Ink2 | The text of a key cap (the only text below 12) |
 
 Plain `TextBlock` defaults come from the window (`Font.Family`, 14, `Ink`), but always pick a `Text.*` style so wrapping, line height and colour are
 set. Every `Text.*` style based on `Text.Base` wraps by default; add `TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"` for one-line cells.
 
 Rules: proportional figures in prose and in labels such as "17 units"; tabular figures only where numbers of several digits are stacked in a
-right-aligned column (`Text.Numeric` or `Typography.NumeralAlignment="Tabular"`). Onest's tabular 1 is as wide as an 8, so a tabular "17 units"
+right-aligned column (`Text.Numeric` or `Typography.NumeralAlignment="Tabular"`). A tabular 1 is as wide as an 8, so a tabular "17 units"
 reads as "1 7 units": do not use tabular figures for a number that stands in a label. Blood groups carry a real minus sign (U+2212): use `BloodType.ToTypographic()` for the screen and keep
 `ToDisplay()` (ASCII "O-") for search, files and the API. Nothing is smaller than 12 DIP except key caps.
 
@@ -343,24 +344,33 @@ strings). A missing, unreadable or corrupt file gives the defaults; a failed sav
 
 ## 4. Fonts and icons
 
-### 4.1 Onest
+### 4.1 Google Sans Flex
 
-One family, Onest (SIL Open Font License), bundled in `Lifestream.exe` as four static TrueType files in `src/Lifestream.Desktop/Fonts`: Regular 400,
-Medium 500, SemiBold 600 and Bold 700. `Font.Family` is `pack://application:,,,/Lifestream;component/Fonts/#Onest`. `Font.Display` is the same
-family, kept for 2.0 code. `Font.Icons` ("Segoe Fluent Icons, Segoe MDL2 Assets") is only for the legacy `IconText` glyphs and the caption buttons.
+One family, Google Sans Flex (SIL Open Font License), bundled in `Lifestream.exe` as four static TrueType files in `src/Lifestream.Desktop/Fonts`:
+Regular 400, Medium 500, SemiBold 600 and Bold 700. `Font.Family` is `pack://application:,,,/Lifestream;component/Fonts/#Google Sans Flex`.
+`Font.Display` is the same family and the same files, kept for 2.0 code. `Font.Icons` ("Segoe Fluent Icons, Segoe MDL2 Assets") is only for the legacy
+`IconText` glyphs and the caption buttons. "Google Sans Flex" is a trademark of Google LLC: name it only to say which font the app uses.
 
-Why the files are built rather than downloaded: Google's Onest is a variable font with no hinting. WPF cannot pick weights from a variable axis, and
-unhinted outlines render soft at 12 to 14 px. `tools/fonts/build-onest.py` cuts static instances at 400, 500, 600 and 700 from the official variable
-font (pinned to a google/fonts commit and SHA-256) and hints each with ttfautohint (8 to 50 px). The output is byte-for-byte reproducible.
+Why the files are built rather than downloaded: Google publishes one variable font with five axes and no hinting. WPF cannot select an instance of a
+variable font, and draws unhinted outlines ragged in the whole-pixel layout the app uses. `tools/fonts/build-google-sans-flex.py` cuts static
+instances at 400, 500, 600 and 700 from the official variable font (version 5.000, pinned to a google/fonts commit and SHA-256) and hints each with
+ttfautohint (8 to 50 px). The other axes are fixed for the whole app: optical size 14 (one cut for headings and body text, so they are the same
+design), width 100, roundness 0, slant 0. The output is the same bytes on every run.
 
-Rebuild: `python -m pip install --user fonttools ttfautohint-py`, then
-`python tools/fonts/build-onest.py <Onest[wght].ttf> src/Lifestream.Desktop/Fonts`. `Fonts/README.md` lists source, versions and hashes; the licence is
-`Fonts/OFL.txt`. Charts load `Onest-Regular.ttf` into Skia (`FontSetup.ApplyChartFont`) so chart text matches. If a font cannot load, WPF text falls
-back to the system UI font and charts to Skia's default, with a logged warning, rather than ending the process.
+Rebuild: `python -m pip install fonttools==4.64.0 ttfautohint-py==0.6.1`, then
+`python -I tools/fonts/build-google-sans-flex.py "<GoogleSansFlex[ROND,opsz,slnt,wdth,wght].ttf>" src/Lifestream.Desktop/Fonts`. `Fonts/README.md`
+lists source, versions, hashes and the reasons for each axis value; the licence is `Fonts/OFL.txt`. Charts load `GoogleSansFlex-Regular.ttf` into Skia
+(`FontSetup.ApplyChartFont`) so chart text matches. If a font cannot load, WPF text falls back to the system UI font and charts to Skia's default,
+with a logged warning, rather than ending the process.
 
-Small text is crisp only with Display text formatting, which `ChromeWindow` sets on the whole window together with `TextRenderingMode="ClearType"` and
-`TextHintingMode="Fixed"`. The 20 DIP and larger styles opt back into Ideal. Overlays drawn over Mica (title bar, sidebar, sign-in hero) set
-`TextOptions.TextRenderingMode="Grayscale"` because ClearType needs an opaque background.
+**One way of drawing text.** `Theme/TextDefaults.cs` holds the text rendering of the whole app: Display formatting (glyphs on whole pixels, hinting
+used: crisp at 12 to 15 DIP), grayscale anti-aliasing (the only kind WPF can draw on Mica and in the transparent dialog windows, so the only kind
+that is the same everywhere) and kerning off (Display formatting rounds a kerning pair to a whole pixel, which closed up "2.1.0" and "10:30"). The
+values are inherited, so they are set once per visual tree: `theme:TextDefaults.Apply="True"` on the root element of every window, and in the
+styles of tool tips and context menus, which open in a tree of their own. Never set `TextOptions.TextFormattingMode`,
+`TextOptions.TextRenderingMode` or `Typography.Kerning` on a style or in a view: a heading in another mode than the text under it reads as
+another typeface (2.1.0 had Ideal headings over Display text, and grayscale beside ClearType). `RedesignA/TextChecks.cs` fails any render in which
+a piece of text comes from another font file or is drawn with other settings.
 
 ### 4.2 Icon control
 
@@ -976,9 +986,8 @@ text is unchanged, so tooltips, automation names and copies keep the plain text.
 <TextBlock Text="{Binding Detail, Converter={StaticResource KeepGroups}}" TextWrapping="Wrap" />
 ```
 
-The minus itself: Onest's U+2212 is as wide as its plus and sits at the same height, which is right beside a capital, but both are narrow, so at 12
-to 13 px it can read as a hyphen. The en dash is wider but sits lower (at hyphen height) and looks dropped after a capital; there is no better
-glyph in the font. It is left as it is.
+The minus itself: the font's U+2212 is as wide as its plus and sits at the same height, which is right beside a capital. The en dash is wider but
+sits lower (at hyphen height) and looks dropped after a capital. The minus is used as it is.
 
 ### 5.27 Scroll bars beside the content
 
@@ -1083,7 +1092,7 @@ Not built: Ctrl+S (save) and Ctrl+/ (shortcut sheet), and F6 does not visit the 
 
 - **Overlay badge:** a 16 px red disc (`Color.CloseHover`) with the number of blood groups below their minimum in white (`9+` above nine), drawn by
   `MainWindow.CreateBadge`; none when the count is zero. The item description reads "{n} blood groups below their minimum". It is rebuilt on
-  `ThemeService.Changed`. (The number is drawn in Segoe UI, not Onest.)
+  `ThemeService.Changed`. (The number is drawn in the app's font, `Font.Family`.)
 - **Progress:** `Indeterminate` while a call waits on a waking server (`IsServerWaking`), otherwise none. An error state of the progress is not built.
 - **Thumbnail buttons:** "Record donation" (`Drop` icon) and "Book appointment" (`Calplus`), white outline icons, running `RecordDonationCommand` and
   `BookAppointmentCommand` without dismissing the thumbnail.

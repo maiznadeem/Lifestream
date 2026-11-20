@@ -2,6 +2,14 @@
 
 All notable changes to Lifestream are listed here. The section of a version is also the text of its release on the GitHub Releases page.
 
+## [Unreleased]
+
+### Look and feel
+
+- A new typeface, Google Sans Flex (open source, SIL Open Font License), replaces Onest.
+- Every text in a window is now drawn the same way, so headings and small print read as one typeface. In 2.1.0 the headings and the small text were drawn differently and could look like two fonts.
+- Small text is evenly spaced: "2.1.0" and times such as "10:30" no longer close up.
+
 ## [2.1.0] - 2026-11-20
 
 Lifestream 2.1 brings a new, calmer design built for the PC it runs on, and finishes every screen to the same pattern: the same paging, the same panel

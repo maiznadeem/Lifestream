@@ -189,7 +189,7 @@ public sealed class Part3FeatureViewTests
     }
 
     [Fact]
-    public void ReceiptDocument_OnScreenAndInPrint_IsSetInTheBundledOnest_FakeApi()
+    public void ReceiptDocument_OnScreenAndInPrint_IsSetInTheBundledFont_FakeApi()
     {
         var facts = StaHost.Run(() =>
         {
@@ -198,7 +198,7 @@ public sealed class Part3FeatureViewTests
             var viewer = new FlowDocumentScrollViewer { Document = flow };
             using var host = Hosted.Create(viewer, Width, Height);
             host.Settle(300);
-            Part2Harness.Save(host, "ReceiptDocument_Onest.png");
+            Part2Harness.Save(host, "ReceiptDocument_Font.png");
 
             static string Resolve(FontFamily family, FontStyle style, FontWeight weight, FontStretch stretch)
             {
@@ -237,12 +237,12 @@ public sealed class Part3FeatureViewTests
                 Pages: paginator.PageCount);
         });
 
-        static bool IsBundledOnest(string face) =>
-            face.StartsWith("Onest", StringComparison.Ordinal) && System.Text.RegularExpressions.Regex.IsMatch(face, @"/Lifestream;component/Fonts/onest-(regular|medium|semibold|bold)\.ttf$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        static bool IsBundledFont(string face) =>
+            face.StartsWith("Google Sans Flex", StringComparison.Ordinal) && System.Text.RegularExpressions.Regex.IsMatch(face, @"/Lifestream;component/Fonts/googlesansflex-(regular|medium|semibold|bold)\.ttf$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
-        Assert.True(IsBundledOnest(facts.Document), facts.Document);
+        Assert.True(IsBundledFont(facts.Document), facts.Document);
         Assert.True(facts.RunCount >= 5, "the receipt's text runs were not found");
-        Assert.All(facts.Runs, face => Assert.True(IsBundledOnest(face), face));
+        Assert.All(facts.Runs, face => Assert.True(IsBundledFont(face), face));
         Assert.DoesNotContain("Segoe", facts.Source, StringComparison.OrdinalIgnoreCase);
         Assert.True(facts.Pages >= 1);
     }

@@ -20,8 +20,8 @@
     <ProjectReference Include="..\Lifestream.Client\Lifestream.Client.csproj" />
     <InternalsVisibleTo Include="Lifestream.Desktop.Tests" />
     <Content Include="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
-    <!-- Onest, SIL Open Font License (Fonts/OFL.txt, source, build and hashes in Fonts/README.md): the one font of the app, embedded in the executable. -->
-    <Resource Include="Fonts\Onest-*.ttf" />
+    <!-- Google Sans Flex, SIL Open Font License (Fonts/OFL.txt, source, build and hashes in Fonts/README.md): the one font of the app, embedded in the executable. -->
+    <Resource Include="Fonts\GoogleSansFlex-*.ttf" />
     <!-- The window icon is read from pack://application:,,,/Lifestream;component/Assets/Lifestream.ico; ApplicationIcon embeds the same file in the exe. -->
     <Resource Include="Assets\Lifestream.ico" />
   </ItemGroup>

@@ -169,7 +169,7 @@
                 <DataGridTemplateColumn Header="Donations" Width="96" CanUserSort="False" lists:ListColumns.HideBelow="660" controls:ColumnAssist.HeaderAlignment="Right">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate>
-                      <!-- Proportional figures: Onest's tabular 1 is very wide, so "11" would read "1 1" (design-qa 25); the right edge still lines the counts up -->
+                      <!-- Proportional figures: a tabular 1 is as wide as every other figure, so "11" would read "1 1" (design-qa 25); the right edge still lines the counts up -->
                       <TextBlock Style="{DynamicResource DataGrid.TextCell}" Text="{Binding Donations}" HorizontalAlignment="Right" />
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
