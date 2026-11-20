@@ -13,7 +13,7 @@ public interface IDemoDataGenerator
     DemoDataSet Generate(DateOnly today);
 }
 
-/// <summary>The 1x demo dataset: 11 staff, 40 donors, 35 patients, 300 appointments, 150 requests, 270 receipts and their bags.</summary>
+/// <summary>The 1x demo dataset: 11 staff, 100 donors, 35 patients, 300 appointments, 150 requests, 270 receipts and their bags.</summary>
 public sealed class DemoDataGenerator : IDemoDataGenerator
 {
     public DemoDataSet Generate(DateTime nowUtc) => SyntheticDataBuilder.Build(nowUtc, 1);

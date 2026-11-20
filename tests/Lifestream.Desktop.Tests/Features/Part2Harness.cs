@@ -122,6 +122,18 @@ public static class DemoData2
         fake.On("GetDonorEligibilityAsync", ApiResult<DonorEligibility>.Ok(new(true, [], null)));
         fake.On("GetRequestsAsync", ApiResult<PagedResult<RequestListItem>>.Ok(new([.. Enumerable.Range(1, Math.Min(50, requestTotal)).Select(RequestRow)], requestTotal, 1, 50)));
         fake.On("GetRequestAsync", ApiResult<RequestDetail>.Ok(RequestDetail()));
+        // "How many appointments has this donor, how many requests has this patient, on record?" (one row asked, every status: the question behind Delete). The fake
+        // answers every other list call with the same page whatever the filter; these two it answers as the server does, by counting the rows of that donor or
+        // patient. The donors and patients of the lists (ids 1 to 64) own none of the appointments (donors 101 up) or requests (patients 201 up), so they can be
+        // deleted; the donor of the first appointment (101) and the patient of the first request (201) cannot.
+        var appointments = Enumerable.Range(1, appointmentTotal).Select(AppointmentRow).ToList();
+        var requests = Enumerable.Range(1, requestTotal).Select(RequestRow).ToList();
+        fake.AppointmentsFor = q => q is { DonorId: { } donor, PageSize: 1, View: null, Status: null }
+            ? ApiResult<PagedResult<AppointmentListItem>>.Ok(new([.. appointments.Where(a => a.DonorId == donor).Take(1)], appointments.Count(a => a.DonorId == donor), 1, 1))
+            : null;
+        fake.RequestsFor = q => q is { PatientId: { } patient, PageSize: 1, View: null, Status: null }
+            ? ApiResult<PagedResult<RequestListItem>>.Ok(new([.. requests.Where(r => r.PatientId == patient).Take(1)], requests.Count(r => r.PatientId == patient), 1, 1))
+            : null;
         fake.On("GetStockAsync", ApiResult<IReadOnlyList<StockItem>>.Ok(DemoData.Stock()));
         fake.On("GetReceiptsAsync", ApiResult<PagedResult<ReceiptListItem>>.Ok(new([.. Enumerable.Range(1, Math.Min(50, receiptTotal)).Select(ReceiptRow)], receiptTotal, 1, 50)));
         fake.On("GetReceiptAsync", ApiResult<ReceiptDetail>.Ok(ReceiptDetail()));

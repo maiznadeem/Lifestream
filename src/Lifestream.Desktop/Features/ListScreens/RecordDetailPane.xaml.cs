@@ -22,7 +22,8 @@ public partial class RecordDetailPane : UserControl
     public static readonly DependencyProperty FactsSourceProperty =
         DependencyProperty.Register(nameof(FactsSource), typeof(IEnumerable), typeof(RecordDetailPane), new PropertyMetadata(null));
 
-    public static readonly DependencyProperty DeleteTextProperty = DependencyProperty.Register(nameof(DeleteText), typeof(string), typeof(RecordDetailPane), new PropertyMetadata("Delete"));
+    public static readonly DependencyProperty DeleteTextProperty =
+        DependencyProperty.Register(nameof(DeleteText), typeof(string), typeof(RecordDetailPane), new PropertyMetadata("Delete", (d, _) => ((RecordDetailPane)d).UpdateDeleteText()));
 
     public static readonly DependencyProperty ShowFrameProperty =
         DependencyProperty.Register(nameof(ShowFrame), typeof(bool), typeof(RecordDetailPane), new PropertyMetadata(true, (d, _) => ((RecordDetailPane)d).UpdateFrame()));
@@ -34,6 +35,17 @@ public partial class RecordDetailPane : UserControl
     {
         InitializeComponent();
         UpdateFrame();
+        UpdateDeleteText();
+    }
+
+    /// <summary>
+    /// The "..." menu is a popup with a tree of its own, so its Delete item cannot bind to this pane as an ancestor (the released 2.1.0 item had no text at all for
+    /// that reason): the text and the name a screen reader says are put on the item here.
+    /// </summary>
+    private void UpdateDeleteText()
+    {
+        DeleteLabel.Text = DeleteText;
+        System.Windows.Automation.AutomationProperties.SetName(DeleteItem, DeleteText);
     }
 
     /// <summary>The screen's primary action on the record ("Book appointment" on a donor), before Edit.</summary>

@@ -171,7 +171,7 @@ public sealed class RecordScreenTests
 
     [Theory]
     [InlineData(404, ProblemCodes.NotFound, "was not found")]
-    [InlineData(409, ProblemCodes.Conflict, "in use by other records")]
+    [InlineData(409, ProblemCodes.Conflict, "can't be deleted: they have appointments or donations on record")] // 2.1.0 said "can't be changed because it is in use by other records" for a delete (real-app walk, item 13)
     public async Task DonorDelete_OnNotFoundOrConflict_ShowsMessage_LeavesTheListUnchanged_FakeApi(int status, string code, string expectedText)
     {
         var (rig, vm) = await LoadedDonorsAsync();
