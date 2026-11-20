@@ -1020,7 +1020,7 @@ edges and `Radius.ContentCorner` at its top-left.
 |---|---|---|---|
 | (none) | Dashboard | `Home` | none |
 | Donations | Donors | `Donor` | none |
-| Donations | Appointments | `Cal` | Still to come today |
+| Donations | Appointments | `Cal` | Pending today (the whole local day) |
 | Transfusions | Patients | `Patient` | none |
 | Transfusions | Requests | `Request` | Open requests |
 | Inventory | Stock | `Stock` | Groups below minimum, red (`HasAlert`) when above zero |
@@ -1030,8 +1030,9 @@ edges and `Radius.ContentCorner` at its top-left.
 - Items are `RadioButton`s with style `NavItem` (36 high, 18 `Icon`, 14 label, count in 12 `Ink3` with tabular figures), or `RailItem` in the rail.
   The selected item has a `NavActive` fill, a filled icon (`IsFilled`), a SemiBold label and a 3 px `Blood` bar at its left edge (a second place,
   with tabs, where red is used for selection). Group headers use `NavGroupHeader` (12 `Ink3`); the rail hides them and draws a 24 px `Stroke2` separator between groups.
-- A count is `NavItem.Badge`; the screen reader name is "Requests, 40 open" (`AutomationName` with `BadgeNoun`). Counts refresh through
-  `ShellViewModel.RefreshCountsAsync` and are quiet on failure.
+- A count is `NavItem.Badge`; the screen reader name is "Requests, 6 open" (`AutomationName` with `BadgeNoun`). Counts refresh through
+  `ShellViewModel.RefreshCountsAsync` and are quiet on failure. The shell computes them itself, the same on every screen: Appointments counts today's
+  pending appointments, Requests the open requests (the Requests page's "Open" tab), Stock turns red (the rail's dot) when any group is below its minimum.
 - The rail shows a tooltip "Donors  Alt+2" (title and shortcut). `NavItem.Shortcut` is "Alt+1" to "Alt+8" by position among the visible items.
 - The account button at the foot (avatar, name, "Doctor, morning shift"; `AccountButton` style, accessible name "Account menu") opens a menu: Profile,
   Change password, Theme (Light, Dark, Match Windows), Collapse the sidebar (Ctrl+B), Sign out.

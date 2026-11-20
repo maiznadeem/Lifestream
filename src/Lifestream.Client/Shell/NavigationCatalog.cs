@@ -42,7 +42,7 @@ public static class NavigationCatalog
     [
         new("Dashboard", "", "", typeof(Features.Dashboard.DashboardViewModel)) { Icon = "Home" },
         new("Donors", "Donations", "", typeof(Features.Donors.DonorsViewModel)) { Icon = "Donor" },
-        new("Appointments", "Donations", "", typeof(Features.Appointments.AppointmentsViewModel)) { Icon = "Cal", BadgeNoun = "still to come today" },
+        new("Appointments", "Donations", "", typeof(Features.Appointments.AppointmentsViewModel)) { Icon = "Cal", BadgeNoun = "pending today" },
         new("Patients", "Transfusions", "", typeof(Features.Patients.PatientsViewModel)) { Icon = "Patient" },
         new("Requests", "Transfusions", "", typeof(Features.Requests.RequestsViewModel)) { Icon = "Request", BadgeNoun = "open" },
         new("Stock", "Inventory", "", typeof(Features.Stock.StockViewModel)) { Icon = "Stock", BadgeNoun = "groups below minimum" },

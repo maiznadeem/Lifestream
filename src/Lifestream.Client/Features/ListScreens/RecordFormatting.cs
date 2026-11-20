@@ -21,6 +21,13 @@ public static class RecordFormatting
         return local.TimeOfDay == TimeSpan.Zero ? Formatting.Date(DateOnly.FromDateTime(local)) : Formatting.DateTime(value, zone);
     }
 
+    /// <summary>"Thu 19 Nov at 11:00": a UTC instant as a day and a time of the local calendar, for a sentence (a confirmation's body).</summary>
+    public static string DayAndTime(DateTime utc, TimeZoneInfo? zone = null)
+    {
+        var local = TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utc, DateTimeKind.Utc), zone ?? TimeZoneInfo.Local);
+        return local.ToString("ddd d MMM", System.Globalization.CultureInfo.InvariantCulture) + " at " + local.ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture);
+    }
+
     /// <summary>"Name (D-0175)": a name with its record code (<see cref="Receipts.RecordCodes"/>) in one line, for the detail pane.</summary>
     public static string NameWithCode(string name, string code) => $"{name} ({code})";
 

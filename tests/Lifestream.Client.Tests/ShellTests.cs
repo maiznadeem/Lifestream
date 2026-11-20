@@ -313,7 +313,7 @@ public sealed class ShellTests
 
     private sealed class StubPresenter(Func<string, string, bool> confirm) : IDialogPresenter
     {
-        public Task<bool> ConfirmAsync(string title, string body, string dangerVerb) => Task.FromResult(confirm(title, dangerVerb));
+        public Task<bool> ConfirmAsync(string title, string body, string dangerVerb, string keepVerb) => Task.FromResult(confirm(title, dangerVerb));
 
         public Task ShowErrorAsync(string title, string message, string? details) => Task.CompletedTask;
     }

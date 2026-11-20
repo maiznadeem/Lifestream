@@ -148,7 +148,8 @@ public sealed class Part2RequestReceiptTests
 
         await vm.CancelRequestCommand.ExecuteAsync();
 
-        Assert.Contains("Omar Haddad", rig.Dialogs.Confirmations.Single().Body, StringComparison.Ordinal);
+        Assert.StartsWith("Omar Haddad's request for ", rig.Dialogs.Confirmations.Single().Body, StringComparison.Ordinal);
+        Assert.Equal(("Cancel request", "Keep request"), (rig.Dialogs.Confirmations.Single().Verb, rig.Dialogs.Confirmations.Single().Keep));
         Assert.Equal(ToastKind.Error, Assert.Single(rig.Toasts.Toasts).Kind);
         Assert.Equal(1, rig.Recorder.CountOf("GetRequestsAsync")); // the list stays as it was after a refusal
 

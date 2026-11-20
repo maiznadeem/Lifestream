@@ -61,7 +61,7 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
             _view = view;
         }
 
-        FulfilCommand = Command(_ => FulfilSelectedAsync(), () => IsPending && !IsEditing, opensModal: true);
+        FulfilCommand = Command(_ => FulfilSelectedAsync(), () => IsPending && !IsEditing && FulfilHoldReason is null, opensModal: true);
         CancelRequestCommand = Command(_ => CancelSelectedAsync(), () => IsPending && !IsEditing, opensModal: true);
         EditRequestCommand = Command(_ => EditCommand.ExecuteAsync(), () => IsPending && EditCommand.CanExecute(null));
         OpenPatientCommand = Command(async (parameter, _) =>
@@ -95,6 +95,7 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
                 OnPropertyChanged(nameof(DetailBloodGroup));
                 OnPropertyChanged(nameof(DetailUrgency));
                 OnPropertyChanged(nameof(DetailCover));
+                OnPropertyChanged(nameof(FulfilHoldReason));
                 OnPropertyChanged(nameof(IsPendingDetail));
                 OnPropertyChanged(nameof(IsClosedDetail));
             }
@@ -169,6 +170,12 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
 
     /// <summary>Whether the stock covers the selected pending request now; null for a closed request or while the stock is unknown.</summary>
     public RequestCoverage? DetailCover => Detail is { Status: RequestStatus.Pending } r ? CoverOf(r.BloodType, r.Units) : null;
+
+    /// <summary>
+    /// Why "Fulfil request" is disabled for the selected request, shown under the action row: none of its group is in stock ("No O− in stock. The request stays open
+    /// until stock arrives."). Null when it can be fulfilled, or while the stock is unknown (the server still checks).
+    /// </summary>
+    public string? FulfilHoldReason => Detail is { Status: RequestStatus.Pending } r ? DetailCover?.HoldReason(r.BloodType) : null;
 
     /// <summary>
     /// The side panel's details (audit R2): the patient with their code, when it is needed and how urgent, the stock against it, when it was placed, and the receipt or
@@ -442,9 +449,9 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
             return;
         }
 
-        if (detail.Status != RequestStatus.Pending)
+        if (detail.Status != RequestStatus.Pending || FulfilHoldReason is not null)
         {
-            _fulfilWhenOpen = null;
+            _fulfilWhenOpen = null; // closed, or nothing in stock to fulfil it with (the panel says why)
             return;
         }
 
@@ -469,7 +476,9 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
         base.Apply();
         OnPropertyChanged(nameof(ViewCounts));
         OnPropertyChanged(nameof(DetailCover));
+        OnPropertyChanged(nameof(FulfilHoldReason));
         OnPropertyChanged(nameof(PanelFacts));
+        FulfilCommand.RaiseCanExecuteChanged(); // the stock behind the cover may have changed
         if (_openNew)
         {
             _openNew = false;
@@ -578,8 +587,9 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
 
         var confirmed = await Dialogs.ConfirmAsync(
             "Cancel request?",
-            $"The request for {RecordFormatting.Units(request.Units)} of {request.BloodType.ToDisplay()} for '{request.PatientName}' will be cancelled. No blood is issued.",
-            "Cancel request").ConfigureAwait(true);
+            $"{request.PatientName}'s request for {RecordFormatting.Units(request.Units)} of {request.BloodType.ToTypographic()} will be cancelled. No blood is issued.",
+            "Cancel request",
+            "Keep request").ConfigureAwait(true);
         if (!confirmed)
         {
             return;

@@ -106,6 +106,7 @@ public sealed class ShellRenderTests
             ThemeService.Apply(theme == "dark" ? ThemeMode.Dark : ThemeMode.Light);
             using var rig = Clinic(screen);
             var shell = rig.Get<ShellViewModel>();
+            shell.Attach(null, new DesignClock()); // the clinic's day and zone (UTC), as the page-area renders use
             var view = new ShellView { DataContext = shell };
             using var host = Hosted.Create(RenderTests.Frame(view, height == 1080, titleBar), width, height);
             Hosted.Await(() => shell.StartAsync());
@@ -122,6 +123,7 @@ public sealed class ShellRenderTests
             host.Settle(500);
             var page = shell.CurrentPage!;
             SelectFirst(page);
+            Hosted.Await(() => shell.RefreshCountsAsync()); // the sidebar's counts, whatever the screen
             host.Settle(700);
             var png = host.Capture();
             System.IO.Directory.CreateDirectory(RenderTests.Directory);
@@ -141,6 +143,11 @@ public sealed class ShellRenderTests
                 HostPad: pageHost.Margin,
                 Header: header is null ? Rect.Empty : Hosted.BoundsOf(header, host.Element),
                 Selected: shell.Items.Where(i => i.IsSelected).Select(i => i.Destination.Title).ToList(),
+                Badges: shell.Items.Where(i => i.Badge is not null).Select(i => $"{i.Title} {i.Badge}").ToList(),
+                StockAlert: shell.Items.Single(i => i.Title == "Stock").HasAlert,
+                StockDot: host.All<System.Windows.Shapes.Ellipse>().Count(e => e.Name == "Dot" && e.IsVisible && e.TemplatedParent is RadioButton { DataContext: NavItem { Title: "Stock" } }),
+                SelectedRow: SelectedRecord(page),
+                PanelRecord: PanelRecord(page),
                 view.Breakpoint,
                 view.IsRail,
                 Canvas: StaHost.CountPixelsNear(png, canvas.R, canvas.G, canvas.B, 1),
@@ -148,6 +155,16 @@ public sealed class ShellRenderTests
         });
 
         Assert.True(facts.Page, $"the {title} view is not the shell's page");
+
+        // The sidebar's counts are the shell's own, the same on every screen (design-qa-2 N5): the clinic's 6 open requests, its 5 appointments pending today, and
+        // the Stock alert (groups below the minimum in every screen's stock), drawn as the rail's dot in a compact window and as the red count beside the full sidebar.
+        Assert.Contains("Requests 6", facts.Badges);
+        Assert.Contains("Appointments 5", facts.Badges);
+        Assert.True(facts.StockAlert, "the Stock alert is missing");
+        Assert.Equal(compact ? 1 : 0, facts.StockDot);
+
+        // The open panel shows the selected row's record (design-qa-2 N2).
+        Assert.Equal(facts.SelectedRow, facts.PanelRecord);
         Assert.Equal(screen == "profile" ? [] : [title], facts.Selected);
         Assert.Equal(width >= 1920 ? Breakpoint.Wide : compact ? Breakpoint.Compact : Breakpoint.Standard, facts.Breakpoint);
         Assert.Equal(compact, facts.IsRail);
@@ -206,7 +223,18 @@ public sealed class ShellRenderTests
         Assert.True(facts.Rows[0].Top >= facts.Surface.Top && facts.Rows[0].Bottom <= facts.Surface.Bottom && facts.Rows[0].Left >= facts.Surface.Left && facts.Rows[0].Right <= facts.Surface.Right, $"the first row {facts.Rows[0]} is outside the palette {facts.Surface}");
     }
 
-    /// <summary>Selects the first row of a list screen and waits for its side panel (the screens without a list are left as they open).</summary>
+    /// <summary>The id of the selected row of a list screen; null for the other screens.</summary>
+    private static int? SelectedRecord(object page) =>
+        page.GetType().GetProperty("SelectedItem")?.GetValue(page) is { } row ? (int?)row.GetType().GetProperty("Id")?.GetValue(row) : null;
+
+    /// <summary>The id of the record the side panel shows; null for the screens without a record panel.</summary>
+    private static int? PanelRecord(object page) =>
+        page.GetType().GetProperty("Detail")?.GetValue(page) is { } detail ? (int?)detail.GetType().GetProperty("Id")?.GetValue(detail) : null;
+
+    /// <summary>
+    /// Selects the record each page-area render opens (Noor Fairbanks on Patients, Asher Devereux's appointment, Petra Iversen's request; the first row elsewhere) and
+    /// waits for its side panel, sections included. The screens without a list are left as they open.
+    /// </summary>
     private static void SelectFirst(object page)
     {
         var type = page.GetType();
@@ -224,7 +252,14 @@ public sealed class ShellRenderTests
         }
 
         // Staff: the second person, whose details the demo data answers with (the page-area render opens the same one).
-        var row = page is Lifestream.Client.Features.Staff.StaffViewModel && items.Count > 1 ? items[1] : items[0];
+        var row = page switch
+        {
+            Lifestream.Client.Features.Staff.StaffViewModel when items.Count > 1 => items[1],
+            Lifestream.Client.Features.Patients.PatientsViewModel => items.Cast<Lifestream.Contracts.Patients.PatientListItem>().First(p => p.Name == "Noor Fairbanks"),
+            Lifestream.Client.Features.Appointments.AppointmentsViewModel => items.Cast<Lifestream.Contracts.Appointments.AppointmentListItem>().First(a => a.DonorName == "Asher Devereux"),
+            Lifestream.Client.Features.Requests.RequestsViewModel => items.Cast<Lifestream.Contracts.Requests.RequestListItem>().First(r => r.Id == 148),
+            _ => items[0],
+        };
         Hosted.Await(() =>
         {
             selected.SetValue(page, row);

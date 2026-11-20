@@ -279,6 +279,7 @@ public sealed class Part2StaffProfileTests
         Assert.Equal(2, rig.Dialogs.Confirmations.Count);
         Assert.Contains("Selected", rig.Dialogs.Confirmations[1].Body, StringComparison.Ordinal);
         Assert.Contains("You can undo this for a few seconds afterwards", rig.Dialogs.Confirmations[1].Body, StringComparison.Ordinal);
+        Assert.Equal(("Delete staff member", "Keep staff member"), (rig.Dialogs.Confirmations[1].Verb, rig.Dialogs.Confirmations[1].Keep));
         Assert.Equal(1, rig.Recorder.CountOf("DeleteStaffAsync"));
         var toast = Assert.Single(rig.Toasts.Toasts);
         Assert.Equal("Undo", toast.ActionLabel); // FEAT-06: every delete offers a 10-second Undo, staff included
@@ -561,7 +562,7 @@ public sealed class Part2StaffProfileTests
 
     private sealed class AskingPresenter(List<string> asked, bool answer) : IDialogPresenter
     {
-        public Task<bool> ConfirmAsync(string title, string body, string dangerVerb)
+        public Task<bool> ConfirmAsync(string title, string body, string dangerVerb, string keepVerb)
         {
             asked.Add(title);
             return Task.FromResult(answer);

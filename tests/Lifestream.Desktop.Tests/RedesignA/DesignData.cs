@@ -77,7 +77,16 @@ public static class DesignData
             new(136, 54, "Nadia Holloway", BloodType.BNeg, 2, Now.UtcDateTime.AddDays(-2), new DateOnly(2026, 11, 26), RequestStatus.Pending),
             new(150, 55, "Quinn Crowhurst", BloodType.OPos, 3, Now.UtcDateTime.AddDays(-1), new DateOnly(2026, 12, 3), RequestStatus.Pending),
         };
-        api.On("GetRequestsAsync", ApiResult<PagedResult<RequestListItem>>.Ok(new PagedResult<RequestListItem>(requests, 40, 1, 50)));
+        api.On("GetRequestsAsync", ApiResult<PagedResult<RequestListItem>>.Ok(new PagedResult<RequestListItem>(requests, requests.Count, 1, 50)));
+
+        // The shell's counts for the sidebar (one row asked for, only the total read): the clinic's open requests, as the Requests page's "Open" tab counts them,
+        // and its appointments pending today. Any other query gets the screen's own answer.
+        api.RequestsFor = q => q is { PageSize: 1, Status: RequestStatus.Pending, PatientId: null, View: null }
+            ? ApiResult<PagedResult<RequestListItem>>.Ok(new PagedResult<RequestListItem>([], RequestDesignData.In(RequestView.Open).Count, 1, 1))
+            : null;
+        api.AppointmentsFor = q => q is { PageSize: 1, Status: AppointmentStatus.Pending, DonorId: null, View: null, FromUtc: { } from, ToUtc: { } to }
+            ? ApiResult<PagedResult<AppointmentListItem>>.Ok(new PagedResult<AppointmentListItem>([], appointments.Count(a => a.Status == AppointmentStatus.Pending && a.SlotStartUtc >= from && a.SlotStartUtc < to), 1, 1))
+            : null;
 
         api.On("GetProfileAsync", ApiResult<ProfileResponse>.Ok(new ProfileResponse(7, "Hana Greenleaf", "hana.greenleaf", Designation.Doctor, Shift.Morning, "+1-555-0100", false, "rv")));
         api.On("GetReadinessAsync", ApiResult<ReadinessResponse>.Ok(new ReadinessResponse(DatabaseStates.Ready)));

@@ -121,26 +121,37 @@ public static class ListScreensDesignData
 
 public static class PatientDesignData
 {
-    private static readonly (int Id, string Name, BloodType Group, int Pending, string Phone)[] Patients =
+    // One record per patient, for the list row and the detail alike (the API reads both from the same patient), so they never disagree.
+    private static readonly (int Id, string Name, BloodType Group, int Pending, string Phone, string Born, Gender Gender, string Address)[] Patients =
     [
-        (51, "Petra Iversen", BloodType.ABPos, 1, "+1-555-0251"),
-        (52, "Talia Yildiz", BloodType.APos, 1, "+1-555-0252"),
-        (53, "Noor Fairbanks", BloodType.ONeg, 2, "+1-555-0253"),
-        (54, "Nadia Holloway", BloodType.BNeg, 1, "+1-555-0254"),
-        (55, "Quinn Crowhurst", BloodType.OPos, 1, "+1-555-0255"),
-        (56, "Beatrix Farrow", BloodType.APos, 0, "+1-555-0256"),
-        (57, "Elio Kingsley", BloodType.OPos, 0, "+1-555-0257"),
-        (58, "Isolde Marchetti", BloodType.BPos, 0, "+1-555-0258"),
-        (59, "Jonah Whitfield", BloodType.ANeg, 0, "+1-555-0259"),
-        (60, "Leilani Okoro", BloodType.ABNeg, 0, "+1-555-0260"),
-        (61, "Mateus Andrade", BloodType.OPos, 0, "+1-555-0261"),
-        (62, "Saskia van Dijk", BloodType.APos, 0, "+1-555-0262"),
+        (51, "Petra Iversen", BloodType.ABPos, 1, "+1-555-0251", "1950-01-01", Gender.Female, "4 Mill Street, Northgate"),
+        (52, "Talia Yildiz", BloodType.APos, 1, "+1-555-0252", "1957-06-04", Gender.Female, "27 Orchard Row, Westbrook"),
+        (53, "Noor Fairbanks", BloodType.ONeg, 2, "+1-555-0253", "1971-06-04", Gender.Female, "18 Quarry Lane, Eastfield"),
+        (54, "Nadia Holloway", BloodType.BNeg, 1, "+1-555-0254", "1971-04-10", Gender.Female, "9 Linden Court, Eastfield"),
+        (55, "Quinn Crowhurst", BloodType.OPos, 1, "+1-555-0255", "1978-09-13", Gender.Male, "61 Harbour Road, Northgate"),
+        (56, "Beatrix Farrow", BloodType.APos, 0, "+1-555-0256", "1985-02-16", Gender.Female, "3 Chapel Walk, Southmere"),
+        (57, "Elio Kingsley", BloodType.OPos, 0, "+1-555-0257", "1992-07-19", Gender.Male, "140 Station Road, Westbrook"),
+        (58, "Isolde Marchetti", BloodType.BPos, 0, "+1-555-0258", "1999-12-22", Gender.Female, "12 Willow Bank, Southmere"),
+        (59, "Jonah Whitfield", BloodType.ANeg, 0, "+1-555-0259", "1956-05-25", Gender.Male, "75 Kiln Lane, Northgate"),
+        (60, "Leilani Okoro", BloodType.ABNeg, 0, "+1-555-0260", "1963-10-01", Gender.Female, "8 Ferry Street, Eastfield"),
+        (61, "Mateus Andrade", BloodType.OPos, 0, "+1-555-0261", "1970-03-04", Gender.Male, "22 Granary Close, Westbrook"),
+        (62, "Saskia van Dijk", BloodType.APos, 0, "+1-555-0262", "1977-08-07", Gender.Female, "5 Beacon Hill, Southmere"),
     ];
+
+    private static DateOnly Born(int index) => DateOnly.Parse(Patients[index].Born, System.Globalization.CultureInfo.InvariantCulture);
 
     public static PatientListItem Row(int index)
     {
         var p = Patients[index];
-        return new PatientListItem(p.Id, p.Name, new DateOnly(1950 + (index * 7 % 50), 1 + (index * 5 % 12), 1 + (index * 3 % 27)), index % 2 == 0 ? Gender.Female : Gender.Male, p.Group, p.Phone, p.Pending);
+        return new PatientListItem(p.Id, p.Name, Born(index), p.Gender, p.Group, p.Phone, p.Pending);
+    }
+
+    /// <summary>The detail of a patient, from the same record as its row.</summary>
+    public static PatientDetail Detail(int id)
+    {
+        var index = Array.FindIndex(Patients, p => p.Id == id);
+        var p = Patients[index];
+        return new PatientDetail(p.Id, p.Name, Born(index), p.Gender, p.Group, p.Phone, p.Address, "rv");
     }
 
     public static void Configure(FakeApiClient api)
@@ -148,8 +159,7 @@ public static class PatientDesignData
         ArgumentNullException.ThrowIfNull(api);
         var rows = Enumerable.Range(0, Patients.Length).Select(Row).ToList();
         api.On("GetPatientsAsync", ApiResult<PagedResult<PatientListItem>>.Ok(new PagedResult<PatientListItem>(rows, rows.Count, 1, 50)));
-        api.On("GetPatientAsync", ApiResult<PatientDetail>.Ok(new PatientDetail(53, "Noor Fairbanks", new DateOnly(1971, 6, 4), Gender.Female, BloodType.ONeg, "+1-555-0253",
-            "18 Quarry Lane, Eastfield", "rv")));
+        api.ById["GetPatientAsync"] = id => ApiResult<PatientDetail>.Ok(Detail(id));
         // Noor's two open requests, needed first at the top; there is no O− in stock (as the dashboard says).
         var placed = new DateTime(2026, 11, 15, 9, 0, 0, DateTimeKind.Utc);
         api.On("GetRequestsAsync", ApiResult<PagedResult<RequestListItem>>.Ok(new PagedResult<RequestListItem>(
@@ -175,7 +185,8 @@ public static class AppointmentDesignData
         (19, 11, 30, 121, "Gideon Achterberg", BloodType.ONeg, AppointmentStatus.Pending, false),
         (19, 12, 0, 137, "Elio Bergström", BloodType.ABPos, AppointmentStatus.Pending, true),
         (19, 14, 0, 198, "Anders Wójcik", BloodType.OPos, AppointmentStatus.Pending, false),
-        (19, 15, 30, 130, "Hana Lindqvist", BloodType.ABNeg, AppointmentStatus.Cancelled, false),
+        (19, 15, 30, 130, "Hana Lindqvist", BloodType.ABNeg, AppointmentStatus.Pending, false),
+        (17, 16, 0, 144, "Bianca Whitlock", BloodType.BNeg, AppointmentStatus.Cancelled, false),
         (20, 9, 30, 175, "Adrian Mukherjee", BloodType.OPos, AppointmentStatus.Pending, false),
         (20, 13, 0, 191, "Camila Oyelaran", BloodType.APos, AppointmentStatus.Pending, false),
         (23, 10, 30, 114, "Chiara Birch", BloodType.OPos, AppointmentStatus.Pending, false),
@@ -210,11 +221,28 @@ public static class AppointmentDesignData
         Show(api, AppointmentView.Today);
         api.On("GetAppointmentViewCountsAsync", ApiResult<AppointmentViewCounts>.Ok(new AppointmentViewCounts(
             In(AppointmentView.Today).Count, In(AppointmentView.Upcoming).Count, In(AppointmentView.Past).Count, In(AppointmentView.Cancelled).Count)));
-        var asher = All[5];
-        api.On("GetAppointmentAsync", ApiResult<AppointmentDetail>.Ok(new AppointmentDetail(asher.Id, asher.DonorId, asher.DonorName, asher.DonorBloodType, asher.PlacedAtUtc, asher.SlotStartUtc,
-            asher.Status, null, null, "rv")));
-        api.On("GetDonorAsync", ApiResult<DonorDetail>.Ok(new DonorDetail(149, "Asher Devereux", new DateOnly(1990, 3, 14), Gender.Male, BloodType.APos, "+1-555-0149", null,
-            DonorFrequency.Regular, new DateOnly(2026, 8, 3), "rv")));
+        api.ById["GetAppointmentAsync"] = id => All.FirstOrDefault(a => a.Id == id) is { } a
+            ? ApiResult<AppointmentDetail>.Ok(new AppointmentDetail(a.Id, a.DonorId, a.DonorName, a.DonorBloodType, a.PlacedAtUtc, a.SlotStartUtc, a.Status, null, null, "rv"))
+            : FakeApiClient.Fail<AppointmentDetail>(404, "not_found");
+        api.DonorById = Donor;
+    }
+
+    /// <summary>The donor of an appointment (for the panel's eligibility card): Asher Devereux as in the mock-up; the others from the donors' design list where they are on it.</summary>
+    public static ApiResult<DonorDetail> Donor(int id)
+    {
+        if (id == 149)
+        {
+            return ApiResult<DonorDetail>.Ok(new DonorDetail(149, "Asher Devereux", new DateOnly(1990, 3, 14), Gender.Male, BloodType.APos, "+1-555-0149", null,
+                DonorFrequency.Regular, new DateOnly(2026, 8, 3), "rv"));
+        }
+
+        var row = Enumerable.Range(0, 50).Select(ListScreensDesignData.DonorRow).FirstOrDefault(d => d.Id == id);
+        var booked = All.FirstOrDefault(a => a.DonorId == id);
+        return row is not null
+            ? ApiResult<DonorDetail>.Ok(new DonorDetail(row.Id, row.Name, row.DateOfBirth, row.Gender, row.BloodType, row.Phone, null, row.Frequency, row.LastDonated, "rv"))
+            : booked is not null
+                ? ApiResult<DonorDetail>.Ok(new DonorDetail(id, booked.DonorName, new DateOnly(1988, 5, 20), Gender.Female, booked.DonorBloodType, null, null, DonorFrequency.Regular, null, "rv"))
+                : FakeApiClient.Fail<DonorDetail>(404, "not_found");
     }
 }
 
@@ -260,7 +288,9 @@ public static class RequestDesignData
         Show(api, RequestView.Open);
         api.On("GetRequestViewCountsAsync", ApiResult<RequestViewCounts>.Ok(new RequestViewCounts(
             In(RequestView.Open).Count, In(RequestView.DueSoon).Count, In(RequestView.Fulfilled).Count, In(RequestView.Cancelled).Count)));
-        api.On("GetRequestAsync", ApiResult<RequestDetail>.Ok(Petra));
+        api.ById["GetRequestAsync"] = id => All.FirstOrDefault(r => r.Id == id) is { } r
+            ? ApiResult<RequestDetail>.Ok(new RequestDetail(r.Id, r.PatientId, r.PatientName, r.BloodType, r.Units, r.PlacedAtUtc, r.RequiredBy, r.Status, null, "rv"))
+            : FakeApiClient.Fail<RequestDetail>(404, "not_found");
         api.On("GetStockAsync", ApiResult<IReadOnlyList<StockItem>>.Ok(
         [
             new StockItem(BloodType.ABPos, 4, 0, 10, true),

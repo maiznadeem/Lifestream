@@ -115,7 +115,7 @@ public sealed class UnsavedChangesInventoryTests : IDisposable
             makeDirty(dirty);
 
             await dirty.CancelCommand.ExecuteAsync();
-            Assert.True(closed == 0 && !dirty.IsClosing && dialogs.Confirmations is [{ Title: "Discard changes?", Verb: "Discard changes" }], $"{type.Name}: a dirty dialog must ask 'Discard changes?' and stay open when the user refuses");
+            Assert.True(closed == 0 && !dirty.IsClosing && dialogs.Confirmations is [{ Title: "Discard changes?", Verb: "Discard changes", Keep: "Keep editing" }], $"{type.Name}: a dirty dialog must ask 'Discard changes?' and stay open when the user refuses");
 
             dialogs.Answer = true;
             await dirty.CancelCommand.ExecuteAsync();

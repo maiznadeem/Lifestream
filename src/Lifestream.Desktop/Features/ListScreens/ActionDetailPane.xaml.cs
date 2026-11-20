@@ -22,6 +22,9 @@ public partial class ActionDetailPane : UserControl
     public static readonly DependencyProperty ShowFrameProperty =
         DependencyProperty.Register(nameof(ShowFrame), typeof(bool), typeof(ActionDetailPane), new PropertyMetadata(true, (d, _) => ((ActionDetailPane)d).UpdateFrame()));
 
+    public static readonly DependencyProperty ActionsFillProperty =
+        DependencyProperty.Register(nameof(ActionsFill), typeof(bool), typeof(ActionDetailPane), new PropertyMetadata(false, (d, _) => ((ActionDetailPane)d).UpdateActionsFill()));
+
     public ActionDetailPane()
     {
         InitializeComponent();
@@ -45,6 +48,19 @@ public partial class ActionDetailPane : UserControl
 
     /// <summary>Draws the pane as its own panel (on by default); off inside a side panel, which is the surface.</summary>
     public bool ShowFrame { get => (bool)GetValue(ShowFrameProperty); set => SetValue(ShowFrameProperty, value); }
+
+    /// <summary>
+    /// While true the actions take the pane's whole height under the header and the facts are hidden: a step shown in place of the actions (Requests' fulfil step)
+    /// gets a bounded height, so it can keep its own buttons in view and scroll its content above them.
+    /// </summary>
+    public bool ActionsFill { get => (bool)GetValue(ActionsFillProperty); set => SetValue(ActionsFillProperty, value); }
+
+    private void UpdateActionsFill()
+    {
+        ActionsRow.Height = ActionsFill ? new GridLength(1, GridUnitType.Star) : GridLength.Auto;
+        BodyRow.Height = ActionsFill ? GridLength.Auto : new GridLength(1, GridUnitType.Star);
+        BodyScroll.Visibility = ActionsFill ? Visibility.Collapsed : Visibility.Visible;
+    }
 
     protected override void OnPropertyChanged(DependencyPropertyChangedEventArgs e)
     {

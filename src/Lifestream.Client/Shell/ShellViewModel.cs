@@ -367,7 +367,9 @@ public sealed partial class ShellViewModel : ViewModelBase
     }
 
     /// <summary>
-    /// Refreshes the sidebar counts and the taskbar badge: appointments still to come today, open requests, and blood groups below their minimum.
+    /// Refreshes the sidebar counts and the taskbar badge, computed here by the shell (never by whichever page loaded last), on every screen alike:
+    /// Appointments counts today's pending appointments (the whole local day: the ones of the Today view still to record), Requests the open requests (the
+    /// Requests page's "Open" view: every pending request), and Stock shows its alert when any blood group is below its minimum.
     /// Best effort and quiet: a failed call leaves the last counts in place (the screens report their own errors).
     /// </summary>
     public async Task RefreshCountsAsync(CancellationToken ct = default)
@@ -392,11 +394,11 @@ public sealed partial class ShellViewModel : ViewModelBase
     [RunsInOperation("RefreshCountsAsync runs it inside Operations.RunAsync.")]
     private async Task RefreshCountsCoreAsync(CancellationToken ct)
     {
-        var now = Clock.GetUtcNow();
         var local = Clock.GetLocalNow();
+        var startOfDay = new DateTimeOffset(local.Date, local.Offset).UtcDateTime;
         var endOfDay = new DateTimeOffset(local.Date.AddDays(1), local.Offset).UtcDateTime;
         var api = _api!;
-        var appointments = await api.GetAppointmentsAsync(new Contracts.Appointments.AppointmentQuery(Status: Domain.AppointmentStatus.Pending, FromUtc: now.UtcDateTime, ToUtc: endOfDay, PageSize: 1), ct).ConfigureAwait(true);
+        var appointments = await api.GetAppointmentsAsync(new Contracts.Appointments.AppointmentQuery(Status: Domain.AppointmentStatus.Pending, FromUtc: startOfDay, ToUtc: endOfDay, PageSize: 1), ct).ConfigureAwait(true);
         var requests = await api.GetRequestsAsync(new Contracts.Requests.RequestQuery(Status: Domain.RequestStatus.Pending, PageSize: 1), ct).ConfigureAwait(true);
         var stock = await api.GetStockAsync(ct).ConfigureAwait(true);
         Post(() =>

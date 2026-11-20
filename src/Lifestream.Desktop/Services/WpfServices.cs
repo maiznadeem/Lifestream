@@ -16,10 +16,10 @@ public sealed class WpfDialogPresenter(Func<Window?> ownerProvider) : IDialogPre
 {
     private int _errorOpen;
 
-    public Task<bool> ConfirmAsync(string title, string body, string dangerVerb) =>
+    public Task<bool> ConfirmAsync(string title, string body, string dangerVerb, string keepVerb) =>
         OnUi(() =>
         {
-            var dialog = DialogWindow.CreateConfirm(title, body, dangerVerb);
+            var dialog = DialogWindow.CreateConfirm(title, body, dangerVerb, keepVerb);
             Show(dialog);
             return dialog.Confirmed;
         });

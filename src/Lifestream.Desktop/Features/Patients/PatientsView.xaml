@@ -204,6 +204,13 @@
                           <ColumnDefinition Width="*" />
                           <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                          <RowDefinition Height="Auto" />
+                          <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <!-- None of the group in stock: Fulfil is disabled and this line says why (the request stays open) -->
+                        <TextBlock AutomationProperties.AutomationId="HoldReason" Grid.Row="1" Grid.ColumnSpan="2" Style="{DynamicResource Text.Caption}" Foreground="{DynamicResource Brush.Ink2}"
+                                   Text="{Binding HoldReason}" TextWrapping="Wrap" Margin="{DynamicResource Inset.T8}" Visibility="{Binding HoldReason, Converter={StaticResource NullToCollapsed}}" />
                         <StackPanel>
                           <TextBlock Style="{DynamicResource Text.BodyStrong}" TextWrapping="Wrap"><Run Text="{Binding Title, Mode=OneWay}" /><Run Text="  " /><Run Text="{Binding Code, Mode=OneWay}" Foreground="{DynamicResource Brush.Ink3}" FontWeight="Normal" /></TextBlock>
                           <TextBlock Style="{DynamicResource Text.Secondary}" Text="{Binding NeededText}" TextWrapping="Wrap" />
@@ -217,7 +224,8 @@
                         </StackPanel>
                         <Button Grid.Column="1" Style="{DynamicResource Button.Secondary.Small}" VerticalAlignment="Center" Margin="{DynamicResource Inset.L12}" Content="Fulfil"
                                 Command="{Binding DataContext.FulfilRequestCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}"
-                                controls:ButtonAssist.BusyText="" AutomationProperties.Name="Fulfil this request" ToolTip="Open the request and fulfil it" />
+                                controls:ButtonAssist.BusyText="" AutomationProperties.Name="Fulfil this request" ToolTip="Open the request and fulfil it" IsEnabled="{Binding CanFulfil}"
+                                AutomationProperties.HelpText="{Binding HoldReason}" />
                       </Grid>
                     </Border>
                   </DataTemplate>

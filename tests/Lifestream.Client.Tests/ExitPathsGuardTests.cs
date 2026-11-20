@@ -23,7 +23,7 @@ public sealed class ExitPathsGuardTests
     {
         public List<string> Asked { get; } = [];
 
-        public Task<bool> ConfirmAsync(string title, string body, string dangerVerb)
+        public Task<bool> ConfirmAsync(string title, string body, string dangerVerb, string keepVerb)
         {
             Asked.Add(title);
             return Task.FromResult(false); // the user chooses to stay
@@ -133,7 +133,7 @@ public sealed class ExitPathsGuardTests
 
     private sealed class AgreeingPresenter(Presenter record) : IDialogPresenter
     {
-        public Task<bool> ConfirmAsync(string title, string body, string dangerVerb)
+        public Task<bool> ConfirmAsync(string title, string body, string dangerVerb, string keepVerb)
         {
             record.Asked.Add(title);
             return Task.FromResult(true);

@@ -41,19 +41,19 @@ public partial class DialogWindow : ChromeWindow
     public System.Windows.Controls.Button Primary => PrimaryButton;
 
     /// <summary>Configures a confirmation: the danger button carries the verb and object.</summary>
-    public static DialogWindow CreateConfirm(string title, string body, string dangerVerb) => new DialogWindow().ConfigureConfirm(title, body, dangerVerb);
+    public static DialogWindow CreateConfirm(string title, string body, string dangerVerb, string keepVerb) => new DialogWindow().ConfigureConfirm(title, body, dangerVerb, keepVerb);
 
     /// <summary>Configures an error report with a "Details" control for the technical text.</summary>
     public static DialogWindow CreateError(string title, string message, string? details) => new DialogWindow().ConfigureError(title, message, details);
 
-    public DialogWindow ConfigureConfirm(string title, string body, string dangerVerb)
+    public DialogWindow ConfigureConfirm(string title, string body, string dangerVerb, string keepVerb)
     {
         Title = title;
         Surface.Title = title;
         BodyText.Text = body;
         PrimaryButton.Content = dangerVerb;
         PrimaryButton.Style = (Style)FindResource("Button.Danger");
-        CancelButton.Content = "Cancel";
+        CancelButton.Content = keepVerb; // says what it keeps ("Keep appointment"), never a bare "Cancel" beside "Cancel appointment"
         System.Windows.Automation.AutomationProperties.SetName(this, title);
         return this;
     }

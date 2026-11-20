@@ -561,11 +561,11 @@ public sealed class AppointmentsViewModel : SortedRecordListViewModel<Appointmen
             return;
         }
 
-        var when = RecordFormatting.When(appointment.SlotStartUtc, Zone);
         var confirmed = await Dialogs.ConfirmAsync(
             "Cancel appointment?",
-            $"The appointment of '{appointment.DonorName}' on {when} will be cancelled and the time becomes free for someone else.",
-            "Cancel appointment").ConfigureAwait(true);
+            $"{appointment.DonorName}'s appointment on {RecordFormatting.DayAndTime(appointment.SlotStartUtc, Zone)} will be cancelled, and the slot becomes free.",
+            "Cancel appointment",
+            "Keep appointment").ConfigureAwait(true);
         if (!confirmed)
         {
             return;
