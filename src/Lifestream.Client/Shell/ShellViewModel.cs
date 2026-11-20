@@ -36,8 +36,11 @@ public sealed partial class NavItem(Destination destination, int position) : Obs
 
     /// <summary>A count shown at the right of the item (appointments still to come today, open requests, groups below minimum); null hides it.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(AutomationName))]
+    [NotifyPropertyChangedFor(nameof(AutomationName), nameof(RailBadge))]
     public partial string? Badge { get; set; }
+
+    /// <summary>The count as the icon rail shows it, on a small badge at the icon's corner: the number, or "99+" for a count of three digits or more.</summary>
+    public string? RailBadge => Badge is { Length: > 2 } ? "99+" : Badge;
 
     /// <summary>Something here needs attention (stock below its minimum): the count turns red.</summary>
     [ObservableProperty]

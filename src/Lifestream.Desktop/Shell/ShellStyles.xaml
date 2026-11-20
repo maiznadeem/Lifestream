@@ -83,7 +83,8 @@
     </Setter>
   </Style>
 
-  <!-- The same destination on the 52 DIP icon rail: a 40 x 38 icon button with the title and its Alt shortcut as the tooltip. -->
+  <!-- The same destination on the 52 DIP icon rail: a 40 x 38 icon button with the title and its Alt shortcut as the tooltip. The count of the full
+       sidebar is not lost on the rail: it sits on a small badge at the icon's top-right corner (red when the destination needs attention). -->
   <Style x:Key="RailItem" TargetType="RadioButton" BasedOn="{StaticResource NavItem}">
     <Setter Property="Width" Value="40" />
     <Setter Property="Height" Value="38" />
@@ -96,7 +97,14 @@
             <assist:CrispBorder x:Name="Selected" Opacity="0" CornerRadius="{StaticResource Radius.Control}" Background="{DynamicResource Brush.NavActive}" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="1" />
             <Border x:Name="Bar" Width="3" HorizontalAlignment="Left" Margin="{DynamicResource Inset.V10}" CornerRadius="{DynamicResource Radius.2}" Background="Transparent" />
             <controls:Icon x:Name="Glyph" Kind="{Binding Icon}" Size="18" HorizontalAlignment="Center" VerticalAlignment="Center" />
-            <Ellipse x:Name="Dot" Width="6" Height="6" Fill="{DynamicResource Brush.Critical}" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="{DynamicResource Inset.T7R7}" Visibility="Collapsed" />
+            <!-- The count: a 16 DIP badge at the icon's corner. A destination that needs attention has it on the red dot (the same dot the rail has always
+                 drawn for it, grown to hold the number); an alert without a count is the plain 6 DIP dot. -->
+            <Grid x:Name="CountBadge" MinWidth="16" Height="16" HorizontalAlignment="Right" VerticalAlignment="Top" SnapsToDevicePixels="True" IsHitTestVisible="False">
+              <Border x:Name="CountPlate" CornerRadius="{DynamicResource Radius.Panel}" Background="{DynamicResource Brush.Layer}" BorderBrush="{DynamicResource Brush.StrokeStrong}" BorderThickness="1" />
+              <Ellipse x:Name="Dot" Fill="{DynamicResource Brush.Critical}" Visibility="Collapsed" />
+              <TextBlock x:Name="CountText" Text="{Binding RailBadge}" FontSize="{StaticResource FontSize.Kbd}" FontWeight="SemiBold" Foreground="{DynamicResource Brush.Ink2}" HorizontalAlignment="Center"
+                         VerticalAlignment="Center" Margin="{DynamicResource Inset.H3}" Typography.NumeralAlignment="Tabular" />
+            </Grid>
             <assist:CrispBorder x:Name="FocusRing" BorderThickness="{StaticResource Thickness.FocusRing}" BorderBrush="{DynamicResource Brush.Focus}" CornerRadius="{StaticResource Radius.Control}" Visibility="Collapsed"
                                 IsHitTestVisible="False" />
           </Grid>
@@ -109,9 +117,24 @@
               <Setter TargetName="Bar" Property="Background" Value="{DynamicResource Brush.Blood}" />
               <Setter TargetName="Glyph" Property="IsFilled" Value="True" />
             </Trigger>
+            <DataTrigger Binding="{Binding RailBadge}" Value="{x:Null}">
+              <Setter TargetName="CountBadge" Property="Visibility" Value="Collapsed" />
+            </DataTrigger>
             <DataTrigger Binding="{Binding HasAlert}" Value="True">
               <Setter TargetName="Dot" Property="Visibility" Value="Visible" />
+              <Setter TargetName="CountPlate" Property="Visibility" Value="Collapsed" />
+              <Setter TargetName="CountText" Property="Foreground" Value="{DynamicResource Brush.Layer}" />
             </DataTrigger>
+            <MultiDataTrigger>
+              <MultiDataTrigger.Conditions>
+                <Condition Binding="{Binding HasAlert}" Value="True" />
+                <Condition Binding="{Binding RailBadge}" Value="{x:Null}" />
+              </MultiDataTrigger.Conditions>
+              <Setter TargetName="CountBadge" Property="Visibility" Value="Visible" />
+              <Setter TargetName="CountBadge" Property="MinWidth" Value="6" />
+              <Setter TargetName="CountBadge" Property="Height" Value="6" />
+              <Setter TargetName="CountBadge" Property="Margin" Value="{DynamicResource Inset.T7R7}" />
+            </MultiDataTrigger>
             <Trigger Property="assist:FocusAssist.ShowRing" Value="True">
               <Setter TargetName="FocusRing" Property="Visibility" Value="Visible" />
             </Trigger>
