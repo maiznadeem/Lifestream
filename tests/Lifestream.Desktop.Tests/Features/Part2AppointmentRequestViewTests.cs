@@ -379,24 +379,32 @@ public sealed class Part2AppointmentRequestViewTests
         var facts = StaHost.Run(() =>
         {
             using var rig = Part2Harness.NewRig();
-            rig.Api.On("GetStockAsync", ApiResult<IReadOnlyList<Lifestream.Contracts.Stock.StockItem>>.Ok([new(BloodType.ANeg, 1, 0, 10, true), new(BloodType.APos, 1, 0, 10, true)]));
+            // Three units when the step opens (a short request is not offered Fulfil); two are issued elsewhere before the click, so the server refuses.
+            rig.Api.On("GetStockAsync", ApiResult<IReadOnlyList<Lifestream.Contracts.Stock.StockItem>>.Ok([new(BloodType.ANeg, 3, 0, 10, true), new(BloodType.APos, 1, 0, 10, true)]));
             rig.Api.On("FulfilRequestAsync", ApiResult<Lifestream.Contracts.Receipts.ReceiptDetail>.Fail(new ApiProblem(409, ProblemCodes.InsufficientStock, "Not enough stock", "corr-2")));
             var request = DemoData2.RequestDetail(1) with { BloodType = BloodType.ANeg, Units = 3 };
             var dialog = new FulfilRequestDialogViewModel(rig.Api, request);
             using var host = Hosted.Create(Part2Harness.OnCanvas(new FulfilRequestDialogView(), dialog), 560, 520);
             Hosted.Await(() => dialog.PendingStock);
             host.Settle(300);
+            var primaryBefore = ButtonNamed(host, "Fulfil request").IsEnabled;
+            rig.Api.On("GetStockAsync", ApiResult<IReadOnlyList<Lifestream.Contracts.Stock.StockItem>>.Ok([new(BloodType.ANeg, 1, 0, 10, true), new(BloodType.APos, 1, 0, 10, true)]));
             Hosted.Await(() => dialog.PrimaryCommand.ExecuteAsync());
             Hosted.Await(() => dialog.PendingStock);
             host.Settle(300);
             Part2Harness.Save(host, "FulfilRequestDialog_InsufficientStock.png");
-            return (Texts: host.All<TextBlock>().Where(t => t.IsVisible).Select(t => t.Text).ToList(), dialog.Completed, Busy: dialog.IsBusy, Primary: ButtonNamed(host, "Fulfil request").IsEnabled);
+            return (Texts: host.All<TextBlock>().Where(t => t.IsVisible).Select(t => t.Text).ToList(), dialog.Completed, Busy: dialog.IsBusy, PrimaryBefore: primaryBefore,
+                Primary: ButtonNamed(host, "Fulfil request").IsEnabled, NotNow: ButtonNamed(host, "Not now").IsEnabled);
         });
 
-        Assert.Contains("In stock: 1 unit of A-", facts.Texts);
-        Assert.Contains("There isn't enough A- blood in stock: this request needs 3 units. Nothing was issued.", facts.Texts);
+        Assert.True(facts.PrimaryBefore);
+        Assert.Contains("In stock: 1 unit of A−", facts.Texts);
+        Assert.Contains("Nothing was issued: there is no longer enough A− in stock for the 3 units this request needs.", facts.Texts);
+        Assert.Contains("Only 1 of the 3 units of A− needed is in stock, 2 units short. A request is issued in full, so it stays open until more arrives.", facts.Texts);
         Assert.False(facts.Completed);
         Assert.False(facts.Busy);
-        Assert.True(facts.Primary); // the dialog stays usable
+        // The step stays usable: "Not now" leaves it. "Fulfil request" is no longer offered: the server would refuse it again (2.1.2 left it enabled).
+        Assert.True(facts.NotNow);
+        Assert.False(facts.Primary);
     }
 }

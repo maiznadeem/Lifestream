@@ -46,11 +46,19 @@ public static class DemoReset
     public static Task<bool> RunIfTodayIsMissingAsync(LifestreamDbContext db, DateTime nowUtc, CancellationToken cancellationToken) =>
         ResetAsync(db, DateTime.SpecifyKind(nowUtc, DateTimeKind.Utc), Mode.TodayMissing, cancellationToken);
 
+    /// <summary>
+    /// Answers whether the daily reset is due at <paramref name="nowUtc"/> and changes nothing. It takes the same steps as the daily check (the
+    /// transaction, the lock, the two reads), so a new process that calls it once has loaded and compiled what its first signed-in request needs.
+    /// </summary>
+    public static Task<bool> IsDueAsync(LifestreamDbContext db, DateTime nowUtc, CancellationToken cancellationToken) =>
+        ResetAsync(db, DateTime.SpecifyKind(nowUtc, DateTimeKind.Utc), Mode.CheckOnly, cancellationToken);
+
     private enum Mode
     {
         Daily,
         Forced,
         TodayMissing,
+        CheckOnly,
     }
 
     private static async Task<bool> ResetAsync(LifestreamDbContext db, DateTime nowUtc, Mode mode, CancellationToken ct)
@@ -81,6 +89,13 @@ public static class DemoReset
                 {
                     await transaction.CommitAsync(ct);
                     return false;
+                }
+
+                if (mode == Mode.CheckOnly)
+                {
+                    await transaction.CommitAsync(ct);
+                    db.ChangeTracker.Clear();
+                    return true; // due, and left for the first signed-in request to do
                 }
 
                 await WipeAsync(db, ct);

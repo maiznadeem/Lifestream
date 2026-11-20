@@ -30,13 +30,15 @@ public enum StockFilter
 /// the selected record. The editor opens in a side drawer. Delete asks first, names the record, changes the list only after the API
 /// confirms, shows a plain message on failure and offers Undo after success (FEAT-06).
 /// </summary>
-public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListViewModel<TItem>, INavigationParameterReceiver, IHasUnsavedChanges, IScrollMemory
+public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListViewModel<TItem>, INavigationParameterReceiver, IHasUnsavedChanges, IScrollMemory, IRevealsSelection
     where TItem : class
     where TDetail : class
 {
     private CancellationTokenSource? _detailCts;
     private int? _selectedId;
     private int? _openedId; // a record another screen asked to open by id: kept selected while it is not on the loaded page
+    private bool _openedViewChosen; // the tab that holds that record has been chosen (once per link)
+    private int? _revealId; // the record whose row the list brings into view once it is loaded: one opened by id, or one just saved
     private bool _applying;
     private FilterOption<BloodType> _bloodTypeFilter;
 
@@ -58,7 +60,7 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
             OpenEditor(Detail);
             return Task.CompletedTask;
         }, () => Detail is not null && !IsEditing);
-        DeleteCommand = Command(_ => DeleteSelectedAsync(), () => Detail is { } record && !IsEditing && CanDelete(record), opensModal: true);
+        DeleteCommand = Command(_ => DeleteSelectedAsync(), () => Detail is { } record && !IsEditing && CanDelete(record) && DeleteBlockOf(record) is null, opensModal: true);
         RetryDetailCommand = Command(_ => LoadDetailAsync(_selectedId));
         CancelDetailCommand = Command(_ =>
         {
@@ -153,12 +155,19 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
     public partial TItem? SelectedItem { get; set; }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasDetail), nameof(ShowDetailSkeleton), nameof(HasDetailError), nameof(DetailTitle), nameof(IsDetailOpen))]
+    [NotifyPropertyChangedFor(nameof(HasDetail), nameof(ShowDetailSkeleton), nameof(HasDetailError), nameof(DetailTitle), nameof(IsDetailOpen), nameof(DeleteBlockedReason), nameof(ShowNoSelection))]
     public partial TDetail? Detail { get; set; }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasDetail), nameof(ShowDetailSkeleton), nameof(HasDetailError), nameof(IsDetailWaking), nameof(ShowWakingNotice), nameof(IsDetailOpen))]
+    [NotifyPropertyChangedFor(nameof(HasDetail), nameof(ShowDetailSkeleton), nameof(HasDetailError), nameof(IsDetailWaking), nameof(ShowWakingNotice), nameof(IsDetailOpen), nameof(ShowNoSelection))]
     public partial LoadState DetailState { get; set; } = LoadState.Ready;
+
+    /// <summary>
+    /// True while the detail pane has nothing to show (no record, no skeleton, no error): only then does it say "Select a donor to see their details." The pane can
+    /// show a record that has no row in the list (it left the list's view when it was fulfilled or booked for another day, or another screen opened it by id), so
+    /// the selected row does not decide this.
+    /// </summary>
+    public bool ShowNoSelection => Detail is null && DetailState == LoadState.Ready;
 
     /// <summary>
     /// True while the side panel has something to show: a selected record (loading, loaded or failed) or an open editor. Selecting nothing and closing the editor closes it
@@ -260,6 +269,39 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
     /// <summary>Whether the selected record may be deleted at all (the signed-in admin's own staff record may not).</summary>
     protected virtual bool CanDelete(TDetail detail) => true;
 
+    /// <summary>
+    /// Why the server will refuse to delete this record (other records point at it: a donor's appointments, a patient's requests), or null when it can be deleted or
+    /// the screen does not know. Delete is not offered while there is a reason; the "..." menu shows the reason under the disabled item.
+    /// </summary>
+    protected virtual string? DeleteBlockOf(TDetail detail) => null;
+
+    /// <summary>Why the selected record can't be deleted (<see cref="DeleteBlockOf"/>), or null: shown with the disabled Delete.</summary>
+    public string? DeleteBlockedReason => Detail is { } record ? DeleteBlockOf(record) : null;
+
+    /// <summary>
+    /// What to say when the server refuses a delete because other records point at the record (409 conflict): the screen could not know beforehand (the count of
+    /// those records could not be read), or it changed since. It says "deleted", why, and that nothing was changed. Null (the default) for a screen whose records
+    /// have no such rule (a receipt, a request): its refusals keep the general message, and nothing is read again because of them.
+    /// </summary>
+    protected virtual string? DeleteRefusedText(string name) => null;
+
+    /// <summary>Call when what <see cref="DeleteBlockOf"/> answers may have changed (the record's history has loaded).</summary>
+    protected void RaiseDeleteBlockChanged()
+    {
+        OnPropertyChanged(nameof(DeleteBlockedReason));
+        DeleteCommand.RaiseCanExecuteChanged();
+    }
+
+    /// <summary>
+    /// Moves the screen to the saved view (tab) that lists this record, when the open one does not: called for a record just saved in the editor (a booking for
+    /// tomorrow made from "Today") and, once, for a record another screen opened by id. True when the view changed (the list is then read again). Not remembered:
+    /// the next visit opens on the view the user chose. A screen without saved views has nothing to do.
+    /// </summary>
+    protected virtual bool ShowViewOf(TDetail record) => false;
+
+    /// <summary>Asks the list to bring the selected row into view: raised when the row of a record opened by id, or of one just saved, has been loaded and selected.</summary>
+    public event EventHandler? RevealSelectionRequested;
+
     /// <summary>Whether a deleted record can be offered back with Undo; false for records the API cannot restore (staff).</summary>
     protected virtual bool SupportsUndo => true;
 
@@ -284,6 +326,8 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
         {
             _selectedId = recordId;
             _openedId = recordId;
+            _openedViewChosen = false;
+            _revealId = recordId;
             PendingDetail = LoadDetailAsync(recordId); // the detail does not wait for the list, and does not depend on the record being on its first page
         }
 
@@ -311,6 +355,13 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
             {
                 ClearDetail();
             }
+
+            if (keep is not null && _revealId == _selectedId)
+            {
+                // The row of the record another screen opened, or of the one just saved, is in the list now: it is selected, and the list brings it into view.
+                _revealId = null;
+                RevealSelectionRequested?.Invoke(this, EventArgs.Empty);
+            }
         }
         finally
         {
@@ -327,6 +378,7 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
 
         _selectedId = value is null ? null : IdOf(value);
         _openedId = null; // the user chose something themselves
+        _revealId = null;
         if (value is null)
         {
             ClearDetail();
@@ -344,6 +396,9 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
         EditCommand.RaiseCanExecuteChanged();
         DeleteCommand.RaiseCanExecuteChanged();
     }
+
+    // The extra lines arrive with the record's history (a donor's appointments): whether it can be deleted is known from then on.
+    partial void OnDetailFactsChanged(IReadOnlyList<DetailFact> value) => RaiseDeleteBlockChanged();
 
     partial void OnEditorChanged(RecordEditorViewModel? value)
     {
@@ -396,6 +451,15 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
             Detail = detail;
             DetailFacts = [.. FactsOf(detail), .. extraFacts];
             DetailState = LoadState.Ready;
+            if (_openedId == recordId && !_openedViewChosen)
+            {
+                // A record another screen opened: now that it is known, the tab that lists it (once; the user is free to change tabs afterwards).
+                _openedViewChosen = true;
+                if (ShowViewOf(detail))
+                {
+                    _ = RefreshAsync();
+                }
+            }
         }
         catch (OperationCanceledException)
         {
@@ -500,6 +564,8 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
             if (e.Record is TDetail saved)
             {
                 _selectedId = IdOfDetail(saved);
+                _revealId = _selectedId;
+                ShowViewOf(saved); // the tab that lists what was saved; the refresh below reads it
             }
 
             _ = RefreshAfterSaveAsync();
@@ -541,6 +607,15 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
         if (!result.IsOk)
         {
             // The list stays exactly as it was; only a message says why.
+            if (result.Problem!.Code == ProblemCodes.Conflict && DeleteRefusedText(name) is { } refused)
+            {
+                // Other records point at it (the screen did not know, or it changed since): say so, and read the record and its counts again, so that Delete is
+                // offered or not by what the server says now.
+                Toasts.Show(ToastKind.Error, refused);
+                await LoadDetailAsync(id).ConfigureAwait(true);
+                return;
+            }
+
             Toasts.Show(ToastKind.Error, ProblemText.For(result.Problem!, RecordType, name));
             return;
         }

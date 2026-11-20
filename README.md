@@ -1,13 +1,13 @@
 # Lifestream 2.1
 
 Lifestream is a blood-bank management desktop app: donors, patients, appointments, blood requests, stock and receipts,
-with a dashboard. Version **2.1.2** is a ground-up rewrite of the original course project on .NET 11.
+with a dashboard. Version **2.1.5** is a ground-up rewrite of the original course project on .NET 11.
 
 What changed for users is in [CHANGELOG.md](CHANGELOG.md).
 
 ## Install
 
-1. Open the [v2.1.2 release](https://github.com/maiznadeem/lifestream/releases/tag/v2.1.2) and download `Lifestream-win-Setup.exe` (and `SHA256SUMS.txt`). Windows 10 or 11, 64-bit.
+1. Open the [v2.1.5 release](https://github.com/maiznadeem/lifestream/releases/tag/v2.1.5) and download `Lifestream-win-Setup.exe` (and `SHA256SUMS.txt`). Windows 10 or 11, 64-bit.
 2. Check the download. In PowerShell, in the folder you saved it to:
 
    ```powershell
@@ -24,7 +24,7 @@ What changed for users is in [CHANGELOG.md](CHANGELOG.md).
 ## Try it (demo login)
 
 Start the app and press **Try the demo**. No account, username or password is needed. The demo runs against synthetic
-data only (see [docs/data-retention.md](docs/data-retention.md)) and is reset every day. The first request after a quiet period can take up to a minute while the server wakes up.
+data only (see [docs/data-retention.md](docs/data-retention.md)) and is reset every day. The first request after a quiet period can take about a minute and a half while the server wakes up (first the server starts, then its database); the app says which while it waits. The demo database runs on a free plan with a monthly allowance: if that is used up, the app says so and the demo is back on the 1st of the next month.
 
 The demo clinic has a day in progress: today's appointments are in it, the earlier ones already donated, the rest
 still to come. It keeps its hours in UTC (09:00 to 16:30), so they appear at those hours in your own time.

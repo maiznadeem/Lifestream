@@ -226,23 +226,52 @@ Describe 'INFRA-09 / OWN-02 container app on Consumption, scale to zero' {
         $env.properties.zoneRedundant | Should -Be $false
     }
 
-    It 'scales from 0 to at most 1 replica (the ledger allows up to 2) at 0.25 vCPU / 0.5 GiB' {
+    It 'scales from 0 to at most 1 replica (the ledger allows up to 2) at 0.5 vCPU / 1 GiB with a cooldown of 300 s' {
         $api = Single 'Microsoft.App/containerApps' 'the API'
         $api.properties.template.scale.minReplicas | Should -Be 0
         $api.properties.template.scale.maxReplicas | Should -Be 1
         $api.properties.template.scale.maxReplicas | Should -BeLessOrEqual 2
+        $api.properties.template.scale.cooldownPeriod | Should -Be 300
         $c = $api.properties.template.containers[0]
-        ([string]$c.resources.cpu -replace "^\[json\('|'\)\]$", '') | Should -Be '0.25'
-        $c.resources.memory | Should -Be '0.5Gi'
+        ([string]$c.resources.cpu -replace "^\[json\('|'\)\]$", '') | Should -Be '0.5'
+        $c.resources.memory | Should -Be '1Gi'
         $api.properties.workloadProfileName | Should -Be 'Consumption'
     }
 
-    It 'has a startup probe on /healthz' {
+    # The Container Apps free grant, per subscription and calendar month (Microsoft Learn, Billing in Azure Container Apps, read
+    # 2026-11-20): 180,000 vCPU-seconds and 360,000 GiB-seconds. A replica is billed from its start until it is removed: the cooldown
+    # plus about 135 s after the last request (measured 2026-11-20: 7 min 15 s with the cooldown at 300 s). The owner's scale is a demo
+    # with a few sessions a day: 5 sessions of 15 minutes and 2 stray requests that start the container, every day of a 30-day month.
+    It 'stays inside the free grant at the owner''s scale, with a quarter of the grant to spare, whatever size and cooldown are set' {
+        $api = Single 'Microsoft.App/containerApps' 'the API'
+        $c = $api.properties.template.containers[0]
+        $cpu = [double](([string]$c.resources.cpu -replace "^\[json\('|'\)\]$", ''))
+        $memoryGiB = [double]($c.resources.memory -replace 'Gi$', '')
+        $cooldown = [int]$api.properties.template.scale.cooldownPeriod
+        $cooldown | Should -BeGreaterThan 0 -Because 'the sum below needs the cooldown written in the template'
+
+        $start = 30; $scalerLag = 135; $session = 15 * 60
+        $perSession = $start + $session + $cooldown + $scalerLag
+        $perStray = $start + $cooldown + $scalerLag
+        $replicaSeconds = 30 * (5 * $perSession + 2 * $perStray)
+        $vcpuSeconds = $replicaSeconds * $cpu
+        $gibSeconds = $replicaSeconds * $memoryGiB
+
+        # With 0.5 vCPU, 1 GiB and 300 s: 232,650 replica-seconds, 116,325 vCPU-seconds (65 %) and 232,650 GiB-seconds (65 %).
+        $vcpuSeconds | Should -BeLessOrEqual (0.75 * 180000) -Because "$replicaSeconds replica-seconds a month at $cpu vCPU is $vcpuSeconds vCPU-seconds of the 180,000 that are free"
+        $gibSeconds | Should -BeLessOrEqual (0.75 * 360000) -Because "$replicaSeconds replica-seconds a month at $memoryGiB GiB is $gibSeconds GiB-seconds of the 360,000 that are free"
+    }
+
+    It 'has a startup probe on /healthz, every second (the minimum), with a minute of patience' {
         $api = Single 'Microsoft.App/containerApps' 'the API'
         $probes = @($api.properties.template.containers[0].probes | Where-Object type -eq 'Startup')
         $probes.Count | Should -Be 1
-        $probes[0].httpGet.path | Should -Be '/healthz'
+        $probes[0].httpGet.path | Should -Be '/healthz' -Because '/healthz never opens a database connection: a probe must never wake the free database'
         $probes[0].httpGet.port | Should -Be 8080
+        $probes[0].periodSeconds | Should -Be 1
+        $probes[0].initialDelaySeconds | Should -Be 1
+        ($probes[0].periodSeconds * $probes[0].failureThreshold) | Should -BeGreaterOrEqual 60
+        @($api.properties.template.containers[0].probes | Where-Object type -ne 'Startup') | Should -BeNullOrEmpty -Because 'a liveness or readiness probe would call the app for as long as it runs'
     }
 
     It 'exposes external HTTPS only on port 8080' {
@@ -344,7 +373,9 @@ Describe 'INFRA-10 free-offer serverless database' {
         $db = Single 'Microsoft.Sql/servers/databases' 'BloodBank'
         $db.properties.useFreeLimit | Should -Be $true
         $db.properties.freeLimitExhaustionBehavior | Should -Be 'AutoPause'
-        $db.properties.autoPauseDelay | Should -Be 60
+        # The free offer pauses after 15 minutes whatever is sent ("fixed and can't be changed", Microsoft Learn); the template used to
+        # send 60, which Azure stored and ignored. Not declaring it keeps the file from claiming a delay it does not set.
+        $db.properties.PSObject.Properties.Name | Should -Not -Contain 'autoPauseDelay'
         $db.sku.name | Should -Be 'GP_S_Gen5'
         $db.sku.tier | Should -Be 'GeneralPurpose'
         $db.properties.requestedBackupStorageRedundancy | Should -Be 'Local'

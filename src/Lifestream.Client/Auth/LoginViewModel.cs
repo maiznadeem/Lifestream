@@ -17,6 +17,9 @@ public enum ServerReadiness
     Ready,
     Waking,
     Unreachable,
+
+    /// <summary>The demo database has used up its free allowance and is paused until next month: waiting does not help.</summary>
+    Resting,
 }
 
 /// <summary>One cell of the sign-in screen's red-cell compatibility matrix: can the row's donor give to the column's patient.</summary>
@@ -32,6 +35,9 @@ public sealed record CompatibilityCell(BloodType Donor, BloodType Patient, bool 
 public sealed record CompatibilityRow(BloodType Donor, IReadOnlyList<CompatibilityCell> Cells)
 {
     public string Label => Donor.ToTypographic();
+
+    /// <summary>What a screen reader calls the row.</summary>
+    public string AutomationName => $"Donor {Label}";
 }
 
 /// <summary>What the login screen is telling the user about the last attempt.</summary>
@@ -79,6 +85,7 @@ public sealed partial class LoginViewModel : ViewModelBase
         if (serverStatus is not null)
         {
             serverStatus.Changed += OnServerStatusChanged;
+            _phase = serverStatus.Phase;
             IsServerWaking = serverStatus.State == ServerState.Waking;
         }
 
@@ -142,20 +149,34 @@ public sealed partial class LoginViewModel : ViewModelBase
     public string ServerText => Server switch
     {
         ServerReadiness.Ready => "Server ready",
-        ServerReadiness.Waking => "Waking the server",
+        // While a call waits, the pill names the part of the wake that is going on; a server that answered "still waking" means its database.
+        ServerReadiness.Waking when IsServerWaking && _phase == WakePhase.ServerStarting => "Starting the server",
+        ServerReadiness.Waking when IsServerWaking && _phase == WakePhase.ServerWorking => "Waiting for the server",
+        ServerReadiness.Waking => "Waking the database",
         ServerReadiness.Unreachable => "Can't reach the server",
+        ServerReadiness.Resting => "Demo database paused until the 1st",
         _ => "Checking the server",
     };
 
     /// <summary>
-    /// Asks the server whether it is ready, for the footer pill (the screen calls it once when it appears). A cold demo server answers "waking"; the
-    /// first sign-in then takes up to a minute, which the status line says.
+    /// Asks the server whether it is ready, for the footer pill (the screen calls it once when it appears). The call also starts the server's
+    /// own warm-up for the first sign-in. A cold demo server answers "waking" until its database is back, about a minute and a half at the
+    /// longest measured, which the status line says; the pill turns to "Server ready" within about two seconds of the database answering.
     /// </summary>
     public async Task CheckServerAsync(CancellationToken ct = default)
     {
         try
         {
-            Server = await Operations.RunAsync(ReadReadinessAsync, ct).ConfigureAwait(true);
+            // A server that still says "waking" when the two-minute wait ends is asked once more, so a wake that runs long ends in
+            // "Server ready" by itself. Then the pill is left on "waking": asking for ever would knock on a database that is not coming back.
+            for (var round = 1; ; round++)
+            {
+                Server = await Operations.RunAsync(ReadReadinessAsync, ct).ConfigureAwait(true);
+                if (Server != ServerReadiness.Waking || round >= ReadinessRounds)
+                {
+                    break;
+                }
+            }
         }
         catch (Exception ex) when (ex is HttpRequestException or TimeoutException or IOException or OperationCanceledException or System.Text.Json.JsonException)
         {
@@ -163,13 +184,81 @@ public sealed partial class LoginViewModel : ViewModelBase
         }
     }
 
+    /// <summary>How many two-minute waits the readiness check of the sign-in window makes while the server keeps answering "still waking".</summary>
+    public const int ReadinessRounds = 2;
+
     /// <summary>True from the third second of a slow or waking call until it ends: the server is starting from cold (SHELL-07).</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanCancel))]
     public partial bool IsServerWaking { get; set; }
 
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "Bound from XAML, which needs instance properties.")]
-    public string WakingText => "Waking up the server, this can take up to a minute.";
+    /// <summary>
+    /// What the waking notice says: how long a wake takes, and, only once this one has lasted longer than that
+    /// (<see cref="WakingTexts.LongerThanUsualAfter"/>), that it is taking longer than usual. It never reads as a failure: the attempt is still running.
+    /// </summary>
+    public string WakingText =>
+        _wakingLongerThanUsual ? WakingTexts.SignInLate
+        : _phase == WakePhase.DatabaseWaking ? WakingTexts.SignInDatabase
+        : _phase == WakePhase.ServerWorking ? WakingTexts.SignInWorking
+        : WakingTexts.SignIn;
+
+    /// <summary>The part of the wake the server is in, as last heard (<see cref="IServerStatus.Phase"/>).</summary>
+    private WakePhase _phase;
+
+    private bool _wakingLongerThanUsual;
+    private ITimer? _wakingClock;
+
+    partial void OnIsServerWakingChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ServerText));
+        _wakingClock?.Dispose();
+        _wakingClock = null;
+        if (_wakingLongerThanUsual)
+        {
+            _wakingLongerThanUsual = false;
+            OnPropertyChanged(nameof(WakingText));
+        }
+
+        var now = Clock.GetTimestamp();
+        if (!value)
+        {
+            _wakingEnded = now;
+            return;
+        }
+
+        // One wake can be several waits in a row (the readiness check, then a sign-in): the time counts from the first of them.
+        if (_wakingBegan is null || _wakingEnded is not { } ended || Clock.GetElapsedTime(ended, now) > SameWakeWithin)
+        {
+            _wakingBegan = now;
+        }
+
+        var left = WakingTexts.LongerThanUsualAfter - Clock.GetElapsedTime(_wakingBegan.Value, now);
+        if (left <= TimeSpan.Zero)
+        {
+            _wakingLongerThanUsual = true;
+            OnPropertyChanged(nameof(WakingText));
+            return;
+        }
+
+        _wakingClock = Clock.CreateTimer(
+            _ => Post(() =>
+            {
+                if (IsServerWaking && !_wakingLongerThanUsual)
+                {
+                    _wakingLongerThanUsual = true;
+                    OnPropertyChanged(nameof(WakingText));
+                }
+            }),
+            null,
+            left,
+            Timeout.InfiniteTimeSpan);
+    }
+
+    /// <summary>A wait that starts this soon after the last one ended belongs to the same wake.</summary>
+    private static readonly TimeSpan SameWakeWithin = TimeSpan.FromSeconds(10);
+
+    private long? _wakingBegan;
+    private long? _wakingEnded;
 
     /// <summary>Cancel is offered while an attempt is waiting on a waking server.</summary>
     public bool CanCancel => IsBusy && IsServerWaking;
@@ -251,7 +340,7 @@ public sealed partial class LoginViewModel : ViewModelBase
         }
     }
 
-    /// <summary>True while the pill says "Waking the server" because a call of this screen is slow (not because the readiness check said so).</summary>
+    /// <summary>True while the pill shows a wake (starting the server, waking the database, waiting) because a call of this screen is slow (not because the readiness check said so).</summary>
     private bool _pillWakingFromACall;
     private ServerReadiness _pillBeforeWaking = ServerReadiness.Checking;
 
@@ -259,7 +348,16 @@ public sealed partial class LoginViewModel : ViewModelBase
     {
         void Apply()
         {
+            var phase = _serverStatus?.Phase ?? WakePhase.ServerStarting;
+            var phaseChanged = phase != _phase;
+            _phase = phase;
             IsServerWaking = _serverStatus?.State == ServerState.Waking;
+            if (phaseChanged)
+            {
+                OnPropertyChanged(nameof(WakingText));
+                OnPropertyChanged(nameof(ServerText));
+            }
+
             if (IsServerWaking)
             {
                 if (!_pillWakingFromACall)
@@ -295,6 +393,8 @@ public sealed partial class LoginViewModel : ViewModelBase
     {
         if (disposing)
         {
+            _wakingClock?.Dispose();
+            _wakingClock = null;
             if (_serverStatus is not null)
             {
                 _serverStatus.Changed -= OnServerStatusChanged;
@@ -375,9 +475,15 @@ public sealed partial class LoginViewModel : ViewModelBase
     private async Task<ServerReadiness> ReadReadinessAsync(CancellationToken ct)
     {
         var result = await _api.GetReadinessAsync(ct).ConfigureAwait(true);
-        return !result.IsOk ? ServerReadiness.Unreachable
-            : result.Value.Database == Contracts.Health.DatabaseStates.Ready ? ServerReadiness.Ready
-            : ServerReadiness.Waking;
+        if (result.Problem is { } problem)
+        {
+            // A server that answered "still waking" (after the whole wait) or "resting" was reached: only no answer at all is "can't reach".
+            return problem.IsWaking ? ServerReadiness.Waking
+                : problem.IsResting ? ServerReadiness.Resting
+                : ServerReadiness.Unreachable;
+        }
+
+        return result.Value.Database == Contracts.Health.DatabaseStates.Ready ? ServerReadiness.Ready : ServerReadiness.Waking;
     }
 
     /// <summary>The problem code of an answer that was successful but not a usable sign-in.</summary>
@@ -397,8 +503,9 @@ public sealed partial class LoginViewModel : ViewModelBase
             "unauthorized" or "invalid_credentials" => (LoginProblem.WrongCredentials, "That username and password don't match. Check them and try again."),
             ProblemCodes.LockedOut => (LoginProblem.LockedOut, "Too many failed attempts. Wait a few minutes and try again."),
             ProblemCodes.RateLimited => (LoginProblem.LockedOut, "Too many attempts from this computer. Wait a minute and try again."),
-            ProblemCodes.DatabaseResting => (LoginProblem.DemoResting, "The demo is resting until the start of next month. It will be back then."),
-            ProblemCodes.DatabaseWaking => (LoginProblem.ServerWaking, "The server is still waking up. This can take up to a minute. Retry, or wait a moment."),
+            ProblemCodes.DatabaseResting => (LoginProblem.DemoResting, WakingTexts.Resting),
+            // Shown only after the attempt has waited its whole two minutes, which is longer than any wake measured: by then it is longer than usual.
+            ProblemCodes.DatabaseWaking => (LoginProblem.ServerWaking, "The server is still waking up, which is taking longer than usual. Retry to keep waiting."),
             ClientProblemCodes.Unreachable => (LoginProblem.ServerUnreachable, "Can't reach the server. Check your internet connection, then retry."),
             _ when problem.Status == 401 => (LoginProblem.WrongCredentials, "That username and password don't match. Check them and try again."),
             _ => (LoginProblem.Other, "Sign-in didn't work. Try again in a moment."),
@@ -410,6 +517,7 @@ public sealed partial class LoginViewModel : ViewModelBase
         {
             LoginProblem.ServerUnreachable => ServerReadiness.Unreachable,
             LoginProblem.ServerWaking => ServerReadiness.Waking,
+            LoginProblem.DemoResting => ServerReadiness.Resting,
             LoginProblem.WrongCredentials or LoginProblem.LockedOut => ServerReadiness.Ready,
             _ => Server,
         };

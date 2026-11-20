@@ -33,7 +33,7 @@
           <ScrollViewer x:Name="ItemsScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto" Focusable="False">
             <Grid>
               <!-- The items: a tinted icon tile, the problem in SemiBold, why it matters, and the one action. -->
-              <ItemsControl x:Name="ItemsList" ItemsSource="{Binding Items}" Focusable="False" AutomationProperties.Name="Needs attention">
+              <ItemsControl x:Name="ItemsList" ItemsSource="{Binding Items}" Focusable="False" AutomationProperties.Name="Needs attention" ItemContainerStyle="{DynamicResource ListItem.Named}">
                 <ItemsControl.ItemTemplate>
                   <DataTemplate DataType="{x:Type dashboard:AttentionItem}">
                     <Border x:Name="Divider" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="0,1,0,0" Padding="{DynamicResource Inset.H18V12}">

@@ -95,6 +95,9 @@ public sealed partial class AppointmentEditorViewModel : RecordEditorViewModel
 
     public new string SaveBusyText => IsNew ? "Booking..." : "Saving...";
 
+    /// <summary>An appointment is the donor's, and it is booked or rescheduled: "Appointment for 'Ana Li' rescheduled."</summary>
+    protected override string SavedMessage => $"Appointment for '{RecordName}' {(IsNew ? "booked" : "rescheduled")}.";
+
     /// <summary>The earliest date the date field accepts: today (a past date can't be booked).</summary>
     public DateOnly EarliestDate => LocalToday;
 

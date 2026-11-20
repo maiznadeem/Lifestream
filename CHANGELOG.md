@@ -2,6 +2,54 @@
 
 All notable changes to Lifestream are listed here. The section of a version is also the text of its release on the GitHub Releases page.
 
+## [2.1.5] - 2026-11-20
+
+Lifestream 2.1.5 makes waiting for the server shorter where it can be, and honest where it cannot.
+
+### Fixed
+
+- Signing in right after the window says "Server ready" is quick: the server prepares for the sign-in while the window is open.
+- When the server's database has just woken up, the app carries on within a couple of seconds, and it no longer gives up on a request the server is still working on only to start it again.
+- The sign-in window says what it is waiting for: "Step 1 of 2: starting the server", then "Step 2 of 2: the server is up and its database is waking". The notices say a wake takes about a minute and a half, and "longer than usual" appears only when it is.
+- When the demo database has used its free monthly allowance the app says so, and when it is back, instead of waiting for it.
+
+## [2.1.4] - 2026-11-20
+
+Lifestream 2.1.4 fixes the rest of what using the app end to end against a real server turned up in the shell, the forms and the dashboard.
+
+### Fixed
+
+- When the server cannot be reached the app says so ("Can't reach the server") in one notice, instead of two notices saying it is waking up.
+- A screen reader reads list items, table rows and cells by what they show, not as program text.
+- A date typed into a form is saved even when you press Save straight away, and an impossible date ("31 Feb") blocks the save with a short message.
+- Error and hint texts under a form field wrap instead of being cut off.
+- After a password reset, the way out of the Change password prompt is labelled "Sign out", which is what it does.
+- The record picker shows record codes (D-0041), like the rest of the app.
+- The sidebar counts update as soon as a record is added or changed.
+- The bell stays in the title bar at the smallest window size, and its description counts everything that needs attention.
+- The command palette says when nothing matches, and finds a blood group ("O-").
+- The dashboard and the Requests screen agree on whether stock can cover a request.
+- The demo account's Profile is read-only and says why.
+
+### Demo
+
+- The demo clinic keeps the rule the app enforces: no donor has two donations less than 90 days apart, and every open booking is on a day its donor may donate. The demo now has 100 donors.
+
+## [2.1.3] - 2026-11-20
+
+Lifestream 2.1.3 fixes more of what using the app end to end against a real server turned up, on the list screens.
+
+### Fixed
+
+- The "..." menu on a donor or patient shows its Delete item's text again.
+- Delete is offered only when it can work: for a donor with appointments or a patient with requests it is greyed out, with the reason under it.
+- The line "Select a record to see its details" is no longer drawn over a record that is open.
+- Fulfil request is offered only when stock covers the whole request; when it covers part, the panel says how many units are short.
+- A record opened from another screen opens on the tab that holds it, with its row selected and in view; after a save the list moves to that tab too.
+- Messages name what happened: "Appointment for Asher Devereux booked", "Request for Nadia Holloway cancelled".
+- A receipt that is only opened no longer says a duplicate copy was printed; the line appears on the printed copy.
+- The access list of a staff member says plainly that the Staff role has no access to staff accounts.
+
 ## [2.1.2] - 2026-11-20
 
 Lifestream 2.1.2 fixes defects found by using the app end to end against a real server.

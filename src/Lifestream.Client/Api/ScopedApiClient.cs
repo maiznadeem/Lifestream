@@ -6,7 +6,7 @@ namespace Lifestream.Client.Api;
 
 /// <summary>
 /// Wraps the API client the screens use (SHELL-07). Every call made inside an <see cref="OperationScope"/> gets a token that is linked to the
-/// scope's token and to a hard ceiling (the 120 s wake budget plus one attempt), whatever token the caller passed, so
+/// scope's token and to a hard ceiling (the 120 s wake budget plus a margin), whatever token the caller passed, so
 /// <see cref="OperationRunner.Cancel"/> reaches <see cref="HttpClient"/> and the request never reaches the server. The runner is told when
 /// the call starts and ends, which is what drives the "Waking up the server" state. A call outside any scope is a bug in a screen: with
 /// <see cref="Strict"/> set (the tests) it throws; otherwise it is passed through unchanged. Methods marked <see cref="OutsideOperationAttribute"/>
@@ -23,7 +23,7 @@ public class ScopedApiClient : DispatchProxy
     /// <summary>When true a call made outside any operation throws instead of being passed through.</summary>
     public bool Strict { get; private set; }
 
-    /// <summary>Wraps <paramref name="inner"/>. The ceiling is the longest any one call may take: the wake budget plus one attempt.</summary>
+    /// <summary>Wraps <paramref name="inner"/>. The ceiling is the longest any one call may take (<see cref="WakePolicy.Ceiling"/>).</summary>
     public static ILifestreamApiClient Wrap(ILifestreamApiClient inner, WakePolicy? policy = null, bool strict = false)
     {
         ArgumentNullException.ThrowIfNull(inner);
@@ -42,7 +42,7 @@ public class ScopedApiClient : DispatchProxy
 
         if (policy is not null)
         {
-            scoped._ceiling = policy.Budget + policy.AttemptTimeout;
+            scoped._ceiling = policy.Ceiling;
             scoped._clock = policy.Clock;
         }
 

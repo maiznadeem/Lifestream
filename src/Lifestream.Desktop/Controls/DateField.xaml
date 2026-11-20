@@ -16,7 +16,7 @@
   </UserControl.Style>
   <Grid>
     <!-- The text is always in the one app format (dd MMM yyyy); typing another format is refused with a message, never guessed. -->
-    <TextBox x:Name="Box" Padding="{DynamicResource Inset.L12R44}" MaxLength="11" LostFocus="OnBoxLostFocus" KeyDown="OnBoxKeyDown" AutomationProperties.HelpText="Format: 05 Mar 2022" />
+    <TextBox x:Name="Box" Padding="{DynamicResource Inset.L12R44}" MaxLength="11" LostFocus="OnBoxLostFocus" KeyDown="OnBoxKeyDown" TextChanged="OnBoxTextChanged" AutomationProperties.HelpText="Format: 05 Mar 2022" />
     <Button x:Name="OpenButton" Style="{DynamicResource Button.Icon}" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="{DynamicResource Inset.R4}" Click="OnOpenClick"
             AutomationProperties.Name="Open calendar" ToolTip="Open calendar">
       <controls:IconText Style="{DynamicResource Text.Icon}" Text="&#xE787;" />

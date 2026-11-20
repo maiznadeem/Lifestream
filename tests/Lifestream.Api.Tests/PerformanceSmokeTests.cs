@@ -151,7 +151,7 @@ public sealed class PerformanceSmokeTests(ScaleApiFixture fx) : IClassFixture<Sc
 
 /// <summary>
 /// DB-06: the same timings against the 1x demo dataset (the data the public demo holds after each daily reset: 270 receipts, 300
-/// appointments, 150 requests, 40 donors).
+/// appointments, 150 requests, 100 donors).
 /// </summary>
 [Trait("Category", "Perf")]
 [Collection("Scale datasets: one class at a time")] // the 100x databases load 100,000 rows and the perf tests time requests, so they do not overlap

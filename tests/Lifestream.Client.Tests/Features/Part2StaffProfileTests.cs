@@ -701,7 +701,7 @@ public sealed class Part2StaffProfileTests
     }
 
     [Fact]
-    public async Task ChangePasswordPrompt_RequiredMode_ExplainsWhy_AndOffersNotNow()
+    public async Task ChangePasswordPrompt_RequiredMode_ExplainsWhy_AndItsWayOutSaysSignOut()
     {
         var rig = new Part2Rig();
         rig.Forms.Script = dialog =>
@@ -709,7 +709,11 @@ public sealed class Part2StaffProfileTests
             var change = Assert.IsType<ChangePasswordDialogViewModel>(dialog);
             Assert.True(change.IsRequired);
             Assert.Contains("administrator reset your password", change.Explanation, StringComparison.Ordinal);
-            Assert.Equal("Not now", change.CancelText);
+            Assert.Equal("Sign out", change.CancelText); // was "Not now" until 2.1.3: the button signs the person out (ForcedPasswordChangeTests), so it says so (real-app walk 26)
+            Assert.Contains("Until you do, you can only sign out.", change.Explanation, StringComparison.Ordinal);
+            Assert.Equal("Temporary password", change.CurrentPasswordLabel);
+            change.PrimaryCommand.Execute(null);
+            Assert.Equal("Enter the temporary password you were given.", change.GetError(nameof(ChangePasswordDialogViewModel.CurrentPassword)));
             return change.CancelCommand.ExecuteAsync();
         };
         var prompt = new ChangePasswordPrompt(rig.Api, rig.Forms, rig.Toasts);

@@ -4,7 +4,7 @@ using System.Windows.Input;
 namespace Lifestream.Desktop.Controls;
 
 /// <summary>
-/// "Waking up the server, this can take up to a minute" with a Cancel, for every operation that is not a screen load (SHELL-07). The view
+/// "Waking up the server, this can take about a minute and a half" with a Cancel, for every operation that is not a screen load (SHELL-07). The view
 /// binds <see cref="IsActive"/> to the view model's waking flag and <see cref="CancelCommand"/> to the command that cancels the request.
 /// </summary>
 public partial class WakingNotice : System.Windows.Controls.UserControl

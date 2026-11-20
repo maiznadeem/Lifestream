@@ -173,13 +173,13 @@
                 </DataTemplate>
               </ItemsControl.ItemTemplate>
             </ItemsControl>
-            <ItemsControl ItemsSource="{x:Static auth:LoginViewModel.Compatibility}" Focusable="False">
+            <ItemsControl ItemsSource="{x:Static auth:LoginViewModel.Compatibility}" Focusable="False" ItemContainerStyle="{DynamicResource ListItem.Named}">
               <ItemsControl.ItemTemplate>
                 <DataTemplate>
                   <StackPanel Orientation="Horizontal" Margin="{DynamicResource Inset.V3}">
                     <TextBlock Text="{Binding Label}" Width="56" Padding="{DynamicResource Inset.R8}" TextAlignment="Right" VerticalAlignment="Center" FontSize="{DynamicResource FontSize.Caption}" FontWeight="SemiBold"
                                Foreground="{DynamicResource Brush.Ink2}" />
-                    <ItemsControl ItemsSource="{Binding Cells}" Focusable="False" Margin="{DynamicResource Inset.L6}">
+                    <ItemsControl ItemsSource="{Binding Cells}" Focusable="False" Margin="{DynamicResource Inset.L6}" ItemContainerStyle="{DynamicResource ListItem.Named}">
                       <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
                           <StackPanel Orientation="Horizontal" />

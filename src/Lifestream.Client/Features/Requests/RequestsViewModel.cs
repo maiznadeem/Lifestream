@@ -174,7 +174,8 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
 
     /// <summary>
     /// Why "Fulfil request" is disabled for the selected request, shown under the action row: none of its group is in stock ("No O− in stock. The request stays open
-    /// until stock arrives."). Null when it can be fulfilled, or while the stock is unknown (the server still checks).
+    /// until stock arrives."), or fewer units than it needs ("Only 2 of the 3 units of O− needed are in stock, 1 unit short. ..."): the server issues a request in
+    /// full or not at all. Null when it can be fulfilled, or while the stock is unknown (the server still checks).
     /// </summary>
     public string? FulfilHoldReason => Detail is { Status: RequestStatus.Pending } r ? DetailCover?.HoldReason(r.BloodType) : null;
 
@@ -407,13 +408,33 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
             RaiseViewChanged();
             OnFiltersChanged();
         }
-        else if (prefilter.RecordId is not null)
+
+        // A link to one request (a dashboard item, a patient's panel) keeps a tab selected: once the request is in the panel the screen moves to the tab that
+        // holds it (ShowViewOf). Not remembered: the next visit opens on the view the user chose.
+    }
+
+    /// <summary>
+    /// The tab that lists this request: a pending one under Open (or stays under "Due in 48 h" when that tab is open and the request is due by the day after
+    /// tomorrow, the server's rule), a fulfilled one under Fulfilled, a cancelled one under Cancelled. Moves there when another tab is open (a new request added
+    /// from "Fulfilled"; a request another screen opened).
+    /// </summary>
+    protected override bool ShowViewOf(RequestDetail request)
+    {
+        var holds = request.Status switch
         {
-            // A link to one request (a dashboard item, a patient's panel): every view, so the request is in the list whatever its status. Not remembered: the
-            // next visit opens on the view the user chose.
-            _view = null;
-            RaiseViewChanged();
+            RequestStatus.Pending => _view == RequestView.DueSoon && request.RequiredBy <= Today.AddDays(2) ? RequestView.DueSoon : RequestView.Open,
+            RequestStatus.Fulfilled => RequestView.Fulfilled,
+            _ => RequestView.Cancelled,
+        };
+        if (_view is null || _view == holds)
+        {
+            return false; // already listed (every request is shown, or its tab is open)
         }
+
+        _view = holds;
+        Page = 1;
+        RaiseViewChanged();
+        return true;
     }
 
     /// <summary>A prefilter; "request blood for this patient" (a <see cref="RelatedRecord"/> of kind Patient); or "fulfil this request" (kind Request).</summary>
@@ -454,8 +475,8 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
 
     /// <summary>
     /// Opens the fulfil step asked for by another screen as soon as it can run: the request's detail is in the panel, the stock behind its cover has been read
-    /// (the list's load brings it), and no operation of the screen keeps the step's command disabled. A request that is no longer pending, one with none of its
-    /// group in stock, or another selection, drops the wish.
+    /// (the list's load brings it), and no operation of the screen keeps the step's command disabled. A request that is no longer pending, one the stock does not
+    /// cover in full, or another selection, drops the wish.
     /// </summary>
     private void TryStartPendingFulfil()
     {
@@ -468,7 +489,7 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
 
         if (detail.Status != RequestStatus.Pending || FulfilHoldReason is not null)
         {
-            _fulfilWhenOpen = null; // closed, or nothing in stock to fulfil it with (the panel says why)
+            _fulfilWhenOpen = null; // closed, or the stock does not cover it (the panel says why)
             _fulfilSettled?.TrySetResult();
             return;
         }
@@ -568,6 +589,7 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
 
         var dialog = new FulfilRequestDialogViewModel(_api, request);
         bool done;
+        var shortWhenClosed = false;
         try
         {
             // In the side panel: the step closes itself after a fulfilled request, or on "Not now"; a refusal (not enough stock) keeps it open with the message.
@@ -577,6 +599,7 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
             Fulfilment = dialog;
             await closed.Task.ConfigureAwait(true);
             done = dialog.Completed;
+            shortWhenClosed = dialog.StockIsShort;
         }
         finally
         {
@@ -586,7 +609,14 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
 
         if (!done)
         {
-            return; // not now, or the API refused (insufficient stock): nothing changed, so the list is left as it was
+            // Not now, or the API refused (insufficient stock): nothing was issued. When the step found the stock short, the list's figure was out of date (that
+            // is how a short request got this far), so the list is read again: the Cover and the Fulfil action then say what the server will do.
+            if (shortWhenClosed)
+            {
+                await RefreshAfterActionAsync(request.Id).ConfigureAwait(true);
+            }
+
+            return;
         }
 
         var receiptId = dialog.Receipt?.Id;
@@ -623,7 +653,7 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
             return;
         }
 
-        Toasts.ShowForRecord(ToastKind.Success, "Request", request.PatientName, "cancelled");
+        Toasts.Show(ToastKind.Success, $"Request for '{request.PatientName}' cancelled.");
         await RefreshAfterActionAsync(request.Id).ConfigureAwait(true);
     }
 

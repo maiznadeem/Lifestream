@@ -99,7 +99,8 @@ public sealed class ShellBadgeTests
         shell.Attach(null, new ClinicClock());
         await shell.StartAsync();
         var items = shell.Items.ToDictionary(i => i.Title);
-        for (var i = 0; i < 200 && items["Requests"].Badge is null; i++)
+        // The three counts arrive one by one; wait for the last of them, not only for the Requests count (the Stock count could still be on its way).
+        for (var i = 0; i < 200 && (items["Appointments"].Badge is null || items["Requests"].Badge is null || items["Stock"].Badge is null); i++)
         {
             await Task.Delay(10, TestContext.Current.CancellationToken);
         }

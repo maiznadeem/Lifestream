@@ -206,8 +206,8 @@ try {
             if ($LASTEXITCODE -ne 0) { $created = $false; Fail "creating the $label fixture failed" }
             $info = $out | Select-Object -Last 1 | ConvertFrom-Json
             Write-Host "   $dbName : $($info.rows.Receipt) receipts, $($info.rows.Appointment) appointments, $($info.rows.Request) requests, $($info.rows.Donor) donors, $($info.rows.Patient) patients, $($info.rows.Staff) staff ($($info.server))"
-            # The generator is deterministic and exactly proportional (11 staff, 40 donors, 35 patients, 300 appointments, 150 requests, 270 receipts per 1x).
-            $sizeOk = ($info.rows.Receipt -eq 270 * $factor) -and ($info.rows.Appointment -eq 300 * $factor) -and ($info.rows.Request -eq 150 * $factor) -and ($info.rows.Donor -eq 40 * $factor) -and ($info.rows.Patient -eq 35 * $factor) -and ($info.rows.Staff -eq 11 * $factor)
+            # The generator is deterministic and exactly proportional (11 staff, 100 donors, 35 patients, 300 appointments, 150 requests, 270 receipts per 1x).
+            $sizeOk = ($info.rows.Receipt -eq 270 * $factor) -and ($info.rows.Appointment -eq 300 * $factor) -and ($info.rows.Request -eq 150 * $factor) -and ($info.rows.Donor -eq 100 * $factor) -and ($info.rows.Patient -eq 35 * $factor) -and ($info.rows.Staff -eq 11 * $factor)
             Add-Record 'fixture' "Fixture database $label" $label 'rows created by Lifestream.Perf.Seed' 1 $info.rows.Receipt 'receipts' "$($info.rows | ConvertTo-Json -Compress)" $sizeOk "$($info.server); admin session user is a generated administrator; index rebuild and full-scan statistics done"
 
             # The API: a separate process over this database, through the run launcher with --service when there is one.

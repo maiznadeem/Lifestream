@@ -53,7 +53,7 @@ public sealed class LoginWakingRenderedTests
         Assert.False(bannerBefore);
         Assert.True(bannerShown, "the waking banner must be visible");
         Assert.True(cancelShown, "Cancel must be visible while the sign-in waits on a waking server");
-        Assert.Contains("this can take up to a minute", bannerText, StringComparison.Ordinal);
+        Assert.Contains("this can take about a minute and a half", bannerText, StringComparison.Ordinal);
         Assert.False(afterCancel.IsBusy);
         Assert.True(afterCancel.Item3, $"Sign in is usable again after Cancel: canExecute={afterCancel.Item2}");
     }

@@ -235,6 +235,43 @@ public sealed partial class CommandPaletteViewModel : ObservableObject
     }
 
     /// <summary>Whether every word of the query appears in the row's title or subtitle.</summary>
+    /// <summary>
+    /// A blood group typed into the palette ("O-", "o−", "ab+") opens the lists on that group: the record search matches names and phone
+    /// numbers, and a blood group is the first thing a blood bank looks for.
+    /// </summary>
+    private IEnumerable<PaletteItem> BloodGroupCommands(string query)
+    {
+        if (!Domain.BloodTypeExtensions.TryParseDisplay(query.Replace('−', '-').Replace(" ", string.Empty, StringComparison.Ordinal), out var group))
+        {
+            yield break;
+        }
+
+        var name = Domain.BloodTypeExtensions.ToTypographic(group);
+        var screens = _shell.Items.Select(i => i.Title).ToHashSet();
+        foreach (var (screen, title, icon) in new[]
+        {
+            ("Donors", $"Donors with {name}", "Donor"), ("Patients", $"Patients with {name}", "Patient"),
+            ("Requests", $"Requests for {name}", "Request"), ("Stock", $"{name} bags in stock", "Stock"),
+        })
+        {
+            if (screens.Contains(screen))
+            {
+                yield return new("Blood group", title, null, icon, null, () => _shell.OpenByTitleAsync(screen, new ListPrefilter(BloodType: group)));
+            }
+        }
+    }
+
+    partial void OnIsSearchingChanged(bool value) => UpdateEmptyText(); // the search that found nothing has ended: say so
+
+    /// <summary>"Nothing matches" once the record search has ended with nothing to show; never while it is still running.</summary>
+    private void UpdateEmptyText()
+    {
+        var query = Query.Trim();
+        EmptyText = Items.Count == 0 && query.Length > 0 && !IsSearching
+            ? $"Nothing matches “{query}”. Try a name, a phone number, a blood group or a request number."
+            : null;
+    }
+
     public static bool Matches(PaletteItem item, string query)
     {
         ArgumentNullException.ThrowIfNull(item);
@@ -254,6 +291,7 @@ public sealed partial class CommandPaletteViewModel : ObservableObject
         }
         else
         {
+            rows.AddRange(BloodGroupCommands(query));
             rows.AddRange(records);
             rows.AddRange(Commands().Where(c => Matches(c, query)));
         }
@@ -265,6 +303,6 @@ public sealed partial class CommandPaletteViewModel : ObservableObject
         }
 
         SelectedIndex = Items.Count > 0 ? 0 : -1;
-        EmptyText = Items.Count == 0 && query.Length > 0 && !IsSearching ? $"Nothing matches “{query}”. Try a name, a phone number or a request number." : null;
+        UpdateEmptyText();
     }
 }

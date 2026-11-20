@@ -46,17 +46,21 @@ public abstract class FormViewModelBase : ViewModelBase, INotifyDataErrorInfo, I
 
     /// <summary>
     /// Called by an input control whose text is not a value at all (the date field holding "31 Feb 2030"): the field's bound value is still the
-    /// previous one, so the form must not be saved until the text is put right. The message is shown and blocks <see cref="ValidateAll"/> like
-    /// any other; null means the text is a value again.
+    /// previous one, so the form must not be saved until the text is put right. The message blocks <see cref="ValidateAll"/> like any other;
+    /// null means the text is a value again. With <paramref name="show"/> false (the person is still typing) the message is kept back until
+    /// the field is validated (on blur, or by a save), so every way of saving is blocked without a message appearing at each keystroke.
     /// </summary>
-    public void SetInputError(string field, string? message)
+    public void SetInputError(string field, string? message, bool show = true)
     {
         ArgumentNullException.ThrowIfNull(field);
         _inputErrors.Remove(field, out var old);
         if (message is not null)
         {
             _inputErrors[field] = message;
-            SetError(field, message);
+            if (show || GetError(field) == old)
+            {
+                SetError(field, show ? message : null);
+            }
         }
         else if (old is not null && GetError(field) == old)
         {
