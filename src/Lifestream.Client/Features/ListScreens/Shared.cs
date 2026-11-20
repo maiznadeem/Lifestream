@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Lifestream.Client.Api;
+using Lifestream.Client.Common;
 using Lifestream.Contracts;
 
 namespace Lifestream.Client.Features.ListScreens;
@@ -8,6 +9,12 @@ namespace Lifestream.Client.Features.ListScreens;
 public sealed record Choice<T>(string Display, T Value)
 {
     public override string ToString() => Display;
+}
+
+/// <summary>A list that asks its view to bring the selected row into view (a record another screen opened, or one just saved, may be far down the page).</summary>
+public interface IRevealsSelection
+{
+    event EventHandler? RevealSelectionRequested;
 }
 
 /// <summary>One label and value line of a detail pane.</summary>
@@ -27,7 +34,7 @@ public static class ProblemText
             ProblemCodes.Concurrency => $"{subject} was changed by someone else. Reload to see the latest version.",
             ProblemCodes.DemoForbidden => "The demo account can't make this change.",
             ProblemCodes.DatabaseWaking => "The server is still starting up. Try again in a moment.",
-            ProblemCodes.DatabaseResting => "The demo is resting until the start of next month.",
+            ProblemCodes.DatabaseResting => WakingTexts.Resting,
             ProblemCodes.RateLimited => "Too many requests. Wait a moment and try again.",
             ClientProblemCodes.Unreachable => "Can't reach the server. Check your internet connection and try again.",
             ClientProblemCodes.SessionExpired => "Your session has expired. Sign in again.",

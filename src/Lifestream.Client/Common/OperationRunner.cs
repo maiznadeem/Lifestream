@@ -346,6 +346,37 @@ public sealed class OutsideOperationAttribute(string reason) : Attribute
 /// <summary>The wording of the waking state, shared by every view.</summary>
 public static class WakingTexts
 {
-    /// <summary>Shown on a screen, an editor, a dialog or a pane while a call waits on a waking server.</summary>
-    public const string Operation = "Waking up the server, this can take up to a minute";
+    /// <summary>
+    /// Shown on a screen, an editor, a dialog or a pane while a call waits on a waking server. A wake from cold was measured at 77 to
+    /// 95 s (2026-11-20: the container 24 to 31 s, then the database 42 to 58 s, then the first use), so the notice says so; "up to
+    /// a minute", the text up to 2.1.2, was short of every full wake measured.
+    /// </summary>
+    public const string Operation = "Waking up the server, this can take about a minute and a half";
+
+    /// <summary>
+    /// The sign-in window's notice while nothing has answered yet: the container is starting (24 to 31 s measured), and the database
+    /// comes after it. The sign-in window is where a wake from cold is met, so it names the two steps.
+    /// </summary>
+    public const string SignIn = Operation + ". Step 1 of 2: starting the server.";
+
+    /// <summary>The sign-in window's notice once the server answers and says its database is waking (42 to 58 s measured).</summary>
+    public const string SignInDatabase = "Waking up the server. Step 2 of 2: the server is up and its database is waking, which takes about a minute.";
+
+    /// <summary>The sign-in window's notice for a slow call to a server that is up and has not said its database is waking.</summary>
+    public const string SignInWorking = "The server is up and working on its answer.";
+
+    /// <summary>The sign-in window's notice once the wake has lasted longer than <see cref="LongerThanUsualAfter"/>.</summary>
+    public const string SignInLate = "Still waking up the server. This is taking longer than usual; you can keep waiting.";
+
+    /// <summary>
+    /// From when a wake counts as longer than usual: a little past the longest one measured. Nothing says "longer than usual", and nothing
+    /// looks like a failure, before this.
+    /// </summary>
+    public static readonly TimeSpan LongerThanUsualAfter = TimeSpan.FromSeconds(100);
+
+    /// <summary>
+    /// Shown instead of any waking notice when the server says its database has used up the month's free allowance (Azure SQL error
+    /// 42119: the database stays paused until the 1st of the next month, 00:00 UTC). Waiting or retrying does not bring it back.
+    /// </summary>
+    public const string Resting = "The demo database has used its free monthly allowance and is back on the 1st.";
 }

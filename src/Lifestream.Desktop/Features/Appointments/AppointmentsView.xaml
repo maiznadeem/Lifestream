@@ -128,7 +128,7 @@
             <controls:LifestreamDataGrid x:Name="Grid" SelectedItem="{Binding SelectedItem, Mode=TwoWay}" SortCommand="{Binding SortCommand}"
                                          SortColumn="{Binding SortColumn, Mode=OneWay}" SortDescending="{Binding SortDescending, Mode=OneWay}"
                                          VirtualizingPanel.IsVirtualizingWhenGrouping="True"
-                                         lists:ListColumns.IsResponsive="True" lists:ListKeys.Panel="{Binding ElementName=Panel}"
+                                         lists:ListColumns.IsResponsive="True" lists:ListKeys.Panel="{Binding ElementName=Panel}" lists:ListReveal.IsEnabled="True"
                                          AutomationProperties.Name="Appointments">
               <DataGrid.GroupStyle>
                 <GroupStyle>

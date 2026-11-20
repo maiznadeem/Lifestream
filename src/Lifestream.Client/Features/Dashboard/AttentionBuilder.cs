@@ -1,5 +1,6 @@
 using System.Globalization;
 using Lifestream.Client.Features.ListScreens;
+using Lifestream.Client.Features.Requests;
 using Lifestream.Contracts.Appointments;
 using Lifestream.Contracts.Requests;
 using Lifestream.Contracts.Stock;
@@ -14,8 +15,10 @@ namespace Lifestream.Client.Features.Dashboard;
 public static class AttentionBuilder
 {
     /// <summary>
-    /// A request that no compatible stock can cover (at most two), the bags expiring within 7 days (and the request that could use them), the groups
-    /// below their minimum, and the next request that is due within 3 days and can be fulfilled.
+    /// A request that the stock cannot cover (at most two), the bags expiring within 7 days (and the request that could use them), the groups
+    /// below their minimum, and the next request that is due within 3 days and can be fulfilled. Whether stock covers a request is the Requests
+    /// screen's own rule (<see cref="RequestCoverage"/>: the units of the request's own group, the only ones Fulfil issues), in its words
+    /// ("1 short"), so the dashboard never offers or promises what that screen then refuses.
     /// </summary>
     /// <param name="stock">The stock by blood group.</param>
     /// <param name="requests">The open requests.</param>
@@ -31,16 +34,21 @@ public static class AttentionBuilder
         var items = new List<AttentionItem>();
         var day = DateOnly.FromDateTime(clock.GetLocalNow().DateTime);
         var available = stock.ToDictionary(i => i.BloodType, i => i.Available);
-        int Cover(BloodType patient) => available.Where(p => p.Key.CanGiveTo(patient)).Sum(p => p.Value);
+        RequestCoverage Cover(RequestListItem request) => RequestCoverage.Of(request.Units, available.GetValueOrDefault(request.BloodType));
         static string Day(DateOnly d) => d.ToString("ddd d MMM", CultureInfo.CurrentCulture);
+
+        // One wording for when a request is due, wherever it is mentioned: "today", "tomorrow", then the day.
+        string Due(DateOnly d) => d == day ? "today" : d == day.AddDays(1) ? "tomorrow" : d.ToString("ddd", CultureInfo.CurrentCulture);
         string Time(DateTime utc) => TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utc, DateTimeKind.Utc), clock.LocalTimeZone).ToString("HH:mm", CultureInfo.CurrentCulture);
 
-        foreach (var request in requests.Where(r => Cover(r.BloodType) < r.Units).OrderBy(r => r.RequiredBy).Take(2))
+        foreach (var request in requests.Where(r => Cover(r).Kind != CoverKind.CanFulfil).OrderBy(r => r.RequiredBy).Take(2))
         {
-            var cover = Cover(request.BloodType);
-            var title = available.GetValueOrDefault(request.BloodType) == 0 ? $"{request.BloodType.ToTypographic()} is out of stock" : $"Not enough blood for {request.PatientName}";
-            var detail = $"{request.PatientName} needs {Units(request.Units)} by {Day(request.RequiredBy)}" + (cover > 0 ? $"; {Units(cover)} can be given." : ".");
-            var donor = today.FirstOrDefault(a => a.Status != AppointmentStatus.Completed && a.DonorBloodType.CanGiveTo(request.BloodType));
+            var cover = Cover(request);
+            var group = request.BloodType.ToTypographic();
+            var title = cover.Kind == CoverKind.NoStock ? $"{group} is out of stock" : $"Not enough {group} for {request.PatientName}";
+            var detail = $"{request.PatientName} needs {Units(request.Units)} by {Day(request.RequiredBy)}"
+                + (cover.Kind == CoverKind.Partial ? $": {Units(cover.Available)} in stock, {cover.Text}." : ".");
+            var donor = today.FirstOrDefault(a => a.Status != AppointmentStatus.Completed && a.DonorBloodType == request.BloodType);
             if (donor is not null)
             {
                 detail += $" {donor.DonorName} ({donor.DonorBloodType.ToTypographic()}) comes in at {Time(donor.SlotStartUtc)}.";
@@ -55,7 +63,7 @@ public static class AttentionBuilder
             var user = requests.Where(r => item.BloodType.CanGiveTo(r.BloodType)).OrderBy(r => r.BloodType == item.BloodType ? 0 : 1).ThenBy(r => r.RequiredBy).FirstOrDefault();
             if (user is not null)
             {
-                detail = $"Use them for {user.PatientName}’s request ({Units(user.Units)}, due {user.RequiredBy.ToString("ddd", CultureInfo.CurrentCulture)}).";
+                detail = $"Use them for {user.PatientName}’s request ({Units(user.Units)}, due {Due(user.RequiredBy)}).";
             }
 
             items.Add(new(AttentionKind.Warning, "Clock", $"{item.ExpiringSoon} {item.BloodType.ToTypographic()} {(item.ExpiringSoon == 1 ? "bag expires" : "bags expire")} within 7 days", detail,
@@ -70,9 +78,9 @@ public static class AttentionBuilder
                 string.Join(", ", low.Select(i => $"{i.BloodType.ToTypographic()} {i.Available}")) + ".", "Open stock", "Stock", new ListPrefilter(StockView: StockFilter.BelowThreshold)));
         }
 
-        foreach (var request in requests.Where(r => Cover(r.BloodType) >= r.Units && r.RequiredBy <= day.AddDays(3)).OrderBy(r => r.RequiredBy).Take(1))
+        foreach (var request in requests.Where(r => Cover(r).Kind == CoverKind.CanFulfil && r.RequiredBy <= day.AddDays(3)).OrderBy(r => r.RequiredBy).Take(1))
         {
-            var due = request.RequiredBy == day ? "today" : request.RequiredBy == day.AddDays(1) ? "tomorrow" : $"on {request.RequiredBy.ToString("dddd", CultureInfo.CurrentCulture)}";
+            var due = request.RequiredBy == day || request.RequiredBy == day.AddDays(1) ? Due(request.RequiredBy) : $"on {request.RequiredBy.ToString("dddd", CultureInfo.CurrentCulture)}";
             var same = available.GetValueOrDefault(request.BloodType);
             items.Add(new(AttentionKind.Info, "Request", $"{request.PatientName}’s request is due {due}",
                 $"{request.BloodType.ToTypographic()}, {Units(request.Units)}. {same} {request.BloodType.ToTypographic()} {(same == 1 ? "bag is" : "bags are")} available.", "Fulfil", "Requests", new ListPrefilter(RecordId: request.Id)));

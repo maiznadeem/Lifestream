@@ -50,7 +50,8 @@
                     <Run Text="{Binding DesignationText, Mode=OneWay}" /><Run Text=", " /><Run Text="{Binding ShiftText, Mode=OneWay}" />
                   </TextBlock>
                   <StackPanel Orientation="Horizontal" feat:Edge.Top="{DynamicResource Space.12}">
-                    <Button Style="{DynamicResource Button.Secondary.Small}" Command="{Binding PickPhotoCommand}" AutomationProperties.Name="Change photo">
+                    <Button x:Name="ChangePhotoButton" Style="{DynamicResource Button.Secondary.Small}" Command="{Binding PickPhotoCommand}" AutomationProperties.Name="Change photo"
+                            Visibility="{Binding CanEditProfile, Converter={StaticResource BoolToVisibility}}">
                       <StackPanel Orientation="Horizontal">
                         <controls:Icon Kind="User" Size="14" VerticalAlignment="Center" feat:Edge.Right="{DynamicResource Space.8}" />
                         <TextBlock Text="Change photo" VerticalAlignment="Center" />
@@ -99,7 +100,7 @@
           </controls:Section>
 
           <!-- Your details: what you can change yourself. Save and Discard are in the bar at the foot of the page. -->
-          <controls:Section x:Name="DetailsSection" Header="Your details" Subtitle="Your name and phone show to the rest of the team." feat:Edge.Top="{DynamicResource Space.16}">
+          <controls:Section x:Name="DetailsSection" Header="Your details" Subtitle="{Binding DetailsSectionText}" feat:Edge.Top="{DynamicResource Space.16}">
             <StackPanel>
               <Grid>
                 <Grid.ColumnDefinitions>
@@ -108,10 +109,10 @@
                   <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
                 <controls:FormField Label="Full name" IsRequired="True" controls:FormFocus.FieldName="DisplayName" Error="{Binding [DisplayName]}">
-                  <TextBox x:Name="NameBox" Text="{Binding DisplayName, UpdateSourceTrigger=PropertyChanged}" MaxLength="100" AutomationProperties.Name="Full name" />
+                  <TextBox x:Name="NameBox" Text="{Binding DisplayName, UpdateSourceTrigger=PropertyChanged}" MaxLength="100" AutomationProperties.Name="Full name" IsReadOnly="{Binding IsProfileReadOnly}" />
                 </controls:FormField>
                 <controls:FormField Grid.Column="2" Label="Phone (optional)" Hint="Include the country code, for example +1 555 0175" controls:FormFocus.FieldName="Phone" Error="{Binding [Phone]}">
-                  <TextBox x:Name="PhoneBox" Text="{Binding Phone, UpdateSourceTrigger=PropertyChanged}" MaxLength="21" AutomationProperties.Name="Phone" />
+                  <TextBox x:Name="PhoneBox" Text="{Binding Phone, UpdateSourceTrigger=PropertyChanged}" MaxLength="21" AutomationProperties.Name="Phone" IsReadOnly="{Binding IsProfileReadOnly}" />
                 </controls:FormField>
               </Grid>
 
@@ -192,7 +193,7 @@
 
           <!-- Shortcuts: the keys of the main window, in two columns of key caps and what they do. -->
           <controls:Section x:Name="ShortcutsSection" Header="Shortcuts" Subtitle="These work anywhere in the main window." feat:Edge.Top="{DynamicResource Space.16}">
-            <ItemsControl x:Name="ShortcutList" ItemsSource="{Binding Shortcuts}" Focusable="False" AutomationProperties.Name="Keyboard shortcuts">
+            <ItemsControl x:Name="ShortcutList" ItemsSource="{Binding Shortcuts}" Focusable="False" AutomationProperties.Name="Keyboard shortcuts" ItemContainerStyle="{DynamicResource ListItem.Named}">
               <ItemsControl.ItemsPanel>
                 <ItemsPanelTemplate>
                   <UniformGrid Columns="2" />

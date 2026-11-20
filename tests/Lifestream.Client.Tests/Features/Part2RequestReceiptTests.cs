@@ -98,7 +98,7 @@ public sealed class Part2RequestReceiptTests
         Assert.True(vm.IsFulfilling);
         Assert.Empty(rig.Forms.Shown); // no dialog
         await fulfil.PendingStock;
-        Assert.Equal("In stock: 8 units of A-", fulfil.StockText);
+        Assert.Equal("In stock: 8 units of A−", fulfil.StockText); // the group as every badge writes it, with a true minus sign
         Assert.False(fulfil.StockIsShort);
         await fulfil.PrimaryCommand.ExecuteAsync();
         await run;
@@ -116,18 +116,26 @@ public sealed class Part2RequestReceiptTests
     [Fact]
     public async Task FulfilRequest_InsufficientStock_ShowsMessage_NoChange()
     {
+        // The stock covers the request when the step opens (a short request is not offered Fulfil at all); someone else then issues two of the three bags, so
+        // the server refuses the fulfil.
         var (rig, vm) = await LoadedRequestsAsync(Samples2.RequestRow(7, 3, "Omar Haddad"));
-        rig.Fake.On("GetStockAsync", ApiResult<IReadOnlyList<StockItem>>.Ok([new StockItem(BloodType.ANeg, 1, 0, 10, true)]));
+        rig.Fake.On("GetStockAsync", ApiResult<IReadOnlyList<StockItem>>.Ok([new StockItem(BloodType.ANeg, 3, 0, 10, true)]));
         rig.Fake.On("FulfilRequestAsync", FakeApiClient.Fail<ReceiptDetail>(409, ProblemCodes.InsufficientStock, "Not enough stock"));
         await SelectFirstAsync(vm);
         var run = vm.FulfilCommand.ExecuteAsync();
         var shown = Assert.IsType<FulfilRequestDialogViewModel>(vm.Fulfilment);
         await shown.PendingStock;
-        Assert.True(shown.StockIsShort); // the warning is there before the click
+        Assert.False(shown.StockIsShort);
+        rig.Fake.On("GetStockAsync", ApiResult<IReadOnlyList<StockItem>>.Ok([new StockItem(BloodType.ANeg, 1, 0, 10, true)]));
         await shown.PrimaryCommand.ExecuteAsync();
+        await shown.PendingStock;
 
         Assert.False(shown.Completed);
-        Assert.Equal("There isn't enough A- blood in stock: this request needs 3 units. Nothing was issued.", shown.FormError);
+        Assert.Equal("Nothing was issued: there is no longer enough A− in stock for the 3 units this request needs.", shown.FormError);
+        Assert.True(shown.StockIsShort); // the step has read the stock again: one unit of the three
+        Assert.Equal("In stock: 1 unit of A−", shown.StockText);
+        Assert.Equal("Only 1 of the 3 units of A− needed is in stock, 2 units short. A request is issued in full, so it stays open until more arrives.", shown.ShortReason);
+        Assert.False(shown.PrimaryCommand.CanExecute(null)); // and no longer offers a fulfil the server would refuse again
         Assert.False(shown.IsBusy);
         Assert.Same(shown, vm.Fulfilment); // the step stays open with the message
         Assert.False(run.IsCompleted);
@@ -135,8 +143,29 @@ public sealed class Part2RequestReceiptTests
         await run;
         Assert.Null(vm.Fulfilment);
         Assert.Empty(rig.Toasts.Toasts); // no success toast
-        Assert.Equal(1, rig.Recorder.CountOf("GetRequestsAsync")); // the list was not touched
+        // Nothing was issued, but the stock is not what the list showed: the list is read once more, so that its Cover and the panel's Fulfil say what the
+        // server will do (before 2.1.3 the list was left as it was, still offering the fulfil that had just been refused).
+        Assert.Equal(2, rig.Recorder.CountOf("GetRequestsAsync"));
+        Assert.Equal(CoverKind.Partial, vm.DetailCover?.Kind);
+        Assert.False(vm.FulfilCommand.CanExecute(null));
         Assert.Empty(rig.Viewer.Opened);
+    }
+
+    [Fact]
+    public async Task FulfilRequest_NotNow_OnARequestTheStockCovers_LeavesTheListAsItWas()
+    {
+        var (rig, vm) = await LoadedRequestsAsync(Samples2.RequestRow(7, 3, "Omar Haddad"));
+        rig.Fake.On("GetStockAsync", ApiResult<IReadOnlyList<StockItem>>.Ok([new StockItem(BloodType.ANeg, 3, 0, 10, true)]));
+        await SelectFirstAsync(vm);
+        var run = vm.FulfilCommand.ExecuteAsync();
+        var shown = Assert.IsType<FulfilRequestDialogViewModel>(vm.Fulfilment);
+        await shown.PendingStock;
+        await shown.CancelCommand.ExecuteAsync();
+        await run;
+
+        Assert.Null(vm.Fulfilment);
+        Assert.Equal(1, rig.Recorder.CountOf("GetRequestsAsync")); // nothing changed and nothing was learnt: the list was not touched
+        Assert.Equal(0, rig.Recorder.CountOf("FulfilRequestAsync"));
     }
 
     [Fact]

@@ -901,7 +901,7 @@ be, on every screen (while loading the content stays hidden, not collapsed, so a
 
 | Property | Meaning |
 |---|---|
-| `State` | `Loading` shows the skeleton; `Waking` shows the skeleton and a "Waking up the server, this can take up to a minute" banner with Retry and Cancel; `Empty` and `Error` show those states; `Ready` shows the content |
+| `State` | `Loading` shows the skeleton; `Waking` shows the skeleton and a "Waking up the server, this can take about a minute and a half" banner with Retry and Cancel; `Empty` and `Error` show those states; `Ready` shows the content |
 | `SkeletonKind` | `List`, `Detail`, `Dashboard`, `StockTiles`, `Picker` or `Profile` |
 | `SkeletonColumns` | For `List`: the same column spec as the grid ("2*,100,90,*,130") so the bars line up |
 | `ErrorMessage`, `ErrorDetail`, `RetryCommand`, `CancelCommand` | Error state and waking banner |
@@ -1325,7 +1325,7 @@ Always go through `LoadSurface`; never hand-roll a spinner or a "no data" text.
 | State | What the user sees | Copy rule |
 |---|---|---|
 | Loading | `Skeleton` shaped like the rows, in place (use `SkeletonColumns` equal to the grid columns) | No text |
-| Waking | Skeleton plus the "Waking up the server, this can take up to a minute" banner with Retry and Cancel (from the third second of a slow call) | Fixed text |
+| Waking | Skeleton plus the "Waking up the server, this can take about a minute and a half" banner with Retry and Cancel (from the third second of a slow call) | Fixed text |
 | Empty, no records | `EmptyState` | "No donors yet." plus an action ("Add donor") |
 | Empty, filtered | `EmptyState` | "No donors match these filters." plus "Clear filters" |
 | Error | `ErrorState` with Retry and Details | Plain cause and what to do ("Can't reach the server. Check your connection, then retry."); the exception text only behind Details |

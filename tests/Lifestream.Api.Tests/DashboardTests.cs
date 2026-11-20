@@ -21,7 +21,7 @@ public sealed class Scale10Database : SqlServerDatabaseFixture
     }
 }
 
-/// <summary>The API over 10x data: 400 donors, 350 patients, 3,000 appointments, 1,500 requests, 2,700 receipts, 110 staff.</summary>
+/// <summary>The API over 10x data: 1,000 donors, 350 patients, 3,000 appointments, 1,500 requests, 2,700 receipts, 110 staff.</summary>
 public sealed class Scale10ApiFixture : ApiFixture
 {
     protected override SqlServerDatabaseFixture CreateDb() => new Scale10Database();

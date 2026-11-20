@@ -77,7 +77,15 @@
                       <TextBlock Style="{DynamicResource Text.Body}" Text="{Binding Title}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
                       <TextBlock Style="{DynamicResource Text.Caption}" Text="{Binding Subtitle}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
                     </StackPanel>
-                    <TextBlock Grid.Column="1" Style="{DynamicResource Text.Caption}" Text="{Binding Id, StringFormat=#{0}}" VerticalAlignment="Center" Margin="{DynamicResource Inset.L12}" />
+                    <TextBlock x:Name="OptionCode" Grid.Column="1" Style="{DynamicResource Text.Caption}" VerticalAlignment="Center" Margin="{DynamicResource Inset.L12}">
+                      <TextBlock.Text>
+                        <!-- The record's code as every list shows it (D-0041), from the picker's kind. -->
+                        <MultiBinding Converter="{x:Static controls:RecordCodeConverter.Instance}">
+                          <Binding Path="Id" />
+                          <Binding Path="DataContext" RelativeSource="{RelativeSource AncestorType=ListBox}" />
+                        </MultiBinding>
+                      </TextBlock.Text>
+                    </TextBlock>
                   </Grid>
                 </DataTemplate>
               </ListBox.ItemTemplate>

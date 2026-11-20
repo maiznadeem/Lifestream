@@ -81,6 +81,59 @@ public sealed class Part2AppointmentTests
     }
 
     [Fact]
+    public async Task BookingForALaterDay_FromTheTodayTab_MovesToTheUpcomingTab_WhereItIs_AndTheToastSaysBooked()
+    {
+        // Real-app walk, items 20 and 22: after booking for tomorrow the page stayed on "Today 0" with "No appointments match", and the toast said
+        // "Appointment 'Walk Tester' added".
+        var rig = RigWithSlots();
+        var donor = Samples2.RestedDonor();
+        rig.Fake.On("GetDonorAsync", ApiResult<DonorDetail>.Ok(donor));
+        rig.Fake.On("GetAppointmentsAsync", ApiResult<PagedResult<AppointmentListItem>>.Ok(Samples2.AppointmentPage()));
+        var vm = rig.Appointments();
+        await vm.LoadAsync();
+        Assert.True(vm.IsTodayView);
+
+        vm.AddCommand.Execute(null);
+        var form = Assert.IsType<AppointmentEditorViewModel>(vm.Editor);
+        form.DonorOption = new RecordOption(donor.Id, donor.Name, null);
+        await form.PendingDonor;
+        form.Date = Day; // 10 Mar 2027: a later day than the rig's today
+        await Settled(form);
+        form.SelectedSlot = form.Slots.Single(s => s.Display == "10:30");
+        var booked = Samples2.Appointment(5, donor.Id, donor.Name);
+        rig.Fake.On("BookAppointmentAsync", ApiResult<AppointmentDetail>.Ok(booked));
+        rig.Fake.On("GetAppointmentAsync", ApiResult<AppointmentDetail>.Ok(booked));
+        rig.Fake.On("GetAppointmentsAsync", ApiResult<PagedResult<AppointmentListItem>>.Ok(Samples2.AppointmentPage(Samples2.AppointmentRow(5, donor.Id, donor.Name))));
+        var reveals = 0;
+        vm.RevealSelectionRequested += (_, _) => reveals++;
+
+        await form.SaveCommand.ExecuteAsync();
+        await vm.PendingRefresh;
+
+        Assert.True(vm.IsUpcomingView);
+        Assert.Equal(AppointmentView.Upcoming, rig.Recorder.LastArg<AppointmentQuery>("GetAppointmentsAsync").View);
+        Assert.Equal(5, vm.SelectedItem?.Id); // the new appointment's row, selected
+        Assert.Equal(1, reveals); // and the list is asked to bring it into view
+        Assert.Contains(rig.Toasts.Toasts, t => t.Message == "Appointment for 'Omar Haddad' booked.");
+    }
+
+    [Fact]
+    public async Task Reschedule_TheToastSaysRescheduled_AndWhoseAppointment()
+    {
+        var rig = RigWithSlots();
+        rig.Fake.On("RescheduleAppointmentAsync", ApiResult<AppointmentDetail>.Ok(Samples2.Appointment()));
+        var form = rig.RescheduleForm(Samples2.Appointment());
+        await Settled(form);
+        form.Date = Day.AddDays(3);
+        await Settled(form);
+
+        await form.SaveCommand.ExecuteAsync();
+
+        // Real-app walk, item 22: "Appointment 'Walk Tester' saved" for a reschedule.
+        Assert.Equal("Appointment for 'Ayşe Nur Öztürk-Abdulrahman' rescheduled.", Assert.Single(rig.Toasts.Toasts).Message);
+    }
+
+    [Fact]
     public async Task BookAppointment_ValidForm_SendsTheChosenSlotInstant_FakeApi()
     {
         var rig = RigWithSlots();

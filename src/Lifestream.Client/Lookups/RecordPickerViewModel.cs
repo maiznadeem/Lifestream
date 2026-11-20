@@ -139,8 +139,18 @@ public sealed partial class RecordPickerViewModel : ObservableObject, IDisposabl
 
     public bool HasNoMatches => !IsSearching && SearchError is null && Options.Count == 0 && SearchText.Length > 0;
 
-    /// <summary>"Ayşe Öztürk · #1123 · A+" style chip text: name, id and the key detail.</summary>
-    public string SummaryText => Selected is null ? string.Empty : $"{Selected.Title} · #{Selected.Id}" + (string.IsNullOrEmpty(Selected.Subtitle) ? string.Empty : $" · {Selected.Subtitle}");
+    /// <summary>"Ayşe Öztürk · D-1123 · A+" style chip text: name, record code and the key detail.</summary>
+    public string SummaryText => Selected is null ? string.Empty : $"{Selected.Title} · {CodeOf(Selected.Id)}" + (string.IsNullOrEmpty(Selected.Subtitle) ? string.Empty : $" · {Selected.Subtitle}");
+
+    /// <summary>The record's code as every list and panel shows it ("D-0041", "P-0002"), never a bare "#41".</summary>
+    public string CodeOf(int id) => Kind switch
+    {
+        RecordKind.Donor => Features.Receipts.RecordCodes.Donor(id),
+        RecordKind.Patient => Features.Receipts.RecordCodes.Patient(id),
+        RecordKind.Staff => Features.Receipts.RecordCodes.Staff(id),
+        RecordKind.Appointment => Features.Receipts.RecordCodes.Appointment(id),
+        _ => Features.Receipts.RecordCodes.Request(id),
+    };
 
     partial void OnSearchTextChanged(string value)
     {

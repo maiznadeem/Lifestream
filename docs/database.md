@@ -227,7 +227,7 @@ erDiagram
 
 All data comes from code, never from a backup.
 
-- `DemoDataGenerator.Generate(nowUtc)`: 11 staff (one is the public `demo` account), 40 donors, 35 patients, 300 appointments,
+- `DemoDataGenerator.Generate(nowUtc)`: 11 staff (one is the public `demo` account), 100 donors, 35 patients, 300 appointments,
   150 requests, 270 receipts and their bags, as the clinic stands at that instant (the moment of the reset). Dates are relative to its UTC date,
   and the same instant always gives the same rows. `Generate(today)` is the clinic at 00:00 UTC of that date.
   - **The demo has a today.** Yesterday, today and tomorrow (UTC) each hold a clinic day: one appointment in every hour the clinic is open
@@ -239,7 +239,14 @@ All data comes from code, never from a backup.
     appointment is pending. Nothing is done before its time and no row carries a time after the reset, in any time zone. What can happen is the
     reverse: an appointment whose time passes after the reset stays pending until someone records it, as in the app itself.
   - The last appointment of today and of tomorrow belongs to a donor who has never donated; today's and tomorrow's other donors last donated more
-    than 90 days ago, so they are eligible. The totals do not depend on the time of day (`SeedSizes`): today's rows come out of the same counts.
+    than 90 days ago (a few of them not yet either), so they are eligible. The totals do not depend on the time of day (`SeedSizes`): today's rows
+    come out of the same counts.
+  - **Nobody breaks the donation rule** (`Eligibility.MinDaysBetweenDonations`, and the age limits). A donor's donations are at least that many days
+    apart; every appointment, whatever became of it, is on a day the donor was (or will be) eligible as the API judges a booking; and a donor's open
+    bookings keep the same distance from each other. That is why the demo has 100 donors: a year of 180 donations needs more donors than the 40
+    it had (each would have had to give blood more often than the rule allows). A donor has one open booking at most, from the day they are
+    eligible again, so the bookings after tomorrow are densest in the coming month and reach about four months ahead. No generated appointment
+    carries an override reason.
   Names come from two lists in `SyntheticVocabulary`, phones are in the fictional range `+1-555-0100` to `+1-555-0199`,
   addresses are on "Sample" streets in "Demoville". Every staff row holds the hash of a random password that was thrown away, so no
   seeded account has a known password; the demo login issues a token without one.

@@ -112,13 +112,13 @@
         </StackPanel>
       </Button>
       <ScrollViewer x:Name="NavScroll" VerticalScrollBarVisibility="Auto" Focusable="False">
-        <ItemsControl x:Name="NavGroups" ItemsSource="{Binding Groups}" Focusable="False">
+        <ItemsControl x:Name="NavGroups" ItemsSource="{Binding Groups}" Focusable="False" ItemContainerStyle="{DynamicResource ListItem.Named}">
           <ItemsControl.ItemTemplate>
             <DataTemplate>
               <StackPanel>
                 <TextBlock x:Name="GroupHeader" Style="{DynamicResource NavGroupHeader}" Text="{Binding Title}" TextWrapping="NoWrap" />
                 <Rectangle x:Name="RailSeparator" Height="1" Width="24" Fill="{DynamicResource Brush.Stroke2}" Margin="{DynamicResource Inset.V6}" Visibility="Collapsed" />
-                <ItemsControl ItemsSource="{Binding Items}" Focusable="False">
+                <ItemsControl ItemsSource="{Binding Items}" Focusable="False" ItemContainerStyle="{DynamicResource ListItem.Named}">
                   <ItemsControl.ItemTemplate>
                     <DataTemplate>
                       <RadioButton x:Name="Item" Style="{DynamicResource NavItem}" Content="{Binding Title}"

@@ -188,7 +188,7 @@ public sealed class ComponentModelTests
 
         Assert.Equal(1123, picker.SelectedId);
         Assert.True(picker.HasSelection);
-        Assert.Equal("Ayşe Öztürk · #1123 · A+ · 02 Jan 1990", picker.SummaryText);
+        Assert.Equal("Ayşe Öztürk · D-1123 · A+ · 02 Jan 1990", picker.SummaryText); // "#1123" until 2.1.3: the picker now shows the record code every list shows (real-app walk 22)
         Assert.False(picker.ShowSearch);
 
         await picker.ChangeCommand.ExecuteAsync();

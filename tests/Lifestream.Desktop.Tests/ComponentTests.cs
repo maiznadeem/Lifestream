@@ -256,7 +256,7 @@ public sealed class ComponentTests
 
         Assert.True(emptyVisible);
         Assert.Equal("Clear filters", actionText);
-        Assert.Equal("Waking up the server, this can take up to a minute", wakingText);
+        Assert.Equal(Lifestream.Client.Common.WakingTexts.Operation, wakingText); // the screens' banner and the shared notice are one text
         Assert.Contains("Cancel", wakingButtons);
         Assert.Contains("Retry", wakingButtons);
     }
@@ -594,7 +594,7 @@ public sealed class ComponentTests
 
         Assert.True(skeletonWhileSearching);
         Assert.Equal(["Ayşe Öztürk", "Ayşegül Can"], optionTitles);
-        Assert.Equal("Ayşe Öztürk · #1123 · A+ · 02 Jan 1990", chipText);
+        Assert.Equal("Ayşe Öztürk · D-1123 · A+ · 02 Jan 1990", chipText); // "#1123" until 2.1.3 (real-app walk 22)
         Assert.Equal(1123, selectedId);
         Assert.Equal(1123, boundId);
         Assert.True(noSearchBoxAfter);
@@ -652,7 +652,7 @@ public sealed class ComponentTests
             return (host.All<TextBlock>().First(t => t.IsVisible && t.Text.StartsWith("Jane", StringComparison.Ordinal)).Text, host.All<TextBox>().Count(t => t.IsVisible));
         });
 
-        Assert.Equal("Jane Q. Public · #42 · B-", chip);
+        Assert.Equal("Jane Q. Public · D-0042 · B-", chip); // "#42" until 2.1.3 (real-app walk 22)
         Assert.Equal(0, searchBoxes);
     }
 
