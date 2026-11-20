@@ -3,9 +3,9 @@
 Builds the solution once and runs every test of the four test projects in about two minutes.
 
 .DESCRIPTION
-Domain and Client run first, then the Desktop tests, with Api beside all of them: Api starts with Domain and Client
-(it is the longest single piece and nothing in it can be shortened by more processes), the Desktop shards start when
-Domain and Client have ended.
+All four projects start together: Api is the longest single piece, and one Domain test runs 'dotnet build' twice,
+which takes 3 to 40 seconds depending on what else the machine does, so nothing waits for anything else. With
+-DomainAndClientFirst, Api and the Desktop tests start when Domain and Client have ended.
 
 Desktop: a WPF test process runs its tests one at a time (WPF cannot build views on several threads of one process),
 so the Desktop test executable is started several times, each process (a shard) running its own share of the test
@@ -19,6 +19,16 @@ classes are shared over that many processes, each class with its own database as
 the 100x database stay in one process ("apiTogether": they share one template per process), and the classes that
 must run alone ("apiLast": the one-at-a-time collection) run in a process of their own once the other Api processes
 have ended, so SQL Server is as quiet for them as in an unsharded run. That only pays when processors are idle.
+
+The Api tests keep the backup of their 100x template database on the server between runs and say in the summary
+whether this run restored it or had to build it (a change in the generator, the seed code, the migrations or the day).
+
+The real-window tests of the Desktop project need the compositor drawing. While it runs, this script asks Windows to
+keep the display on; it never sends input (no pointer movement, no keystrokes), so it cannot turn on a display that is
+already off. Those tests then skip at once ("display is off: real-window checks not run"), as they do when the session
+is locked. The summary says on a line of its own how many real-window checks did not run, and names them with the
+reason; because a release gate must not lose those checks silently, the run then ends FAILED unless
+-AllowRealWindowSkip says that a run without them is acceptable.
 
 Every test process runs with DOTNET_TieredPGO=0: the same tests and results for about 30 % less processor time (the
 JIT does not instrument code for a profile that a process this short never gets to use).
@@ -47,15 +57,21 @@ param(
     # How many classes one Api process runs at once (0: the allowed processors shared over the Api processes, so that SQL Server
     # gets as many classes at once as in an unsharded run; more than that and tests with a time window fail).
     [int]$ApiThreads = 0,
-    # How many worker processes the walk over every command starts (0: the test's own default, one per two processors, which is
-    # meant for a walk that has the processors to itself; here the other shards and Api run beside it).
-    [int]$Walkers = 6,
+    # How many worker processes the walk over every command starts. 0: 8 when at least three quarters of the allowed processors are
+    # free, else 6 (a worker is 40 % processor time and 60 % fixed waits; more of them finish sooner but starve the rest when
+    # processors are short). The test's own default, one per two processors, is meant for a walk that runs by itself.
+    [int]$Walkers = 0,
     # dotnet.exe of the SDK to build with (default: tools/dotnet beside the worktrees folder when it exists, else PATH).
     [string]$Dotnet,
     # Where logs and result files go (default: a folder per checkout under the temp folder).
     [string]$Out,
     # The class durations file (default: tools/test-fast.durations.json of the checkout, else the one beside this script).
     [string]$Durations,
+    # Accept a run in which real-window checks did not run (display off, session locked): they are still counted and named, but the
+    # run is not failed for them.
+    [switch]$AllowRealWindowSkip,
+    # Run Domain and Client by themselves first; Api and the Desktop tests start when both have ended.
+    [switch]$DomainAndClientFirst,
     # Skip the build (the Release output must be up to date).
     [switch]$NoBuild,
     # Write the class durations measured by this run to the durations file of the checkout.
@@ -226,6 +242,7 @@ function Read-Results([string]$file) {
                 Class = $test.GetAttribute('type')
                 Collection = $collectionName
                 Result = $test.GetAttribute('result')
+                Reason = $(if ($test.SelectSingleNode('reason')) { $test.SelectSingleNode('reason').InnerText.Trim() } else { '' })
                 Seconds = [double]::Parse($test.GetAttribute('time'), [System.Globalization.CultureInfo]::InvariantCulture)
             })
         }
@@ -236,7 +253,9 @@ function Read-Results([string]$file) {
 
 # The listing prints a test's name as it is; the result file writes the quotes inside it with a backslash. One form for comparing the two.
 function Get-NameKey([string]$name) {
-    return ($name -replace '\\', '')
+    # A character outside ASCII (the infinity sign of a theory row) reaches this script through the listing's console output in whatever
+    # encoding the caller's console has, so it can arrive as another character or as several: any run of them counts as one.
+    return (($name -replace '\\', '') -replace '[^\x20-\x7E]+', '?')
 }
 
 function New-Shard([string]$note) {
@@ -285,7 +304,7 @@ function Get-DesktopPlan($cases, $known, [string[]]$alone, $split, [int]$count) 
         $seconds = Get-Seconds @($class) $known
         $short = $class.Substring($class.LastIndexOf('.') + 1)
         if ($alone -contains $class) {
-            $shard = New-Shard "$short (starts its own worker processes)"
+            $shard = New-Shard "$short (starts its own worker processes: $script:WalkerCount)"
             [void]$shard.Classes.Add($class)
             $shard.Seconds = $seconds
             [void]$plan.Add($shard)
@@ -406,9 +425,11 @@ if (Test-Path -LiteralPath $Durations) {
 }
 
 $self = [System.Diagnostics.Process]::GetCurrentProcess()
-$before = @{ Affinity = $self.ProcessorAffinity; Priority = $self.PriorityClass; Root = $env:DOTNET_ROOT; HostPath = $env:DOTNET_HOST_PATH; Pgo = $env:DOTNET_TieredPGO; Reuse = $env:MSBUILDDISABLENODEREUSE; Server = $env:DOTNET_CLI_USE_MSBUILD_SERVER }
+$before = @{ Affinity = $self.ProcessorAffinity; Priority = $self.PriorityClass; Root = $env:DOTNET_ROOT; HostPath = $env:DOTNET_HOST_PATH; Pgo = $env:DOTNET_TieredPGO; TemplateLog = $env:LIFESTREAM_SCALE_TEMPLATE_LOG; Reuse = $env:MSBUILDDISABLENODEREUSE; Server = $env:DOTNET_CLI_USE_MSBUILD_SERVER }
 $mutex = New-Object System.Threading.Mutex($false, 'Global\Lifestream.TestFast')
 $held = $false
+$displayHeld = $false
+$poolBefore = $null
 $exitCode = 1
 try {
     try {
@@ -435,13 +456,15 @@ try {
     }
 
     [void](New-Item -ItemType Directory -Force -Path $Out)
+    $templateLog = Join-Path $Out 'scale-template.log'
+    $env:LIFESTREAM_SCALE_TEMPLATE_LOG = $templateLog # each Api process says here whether it restored the kept 100x template or built it
     Write-Host "test-fast: $($script:Checkout)"
     Write-Host "  logs and results: $Out"
 
     # What else is using the allowed processors: this run needs most of them, and tests that wait real time fail when they get too little.
+    $busy = 0.0
+    $allowed = 0
     try {
-        $busy = 0.0
-        $allowed = 0
         foreach ($sample in (Get-Counter '\Processor(*)\% Processor Time' -SampleInterval 1 -MaxSamples 1).CounterSamples) {
             if ($sample.InstanceName -match '^\d+$' -and (($Affinity -shr [int]$sample.InstanceName) -band 1)) {
                 $busy += $sample.CookedValue / 100
@@ -459,6 +482,33 @@ try {
     catch {
         Write-Verbose "The processor load could not be read: $_"
     }
+
+    if ($Walkers -le 0) {
+        $Walkers = 6
+        if ($allowed -gt 0 -and ($allowed - $busy) -ge 0.75 * $allowed) {
+            $Walkers = 8
+        }
+    }
+
+    # The display is kept on while this runs (the request ends in the finally block below). Nothing here sends input.
+    try {
+        Add-Type -Namespace LifestreamTestFast -Name Power -MemberDefinition '[System.Runtime.InteropServices.DllImport("kernel32.dll")] public static extern uint SetThreadExecutionState(uint flags);'
+        [void][LifestreamTestFast.Power]::SetThreadExecutionState([uint32]2147483651) # continuous + system required + display required
+        $displayHeld = $true
+    }
+    catch {
+        Write-Verbose "Windows could not be asked to keep the display on: $_"
+    }
+
+    # Every child's output is read through a pipe, and each pending read holds a thread of the thread pool. With some twenty children started
+    # together the pool's ready threads (one per processor) run out, and a child that prints more than its pipe holds (the Client tests log
+    # about 15 KB from a real server) then waits in its own write until the pool grows: measured, a child printing 68 KB beside 30 silent
+    # ones took 24.9 s to exit instead of 0.1 s, and a Client run stayed 51 s after its last test. Enough ready threads for every read.
+    $workers = 0
+    $ports = 0
+    [System.Threading.ThreadPool]::GetMinThreads([ref]$workers, [ref]$ports)
+    $poolBefore = @($workers, $ports)
+    [void][System.Threading.ThreadPool]::SetMinThreads([Math]::Max($workers, 256), [Math]::Max($ports, 256))
 
     $buildSeconds = 0.0
     if (-not $NoBuild) {
@@ -494,7 +544,7 @@ try {
         return $run
     }
 
-    # Domain and Client run while the unsharded Api and Desktop executables list what they hold: the reference everything below is checked against.
+    # Domain and Client start while the unsharded executables list what they hold: the reference everything below is checked against.
     $first = @((Start-Tests 'Domain' 'Domain'), (Start-Tests 'Client' 'Client'))
     $listings = [ordered]@{
         Domain = Start-Listing $projects['Domain'] 'tests'
@@ -524,6 +574,7 @@ try {
     $classes = @{ Desktop = @($casesOf.Keys | Sort-Object); Api = @(Read-Listing $listings['ApiClasses'] | Sort-Object -Unique) }
 
     # Every listed Desktop test case and every Api class is given to exactly one shard, before anything runs.
+    $script:WalkerCount = $Walkers
     $plans = @{
         Desktop = @(Get-DesktopPlan $cases $known $settings.ownShard $split $Shards)
         Api = @(Get-ApiPlan $classes.Api $known $settings.apiTogether $settings.apiLast $ApiShards)
@@ -580,6 +631,10 @@ try {
         }
     }
 
+    if ($DomainAndClientFirst) {
+        Wait-Runs $first $TimeoutMinutes
+    }
+
     $second = New-Object System.Collections.ArrayList
     $apiLast = $null
     if ($ApiThreads -le 0) {
@@ -606,8 +661,6 @@ try {
         }
     }
 
-    Wait-Runs $first $TimeoutMinutes
-
     for ($i = 0; $i -lt $plans.Desktop.Count; $i++) {
         $shard = $plans.Desktop[$i]
         $label = "Desktop-{0:D2}" -f ($i + 1)
@@ -616,16 +669,13 @@ try {
         # Each shard writes its render captures to its own folder, so two processes never write one file.
         $captures = Join-Path $Out ("captures\$label")
         [void](New-Item -ItemType Directory -Force -Path $captures)
-        $environment = @{ LIFESTREAM_CAPTURE_DIR = $captures }
-        if ($Walkers -gt 0) {
-            $environment['LIFESTREAM_WAKING_WALKERS'] = $Walkers
-        }
+        $environment = @{ LIFESTREAM_CAPTURE_DIR = $captures; LIFESTREAM_WAKING_WALKERS = $Walkers }
 
         [void]$second.Add((Start-Tests $label 'Desktop' $filter $environment $shard.Note))
     }
 
     while ($true) {
-        $running = Update-Runs $second $TimeoutMinutes
+        $running = (Update-Runs $second $TimeoutMinutes) -bor (Update-Runs $first $TimeoutMinutes)
         if ($apiLast -and @($second | Where-Object { $_.Project -eq 'Api' -and $_.Watch.IsRunning }).Count -eq 0) {
             # The run-alone classes start when no other Api process is left: SQL Server is theirs, as it is at the end of an unsharded run.
             [void]$second.Add((Start-Tests $apiLast.Label 'Api' $apiLast.Filter @{} $apiLast.Note))
@@ -640,6 +690,7 @@ try {
         Start-Sleep -Milliseconds 100
     }
 
+    Complete-Runs $first
     Complete-Runs $second
     $tests.Stop()
 
@@ -647,6 +698,7 @@ try {
     $problems = New-Object System.Collections.ArrayList
     $rows = New-Object System.Collections.ArrayList
     $failed = New-Object System.Collections.ArrayList
+    $realWindowSkips = New-Object System.Collections.ArrayList
     $ran = @{}
     $seenIn = @{ Domain = @{}; Client = @{}; Api = @{}; Desktop = @{} }
     $collections = @{}
@@ -660,6 +712,10 @@ try {
             $counts[$test.Result]++
             if ($test.Result -eq 'Fail') {
                 [void]$failed.Add("$($run.Name): $(Get-NameKey $test.Name)")
+            }
+            elseif ($test.Result -eq 'Skip' -and ($test.Reason -like 'display is off: real-window checks not run*' -or $test.Reason -like 'Real-window tests *')) {
+                # What the real-window tests skip with when they cannot see a window (RealWindow.Unavailable in the Desktop tests).
+                [void]$realWindowSkips.Add([pscustomobject]@{ Name = (Get-NameKey $test.Name); Reason = $test.Reason })
             }
 
             if (-not $seenIn[$run.Project].ContainsKey($test.Class)) { $seenIn[$run.Project][$test.Class] = @{} }
@@ -773,6 +829,25 @@ try {
     Write-Host ''
     Write-Host ('Wall time by project: ' + (($projects.Keys | ForEach-Object { '{0} {1:N1} s' -f $_, ($span[$_].To - $span[$_].From).TotalSeconds }) -join ', ') + " (Api in $($plans.Api.Count) processes, Desktop in $($plans.Desktop.Count)).")
     Write-Host ('Counts: ' + (($projects.Keys | ForEach-Object { "$_ $([int]$ran[$_]) of $($expected[$_])" }) -join ', ') + "; $($classes.Api.Count) Api and $($classes.Desktop.Count) Desktop classes, each in one shard" + $(if ($split.Count -gt 0) { " ($($split.Count) Desktop classes split over shards of their own)" } else { '' }) + '.')
+    if (Test-Path -LiteralPath $templateLog) {
+        Get-Content -LiteralPath $templateLog | Sort-Object -Unique | ForEach-Object { Write-Host "Api $_" }
+    }
+
+    Write-Host "Real-window checks not run: $($realWindowSkips.Count)"
+    if ($realWindowSkips.Count -gt 0) {
+        foreach ($group in ($realWindowSkips | Group-Object Reason)) {
+            Write-Host "  why: $($group.Name)"
+            $group.Group | Sort-Object Name | ForEach-Object { Write-Host "    $($_.Name)" }
+        }
+
+        if ($AllowRealWindowSkip) {
+            Write-Host '  accepted for this run (-AllowRealWindowSkip)'
+        }
+        else {
+            [void]$problems.Add("$($realWindowSkips.Count) real-window check(s) did not run ($((@($realWindowSkips | ForEach-Object { $_.Reason } | Sort-Object -Unique)) -join '; ')): they are named above. A release gate must not lose them: run again with the display on and the session unlocked, or pass -AllowRealWindowSkip to accept a run without them.")
+        }
+    }
+
     if ($failed.Count -gt 0) {
         Write-Host ''
         Write-Host "Failed tests ($($failed.Count)):"
@@ -806,8 +881,17 @@ finally {
     $env:DOTNET_ROOT = $before.Root
     $env:DOTNET_HOST_PATH = $before.HostPath
     $env:DOTNET_TieredPGO = $before.Pgo
+    $env:LIFESTREAM_SCALE_TEMPLATE_LOG = $before.TemplateLog
     $env:MSBUILDDISABLENODEREUSE = $before.Reuse
     $env:DOTNET_CLI_USE_MSBUILD_SERVER = $before.Server
+    if ($displayHeld) {
+        [void][LifestreamTestFast.Power]::SetThreadExecutionState([uint32]2147483648) # continuous only: the display may turn off again
+    }
+
+    if ($poolBefore) {
+        [void][System.Threading.ThreadPool]::SetMinThreads($poolBefore[0], $poolBefore[1])
+    }
+
     if ($held) {
         $mutex.ReleaseMutex()
     }

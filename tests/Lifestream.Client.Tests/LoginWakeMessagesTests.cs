@@ -47,12 +47,34 @@ public sealed class LoginWakeMessagesTests
         Assert.True(condition(), "the awaited state was not reached");
     }
 
+    /// <summary>
+    /// Waits until an operation that was just started has reached the clock (the handler puts its waking timer and its budget there before its
+    /// first attempt) or is over already (an answer that needs no waiting), and gives its first attempt the same real moment a step used to
+    /// give. Before this, the first step of the clock went ahead of an operation that had not started counting yet.
+    /// </summary>
+    private static async Task StartedAsync(ManualTimeProvider clock, Task operation)
+    {
+        await WaitForAsync(() => clock.TimersWaiting > 0 || operation.IsCompleted);
+        await Task.Delay(1);
+    }
+
+    /// <summary>
+    /// Steps the manual clock half a second at a time. Everything under test waits on that clock (the handler's waking timer, its retry delays
+    /// and its budget, the view model's "longer than usual" timer), so it can only move when a step fires one of the clock's timers. After such a
+    /// step the code that was woken gets the same real moment to run as before, ahead of the next step; a step that fired nothing woke nothing,
+    /// and is not waited after. (The pause used to follow every step: hundreds of them, about 15 ms each on Windows, for a clock that had mostly
+    /// nothing due: 31 s for this class.)
+    /// </summary>
     private static async Task PassAsync(ManualTimeProvider clock, double seconds)
     {
         for (var i = 0; i < seconds * 2; i++)
         {
+            var fired = clock.TimersFired;
             clock.Advance(TimeSpan.FromMilliseconds(500));
-            await Task.Delay(1);
+            if (clock.TimersFired != fired)
+            {
+                await Task.Delay(1);
+            }
         }
     }
 
@@ -143,6 +165,7 @@ public sealed class LoginWakeMessagesTests
         var vm = screen.Vm;
 
         var signIn = vm.SignInCommand.ExecuteAsync();
+        await StartedAsync(screen.Clock, signIn);
         for (var i = 0; i < 300 && !signIn.IsCompleted; i++)
         {
             await PassAsync(screen.Clock, 1);
@@ -166,6 +189,7 @@ public sealed class LoginWakeMessagesTests
         using var screen = Open(handler);
 
         var check = screen.Vm.CheckServerAsync();
+        await StartedAsync(screen.Clock, check);
         for (var i = 0; i < 300 && !check.IsCompleted; i++)
         {
             await PassAsync(screen.Clock, 1);
@@ -188,6 +212,7 @@ public sealed class LoginWakeMessagesTests
         clock = screen.Clock;
 
         var check = screen.Vm.CheckServerAsync();
+        await StartedAsync(screen.Clock, check);
         await PassAsync(screen.Clock, 95);
         Assert.Equal(WakingTexts.SignInDatabase, screen.Vm.WakingText);
 
@@ -211,6 +236,7 @@ public sealed class LoginWakeMessagesTests
         using var screen = Open(handler);
 
         var check = screen.Vm.CheckServerAsync();
+        await StartedAsync(screen.Clock, check);
         for (var i = 0; i < 400 && !check.IsCompleted; i++)
         {
             await PassAsync(screen.Clock, 1);
@@ -232,6 +258,7 @@ public sealed class LoginWakeMessagesTests
         using var screen = Open(handler);
 
         var check = screen.Vm.CheckServerAsync();
+        await StartedAsync(screen.Clock, check);
         for (var i = 0; i < 300 && !check.IsCompleted; i++)
         {
             await PassAsync(screen.Clock, 1);
@@ -254,6 +281,7 @@ public sealed class LoginWakeMessagesTests
         clock = screen.Clock;
 
         var check = screen.Vm.CheckServerAsync();
+        await StartedAsync(screen.Clock, check);
         await PassAsync(screen.Clock, 59.5);
         Assert.False(check.IsCompleted);
         Assert.Equal("Waking the database", screen.Vm.ServerText);
