@@ -164,13 +164,25 @@ public sealed partial class LoginViewModel : ViewModelBase
     {
         try
         {
-            Server = await Operations.RunAsync(ReadReadinessAsync, ct).ConfigureAwait(true);
+            // A server that still says "waking" when the two-minute wait ends is asked once more, so a wake that runs long ends in
+            // "Server ready" by itself. Then the pill is left on "waking": asking for ever would knock on a database that is not coming back.
+            for (var round = 1; ; round++)
+            {
+                Server = await Operations.RunAsync(ReadReadinessAsync, ct).ConfigureAwait(true);
+                if (Server != ServerReadiness.Waking || round >= ReadinessRounds)
+                {
+                    break;
+                }
+            }
         }
         catch (Exception ex) when (ex is HttpRequestException or TimeoutException or IOException or OperationCanceledException or System.Text.Json.JsonException)
         {
             Server = ServerReadiness.Unreachable;
         }
     }
+
+    /// <summary>How many two-minute waits the readiness check of the sign-in window makes while the server keeps answering "still waking".</summary>
+    public const int ReadinessRounds = 2;
 
     /// <summary>True from the third second of a slow or waking call until it ends: the server is starting from cold (SHELL-07).</summary>
     [ObservableProperty]
@@ -204,22 +216,46 @@ public sealed partial class LoginViewModel : ViewModelBase
             OnPropertyChanged(nameof(WakingText));
         }
 
-        if (value)
+        var now = Clock.GetTimestamp();
+        if (!value)
         {
-            _wakingClock = Clock.CreateTimer(
-                _ => Post(() =>
-                {
-                    if (IsServerWaking && !_wakingLongerThanUsual)
-                    {
-                        _wakingLongerThanUsual = true;
-                        OnPropertyChanged(nameof(WakingText));
-                    }
-                }),
-                null,
-                WakingTexts.LongerThanUsualAfter,
-                Timeout.InfiniteTimeSpan);
+            _wakingEnded = now;
+            return;
         }
+
+        // One wake can be several waits in a row (the readiness check, then a sign-in): the time counts from the first of them.
+        if (_wakingBegan is null || _wakingEnded is not { } ended || Clock.GetElapsedTime(ended, now) > SameWakeWithin)
+        {
+            _wakingBegan = now;
+        }
+
+        var left = WakingTexts.LongerThanUsualAfter - Clock.GetElapsedTime(_wakingBegan.Value, now);
+        if (left <= TimeSpan.Zero)
+        {
+            _wakingLongerThanUsual = true;
+            OnPropertyChanged(nameof(WakingText));
+            return;
+        }
+
+        _wakingClock = Clock.CreateTimer(
+            _ => Post(() =>
+            {
+                if (IsServerWaking && !_wakingLongerThanUsual)
+                {
+                    _wakingLongerThanUsual = true;
+                    OnPropertyChanged(nameof(WakingText));
+                }
+            }),
+            null,
+            left,
+            Timeout.InfiniteTimeSpan);
     }
+
+    /// <summary>A wait that starts this soon after the last one ended belongs to the same wake.</summary>
+    private static readonly TimeSpan SameWakeWithin = TimeSpan.FromSeconds(10);
+
+    private long? _wakingBegan;
+    private long? _wakingEnded;
 
     /// <summary>Cancel is offered while an attempt is waiting on a waking server.</summary>
     public bool CanCancel => IsBusy && IsServerWaking;

@@ -177,6 +177,55 @@ public sealed class LoginWakeMessagesTests
     }
 
     [Fact]
+    public async Task AWakeThatOutlastsTheTwoMinuteWait_IsAskedAboutOnceMore_AndEndsInServerReadyByItself()
+    {
+        // The database is back after 150 s: longer than any wake measured, and longer than one wait of the readiness check.
+        ManualTimeProvider? clock = null;
+        var handler = new ScriptedHandler((_, _) => clock!.Elapsed < TimeSpan.FromSeconds(150)
+            ? ScriptedHandler.Json(HttpStatusCode.ServiceUnavailable, $$"""{"title":"waking","status":503,"code":"{{ProblemCodes.DatabaseWaking}}","database":"waking"}""", ("Retry-After", "2"))
+            : ScriptedHandler.Json(HttpStatusCode.OK, """{"database":"ready"}"""));
+        using var screen = Open(handler);
+        clock = screen.Clock;
+
+        var check = screen.Vm.CheckServerAsync();
+        await PassAsync(screen.Clock, 95);
+        Assert.Equal(WakingTexts.SignInDatabase, screen.Vm.WakingText);
+
+        await PassAsync(screen.Clock, 40); // 135 s: the first wait is over, the second has shown "waking" again
+        Assert.False(check.IsCompleted);
+        Assert.True(screen.Vm.IsServerWaking);
+        Assert.Equal(WakingTexts.SignInLate, screen.Vm.WakingText); // one wake, counted from its start: longer than usual by now
+        Assert.Equal("Waking the database", screen.Vm.ServerText);
+        Assert.NotEqual(ServerReadiness.Unreachable, screen.Vm.Server);
+
+        await PassAsync(screen.Clock, 20);
+        await check.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal("Server ready", screen.Vm.ServerText);
+        Assert.False(screen.Vm.IsServerWaking);
+    }
+
+    [Fact]
+    public async Task ADatabaseThatNeverComesBack_IsAskedAboutForTwoWaits_ThenLeftAlone()
+    {
+        var handler = new ScriptedHandler((_, _) => ScriptedHandler.Json(HttpStatusCode.ServiceUnavailable, $$"""{"title":"waking","status":503,"code":"{{ProblemCodes.DatabaseWaking}}","database":"waking"}""", ("Retry-After", "2")));
+        using var screen = Open(handler);
+
+        var check = screen.Vm.CheckServerAsync();
+        for (var i = 0; i < 400 && !check.IsCompleted; i++)
+        {
+            await PassAsync(screen.Clock, 1);
+        }
+
+        await check.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.InRange(screen.Clock.Elapsed.TotalSeconds, 230, 245);
+        Assert.Equal("Waking the database", screen.Vm.ServerText);
+        var asked = handler.Requests.Count;
+
+        await PassAsync(screen.Clock, 120);
+        Assert.Equal(asked, handler.Requests.Count); // nothing keeps knocking on a database that is not coming back
+    }
+
+    [Fact]
     public async Task Pill_WhenNoAnswerComesAtAll_StillSaysCantReach()
     {
         var handler = new ScriptedHandler((_, _) => throw new HttpRequestException("no route"));
