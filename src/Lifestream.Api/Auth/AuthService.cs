@@ -42,10 +42,7 @@ public sealed class AuthService(
     public async Task<TokenResponse> LoginAsync(LoginRequest request, CancellationToken ct)
     {
         var username = request.Username.Trim();
-        var user = await db.Staff.AsNoTracking()
-            .Where(s => s.Username == username)
-            .Select(s => new { s.Id, s.DisplayName, s.Role, s.IsDemo, s.Credential!.PasswordHash, s.Credential.MustChangePassword })
-            .FirstOrDefaultAsync(ct);
+        var user = await FindLoginAsync(username, ct);
 
         // A name with no password account (and the demo account) takes exactly the same steps: the same counting in the database, then a
         // hash check against a dummy hash, then the same answer.
@@ -65,6 +62,57 @@ public sealed class AuthService(
 
         await ClearFailuresAsync(user.Id, ct);
         return await IssueAsync(user.Id, user.DisplayName, user.Role, isDemo: false, user.MustChangePassword, ct);
+    }
+
+    /// <summary>What a password sign-in reads about the name it was given.</summary>
+    private sealed class LoginRow
+    {
+        public int Id { get; init; }
+        public required string DisplayName { get; init; }
+        public Role Role { get; init; }
+        public bool IsDemo { get; init; }
+        public required string PasswordHash { get; init; }
+        public bool MustChangePassword { get; init; }
+    }
+
+    /// <summary>The demo account as a demo sign-in and a demo refresh read it.</summary>
+    private sealed class DemoRow
+    {
+        public int Id { get; init; }
+        public required string DisplayName { get; init; }
+    }
+
+    // One definition of each sign-in read, used by the sign-in and by the warm-up, so the warm-up always compiles the query a sign-in runs.
+    private Task<LoginRow?> FindLoginAsync(string username, CancellationToken ct) =>
+        db.Staff.AsNoTracking()
+            .Where(s => s.Username == username)
+            .Select(s => new LoginRow { Id = s.Id, DisplayName = s.DisplayName, Role = s.Role, IsDemo = s.IsDemo, PasswordHash = s.Credential!.PasswordHash, MustChangePassword = s.Credential.MustChangePassword })
+            .FirstOrDefaultAsync(ct);
+
+    private Task<DemoRow?> FindDemoAsync(CancellationToken ct) =>
+        db.Staff.Where(s => s.IsDemo).Select(s => new DemoRow { Id = s.Id, DisplayName = s.DisplayName }).FirstOrDefaultAsync(ct);
+
+    /// <summary>
+    /// Runs the reads of a sign-in once, for <see cref="SignInWarmUp"/>: the look-up of a name (the empty name, which no account has and
+    /// the sign-in endpoint refuses) and of the demo account. It reads only: no guess is counted and nobody is signed in.
+    /// </summary>
+    public async Task WarmUpAsync(CancellationToken ct)
+    {
+        await FindLoginAsync(string.Empty, ct);
+        if (demoSettings.Value.Enabled)
+        {
+            await FindDemoAsync(ct);
+        }
+    }
+
+    /// <summary>
+    /// Runs the token code once (make, sign, check), which needs no database, so the first sign-in does not pay for loading it. The
+    /// tokens are for no staff row (id 0), never leave this method and are discarded.
+    /// </summary>
+    public void WarmUpTokens()
+    {
+        var response = DemoTokens(0, "warm-up", Guid.NewGuid());
+        _ = tokens.ReadDemoRefreshAsync(response.RefreshToken).GetAwaiter().GetResult();
     }
 
     /// <summary>
@@ -128,8 +176,7 @@ public sealed class AuthService(
             throw ApiException.NotFound("The demo");
         }
 
-        var demo = await db.Staff.Where(s => s.IsDemo).Select(s => new { s.Id, s.DisplayName }).FirstOrDefaultAsync(ct)
-            ?? throw ApiException.Conflict("The demo account is not available yet.");
+        var demo = await FindDemoAsync(ct) ?? throw ApiException.Conflict("The demo account is not available yet.");
         return DemoTokens(demo.Id, demo.DisplayName, Guid.NewGuid());
     }
 
@@ -151,7 +198,7 @@ public sealed class AuthService(
                 throw Unauthorized();
             }
 
-            var demo = await db.Staff.Where(s => s.IsDemo).Select(s => new { s.Id, s.DisplayName }).FirstOrDefaultAsync(ct) ?? throw Unauthorized();
+            var demo = await FindDemoAsync(ct) ?? throw Unauthorized();
             return DemoTokens(demo.Id, demo.DisplayName, demoRefresh.Family);
         }
 
@@ -281,14 +328,29 @@ public static class RevocationCache
         }
 
         var now = time.GetUtcNow().UtcDateTime;
-        var session = await db.RefreshTokens
-            .Where(t => t.FamilyId == family && t.RevokedAtUtc == null && t.ExpiresAtUtc > now)
-            .Select(t => new { t.Staff!.Role, t.Staff.Credential!.MustChangePassword })
-            .FirstOrDefaultAsync(ct);
-        var state = new SessionState(session is not null, session?.Role ?? Role.Staff, session?.MustChangePassword ?? false);
+        var state = await ReadAsync(db, family, now, ct);
         cache.Set(key, state, TimeSpan.FromSeconds(20));
         return state;
     }
+
+    private sealed class SessionRow
+    {
+        public Role Role { get; init; }
+        public bool MustChangePassword { get; init; }
+    }
+
+    private static async Task<SessionState> ReadAsync(LifestreamDbContext db, Guid family, DateTime now, CancellationToken ct)
+    {
+        var session = await db.RefreshTokens
+            .Where(t => t.FamilyId == family && t.RevokedAtUtc == null && t.ExpiresAtUtc > now)
+            .Select(t => new SessionRow { Role = t.Staff!.Role, MustChangePassword = t.Staff.Credential!.MustChangePassword })
+            .FirstOrDefaultAsync(ct);
+        return new SessionState(session is not null, session?.Role ?? Role.Staff, session?.MustChangePassword ?? false);
+    }
+
+    /// <summary>Runs the session read once, for a session that does not exist (for <see cref="SignInWarmUp"/>). Nothing is remembered.</summary>
+    public static Task WarmUpAsync(LifestreamDbContext db, TimeProvider time, CancellationToken ct) =>
+        ReadAsync(db, Guid.Empty, time.GetUtcNow().UtcDateTime, ct);
 }
 
 /// <summary>The password hashing the login runs (PBKDF2), behind an interface so a test can count the work.</summary>

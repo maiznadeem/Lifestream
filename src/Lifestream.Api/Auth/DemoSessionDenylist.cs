@@ -37,7 +37,7 @@ public sealed class DemoSessionDenylist(LifestreamDbContext db, TimeProvider tim
         var now = Now;
         await PurgeAsync(now, ct);
         var key = FamilyKey(family);
-        var revoked = await db.DemoRevocations.AsNoTracking().AnyAsync(r => r.Key == key && r.ExpiresAtUtc > now, ct);
+        var revoked = await AnyAsync(key, now, ct);
         if (!revoked)
         {
             // Only "not revoked" is remembered: a revoked session is asked about rarely, and a revocation clears the memory at once.
@@ -45,6 +45,23 @@ public sealed class DemoSessionDenylist(LifestreamDbContext db, TimeProvider tim
         }
 
         return revoked;
+    }
+
+    private Task<bool> AnyAsync(string key, DateTime now, CancellationToken ct) =>
+        db.DemoRevocations.AsNoTracking().AnyAsync(r => r.Key == key && r.ExpiresAtUtc > now, ct);
+
+    private Task<List<string>> ExpiredAsync(DateTime now, CancellationToken ct) =>
+        db.DemoRevocations.Where(r => r.ExpiresAtUtc <= now).OrderBy(r => r.ExpiresAtUtc).Select(r => r.Key).Take(PurgeBatch).ToListAsync(ct);
+
+    /// <summary>
+    /// Runs the two reads of <see cref="IsRevokedAsync"/> once, for a session that does not exist (for <see cref="Lifestream.Api.Infrastructure.SignInWarmUp"/>).
+    /// It deletes nothing, remembers nothing and leaves the purge to the first real request.
+    /// </summary>
+    public async Task WarmUpAsync(CancellationToken ct)
+    {
+        var now = Now;
+        await ExpiredAsync(now, ct);
+        await AnyAsync(FamilyKey(Guid.Empty), now, ct);
     }
 
     /// <summary>Ends the session until <paramref name="until"/> (when its last token would have expired anyway).</summary>
@@ -110,7 +127,7 @@ public sealed class DemoSessionDenylist(LifestreamDbContext db, TimeProvider tim
             return;
         }
 
-        var expired = await db.DemoRevocations.Where(r => r.ExpiresAtUtc <= now).OrderBy(r => r.ExpiresAtUtc).Select(r => r.Key).Take(PurgeBatch).ToListAsync(ct);
+        var expired = await ExpiredAsync(now, ct);
         if (expired.Count > 0)
         {
             await db.DemoRevocations.Where(r => expired.Contains(r.Key) && r.ExpiresAtUtc <= now).ExecuteDeleteAsync(ct);

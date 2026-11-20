@@ -103,6 +103,7 @@ public static class ApiSetup
             options.AddInterceptors(new SearchPlanInterceptor());
         });
         services.AddSingleton<IDatabaseProbe, SqlDatabaseProbe>();
+        services.AddSingleton<SignInWarmUp>();
 
         services.AddSingleton<TokenService>();
         services.AddSingleton<DemoDirectory>();
@@ -198,16 +199,31 @@ public static class ApiSetup
 
     public static WebApplication MapLifestreamEndpoints(this WebApplication app)
     {
-        // Liveness only: never opens a database connection (the startup probe and the client warm-up call it).
-        app.MapGet(ApiRoutes.Healthz, () => Results.Ok(new { status = "healthy" }));
+        // Liveness only: never opens a database connection (the startup probe, the client's first call and any stray request reach it,
+        // and each wake of the free database uses its monthly allowance). Once its first answer has gone out (which is what lets the
+        // platform send traffic) the part of the warm-up that needs no database starts: the EF model and the token code, in the two to
+        // three seconds the platform then takes to pass on the request that woke the container. The database part starts from /readyz only.
+        app.MapGet(ApiRoutes.Healthz, (HttpContext context, SignInWarmUp warmUp) =>
+        {
+            context.Response.OnCompleted(() =>
+            {
+                warmUp.StartOffline();
+                return Task.CompletedTask;
+            });
+            return Results.Ok(new { status = "healthy" });
+        });
 
         // Readiness: the only health route that touches the database; "waking" and "resting" are distinct, visible states. Not ready is
         // an error like any other: RFC 7807 problem details with a code and the correlation id, plus the state as a "database" member.
-        app.MapGet(ApiRoutes.Readyz, async (IDatabaseProbe probe, CancellationToken ct) =>
+        // The client calls it when its sign-in window opens, so it also starts the sign-in warm-up, in the background and once: after
+        // this request's own connection has its answer (the two would compete for the processor), when that answer is "ready" or
+        // "waking". The answer does not wait for the warm-up and does not depend on it.
+        app.MapGet(ApiRoutes.Readyz, async (IDatabaseProbe probe, SignInWarmUp warmUp, CancellationToken ct) =>
         {
             try
             {
                 await probe.CheckAsync(ct);
+                warmUp.EnsureStarted(afterFailure: true); // the database answers: a warm-up that gave up while it was waking may run again
                 return Results.Ok(new ReadinessResponse(DatabaseStates.Ready));
             }
             catch (Exception exception) when (DatabaseErrors.IsResting(exception))
@@ -221,6 +237,9 @@ public static class ApiSetup
             }
             catch (Exception exception) when (DatabaseErrors.IsWaking(exception) || exception is SqlException)
             {
+                // Waking: the warm-up starts now and waits with the database, so its other work is done by the time the database is back.
+                // (Not for a resting database above: waiting does not bring that one back.)
+                warmUp.EnsureStarted();
                 return new ProblemResult(
                     StatusCodes.Status503ServiceUnavailable,
                     ProblemCodes.DatabaseWaking,

@@ -72,6 +72,12 @@ public sealed class DatabaseSettings
 
     /// <summary>The readiness probe waits this long for one connection before reporting "waking".</summary>
     public int ReadinessTimeoutSeconds { get; set; } = 5;
+
+    /// <summary>
+    /// How many pooled connections the sign-in warm-up leaves open (1 to 8). The first screen sends several requests at once and the
+    /// pool opens connections one after another, so without this the last of them waits for all the others' connections first.
+    /// </summary>
+    public int WarmConnections { get; set; } = 4;
 }
 
 public sealed class LimitSettings
