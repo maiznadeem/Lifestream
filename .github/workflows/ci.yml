@@ -39,9 +39,9 @@ jobs:
           echo "FAST_STARTED=$(date +%s)" >> "$GITHUB_ENV"
           echo "LIFESTREAM_SCAN_ENGINE_CACHE=$RUNNER_TEMP/scan-engine" >> "$GITHUB_ENV"
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
 
@@ -88,9 +88,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
 
@@ -155,9 +155,9 @@ jobs:
       - name: Set the render capture folder
         run: '"LIFESTREAM_CAPTURE_DIR=$env:RUNNER_TEMP\captures" >> $env:GITHUB_ENV'
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
 
@@ -181,7 +181,7 @@ jobs:
 
       - name: Upload render captures
         if: always() && steps.scan-logs.outcome == 'success'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: desktop-captures
           path: ${{ runner.temp }}\captures
@@ -211,9 +211,9 @@ jobs:
     env:
       SEEDS: "20260101 987654321"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
 
