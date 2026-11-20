@@ -559,7 +559,7 @@ public sealed partial class ShellViewModel : ViewModelBase
         }
     }
 
-    /// <summary>Today's earliest pending appointment that has not started more than an hour ago, or null.</summary>
+    /// <summary>Today's next appointment (<see cref="Features.Dashboard.NextAppointment"/>, the one the dashboard marks "Next"), or null.</summary>
     [RunsInOperation("RecordDonationCommand runs RecordDonationAsync, which calls it, through the shell's operation runner.")]
     private async Task<Contracts.Appointments.AppointmentListItem?> FindNextAppointmentAsync()
     {
@@ -575,10 +575,7 @@ public sealed partial class ShellViewModel : ViewModelBase
             return null;
         }
 
-        var today = result.Value.Items.Where(day.Holds).ToList();
-        var earliest = Clock.GetUtcNow().UtcDateTime.AddHours(-1);
-        return today.Where(a => a.SlotStartUtc >= earliest).OrderBy(a => a.SlotStartUtc).FirstOrDefault()
-            ?? today.OrderBy(a => a.SlotStartUtc).FirstOrDefault();
+        return Features.Dashboard.NextAppointment.Of(result.Value.Items.Where(day.Holds), Clock.GetUtcNow().UtcDateTime);
     }
 
     private void OnPreferencesChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
