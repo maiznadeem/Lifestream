@@ -189,6 +189,18 @@ public sealed class Receipt : IEntity
     public Appointment? Appointment { get; set; }
     public int? RequestId { get; set; }
     public Request? Request { get; set; }
+
+    /// <summary>
+    /// The donor of a donation receipt: its appointment's donor, stored on the receipt so that "the receipts of these donors" is an index seek
+    /// (the receipt search) and not a join through every appointment. Null on an issue. The database keeps it right: the foreign key to the
+    /// appointment is (AppointmentId, DonorId), so no other donor can be stored, and a check constraint requires it on a donation. Set by the
+    /// context when a receipt is added (<see cref="LifestreamDbContext"/>); never written by hand.
+    /// </summary>
+    public int? DonorId { get; set; }
+
+    /// <summary>The patient of an issue receipt: its request's patient, kept the same way as <see cref="DonorId"/>. Null on a donation.</summary>
+    public int? PatientId { get; set; }
+
     public string? Notes { get; set; }
 }
 

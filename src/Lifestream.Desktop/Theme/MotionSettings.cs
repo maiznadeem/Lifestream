@@ -13,8 +13,19 @@ public static class MotionSettings
     [ThreadStatic]
     private static ResourceDictionary? _tokens;
 
-    /// <summary>Tests set this to simulate the Windows setting; null means "ask Windows".</summary>
-    public static bool? Override { get; set; }
+    [ThreadStatic]
+    private static bool? _override;
+
+    /// <summary>
+    /// Tests set this to simulate the Windows setting; null means "ask Windows". Per thread, like the tokens it feeds: each test builds its UI on a
+    /// thread of its own, and one test's switch must not change what another loads beside it (ButtonTests read 0 ms with animations on while a
+    /// hosted view of another class turned them off).
+    /// </summary>
+    public static bool? Override
+    {
+        get => _override;
+        set => _override = value;
+    }
 
     public static bool AnimationsEnabled => Override ?? SystemParameters.ClientAreaAnimation;
 

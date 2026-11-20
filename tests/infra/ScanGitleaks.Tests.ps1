@@ -421,3 +421,85 @@ Describe 'the history scan''s configuration (.gitleaks.toml at the repository ro
         $body | Should -Not -Match '(?m)^\[allowlist\]|^\[\[allowlists\]\]|^commits\s*=|^stopwords\s*=|^disabledRules|^\s*entropy\s*='
     }
 }
+
+# The full-history scan (secret-scan.yml, job `history`) also reads .gitleaksignore at the repository root: the reviewed findings of
+# the history, each one a fingerprint commit:file:rule:line, so it matches one line of one commit. These tests check the shape of every
+# entry, that the whole history of this checkout passes the scan, and that a new finding still fails it, even on the same file, rule
+# and line as an entry (a throw-away repository with this configuration and this list at its root, as the action scans).
+Describe 'the history scan''s ignore list (.gitleaksignore) holds reviewed findings, each pinned to one commit' {
+    BeforeAll {
+        $script:IgnoreFile = Join-Path $script:Root '.gitleaksignore'
+        $script:HistoryConfig = Join-Path $script:Root '.gitleaks.toml'
+        $script:IgnoreLines = @(Get-Content -LiteralPath $script:IgnoreFile)
+        $script:Entries = @($script:IgnoreLines | Where-Object { $_ -and -not $_.StartsWith('#') })
+        $script:Fake = 'k9XpQ7' + 'vL4tR8' + 'wZ3nB6' + 'mD2sH5'   # a fake random value, put together at run time
+
+        function script:Invoke-HistoryScan([string]$Source, [string[]]$Extra = @()) {
+            $report = Join-Path $TestDrive ('ign-' + [guid]::NewGuid().ToString('N') + '.json')
+            # the action's command line (its report is SARIF; JSON here, to read the findings)
+            $out = & $script:Gitleaks detect --source $Source --redact -v --exit-code=2 --report-format=json --report-path=$report --no-banner --log-level=debug @Extra 2>&1 | Out-String
+            [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = $out; Findings = @(if (Test-Path $report) { Get-Content -Raw $report | ConvertFrom-Json }) }
+        }
+    }
+
+    It 'every entry is a whole fingerprint (commit:file:rule:line) of a commit of this repository, listed once' {
+        $script:Entries.Count | Should -BeGreaterThan 0
+        foreach ($e in $script:Entries) {
+            $e | Should -Match '^[0-9a-f]{40}:[^:\s]+:[a-z0-9-]+:\d+$' -Because "$e must name one commit, one file, one rule and one line"
+            & git -C $script:Root cat-file -e "$($e.Substring(0, 40))^{commit}" 2>$null
+            $LASTEXITCODE | Should -Be 0 -Because "$e names a commit of this repository"
+        }
+        @($script:Entries | Sort-Object -Unique).Count | Should -Be $script:Entries.Count
+    }
+
+    It 'every entry has its reason on the line above it' {
+        for ($i = 0; $i -lt $script:IgnoreLines.Count; $i++) {
+            $line = $script:IgnoreLines[$i]
+            if ($line -and -not $line.StartsWith('#')) {
+                $i | Should -BeGreaterThan 0 -Because "$line has no line above it"
+                $script:IgnoreLines[$i - 1] | Should -Match '^# \S' -Because "$line needs its reason above it"
+            }
+        }
+    }
+
+    It 'the whole history of this checkout passes the history scan, with this configuration and this list' {
+        $r = Invoke-HistoryScan $script:Root @('--log-opts=--full-history HEAD')
+        $r.Output | Should -Match 'found \.gitleaksignore file'
+        $r.Output | Should -Match '\d+ commits scanned'
+        $r.ExitCode | Should -Be 0 -Because (($r.Findings | ForEach-Object { $_.Fingerprint }) -join ', ')
+    }
+
+    It 'a new commit with a credential fails the scan, on the same file, rule and line as an entry, and in a new file' {
+        $e = $script:Entries[0] -split ':'
+        $file = $e[1]; $line = [int]$e[3]
+        $repo = New-Folder ('ign-' + [guid]::NewGuid().ToString('N'))
+        $git = @('-C', $repo, '-c', 'core.autocrlf=false', '-c', 'user.email=test@example.invalid', '-c', 'user.name=test', '-c', 'commit.gpgsign=false')
+        $conn = "        var c = `"Server=tcp:x.example,1433;Initial Catalog=BloodBank;$($script:UI)=sa;$($script:P)=$($script:Fake);Encrypt=True;`";"
+        $body = @(1..($line - 1) | ForEach-Object { "        // line $_" }) + $conn
+        New-Item -ItemType Directory -Force -Path (Split-Path (Join-Path $repo $file)) | Out-Null
+        [IO.File]::WriteAllText((Join-Path $repo $file), ($body -join "`n") + "`n")
+        New-Item -ItemType Directory -Force -Path (Join-Path $repo 'src') | Out-Null
+        [IO.File]::WriteAllText((Join-Path $repo 'src' 'Settings.cs'), "class S {`n    string api_key = `"$($script:Fake)`";`n}`n")
+        Copy-Item -LiteralPath $script:HistoryConfig -Destination (Join-Path $repo '.gitleaks.toml')
+        Copy-Item -LiteralPath $script:IgnoreFile -Destination (Join-Path $repo '.gitleaksignore')
+        & git @git init -q -b master 2>&1 | Out-Null
+        & git @git add -A 2>&1 | Out-Null
+        & git @git commit -q -m plant 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw 'could not commit the plant' }
+
+        $r = Invoke-HistoryScan $repo
+        $r.Output | Should -Match 'found \.gitleaksignore file'
+        $r.ExitCode | Should -Be 2 -Because $r.Output
+        $same = @($r.Findings | Where-Object { $_.File -eq $file -and $_.StartLine -eq $line -and $_.RuleID -eq $e[2] })
+        $same.Count | Should -Be 1 -Because "the entry for $file line $line is for another commit"
+        @($r.Findings | Where-Object File -eq 'src/Settings.cs').Count | Should -BeGreaterThan 0
+        $r.Output | Should -Not -Match ([regex]::Escape($script:Fake))
+
+        # the control: with this finding's own fingerprint added, exactly that finding goes and the other stays (the list is read and matched exactly)
+        Add-Content -LiteralPath (Join-Path $repo '.gitleaksignore') -Value ("# test`n" + $same[0].Fingerprint)
+        $r2 = Invoke-HistoryScan $repo
+        @($r2.Findings | Where-Object { $_.File -eq $file }) | Should -BeNullOrEmpty
+        @($r2.Findings | Where-Object File -eq 'src/Settings.cs').Count | Should -BeGreaterThan 0
+        $r2.ExitCode | Should -Be 2
+    }
+}

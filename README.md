@@ -1,13 +1,13 @@
 # Lifestream 2.1
 
 Lifestream is a blood-bank management desktop app: donors, patients, appointments, blood requests, stock and receipts,
-with a dashboard. Version **2.1.6** is a ground-up rewrite of the original course project on .NET 11.
+with a dashboard. Version **2.1.7** is a ground-up rewrite of the original course project on .NET 11.
 
 What changed for users is in [CHANGELOG.md](CHANGELOG.md).
 
 ## Install
 
-1. Open the [v2.1.6 release](https://github.com/maiznadeem/lifestream/releases/tag/v2.1.6) and download `Lifestream-win-Setup.exe` (and `SHA256SUMS.txt`). Windows 10 or 11, 64-bit.
+1. Open the [v2.1.7 release](https://github.com/maiznadeem/lifestream/releases/tag/v2.1.7) and download `Lifestream-win-Setup.exe` (and `SHA256SUMS.txt`). Windows 10 or 11, 64-bit.
 2. Check the download. In PowerShell, in the folder you saved it to:
 
    ```powershell
@@ -117,10 +117,17 @@ What starts by itself is short, because the whole build and every test are run l
 |---|---|---|---|
 | `ci.yml` | pull request, push to `master` | job `fast`: builds Client and Domain with their tests and runs them | 90 second budget, checked by the job itself |
 | `secret-scan.yml` | pull request, push to `master` | job `repository`: credential scan of the source and of the new commits | about 20 seconds |
+| `secret-scan.yml` | Mondays 04:17 UTC | job `history`: credential scan of the whole history, every branch and tag | under a minute |
 | `deploy-api.yml` | push to `master` that changes the API, its libraries or `infra/` | builds and scans the image, migrates, updates the app, checks `/healthz` | about 5 minutes (the migration and the rollout are Azure's time) |
 
 Everything else runs only when started by hand (Actions > the workflow > Run workflow): the full `api`, `desktop` and `test-order`
-jobs of `ci.yml`, the `desktop` and `api-image` scans of `secret-scan.yml`, `release.yml`, `screenshots.yml` and `sync-sql-firewall.yml`.
+jobs of `ci.yml`, the `desktop` and `api-image` scans of `secret-scan.yml` (a run by hand scans the whole history too), `release.yml`,
+`screenshots.yml` and `sync-sql-firewall.yml`.
+
+## Security
+
+To report a vulnerability, and for what the old history holds (two 1.x database logins, neither of which works), see
+[docs/SECURITY.md](docs/SECURITY.md).
 
 ## Repository rules
 

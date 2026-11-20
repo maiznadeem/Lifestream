@@ -164,82 +164,87 @@
     <!-- The selected patient, or the patient form -->
     <controls:SidePanel x:Name="Panel" Grid.Column="2" IsOpen="{Binding IsDetailOpen, Mode=OneWay}" CloseCommand="{Binding CloseDetailCommand}" Overline="{Binding DetailCode}"
                         lists:PanelBleed.IsEnabled="True" lists:DetailPaneFrame.IsInPanel="True">
-      <Grid>
-        <lists:RecordDetailPane x:Name="DetailPane" FactsSource="{Binding PanelFacts}" DeleteText="Delete patient"
-                                IsCompact="{Binding (controls:Responsive.Breakpoint), RelativeSource={RelativeSource Self}, Converter={StaticResource IsCompact}}" Visibility="{Binding Editor, Converter={StaticResource NullToVisible}}">
-          <lists:RecordDetailPane.Header>
-            <Grid>
-              <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-              </Grid.ColumnDefinitions>
-              <controls:Avatar Initials="{Binding DetailInitials}" Size="52" VerticalAlignment="Center" />
-              <StackPanel Grid.Column="1" Margin="{StaticResource Patients.HeaderGap}" VerticalAlignment="Center">
-                <TextBlock Style="{DynamicResource Text.Section}" Text="{Binding DetailTitle}" TextWrapping="Wrap" AutomationProperties.HeadingLevel="Level2" />
-                <TextBlock Style="{DynamicResource Text.Secondary}" Text="{Binding DetailSubtitle}" TextWrapping="Wrap" />
-              </StackPanel>
-              <controls:BloodGroupTag Grid.Column="2" Text="{Binding DetailBloodGroup}" IsLarge="True" VerticalAlignment="Top" />
-            </Grid>
-          </lists:RecordDetailPane.Header>
-          <lists:RecordDetailPane.RelatedActions>
-            <Button Style="{DynamicResource Button.Primary}" Command="{Binding NewRequestCommand}" HorizontalAlignment="Stretch" AutomationProperties.Name="New request">
-              <StackPanel Orientation="Horizontal">
-                <controls:Icon Kind="Request" Size="16" VerticalAlignment="Center" />
-                <TextBlock Text="New request" VerticalAlignment="Center" Margin="{DynamicResource Inset.L8}" />
-              </StackPanel>
-            </Button>
-          </lists:RecordDetailPane.RelatedActions>
-          <lists:RecordDetailPane.Body>
-            <!-- Each request waiting for blood (audit P1): what is needed and by when, how urgent, whether today's stock covers it, and Fulfil -->
-            <StackPanel AutomationProperties.AutomationId="WaitingRequests" Margin="{StaticResource Patients.SectionGap}" Visibility="{Binding OpenRequestsText, Converter={StaticResource NullToCollapsed}}"
-                        AutomationProperties.Name="{Binding OpenRequestsText}">
-              <TextBlock Style="{DynamicResource Text.Heading}" Text="{Binding OpenRequestsText}" Margin="{DynamicResource Inset.B12}" AutomationProperties.HeadingLevel="Level3" />
-              <ItemsControl AutomationProperties.AutomationId="WaitingList" ItemsSource="{Binding WaitingRequests}" Focusable="False" AutomationProperties.Name="Waiting requests">
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate>
-                    <Border Background="{DynamicResource Brush.Layer2}" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="1" CornerRadius="{DynamicResource Radius.Panel}"
-                            Padding="{StaticResource Patients.CardPad}" Margin="{StaticResource Patients.CardGap}" SnapsToDevicePixels="True">
-                      <Grid>
-                        <Grid.ColumnDefinitions>
-                          <ColumnDefinition Width="*" />
-                          <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <Grid.RowDefinitions>
-                          <RowDefinition Height="Auto" />
-                          <RowDefinition Height="Auto" />
-                        </Grid.RowDefinitions>
-                        <!-- None of the group in stock: Fulfil is disabled and this line says why (the request stays open) -->
-                        <TextBlock AutomationProperties.AutomationId="HoldReason" Grid.Row="1" Grid.ColumnSpan="2" Style="{DynamicResource Text.Caption}" Foreground="{DynamicResource Brush.Ink2}"
-                                   Text="{Binding HoldReason}" TextWrapping="Wrap" Margin="{DynamicResource Inset.T8}" Visibility="{Binding HoldReason, Converter={StaticResource NullToCollapsed}}" />
-                        <StackPanel>
-                          <TextBlock Style="{DynamicResource Text.BodyStrong}" TextWrapping="Wrap"><Run Text="{Binding Title, Mode=OneWay}" /><Run Text="  " /><Run Text="{Binding Code, Mode=OneWay}" Foreground="{DynamicResource Brush.Ink3}" FontWeight="Normal" /></TextBlock>
-                          <TextBlock Style="{DynamicResource Text.Secondary}" Text="{Binding NeededText}" TextWrapping="Wrap" />
-                          <WrapPanel Orientation="Horizontal">
-                            <controls:Badge Text="{Binding Urgency.Text}" Kind="{Binding Urgency.Kind, Converter={StaticResource UrgencyKind}}" Icon="{Binding Urgency.Kind, Converter={StaticResource UrgencyIcon}}"
-                                            Margin="{StaticResource Patients.PillGap}" Visibility="{Binding Urgency.Kind, Converter={StaticResource EqualsToVisible}, ConverterParameter=Critical|Soon|Normal}" />
-                            <controls:Badge Text="{Binding Cover, Converter={StaticResource Cover}, ConverterParameter=Text}" Kind="{Binding Cover, Converter={StaticResource Cover}, ConverterParameter=Kind}"
-                                            Icon="{Binding Cover, Converter={StaticResource Cover}, ConverterParameter=Icon}" Margin="{StaticResource Patients.PillGap}"
-                                            Visibility="{Binding Cover, Converter={StaticResource Cover}, ConverterParameter=Visibility}" />
-                          </WrapPanel>
-                        </StackPanel>
-                        <Button Grid.Column="1" Style="{DynamicResource Button.Secondary.Small}" VerticalAlignment="Center" Margin="{DynamicResource Inset.L12}" Content="Fulfil"
-                                Command="{Binding DataContext.FulfilRequestCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}"
-                                controls:ButtonAssist.BusyText="" AutomationProperties.Name="Fulfil this request" ToolTip="Open the request and fulfil it" IsEnabled="{Binding CanFulfil}"
-                                AutomationProperties.HelpText="{Binding HoldReason}" />
-                      </Grid>
-                    </Border>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
-              <TextBlock AutomationProperties.AutomationId="WaitingNote" Style="{DynamicResource Text.Caption}" Text="{Binding WaitingNote}" TextWrapping="Wrap"
-                         Visibility="{Binding WaitingNote, Converter={StaticResource HasContent}}" />
-            </StackPanel>
-          </lists:RecordDetailPane.Body>
-        </lists:RecordDetailPane>
-        <ContentControl x:Name="EditorHost" Content="{Binding Editor}" ContentTemplateSelector="{x:Static services:ViewLocator.Instance}" IsTabStop="False" Focusable="False"
-                        HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" Visibility="{Binding Editor, Converter={StaticResource NullToCollapsed}}" />
-      </Grid>
+      <!-- Built the first time the panel opens: showing the screen does not build the panel it has not opened yet. -->
+      <controls:DeferredContent x:Name="PanelContent">
+        <DataTemplate>
+          <Grid>
+            <lists:RecordDetailPane x:Name="DetailPane" FactsSource="{Binding PanelFacts}" DeleteText="Delete patient"
+                                    IsCompact="{Binding (controls:Responsive.Breakpoint), RelativeSource={RelativeSource Self}, Converter={StaticResource IsCompact}}" Visibility="{Binding Editor, Converter={StaticResource NullToVisible}}">
+              <lists:RecordDetailPane.Header>
+                <Grid>
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                  </Grid.ColumnDefinitions>
+                  <controls:Avatar Initials="{Binding DetailInitials}" Size="52" VerticalAlignment="Center" />
+                  <StackPanel Grid.Column="1" Margin="{StaticResource Patients.HeaderGap}" VerticalAlignment="Center">
+                    <TextBlock Style="{DynamicResource Text.Section}" Text="{Binding DetailTitle}" TextWrapping="Wrap" AutomationProperties.HeadingLevel="Level2" />
+                    <TextBlock Style="{DynamicResource Text.Secondary}" Text="{Binding DetailSubtitle}" TextWrapping="Wrap" />
+                  </StackPanel>
+                  <controls:BloodGroupTag Grid.Column="2" Text="{Binding DetailBloodGroup}" IsLarge="True" VerticalAlignment="Top" />
+                </Grid>
+              </lists:RecordDetailPane.Header>
+              <lists:RecordDetailPane.RelatedActions>
+                <Button Style="{DynamicResource Button.Primary}" Command="{Binding NewRequestCommand}" HorizontalAlignment="Stretch" AutomationProperties.Name="New request">
+                  <StackPanel Orientation="Horizontal">
+                    <controls:Icon Kind="Request" Size="16" VerticalAlignment="Center" />
+                    <TextBlock Text="New request" VerticalAlignment="Center" Margin="{DynamicResource Inset.L8}" />
+                  </StackPanel>
+                </Button>
+              </lists:RecordDetailPane.RelatedActions>
+              <lists:RecordDetailPane.Body>
+                <!-- Each request waiting for blood (audit P1): what is needed and by when, how urgent, whether today's stock covers it, and Fulfil -->
+                <StackPanel AutomationProperties.AutomationId="WaitingRequests" Margin="{StaticResource Patients.SectionGap}" Visibility="{Binding OpenRequestsText, Converter={StaticResource NullToCollapsed}}"
+                            AutomationProperties.Name="{Binding OpenRequestsText}">
+                  <TextBlock Style="{DynamicResource Text.Heading}" Text="{Binding OpenRequestsText}" Margin="{DynamicResource Inset.B12}" AutomationProperties.HeadingLevel="Level3" />
+                  <ItemsControl AutomationProperties.AutomationId="WaitingList" ItemsSource="{Binding WaitingRequests}" Focusable="False" AutomationProperties.Name="Waiting requests">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate>
+                        <Border Background="{DynamicResource Brush.Layer2}" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="1" CornerRadius="{DynamicResource Radius.Panel}"
+                                Padding="{StaticResource Patients.CardPad}" Margin="{StaticResource Patients.CardGap}" SnapsToDevicePixels="True">
+                          <Grid>
+                            <Grid.ColumnDefinitions>
+                              <ColumnDefinition Width="*" />
+                              <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                              <RowDefinition Height="Auto" />
+                              <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <!-- None of the group in stock: Fulfil is disabled and this line says why (the request stays open) -->
+                            <TextBlock AutomationProperties.AutomationId="HoldReason" Grid.Row="1" Grid.ColumnSpan="2" Style="{DynamicResource Text.Caption}" Foreground="{DynamicResource Brush.Ink2}"
+                                       Text="{Binding HoldReason}" TextWrapping="Wrap" Margin="{DynamicResource Inset.T8}" Visibility="{Binding HoldReason, Converter={StaticResource NullToCollapsed}}" />
+                            <StackPanel>
+                              <TextBlock Style="{DynamicResource Text.BodyStrong}" TextWrapping="Wrap"><Run Text="{Binding Title, Mode=OneWay}" /><Run Text="  " /><Run Text="{Binding Code, Mode=OneWay}" Foreground="{DynamicResource Brush.Ink3}" FontWeight="Normal" /></TextBlock>
+                              <TextBlock Style="{DynamicResource Text.Secondary}" Text="{Binding NeededText}" TextWrapping="Wrap" />
+                              <WrapPanel Orientation="Horizontal">
+                                <controls:Badge Text="{Binding Urgency.Text}" Kind="{Binding Urgency.Kind, Converter={StaticResource UrgencyKind}}" Icon="{Binding Urgency.Kind, Converter={StaticResource UrgencyIcon}}"
+                                                Margin="{StaticResource Patients.PillGap}" Visibility="{Binding Urgency.Kind, Converter={StaticResource EqualsToVisible}, ConverterParameter=Critical|Soon|Normal}" />
+                                <controls:Badge Text="{Binding Cover, Converter={StaticResource Cover}, ConverterParameter=Text}" Kind="{Binding Cover, Converter={StaticResource Cover}, ConverterParameter=Kind}"
+                                                Icon="{Binding Cover, Converter={StaticResource Cover}, ConverterParameter=Icon}" Margin="{StaticResource Patients.PillGap}"
+                                                Visibility="{Binding Cover, Converter={StaticResource Cover}, ConverterParameter=Visibility}" />
+                              </WrapPanel>
+                            </StackPanel>
+                            <Button Grid.Column="1" Style="{DynamicResource Button.Secondary.Small}" VerticalAlignment="Center" Margin="{DynamicResource Inset.L12}" Content="Fulfil"
+                                    Command="{Binding DataContext.FulfilRequestCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}"
+                                    controls:ButtonAssist.BusyText="" AutomationProperties.Name="Fulfil this request" ToolTip="Open the request and fulfil it" IsEnabled="{Binding CanFulfil}"
+                                    AutomationProperties.HelpText="{Binding HoldReason}" />
+                          </Grid>
+                        </Border>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                  <TextBlock AutomationProperties.AutomationId="WaitingNote" Style="{DynamicResource Text.Caption}" Text="{Binding WaitingNote}" TextWrapping="Wrap"
+                             Visibility="{Binding WaitingNote, Converter={StaticResource HasContent}}" />
+                </StackPanel>
+              </lists:RecordDetailPane.Body>
+            </lists:RecordDetailPane>
+            <ContentControl x:Name="EditorHost" Content="{Binding Editor}" ContentTemplateSelector="{x:Static services:ViewLocator.Instance}" IsTabStop="False" Focusable="False"
+                            HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" Visibility="{Binding Editor, Converter={StaticResource NullToCollapsed}}" />
+          </Grid>
+        </DataTemplate>
+      </controls:DeferredContent>
     </controls:SidePanel>
   </Grid>
 </UserControl>

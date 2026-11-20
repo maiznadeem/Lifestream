@@ -113,8 +113,9 @@ Colours that exist only as `Color.*` (read them in code with `ThemeService.Color
 | `Color.MicaStart`, `MicaMid`, `MicaEnd` | #EEF1F6, #F3F1F3, #EFF2F5 | #13171C, #17141A, #12161B | Stops of the Mica fallback gradient |
 
 Brushes that are not plain colours: `Brush.Mica` (a gradient of the three Mica stops; transparent in a window where real Mica is active),
-`Brush.WarningHatch` (a 6 x 6 diagonal stripe tile in `Warning`, for the expiring share of a stock meter) and `Image.DefaultAvatar` (a drawing for a
-person with no photo).
+`Brush.WarningHatch` (a 6 x 6 diagonal stripe tile in `Warning`, for the expiring share of a stock meter), `Brush.LayerFade` (top to bottom from
+`Layer` at 0 % to `Layer`: the bottom edge of a list on `Layer` while more rows are below it, as in the command palette) and `Image.DefaultAvatar` (a
+drawing for a person with no photo).
 
 **Section 2 of the colour files is not for new code.** Below the tokens, both colour files map the 2.0 names (`Brush.SurfaceCanvas`,
 `SurfaceRaised`, `SurfaceHover`, `SurfacePressed`, `SurfaceSelected`, `SurfaceInputHover`, `SurfaceInputFocus`, `SurfaceAccent*`, `SurfaceInfo`,
@@ -1101,6 +1102,9 @@ list of grouped results at most 420 high.
   and settings are filtered locally: every word of the query must appear in the title or subtitle.
 - Up and Down move (wrapping), Enter runs the selected row, Esc closes. The result rows show the icon, title, subtitle and the action's shortcut as
   key caps. No match shows "No results for "xyz"" (a polite live region).
+- The list scrolls by pixels. While rows are below the ones it shows, its bottom 28 DIP fade into the surface (`Brush.LayerFade`), so a list taller than
+  the palette says it goes on; at the end of the list the fade is gone. Up, Down, Page Up and Page Down keep the selected row in view and clear of
+  the fade; the first row scrolls back to the top, with its group's heading.
 - Running a row closes the palette, remembers it as recent, then runs it. Each row's accessible name is "Title, subtitle, shortcut".
 
 ### 6.5 Keyboard shortcuts

@@ -299,7 +299,9 @@ public sealed class RealWindowTests
     /// The maximized layout, in a window the size Windows gives a maximized one on the primary monitor (the work area plus the frame on every
     /// side) but not maximized, because Windows would put it on the monitor: the content is pulled in by exactly the frame, so nothing is cut off
     /// at a screen edge and nothing is left over; the buttons sit in the top-right corner of what is on screen; and the whole title bar still
-    /// drags, though its top is now below the window's own top edge.
+    /// drags, though its top is now below the window's own top edge. Nothing of the content lies in the strip a maximized window pushes past
+    /// the top of the screen: every pixel there is what the same window shows with its content hidden, its own background (DWM's Mica on a
+    /// real desktop, the Brush.Mica fallback drawn in software on the isolated one), within the tolerance used for anti-aliasing.
     /// </summary>
     [Fact]
     public void MaximizedLayout_CutsNothingOff_AndKeepsTheButtonsInTheCorner()
@@ -318,10 +320,19 @@ public sealed class RealWindowTests
             scene.Window.ApplyStateLayout(maximized: true);
             real.Settle(300);
             var capture = real.Capture();
+            var root = scene.Part<Border>("PART_Root");
+
+            // The same window with its content hidden (its layout kept): only what the window itself draws behind the content.
+            var shown = (UIElement)root.Child;
+            shown.Visibility = Visibility.Hidden;
+            real.Settle(300);
+            var backgroundOnly = real.Capture(drawnColours: 1);
+            shown.Visibility = Visibility.Visible;
+            real.Settle(300);
             capture.Save(Path.Combine(Folder, "main-light-maximized-layout.png"));
+            backgroundOnly.Save(Path.Combine(Folder, "main-light-maximized-layout-background-only.png"));
             capture.Crop(new Int32Rect(Math.Max(0, capture.Width - 200), 0, Math.Min(200, capture.Width), 70)).Save(Path.Combine(Folder, "main-light-maximized-layout-buttons.png"), 5);
             var scale = real.Scale;
-            var root = scene.Part<Border>("PART_Root");
             var buttons = real.BoundsOf(scene.Part<FrameworkElement>("CaptionButtons"));
             var content = real.BoundsOf(scene.Part<FrameworkElement>("ContentHost"));
             var maximize = real.BoundsOf(scene.Part<FrameworkElement>("PART_Maximize"));
@@ -343,7 +354,7 @@ public sealed class RealWindowTests
                 UnderTitle: real.HitTest(gap, titleBottom),
                 Maximize: real.HitTest(maximize.X + (maximize.Width / 2), maximize.Y + (maximize.Height / 2)),
                 CornerButton: real.HitTest(buttons.X + buttons.Width - 1, buttons.Y),
-                OffScreenStrip: ButtonArea.IsOneColour(capture.Crop(new Int32Rect(0, 0, capture.Width, px))));
+                OffScreenStrip: ButtonArea.ContentOver(capture.Crop(new Int32Rect(0, 0, capture.Width, px)), backgroundOnly.Crop(new Int32Rect(0, 0, capture.Width, px))));
             scene.Window.ApplyStateLayout(maximized: false);
             real.Settle(100);
             return (maximized, RestoredPadding: root.Padding, RestoredCaption: WindowChrome.GetWindowChrome(scene.Window).CaptionHeight);
@@ -356,7 +367,7 @@ public sealed class RealWindowTests
         Assert.Equal(new Int32Rect(frame, frame, m.Size.Width - (2 * frame), m.Size.Height - (2 * frame)), m.Content);
         Assert.Equal(m.Size.Width - frame, m.Buttons.X + m.Buttons.Width); // flush with the right edge of the screen
         Assert.Equal(frame, m.Buttons.Y);                                  // and with its top
-        Assert.True(m.OffScreenStrip, "something is drawn in the strip that is off the screen while maximized");
+        Assert.True(m.OffScreenStrip.Count == 0, $"something is drawn in the strip that is off the screen while maximized: {m.OffScreenStrip.Count} pixels differ from the window's own background, the first at {m.OffScreenStrip.First}");
         Assert.Equal(m.Title + m.Inset.Top, m.Caption);
         Assert.Equal(RealWindow.HitCaption, m.TitleLastRow);
         Assert.Equal(RealWindow.HitClient, m.UnderTitle);
@@ -712,6 +723,40 @@ internal static class ButtonArea
         }
 
         return rows;
+    }
+
+    /// <summary>
+    /// The pixels of <paramref name="seen"/> that are more than <see cref="Drawn"/> away, on their strongest channel, from the same pixel of
+    /// <paramref name="background"/> (the same area with nothing in front of the window's own background): something drawn on it. A background
+    /// that is not one colour (a gradient drawn in software, dithered; DWM's Mica) is compared pixel by pixel, so only content counts.
+    /// </summary>
+    public static (int Count, string First) ContentOver(WindowCapture seen, WindowCapture background)
+    {
+        if (seen.Width != background.Width || seen.Height != background.Height)
+        {
+            throw new ArgumentException($"the captures differ in size: {seen.Width}x{seen.Height} and {background.Width}x{background.Height}");
+        }
+
+        var count = 0;
+        var first = string.Empty;
+        for (var y = 0; y < seen.Height; y++)
+        {
+            for (var x = 0; x < seen.Width; x++)
+            {
+                var (r, g, b) = seen.At(x, y);
+                var (br, bg, bb) = background.At(x, y);
+                if (Math.Max(Math.Abs(r - br), Math.Max(Math.Abs(g - bg), Math.Abs(b - bb))) > Drawn)
+                {
+                    count++;
+                    if (first.Length == 0)
+                    {
+                        first = string.Create(CultureInfo.InvariantCulture, $"{x},{y} = {(r, g, b)} on {(br, bg, bb)}");
+                    }
+                }
+            }
+        }
+
+        return (count, first);
     }
 
     /// <summary>True when every pixel of the capture has the same colour: nothing is drawn there.</summary>

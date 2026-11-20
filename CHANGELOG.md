@@ -2,6 +2,25 @@
 
 All notable changes to Lifestream are listed here. The section of a version is also the text of its release on the GitHub Releases page.
 
+## [2.1.7] - 2026-11-21
+
+Lifestream 2.1.7 fixes the last items found by using the app end to end, and brings its libraries up to date.
+
+### Fixed
+
+- Recording a donation opens its dialog over the page it was started from, instead of switching pages first.
+- The command palette says when more results are below the ones shown, and keeps the selected result in view as you move through them.
+- After booking an appointment, the new row is shown whole, not half under the fade at the bottom of the list.
+- The record picker writes a blood group the way the badges do ("O−"); typing "O-" still finds it.
+- The account menu closes when one of its items runs, also when a screen reader runs it; before, it could stay on screen after "Sign out".
+
+### Changed
+
+- Opening a screen for the first time is quicker: a side panel is built when it first opens, not with its screen, which cuts the work of a first visit by 40 to 70 percent.
+- Searching Receipts is about twice as fast: each receipt now stores its donor or patient, so a search goes straight from the people found to their receipts.
+- The charts and the photo processing use SkiaSharp 4 and LiveCharts 2.2. The charts look the same; the shaded area under a line now fades evenly, as in the rest of the app.
+- The security policy (`docs/SECURITY.md`) says how to report a problem and how the repository is scanned for secrets.
+
 ## [2.1.6] - 2026-11-20
 
 Lifestream 2.1.6 makes search find what you type.

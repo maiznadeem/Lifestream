@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net11.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <NoWarn>$(NoWarn);CA1303;CA1307;CA1309;CA1310;CA1305;CA1031;CA1852;CA2000;CA1812;CA1416;CA1838;CA1806;CA2101;SYSLIB1054;CA1401;CA5392;CA1060;CA1069</NoWarn>
+  </PropertyGroup>
+</Project>

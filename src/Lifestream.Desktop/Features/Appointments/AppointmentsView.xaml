@@ -326,84 +326,89 @@
     <!-- The selected appointment, or the booking (or rescheduling) form -->
     <controls:SidePanel x:Name="Panel" Grid.Column="2" IsOpen="{Binding IsDetailOpen, Mode=OneWay}" CloseCommand="{Binding CloseDetailCommand}" Overline="{Binding DetailCode}"
                         lists:PanelBleed.IsEnabled="True" lists:DetailPaneFrame.IsInPanel="True">
-      <Grid>
-        <lists:ActionDetailPane x:Name="DetailPane" FactsSource="{Binding PanelFacts}" Visibility="{Binding Editor, Converter={StaticResource NullToVisible}}">
-          <lists:ActionDetailPane.Header>
-            <Grid>
-              <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-              </Grid.ColumnDefinitions>
-              <controls:Avatar Initials="{Binding DetailInitials}" IsBlood="True" Size="52" VerticalAlignment="Center" />
-              <StackPanel Grid.Column="1" Margin="{StaticResource Appts.HeaderGap}" VerticalAlignment="Center">
-                <TextBlock Style="{DynamicResource Text.Section}" Text="{Binding Detail.DonorName}" TextWrapping="Wrap" AutomationProperties.HeadingLevel="Level2" />
-                <TextBlock Style="{DynamicResource Text.Secondary}" Text="{Binding DetailWhen}" TextWrapping="Wrap" />
-              </StackPanel>
-              <controls:BloodGroupTag Grid.Column="2" Text="{Binding DetailBloodGroup}" IsLarge="True" VerticalAlignment="Top" />
-            </Grid>
-          </lists:ActionDetailPane.Header>
-          <lists:ActionDetailPane.Actions>
-            <!-- The action row (one layout on every screen): [Record donation] [Reschedule] [...]; cancelling is in the menu with its full label -->
-            <Grid AutomationProperties.AutomationId="ActionsRow">
-              <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
-              </Grid.ColumnDefinitions>
-              <Grid Margin="{DynamicResource Inset.R8}">
-                <Button AutomationProperties.AutomationId="RecordButton" Style="{DynamicResource Button.Primary}" Command="{Binding RecordDonationCommand}" HorizontalAlignment="Stretch" AutomationProperties.Name="Record donation"
-                        controls:ButtonAssist.IsBusy="{Binding RecordDonationCommand.IsRunning}" controls:ButtonAssist.BusyText="Recording"
-                        Visibility="{Binding IsPendingDetail, Converter={StaticResource BoolToVisibility}}">
-                  <StackPanel Orientation="Horizontal">
-                    <controls:Icon Kind="Drop" Size="16" VerticalAlignment="Center" />
-                    <TextBlock Text="Record donation" VerticalAlignment="Center" Margin="{DynamicResource Inset.L8}" />
+      <!-- Built the first time the panel opens: showing the screen does not build the panel it has not opened yet. -->
+      <controls:DeferredContent x:Name="PanelContent">
+        <DataTemplate>
+          <Grid>
+            <lists:ActionDetailPane x:Name="DetailPane" FactsSource="{Binding PanelFacts}" Visibility="{Binding Editor, Converter={StaticResource NullToVisible}}">
+              <lists:ActionDetailPane.Header>
+                <Grid>
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                  </Grid.ColumnDefinitions>
+                  <controls:Avatar Initials="{Binding DetailInitials}" IsBlood="True" Size="52" VerticalAlignment="Center" />
+                  <StackPanel Grid.Column="1" Margin="{StaticResource Appts.HeaderGap}" VerticalAlignment="Center">
+                    <TextBlock Style="{DynamicResource Text.Section}" Text="{Binding Detail.DonorName}" TextWrapping="Wrap" AutomationProperties.HeadingLevel="Level2" />
+                    <TextBlock Style="{DynamicResource Text.Secondary}" Text="{Binding DetailWhen}" TextWrapping="Wrap" />
                   </StackPanel>
-                </Button>
-                <Button AutomationProperties.AutomationId="ReceiptButton" Style="{DynamicResource Button.Primary}" Command="{Binding ViewReceiptCommand}" HorizontalAlignment="Stretch" AutomationProperties.Name="View receipt"
-                        Visibility="{Binding Detail.ReceiptId, Converter={StaticResource NullToCollapsed}}">
-                  <StackPanel Orientation="Horizontal">
-                    <controls:Icon Kind="Receipt" Size="16" VerticalAlignment="Center" />
-                    <TextBlock Text="View receipt" VerticalAlignment="Center" Margin="{DynamicResource Inset.L8}" />
-                  </StackPanel>
-                </Button>
-              </Grid>
-              <Button AutomationProperties.AutomationId="RescheduleButton" Grid.Column="1" Style="{DynamicResource Button.Secondary}" Command="{Binding RescheduleCommand}" controls:ButtonAssist.BusyText=""
-                      AutomationProperties.Name="Reschedule" ToolTip="Reschedule" Visibility="{Binding IsPendingDetail, Converter={StaticResource BoolToVisibility}}">
-                <StackPanel Orientation="Horizontal">
-                  <!-- A clock (a new time), not the calendar of the header's "Book appointment": in a compact window both are icon-only (design-qa-2 N14) -->
-                  <controls:Icon Kind="Clock" Size="16" VerticalAlignment="Center" />
-                  <TextBlock Text="Reschedule" VerticalAlignment="Center" Margin="{DynamicResource Inset.L8}"
-                             Visibility="{Binding (controls:Responsive.Breakpoint), RelativeSource={RelativeSource Self}, Converter={StaticResource CompactCollapsed}}" />
-                </StackPanel>
-              </Button>
-              <lists:MenuButton AutomationProperties.AutomationId="MoreButton" Grid.Column="2" Style="{DynamicResource Button.Icon}" Margin="{DynamicResource Inset.L8}" AutomationProperties.Name="More actions" ToolTip="More actions">
-                <controls:Icon Kind="More" Size="18" />
-                <lists:MenuButton.ContextMenu>
-                  <ContextMenu>
-                    <MenuItem Header="Open donor" Command="{Binding OpenDonorCommand}" CommandParameter="{Binding Detail}">
-                      <MenuItem.Icon>
-                        <controls:Icon Kind="Donor" Size="16" />
-                      </MenuItem.Icon>
-                    </MenuItem>
-                    <MenuItem AutomationProperties.AutomationId="CancelItem" Header="Cancel appointment" Command="{Binding CancelAppointmentCommand}" Foreground="{DynamicResource Brush.Critical}"
-                              Visibility="{Binding IsPendingDetail, Converter={StaticResource BoolToVisibility}}">
-                      <MenuItem.Icon>
-                        <controls:Icon Kind="X" Size="16" />
-                      </MenuItem.Icon>
-                    </MenuItem>
-                  </ContextMenu>
-                </lists:MenuButton.ContextMenu>
-              </lists:MenuButton>
-            </Grid>
-          </lists:ActionDetailPane.Actions>
-          <lists:ActionDetailPane.Body>
-            <appts:EligibilityBannerView DataContext="{Binding DonorEligibility}" />
-          </lists:ActionDetailPane.Body>
-        </lists:ActionDetailPane>
-        <ContentControl x:Name="EditorHost" Content="{Binding Editor}" ContentTemplateSelector="{x:Static services:ViewLocator.Instance}" IsTabStop="False" Focusable="False"
-                        HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" Visibility="{Binding Editor, Converter={StaticResource NullToCollapsed}}" />
-      </Grid>
+                  <controls:BloodGroupTag Grid.Column="2" Text="{Binding DetailBloodGroup}" IsLarge="True" VerticalAlignment="Top" />
+                </Grid>
+              </lists:ActionDetailPane.Header>
+              <lists:ActionDetailPane.Actions>
+                <!-- The action row (one layout on every screen): [Record donation] [Reschedule] [...]; cancelling is in the menu with its full label -->
+                <Grid AutomationProperties.AutomationId="ActionsRow">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                  </Grid.ColumnDefinitions>
+                  <Grid Margin="{DynamicResource Inset.R8}">
+                    <Button AutomationProperties.AutomationId="RecordButton" Style="{DynamicResource Button.Primary}" Command="{Binding RecordDonationCommand}" HorizontalAlignment="Stretch" AutomationProperties.Name="Record donation"
+                            controls:ButtonAssist.IsBusy="{Binding RecordDonationCommand.IsRunning}" controls:ButtonAssist.BusyText="Recording"
+                            Visibility="{Binding IsPendingDetail, Converter={StaticResource BoolToVisibility}}">
+                      <StackPanel Orientation="Horizontal">
+                        <controls:Icon Kind="Drop" Size="16" VerticalAlignment="Center" />
+                        <TextBlock Text="Record donation" VerticalAlignment="Center" Margin="{DynamicResource Inset.L8}" />
+                      </StackPanel>
+                    </Button>
+                    <Button AutomationProperties.AutomationId="ReceiptButton" Style="{DynamicResource Button.Primary}" Command="{Binding ViewReceiptCommand}" HorizontalAlignment="Stretch" AutomationProperties.Name="View receipt"
+                            Visibility="{Binding Detail.ReceiptId, Converter={StaticResource NullToCollapsed}}">
+                      <StackPanel Orientation="Horizontal">
+                        <controls:Icon Kind="Receipt" Size="16" VerticalAlignment="Center" />
+                        <TextBlock Text="View receipt" VerticalAlignment="Center" Margin="{DynamicResource Inset.L8}" />
+                      </StackPanel>
+                    </Button>
+                  </Grid>
+                  <Button AutomationProperties.AutomationId="RescheduleButton" Grid.Column="1" Style="{DynamicResource Button.Secondary}" Command="{Binding RescheduleCommand}" controls:ButtonAssist.BusyText=""
+                          AutomationProperties.Name="Reschedule" ToolTip="Reschedule" Visibility="{Binding IsPendingDetail, Converter={StaticResource BoolToVisibility}}">
+                    <StackPanel Orientation="Horizontal">
+                      <!-- A clock (a new time), not the calendar of the header's "Book appointment": in a compact window both are icon-only (design-qa-2 N14) -->
+                      <controls:Icon Kind="Clock" Size="16" VerticalAlignment="Center" />
+                      <TextBlock Text="Reschedule" VerticalAlignment="Center" Margin="{DynamicResource Inset.L8}"
+                                 Visibility="{Binding (controls:Responsive.Breakpoint), RelativeSource={RelativeSource Self}, Converter={StaticResource CompactCollapsed}}" />
+                    </StackPanel>
+                  </Button>
+                  <lists:MenuButton AutomationProperties.AutomationId="MoreButton" Grid.Column="2" Style="{DynamicResource Button.Icon}" Margin="{DynamicResource Inset.L8}" AutomationProperties.Name="More actions" ToolTip="More actions">
+                    <controls:Icon Kind="More" Size="18" />
+                    <lists:MenuButton.ContextMenu>
+                      <ContextMenu>
+                        <MenuItem Header="Open donor" Command="{Binding OpenDonorCommand}" CommandParameter="{Binding Detail}">
+                          <MenuItem.Icon>
+                            <controls:Icon Kind="Donor" Size="16" />
+                          </MenuItem.Icon>
+                        </MenuItem>
+                        <MenuItem AutomationProperties.AutomationId="CancelItem" Header="Cancel appointment" Command="{Binding CancelAppointmentCommand}" Foreground="{DynamicResource Brush.Critical}"
+                                  Visibility="{Binding IsPendingDetail, Converter={StaticResource BoolToVisibility}}">
+                          <MenuItem.Icon>
+                            <controls:Icon Kind="X" Size="16" />
+                          </MenuItem.Icon>
+                        </MenuItem>
+                      </ContextMenu>
+                    </lists:MenuButton.ContextMenu>
+                  </lists:MenuButton>
+                </Grid>
+              </lists:ActionDetailPane.Actions>
+              <lists:ActionDetailPane.Body>
+                <appts:EligibilityBannerView DataContext="{Binding DonorEligibility}" />
+              </lists:ActionDetailPane.Body>
+            </lists:ActionDetailPane>
+            <ContentControl x:Name="EditorHost" Content="{Binding Editor}" ContentTemplateSelector="{x:Static services:ViewLocator.Instance}" IsTabStop="False" Focusable="False"
+                            HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" Visibility="{Binding Editor, Converter={StaticResource NullToCollapsed}}" />
+          </Grid>
+        </DataTemplate>
+      </controls:DeferredContent>
     </controls:SidePanel>
   </Grid>
 </UserControl>

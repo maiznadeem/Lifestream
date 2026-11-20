@@ -575,6 +575,27 @@ public sealed partial class ThemeTests
     }
 
     [Fact]
+    public void Motion_TheAnimationSwitchOfOneUiThread_IsNotChangedByAnotherThread()
+    {
+        // Every test builds its UI on a thread of its own, and the motion tokens are kept per UI thread, but the switch tests set was one for the whole
+        // process. A class outside the "Wpf" collection runs beside the others: MenuSubmenuTests' hosted view turned animations off (Hosted.Create) while
+        // ButtonTests loaded its theme with them on, and ButtonTests read 0 ms (night-minors, 2026-11-21, 3 isolated runs out of 3 once the shards put them together).
+        var fast = StaHost.Run(() =>
+        {
+            MotionSettings.Override = true;
+            var other = new Thread(() => MotionSettings.Override = false); // what Hosted.Create does on another test's thread
+            other.Start();
+            other.Join();
+            ThemeLoader.Reset();
+            var duration = ((System.Windows.Duration)ThemeLoader.Resources["Motion.Fast"]).TimeSpan;
+            MotionSettings.Override = null;
+            return duration;
+        });
+
+        Assert.Equal(TimeSpan.FromMilliseconds(100), fast);
+    }
+
+    [Fact]
     public void Motion_Dictionary_FollowsTheWindowsAnimationSetting()
     {
         var on = StaHost.Run(() =>

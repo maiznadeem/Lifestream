@@ -22,7 +22,9 @@ public partial class StaffView : UserControl
     public StaffView()
     {
         InitializeComponent();
-        MoreButton.ContextMenu.SetBinding(FrameworkElement.DataContextProperty, new System.Windows.Data.Binding(nameof(DataContext)) { Source = this });
+        // The "..." menu is in the side panel, which builds its content when it first opens.
+        PanelContent.Built += (_, _) => ((FrameworkElement)LogicalTreeHelper.FindLogicalNode(PanelContent.Child, "MoreButton")).ContextMenu
+            .SetBinding(FrameworkElement.DataContextProperty, new System.Windows.Data.Binding(nameof(DataContext)) { Source = this });
         DataContextChanged += (_, e) =>
         {
             if (_model is not null)

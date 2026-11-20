@@ -83,14 +83,15 @@ public sealed partial class SchemaTests(SqlServerDatabaseFixture fixture) : ICla
             """,
             Ct);
         var pairs = rows.Select(r => $"{r[0]}->{r[1]}").Order().ToList();
-        Assert.Equal(["AppointmentId->Appointment", "RequestId->Request", "StaffId->Staff"], pairs);
+        // The keys to the appointment and to the request carry the receipt's party: (AppointmentId, DonorId) and (RequestId, PatientId).
+        Assert.Equal(["AppointmentId->Appointment", "DonorId->Appointment", "PatientId->Request", "RequestId->Request", "StaffId->Staff"], pairs);
     }
 
     [Fact]
     public async Task AllForeignKeyColumns_HaveIndexes()
     {
         var total = await fixture.ScalarAsync<int>("SELECT COUNT(*) FROM sys.foreign_key_columns", Ct);
-        Assert.Equal(10, total); // + StaffCredential.StaffId -> Staff
+        Assert.Equal(12, total); // + StaffCredential.StaffId -> Staff; + Receipt.DonorId and Receipt.PatientId, the second columns of the receipt's two composite keys
 
         // A supporting index has the foreign key column as its first key column.
         var unsupported = await fixture.RowsAsync(

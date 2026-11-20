@@ -572,6 +572,9 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
         }
     }
 
+    /// <summary>The list and the open record's detail are read again; an open editor keeps what the person typed (it holds its own copy).</summary>
+    public override Task RefreshAfterOutsideChangeAsync() => RefreshAfterSaveAsync();
+
     private async Task RefreshAfterSaveAsync()
     {
         await RefreshAsync().ConfigureAwait(true);

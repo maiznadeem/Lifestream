@@ -70,16 +70,63 @@ public static class ListReveal
             }
 
             // After the rows of the page have been laid out (and after the table has put back a remembered scroll position): the reveal is the newer wish.
-            grid.Dispatcher.BeginInvoke(
-                () =>
-                {
-                    if (grid.SelectedItem is { } item)
-                    {
-                        grid.UpdateLayout();
-                        grid.ScrollIntoView(item);
-                    }
-                },
-                DispatcherPriority.ContextIdle);
+            grid.Dispatcher.BeginInvoke(() => Reveal(grid), DispatcherPriority.ContextIdle);
+        }
+    }
+
+    /// <summary>
+    /// Brings the selected row into view, clear of the footer's fade. ScrollIntoView stops with a row from further down on the list's bottom edge, which is
+    /// where the footer draws its 20 px fade while more rows lie below (<see cref="ListFooter"/>): after a booking the new row read as half hidden
+    /// (night-iso's real-app walk; measured: row 786-830, viewport to 830, fade over its last 20 px). The list then scrolls on by the overlap.
+    /// </summary>
+    internal static void Reveal(DataGrid grid)
+    {
+        if (grid.SelectedItem is not { } item)
+        {
+            return;
+        }
+
+        grid.UpdateLayout();
+        grid.ScrollIntoView(item);
+        for (var step = 0; step < 5; step++)
+        {
+            grid.UpdateLayout();
+            if (Descendants(grid).OfType<ScrollViewer>().FirstOrDefault(v => ReferenceEquals(v.TemplatedParent, grid)) is not { } viewer
+                || Descendants(viewer).OfType<ScrollContentPresenter>().FirstOrDefault() is not { } viewport
+                || Descendants(grid).OfType<DataGridRow>().FirstOrDefault(r => r.IsVisible && ReferenceEquals(r.Item, item)) is not { } row)
+            {
+                return;
+            }
+
+            var bounds = row.TransformToAncestor(viewport).TransformBounds(new Rect(row.RenderSize));
+            var moreBelow = viewer.ExtentHeight - viewer.VerticalOffset - viewer.ViewportHeight > 0.5;
+            var overlap = bounds.Bottom - (viewport.ActualHeight - ListFooter.FadeHeight);
+            if (!moreBelow || overlap <= 0.5 || bounds.Top - overlap < 0)
+            {
+                return; // clear of the fade, no fade (the end of the list), or a row too tall to lift without cutting its top
+            }
+
+            if (Math.Abs(viewer.ViewportHeight - viewport.ActualHeight) < 1)
+            {
+                viewer.ScrollToVerticalOffset(viewer.VerticalOffset + overlap); // the list scrolls by pixels: by exactly the overlap
+            }
+            else
+            {
+                viewer.LineDown(); // by items: a line at a time until the row is clear
+            }
+        }
+    }
+
+    private static IEnumerable<DependencyObject> Descendants(DependencyObject root)
+    {
+        for (var i = 0; i < System.Windows.Media.VisualTreeHelper.GetChildrenCount(root); i++)
+        {
+            var child = System.Windows.Media.VisualTreeHelper.GetChild(root, i);
+            yield return child;
+            foreach (var inner in Descendants(child))
+            {
+                yield return inner;
+            }
         }
     }
 }

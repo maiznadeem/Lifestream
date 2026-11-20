@@ -18,6 +18,9 @@ namespace Lifestream.Desktop.Shell;
 /// </summary>
 public partial class CommandPaletteView : UserControl
 {
+    /// <summary>The height of the fade over the bottom of the results while more rows are below (<c>MoreBelow</c> in the list's template).</summary>
+    internal const double FadeHeight = 28;
+
     private CommandPaletteViewModel? _model;
     private IInputElement? _returnFocus;
 
@@ -57,9 +60,57 @@ public partial class CommandPaletteView : UserControl
                 Hide();
             }
         }
-        else if (e.PropertyName == nameof(CommandPaletteViewModel.SelectedIndex) && Results.SelectedItem is { } item)
+        else if (e.PropertyName == nameof(CommandPaletteViewModel.SelectedIndex))
         {
-            Results.ScrollIntoView(item);
+            KeepSelectionInView();
+        }
+    }
+
+    private ScrollViewer? ResultsScroll => Results.Template?.FindName("Scroll", Results) as ScrollViewer;
+
+    /// <summary>True while the results have rows below their viewport.</summary>
+    internal static bool HasMoreBelow(ScrollViewer scroll) => scroll.VerticalOffset + scroll.ViewportHeight < scroll.ExtentHeight - 0.5;
+
+    /// <summary>
+    /// Brings the row Up, Down, Page Up or Page Down moved to into view, clear of the fade while more rows are below it, so it is never cut off or
+    /// faded. It goes by the model's row: the list's own selection may not have followed the model yet when this runs. The first row scrolls to the
+    /// top, with its group's heading.
+    /// </summary>
+    private void KeepSelectionInView()
+    {
+        if (_model is null || ResultsScroll is not { } scroll || _model.SelectedIndex < 0 || _model.SelectedIndex >= _model.Items.Count)
+        {
+            return;
+        }
+
+        if (_model.SelectedIndex == 0)
+        {
+            scroll.ScrollToTop();
+            return;
+        }
+
+        var item = _model.Items[_model.SelectedIndex];
+        Results.ScrollIntoView(item);
+        Results.UpdateLayout();
+        if (Results.ItemContainerGenerator.ContainerFromItem(item) is not FrameworkElement row || !row.IsVisible)
+        {
+            return;
+        }
+
+        var bottom = row.TransformToAncestor(scroll).TransformBounds(new Rect(row.RenderSize)).Bottom;
+        var clear = scroll.Padding.Top + scroll.ViewportHeight - FadeHeight;
+        if (HasMoreBelow(scroll) && bottom > clear)
+        {
+            scroll.ScrollToVerticalOffset(scroll.VerticalOffset + bottom - clear);
+        }
+    }
+
+    /// <summary>Shows the fade over the last visible rows while there are more below, and hides it at the end of the list.</summary>
+    private void OnResultsScrolled(object sender, ScrollChangedEventArgs e)
+    {
+        if (ReferenceEquals(e.OriginalSource, sender) && sender is ScrollViewer scroll && Results.Template.FindName("MoreBelow", Results) is UIElement fade)
+        {
+            fade.Visibility = HasMoreBelow(scroll) ? Visibility.Visible : Visibility.Collapsed;
         }
     }
 

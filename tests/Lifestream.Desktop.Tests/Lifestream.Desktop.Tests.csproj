@@ -4,6 +4,8 @@
     <UseWPF>true</UseWPF>
     <!-- The end-to-end timing tests (EndToEnd/PerfTests.cs) are tagged Category=Perf and need the local API and fixture database that tests/perf/run-perf.ps1 starts; an explicit test filter replaces this default. -->
     <VSTestTestCaseFilter>Category!=Perf</VSTestTestCaseFilter>
+    <!-- The runtime setting of the app (src/Lifestream.Desktop): the views run in this process as they run in the app (RuntimeSettingsTests). -->
+    <TieredPGO>false</TieredPGO>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\Lifestream.Desktop\Lifestream.Desktop.csproj" />

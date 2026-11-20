@@ -43,9 +43,11 @@ No container registry (images live in GHCR), no Key Vault, no gateway, no privat
   (parameter `location`) next to the database.
 - **No VNet, so the firewall follows the outbound addresses.** The API and the migrate job reach Azure SQL from the environment's
   outbound public addresses, which Azure may change. `infra/sync-sql-firewall.ps1` makes the server's firewall exactly those addresses
-  (`aca-outbound-<n>`), deleting every other rule including "Allow anyone" and `AllowAllWindowsAzureIps`. It runs **before the migration
-  job** in every `deploy-api.yml` run (the job connects from the same addresses, so a changed address must not block it) and weekly in
-  `sync-sql-firewall.yml`, and it never touches the database. It adds or updates first, deletes second. It fails, deleting nothing, if the
+  (`aca-outbound-<n>`), deleting every other rule including "Allow anyone" and `AllowAllWindowsAzureIps`. It runs **by hand only**
+  (`sync-sql-firewall.yml`, Run workflow, or the script itself), and it never touches the database. Since 2026-11-19 neither
+  `deploy-api.yml` nor a schedule runs it: the Consumption environment's shared outbound pool is 170+ addresses, and adding them one
+  rule at a time took longer than the deploy job. Entra-only authentication is the access control (see Security trade-offs). It adds or
+  updates first, deletes second. It fails, deleting nothing, if the
   environment reports no addresses. A CanNotDelete lock on the server also blocks deleting firewall rules, so when rules must be deleted
   and such a lock exists the script removes the lock, deletes, and puts the identical lock back in a `finally` block (`UNLOCK` and
   `RELOCK` lines in the log). That needs `Microsoft.Authorization/locks/delete` and `write`, which the built-in **Contributor** role
@@ -114,8 +116,8 @@ Each step lists what it needs and how to check it. Steps that change Azure are t
    The script refuses to add any outbound-address rule unless Entra-only authentication reads true back from the server (step 7), because the
    addresses are shared Azure egress (see Security trade-offs). It deletes "Allow anyone" and `AllowAllWindowsAzureIps`. After this only
    the environment's outbound addresses can reach the database, so nothing on your own machine can: run any further SQL tooling from
-   the job. If the environment lists no outbound address (no app has started), the script stops and changes nothing. From here on
-   `deploy-api.yml` and the weekly `sync-sql-firewall.yml` keep it in sync.
+   the job. If the environment lists no outbound address (no app has started), the script stops and changes nothing. From here on,
+   run `sync-sql-firewall.yml` by hand when the environment's outbound addresses change: neither the deploy nor a schedule runs it.
 9. **Locks, and the template in step with reality**: rerun step 3 with `LIFESTREAM_ENABLE_LOCKS=true` and
    `Remove-Item Env:LIFESTREAM_ENTRA_ONLY` (the template and parameter file default to Entra-only on; never set it to false again), with `LIFESTREAM_API_IMAGE` set to the **currently running** image
    (`az containerapp show --subscription 88f308cf-f1e5-4e4d-b0bc-3e8b14ef9c65 -n lifestream-api -g Lifestream --query properties.template.containers[0].image`),

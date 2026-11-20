@@ -164,6 +164,13 @@ Describe 'INFRA-04 firewall sync is manual only: not in the deploy, not on a sch
         (Run @($script:Deploy.Yaml.jobs.deploy.steps)[$entra]) | Should -Match 'REFUSING TO DEPLOY'
     }
 
+    It 'the docs say so too: no file that describes the sync claims it runs weekly or with every deploy' {
+        $root = Join-Path $script:Dir '..' '..'
+        foreach ($f in '.github/workflows/sync-sql-firewall.yml', 'infra/README.md', 'infra/main.bicep') {
+            (Get-Content -Raw (Join-Path $root $f)) | Should -Not -Match '(?i)\bweekly\b|after every app update|in every `?deploy-api\.yml`? run' -Because $f
+        }
+    }
+
     It 'sync-sql-firewall.yml runs on demand only, signs in with OIDC, and never touches the database' {
         $y = $script:SyncFw.Yaml
         @($y.on.Keys) | Should -Be @('workflow_dispatch')
@@ -290,12 +297,17 @@ Describe 'automatic runs are short: one run per push, under two minutes' {
         $script:All = @{}
         foreach ($f in Get-ChildItem $script:Dir -Filter '*.yml') { $script:All[$f.Name] = Load $f.Name }
         function script:Auto($job) { -not ($job.ContainsKey('if') -and [string]$job.if -match "github\.event_name == 'workflow_dispatch'") }
+        function script:Scheduled($job) { $job.ContainsKey('if') -and [string]$job.if -match "github\.event_name == 'schedule'" }
     }
 
-    It 'no workflow starts on a tag, on a branch other than master, or on a schedule' {
+    It 'no workflow starts on a tag or on a branch other than master, and only secret-scan.yml has a schedule, once a week' {
         foreach ($name in $script:All.Keys) {
             $on = $script:All[$name].Yaml.on
-            $on.Keys | Should -Not -Contain 'schedule' -Because $name
+            if ($name -eq 'secret-scan.yml') {
+                @($on.schedule).Count | Should -Be 1 -Because 'one weekly run of the full-history scan'
+                [string]@($on.schedule)[0].cron | Should -Match '^\d{1,2} \d{1,2} \* \* [0-6]$' -Because 'a minute, an hour and one day of the week'
+            }
+            else { $on.Keys | Should -Not -Contain 'schedule' -Because $name }
             $on.Keys | Should -Not -Contain 'release' -Because $name
             $on.Keys | Should -Not -Contain 'create' -Because $name
             if ($on.Keys -contains 'push') {
@@ -324,7 +336,7 @@ Describe 'automatic runs are short: one run per push, under two minutes' {
     }
 
     It 'every job that starts by itself in ci.yml and secret-scan.yml has a runner limit of 2 minutes, and every other job runs on workflow_dispatch only' {
-        $auto = @()
+        $auto = @(); $scheduled = @()
         foreach ($name in 'ci.yml', 'secret-scan.yml') {
             $jobs = $script:All[$name].Yaml.jobs
             foreach ($jobName in $jobs.Keys) {
@@ -333,11 +345,19 @@ Describe 'automatic runs are short: one run per push, under two minutes' {
                     $auto += "$name/$jobName"
                     [int]$job.'timeout-minutes' | Should -BeLessOrEqual 2 -Because "$name/$jobName starts by itself"
                     [string]$job.if | Should -Match "github\.event_name != 'workflow_dispatch'" -Because "$name/$jobName"
+                    if ($script:All[$name].Yaml.on.Keys -contains 'schedule') { [string]$job.if | Should -Match "github\.event_name != 'schedule'" -Because "$name/$jobName must not also run on the weekly schedule" }
                     [string]$job.'runs-on' | Should -Be 'ubuntu-latest' -Because "$name/$jobName"
                 }
+                elseif (Scheduled $job) {
+                    $scheduled += "$name/$jobName"
+                    [int]$job.'timeout-minutes' | Should -BeLessOrEqual 2 -Because "$name/$jobName starts by itself every week"
+                    [string]$job.'runs-on' | Should -Be 'ubuntu-latest' -Because "$name/$jobName"
+                }
+                else { [string]$job.if | Should -Be "github.event_name == 'workflow_dispatch'" -Because "$name/$jobName" }
             }
         }
         @($auto | Sort-Object) | Should -Be @('ci.yml/fast', 'secret-scan.yml/repository')
+        @($scheduled) | Should -Be @('secret-scan.yml/history')
     }
 
     It 'ci.yml keeps the full jobs (api, desktop, both test orders) for manual runs' {
@@ -350,6 +370,25 @@ Describe 'automatic runs are short: one run per push, under two minutes' {
 
     It 'secret-scan.yml keeps the desktop and api-image jobs for manual runs' {
         foreach ($jobName in 'desktop', 'api-image') { (Auto $script:Scan.Yaml.jobs[$jobName]) | Should -BeFalse -Because $jobName }
+    }
+
+    # gitleaks-action scans the whole history (no range) on a schedule or a run started by hand, and only the event's commits on a
+    # push or pull request. The reviewed findings of the history are in .gitleaksignore (ScanGitleaks.Tests.ps1 tests that list).
+    It 'secret-scan.yml scans the WHOLE history in its own job, weekly and by hand, never on a push or pull request' {
+        $job = $script:Scan.Yaml.jobs.history
+        $job | Should -Not -BeNullOrEmpty
+        [string]$job.if | Should -Be "github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'"
+        $steps = @($job.steps)
+        $checkout = @($steps | Where-Object { (Uses $_) -like 'actions/checkout@*' })
+        $checkout.Count | Should -Be 1
+        $checkout[0].with.'fetch-depth' | Should -Be 0 -Because 'every commit, not only the last one'
+        $scan = @($steps | Where-Object { (Uses $_) -eq 'gitleaks/gitleaks-action@v2' })
+        $scan.Count | Should -Be 1
+        # nothing that narrows the scan: no range, no other configuration, no disabled report
+        foreach ($k in 'BASE_REF', 'GITLEAKS_CONFIG', 'GITLEAKS_VERSION') { $scan[0].env.Keys | Should -Not -Contain $k }
+        @($steps | Where-Object { (Run $_) -match 'gitleaks' }) | Should -BeNullOrEmpty -Because 'the action runs gitleaks, no step of its own'
+        # the weekly run has its own concurrency group, so it never cancels a push to master
+        $script:Scan.Yaml.concurrency.group | Should -Match 'github\.event_name'
     }
 
     It 'the fast job builds and tests Client and Domain only, through the scanning wrapper, with the NuGet cache' {
