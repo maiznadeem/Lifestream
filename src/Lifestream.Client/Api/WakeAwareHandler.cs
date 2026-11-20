@@ -10,6 +10,16 @@ public sealed record WakePolicy
     /// <summary>The longest a call keeps retrying a waking server before it gives up.</summary>
     public TimeSpan Budget { get; init; } = TimeSpan.FromSeconds(120);
 
+    /// <summary>
+    /// The longest a call keeps retrying while no connection can be made at all (refused, no network, no such host). That is not a server
+    /// waking up: a waking server accepts the connection and answers late or with 502/503/504. It is retried quietly, every
+    /// <see cref="FirstBackoff"/>, for this long from the start of the first attempt that could not connect, in case the network or the
+    /// server is back in a moment, and then reported as unreachable. It is well under the 10 s a screen load waits for an answer
+    /// (ViewModelBase.LoadTimeout), and a refused connection can take 2 s to fail on Windows: the screen must end on "Can't reach the
+    /// server", never on "The server is taking too long to answer".
+    /// </summary>
+    public TimeSpan UnreachableBudget { get; init; } = TimeSpan.FromSeconds(6);
+
     /// <summary>How long a call may be slow, or be retried, before the "waking up the server" state is shown.</summary>
     public TimeSpan ShowWakingAfter { get; init; } = TimeSpan.FromSeconds(3);
 
@@ -27,13 +37,20 @@ public sealed record WakePolicy
 }
 
 /// <summary>
-/// Waits for a server or database that is waking up. A request that is out and unanswered is left alone for as long as the
-/// budget lasts: the server is working on it (starting the container, waiting for the database to resume), and giving up on it
-/// would cancel that work on the server and start it again. A request is sent again, with exponential backoff, only when the
-/// last one is over without an answer worth keeping: a connection failure, a 502/503/504, or a <c>database_waking</c> problem.
-/// The retry re-sends the same request headers, so the Idempotency-Key is identical on every attempt. The caller's
-/// cancellation token stops it at any moment, down to the request in flight. A connection that has died is not waited on:
+/// Waits for a server or database that is waking up, for up to <see cref="WakePolicy.Budget"/>, showing the waking state after
+/// <see cref="WakePolicy.ShowWakingAfter"/>. A request that is out and unanswered is left alone for as long as the budget lasts:
+/// the server is working on it (starting the container, waiting for the database to resume), and giving up on it would cancel
+/// that work on the server and start it again. A request is sent again, with exponential backoff, only when the last one is over
+/// without an answer worth keeping: a 502/503/504, a <c>database_waking</c> problem, or a connection that was lost under it.
+/// <para>
+/// A connection that cannot be made at all is a different thing: it is retried quietly for <see cref="WakePolicy.UnreachableBudget"/>
+/// only, never shows the waking state, and then fails as unreachable.
+/// </para>
+/// <para>
+/// The retry re-sends the same request headers, so the Idempotency-Key is identical on every attempt. The caller's cancellation
+/// token stops it at any moment, down to the request in flight. A connection that has died is not waited on:
 /// <see cref="ApiHttpClientFactory"/> has the connection checked while a request waits, and its failure is retried here.
+/// </para>
 /// </summary>
 public sealed class WakeAwareHandler(WakePolicy policy, ServerStatus status, HttpMessageHandler inner) : DelegatingHandler(inner)
 {
@@ -53,8 +70,10 @@ public sealed class WakeAwareHandler(WakePolicy policy, ServerStatus status, Htt
         byte[]? body = request.Content is null ? null : await request.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
 
         var call = new CallState(status, clock);
-        using var slowTimer = clock.CreateTimer(_ => call.Enter(), null, policy.ShowWakingAfter, Timeout.InfiniteTimeSpan);
+        using var slowTimer = clock.CreateTimer(_ => call.Slow(), null, policy.ShowWakingAfter, Timeout.InfiniteTimeSpan);
         var backoff = policy.FirstBackoff;
+        long? unreachableSince = null;
+        var unreachableBudget = policy.UnreachableBudget < policy.Budget ? policy.UnreachableBudget : policy.Budget;
 
         // The one time limit of a call: an attempt still unanswered when the budget ends is given up. Nothing shorter cuts an attempt off.
         // (A budget of zero means one attempt and no retry; that attempt is not cut off at all.)
@@ -66,6 +85,7 @@ public sealed class WakeAwareHandler(WakePolicy policy, ServerStatus status, Htt
             {
                 HttpResponseMessage? response = null;
                 Exception? failure = null;
+                var attemptStarted = clock.GetTimestamp();
                 try
                 {
                     using var copy = Clone(request, body);
@@ -101,9 +121,17 @@ public sealed class WakeAwareHandler(WakePolicy policy, ServerStatus status, Htt
                     }
                 }
 
+                // No connection at all (refused, no network) is not "waking": no waking state while it lasts, and a short budget of its own.
+                // A connection that cannot be made fails within seconds. An attempt that fails only after it has been out for longer than
+                // that budget had its connection and lost it while the server was working on the request: that one is sent again as any
+                // other request of a waking server, not given up as unreachable.
+                var unreachable = failure is HttpRequestException && clock.GetElapsedTime(attemptStarted) < unreachableBudget;
+                unreachableSince = unreachable ? unreachableSince ?? attemptStarted : null;
+                call.Unreachable(unreachable);
+
                 var elapsed = clock.GetElapsedTime(started);
-                var delay = RetryAfter(response) ?? backoff;
-                if (elapsed + delay >= policy.Budget)
+                var delay = RetryAfter(response) ?? (unreachable ? policy.FirstBackoff : backoff);
+                if (elapsed + delay >= policy.Budget || (unreachableSince is { } since && clock.GetElapsedTime(since) + delay >= unreachableBudget))
                 {
                     if (response is not null)
                     {
@@ -115,7 +143,10 @@ public sealed class WakeAwareHandler(WakePolicy policy, ServerStatus status, Htt
 
                 response?.Dispose();
                 await Task.Delay(delay, clock, cancellationToken).ConfigureAwait(false);
-                backoff = TimeSpan.FromTicks(Math.Min(backoff.Ticks * 2, policy.MaxBackoff.Ticks));
+                if (!unreachable)
+                {
+                    backoff = TimeSpan.FromTicks(Math.Min(backoff.Ticks * 2, policy.MaxBackoff.Ticks));
+                }
             }
         }
         finally
@@ -198,38 +229,45 @@ public sealed class WakeAwareHandler(WakePolicy policy, ServerStatus status, Htt
         return copy;
     }
 
-    /// <summary>Tracks whether this call put the server into the waking state, and takes it out again exactly once.</summary>
+    /// <summary>
+    /// Tracks whether this call has the server in the waking state: it does once it has been slow for <see cref="WakePolicy.ShowWakingAfter"/>,
+    /// except while its last attempt could not connect at all, and never after it has ended. Every Enter is balanced by one Leave. The
+    /// state is entered on the handler's clock, the one the server's answers are noted on (<see cref="ServerStatus.Heard"/>).
+    /// </summary>
     private sealed class CallState(ServerStatus status, TimeProvider clock)
     {
         private readonly Lock _gate = new();
+        private bool _slow;
+        private bool _unreachable;
         private bool _entered;
         private bool _completed;
 
-        public void Enter()
+        /// <summary>The call has been running for <see cref="WakePolicy.ShowWakingAfter"/>.</summary>
+        public void Slow() => Update(() => _slow = true);
+
+        /// <summary>Whether the last attempt failed without any connection (true), or the server was there (false).</summary>
+        public void Unreachable(bool value) => Update(() => _unreachable = value);
+
+        public void Complete() => Update(() => _completed = true);
+
+        private void Update(Action change)
         {
-            lock (_gate)
-            {
-                if (_entered || _completed)
-                {
-                    return;
-                }
-
-                _entered = true;
-            }
-
-            status.Enter(clock);
-        }
-
-        public void Complete()
-        {
+            bool enter;
             bool leave;
             lock (_gate)
             {
-                _completed = true;
-                leave = _entered;
+                change();
+                var waking = _slow && !_unreachable && !_completed;
+                enter = waking && !_entered;
+                leave = !waking && _entered;
+                _entered = waking;
             }
 
-            if (leave)
+            if (enter)
+            {
+                status.Enter(clock);
+            }
+            else if (leave)
             {
                 status.Leave();
             }

@@ -556,7 +556,7 @@ public sealed class ScaleApiFixture : ApiFixture
     protected override SqlServerDatabaseFixture CreateDb() => new ScaleDatabaseFixture();
 }
 
-/// <summary>The same host over a database that holds the 1x demo dataset (270 receipts, 300 appointments, 40 donors).</summary>
+/// <summary>The same host over a database that holds the 1x demo dataset (270 receipts, 300 appointments, 100 donors).</summary>
 public sealed class DemoSizeApiFixture : ApiFixture
 {
     protected override SqlServerDatabaseFixture CreateDb() => new DemoSizeDatabaseFixture();

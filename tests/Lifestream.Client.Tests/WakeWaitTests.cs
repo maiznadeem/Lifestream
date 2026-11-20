@@ -73,6 +73,78 @@ public sealed class WakeWaitTests
     }
 
     [Fact]
+    public async Task ARequestThatLosesItsConnectionAfter40Seconds_IsSentAgain_NotGivenUpAsUnreachable()
+    {
+        // The short budget of release 2.1.4 is for a connection that cannot be made (refused within seconds). A request that was out for
+        // 40 s had its connection: losing it then (the platform closes it, a ping goes unanswered) is part of the wake, and the wake goes on.
+        var server = new HoldingServer();
+        var (api, status, clock) = Build(server);
+
+        var call = api.GetDonorAsync(7);
+        await WaitForAsync(() => server.Arrived == 1);
+        await PassAsync(clock, 40);
+        Assert.Equal(ServerState.Waking, status.State);
+
+        server.Fail(0, new HttpRequestException(HttpRequestError.ResponseEnded, "The response ended prematurely."));
+        await PassAsync(clock, 2);
+        await WaitForAsync(() => server.Arrived == 2);
+        Assert.False(call.IsCompleted);
+        Assert.Equal(ServerState.Waking, status.State); // still one wake, still shown as one
+
+        server.Answer(1, ScriptedHandler.Json(HttpStatusCode.OK, DonorJson));
+        var result = await call.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.True(result.IsOk);
+        Assert.Equal(ServerState.Online, status.State);
+    }
+
+    [Fact]
+    public async Task ARefusedConnection_AfterAHeldRequest_StillGetsItsShortBudget_AndLeavesTheWakingState()
+    {
+        // Both rules in one call: 40 s of a request the server holds (not abandoned), then the server is gone (refused at once).
+        var held = new HoldingServer();
+        var refusing = false;
+        var refused = 0;
+        var server = new Switch(held, () => refusing, () => Interlocked.Increment(ref refused));
+        var (api, status, clock) = Build(server);
+
+        var call = api.GetDonorAsync(7);
+        await WaitForAsync(() => held.Arrived == 1);
+        await PassAsync(clock, 40);
+        Assert.Equal(ServerState.Waking, status.State);
+        Assert.Equal(0, held.Cancelled);
+
+        refusing = true;
+        var wentDownAt = clock.Elapsed;
+        held.Fail(0, new HttpRequestException(HttpRequestError.ResponseEnded, "The response ended prematurely."));
+        for (var i = 0; i < 60 && !call.IsCompleted; i++)
+        {
+            clock.Advance(TimeSpan.FromMilliseconds(250));
+            await Task.Delay(2);
+        }
+
+        var result = await call.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.True(result.Problem!.IsUnreachable, result.Problem.Code);
+        Assert.Equal(ServerState.Online, status.State);
+        Assert.InRange((clock.Elapsed - wentDownAt).TotalSeconds, 3, 8); // the backoff after the lost request, then the 6 s of quiet tries
+        Assert.InRange(Volatile.Read(ref refused), 2, 7);
+    }
+
+    /// <summary>Passes requests to a server until told that connections are refused from now on.</summary>
+    private sealed class Switch(HttpMessageHandler up, Func<bool> refusing, Action refused) : DelegatingHandler(up)
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            if (!refusing())
+            {
+                return base.SendAsync(request, cancellationToken);
+            }
+
+            refused();
+            throw new HttpRequestException(HttpRequestError.ConnectionError, "No connection could be made because the target machine actively refused it.");
+        }
+    }
+
+    [Fact]
     public async Task UserCancel_AMinuteIntoOneAttempt_CancelsTheRequestItself_AtOnce()
     {
         var server = new HoldingServer();

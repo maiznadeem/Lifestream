@@ -53,7 +53,11 @@ public sealed partial class NavItem(Destination destination, int position) : Obs
     public string BadgeNoun { get; init; } = string.Empty;
 }
 
-public sealed record NavGroup(string Title, IReadOnlyList<NavItem> Items);
+public sealed record NavGroup(string Title, IReadOnlyList<NavItem> Items)
+{
+    /// <summary>What a screen reader calls the group: its heading, or "Main" for the first group, which has none.</summary>
+    public string AutomationName => Title.Length == 0 ? "Main" : Title;
+}
 
 /// <summary>
 /// The main window's view model (SHELL-17..23): sidebar, account menu, window title, toasts, the "update ready" prompt, and
@@ -183,6 +187,7 @@ public sealed partial class ShellViewModel : ViewModelBase
             return Task.CompletedTask;
         });
         Toasts.Actions.Changed += OnToastActionsChanged;
+        Toasts.Toasts.CollectionChanged += OnToastsChanged;
         navigation.CurrentChanged += OnCurrentChanged;
         serverStatus.DemoResetObserved += OnDemoReset;
         serverStatus.Changed += OnServerStatusChanged;
@@ -218,13 +223,13 @@ public sealed partial class ShellViewModel : ViewModelBase
     /// </summary>
     public bool HasNotifications => Notifications.IsKnown ? Notifications.Count > 0 : LowStockGroups > 0;
 
-    /// <summary>The bell's name and tooltip: "Notifications, 4 items need attention".</summary>
-    public string NotificationsSummary => Notifications.IsKnown ? Notifications.Summary : LowStockGroups switch
-    {
-        0 => "Notifications",
-        1 => "Notifications, 1 blood group is below its minimum",
-        var low => $"Notifications, {low} blood groups are below their minimum",
-    };
+    /// <summary>
+    /// The bell's name and tooltip: "Notifications, 4 items need attention". Until the list has been read (the dashboard or the flyout loads
+    /// it) the shell only knows whether stock is low, which is one item of that list and seldom the only one: it says "at least 1", never the
+    /// one item as if it were everything.
+    /// </summary>
+    public string NotificationsSummary => Notifications.IsKnown ? Notifications.Summary
+        : LowStockGroups > 0 ? "Notifications, at least 1 item needs attention" : "Notifications";
 
     partial void OnLowStockGroupsChanged(int value) => RaiseNotifications();
 
@@ -555,7 +560,7 @@ public sealed partial class ShellViewModel : ViewModelBase
         }
     }
 
-    /// <summary>Today's earliest pending appointment that has not started more than an hour ago, or null.</summary>
+    /// <summary>Today's next appointment (<see cref="Features.Dashboard.NextAppointment"/>, the one the dashboard marks "Next"), or null.</summary>
     [RunsInOperation("RecordDonationCommand runs RecordDonationAsync, which calls it, through the shell's operation runner.")]
     private async Task<Contracts.Appointments.AppointmentListItem?> FindNextAppointmentAsync()
     {
@@ -571,10 +576,7 @@ public sealed partial class ShellViewModel : ViewModelBase
             return null;
         }
 
-        var today = result.Value.Items.Where(day.Holds).ToList();
-        var earliest = Clock.GetUtcNow().UtcDateTime.AddHours(-1);
-        return today.Where(a => a.SlotStartUtc >= earliest).OrderBy(a => a.SlotStartUtc).FirstOrDefault()
-            ?? today.OrderBy(a => a.SlotStartUtc).FirstOrDefault();
+        return Features.Dashboard.NextAppointment.Of(result.Value.Items.Where(day.Holds), Clock.GetUtcNow().UtcDateTime);
     }
 
     private void OnPreferencesChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -652,6 +654,18 @@ public sealed partial class ShellViewModel : ViewModelBase
         }
     }
 
+    /// <summary>
+    /// A success toast means a record was just added, changed, fulfilled, cancelled, deleted or restored, on whichever screen: the sidebar's
+    /// counts are read again at once, not at the next navigation half a minute later (the Requests count stayed 40 beside a page saying 41 open).
+    /// </summary>
+    private void OnToastsChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    {
+        if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Add && e.NewItems is { } added && added.OfType<ToastItem>().Any(t => t.Kind == ToastKind.Success))
+        {
+            _ = RefreshCountsAsync();
+        }
+    }
+
     private void OnDemoReset(object? sender, EventArgs e)
     {
         void Handle()
@@ -703,6 +717,7 @@ public sealed partial class ShellViewModel : ViewModelBase
             Preferences.PropertyChanged -= OnPreferencesChanged;
             _serverStatus.Changed -= OnServerStatusChanged;
             Toasts.Actions.Changed -= OnToastActionsChanged;
+            Toasts.Toasts.CollectionChanged -= OnToastsChanged;
             _serverStatus.DemoResetObserved -= OnDemoReset;
             Navigation.Reset();
         }

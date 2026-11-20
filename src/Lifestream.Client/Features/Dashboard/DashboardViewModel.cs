@@ -511,15 +511,12 @@ public sealed partial class DashboardViewModel : ViewModelBase
     private void ApplyToday()
     {
         Today.Clear();
-        var nextFound = false;
+
+        // "Next" is the appointment that "Record donation" opens: one rule for both (NextAppointment).
+        var next = NextAppointment.Of(_today, Clock.GetUtcNow().UtcDateTime);
         foreach (var a in _today)
         {
-            var state = a.Status == AppointmentStatus.Completed ? TodayState.Done : TodayState.Pending;
-            if (state == TodayState.Pending && !nextFound && a.Status == AppointmentStatus.Pending)
-            {
-                state = TodayState.Next;
-                nextFound = true;
-            }
+            var state = a.Status == AppointmentStatus.Completed ? TodayState.Done : a.Id == next?.Id ? TodayState.Next : TodayState.Pending;
 
             Today.Add(new TodayAppointment(a.Id, a.DonorId, LocalTime(a.SlotStartUtc), a.DonorName, a.DonorBloodType.ToTypographic(), state, _firstTimers.Contains(a.DonorId)));
         }

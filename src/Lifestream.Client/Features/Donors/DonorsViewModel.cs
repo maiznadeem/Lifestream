@@ -21,6 +21,7 @@ public sealed class DonorsViewModel : SortedRecordListViewModel<DonorListItem, D
     private FilterOption<bool> _eligibilityFilter;
     private FilterOption<DonationRecency> _lastDonatedFilter;
     private (int DonorId, DonorDonations? History)? _fetchedHistory;
+    private (int DonorId, int? Appointments)? _fetchedAppointments;
 
     public DonorsViewModel(ILifestreamApiClient api, IListViewStateStore states, IToastService toasts, IDialogService dialogs, INavigationService navigation, IUiDispatcher ui)
         : base(states, "donors", toasts, dialogs, ui)
@@ -284,14 +285,18 @@ public sealed class DonorsViewModel : SortedRecordListViewModel<DonorListItem, D
 
     protected override Task<ApiResult<DonorDetail>> GetDetailAsync(int id, CancellationToken ct) => api.GetDonorAsync(id, ct);
 
-    // The eligibility and the donation history, side by side; either may fail without failing the panel (it says so in place).
+    // The eligibility, the donation history and how many appointments the donor has on record, side by side; any may fail without failing the panel (it says so in
+    // place; an unknown number of appointments leaves Delete to the server).
     protected override async Task<IReadOnlyList<DetailFact>> GetExtraFactsAsync(int id, CancellationToken ct)
     {
         var eligibilityCall = api.GetDonorEligibilityAsync(id, ct);
         var historyCall = api.GetDonorDonationsAsync(id, ct);
+        var appointmentsCall = api.GetAppointmentsAsync(new Contracts.Appointments.AppointmentQuery(DonorId: id, PageSize: 1), ct); // only the total is read
         var result = await eligibilityCall.ConfigureAwait(false);
         var history = await historyCall.ConfigureAwait(false);
+        var appointments = await appointmentsCall.ConfigureAwait(false);
         _fetchedHistory = (id, history.IsOk ? history.Value : null);
+        _fetchedAppointments = (id, appointments.IsOk ? appointments.Value.Total : null);
         var donations = new DetailFact(DonationsLabel, history.IsOk ? DonationHistory.TotalText(history.Value) : "Could not be loaded right now");
         if (!result.IsOk)
         {
@@ -318,6 +323,20 @@ public sealed class DonorsViewModel : SortedRecordListViewModel<DonorListItem, D
     ];
 
     protected override Task<ApiResult> DeleteRecordAsync(int id, CancellationToken ct) => api.DeleteDonorAsync(id, ct);
+
+    /// <summary>
+    /// A donor with an appointment on record (booked, cancelled or with a donation) can't be deleted: the server keeps every appointment and the receipts and bags
+    /// behind it, and they point at the donor. Delete is offered only for a donor with none (one added by mistake).
+    /// </summary>
+    protected override string? DeleteBlockOf(DonorDetail donor) =>
+        _fetchedAppointments is { } fetched && fetched.DonorId == donor.Id && fetched.Appointments is > 0
+            ? HistoryKept
+            : null;
+
+    private const string HistoryKept = "A donor with appointments or donations on record can't be deleted: their history is kept.";
+
+    protected override string? DeleteRefusedText(string name) =>
+        $"Donor '{name}' can't be deleted: they have appointments or donations on record, and that history is kept. Nothing was changed.";
 
     // The API keeps the deleted donor for a few seconds and puts it back as it was (same id, last-donation date, medical hold), so Undo restores rather than re-creates.
     protected override Task<ApiResult<DonorDetail>> RestoreAsync(DonorDetail d, CancellationToken ct) => api.RestoreDonorAsync(d.Id, ct);

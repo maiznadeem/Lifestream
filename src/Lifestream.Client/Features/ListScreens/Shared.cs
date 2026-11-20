@@ -11,6 +11,12 @@ public sealed record Choice<T>(string Display, T Value)
     public override string ToString() => Display;
 }
 
+/// <summary>A list that asks its view to bring the selected row into view (a record another screen opened, or one just saved, may be far down the page).</summary>
+public interface IRevealsSelection
+{
+    event EventHandler? RevealSelectionRequested;
+}
+
 /// <summary>One label and value line of a detail pane.</summary>
 public sealed record DetailFact(string Label, string Value);
 

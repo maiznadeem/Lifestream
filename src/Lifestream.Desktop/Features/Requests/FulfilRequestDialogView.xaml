@@ -6,7 +6,8 @@
              Focusable="False" IsTabStop="False">
   <!-- The fulfil step of a request, in the Requests side panel (direction A, audit R3): what will be issued, the bags that will go (oldest first: order, bag, where it
        came from, use-by date), how much of that blood is in stock (amber when it is short), the server's message when it refuses, and "Fulfil request" with "Not now",
-       which keeps the request as it is. Esc is "Not now" (it leaves the step, not the panel). The data context is the FulfilRequestDialogViewModel.
+       which keeps the request as it is. While the stock is short nothing can be issued (the server issues a request in full or not at all): a line says how many
+       units are missing, the bags are listed as what is in stock, and "Fulfil request" is disabled. Esc is "Not now" (it leaves the step, not the panel). The data context is the FulfilRequestDialogViewModel.
        "Fulfil request" and "Not now" are a footer that stays in view: when the panel is short (1024 x 700) the step's content scrolls above them. Each bag is two
        lines: its code with the use-by date, then where it came from. -->
   <UserControl.Resources>
@@ -67,7 +68,7 @@
           <!-- The bags that will be issued, in the order the server takes them -->
           <TextBlock x:Name="BagsNote" Style="{DynamicResource Text.Label}" Text="{Binding BagsNote}" TextWrapping="Wrap" Margin="{DynamicResource Inset.B8}"
                      Visibility="{Binding BagsNote, Converter={StaticResource HasContent}}" />
-          <ItemsControl x:Name="BagList" ItemsSource="{Binding Bags}" Focusable="False" Margin="{StaticResource Fulfil.Gap}" AutomationProperties.Name="Bags to issue"
+          <ItemsControl x:Name="BagList" ItemsSource="{Binding Bags}" Focusable="False" Margin="{StaticResource Fulfil.Gap}" AutomationProperties.Name="{Binding BagsLabel}"
                         Visibility="{Binding Bags, Converter={StaticResource HasContent}}">
             <ItemsControl.ItemTemplate>
               <DataTemplate>
@@ -96,16 +97,25 @@
           </ItemsControl>
         </StackPanel>
       </ScrollViewer>
-      <!-- The server's refusal, next to the buttons so it is in view whatever the content above has scrolled to -->
-      <Border Grid.Row="1" Background="{DynamicResource Brush.CriticalSoft}" BorderBrush="{DynamicResource Brush.CriticalStroke}" BorderThickness="1" CornerRadius="{DynamicResource Radius.Control}"
-              Padding="{StaticResource Fulfil.CardPad}" Margin="{StaticResource Fulfil.Gap}" Visibility="{Binding HasFormError, Converter={StaticResource BoolToVisibility}}"
-              AutomationProperties.LiveSetting="Assertive">
-        <TextBlock x:Name="FormErrorText" Style="{DynamicResource Text.Body}" Foreground="{DynamicResource Brush.Critical}" Text="{Binding FormError}" TextWrapping="Wrap" />
-      </Border>
+      <!-- Short stock: why "Fulfil request" is not offered, next to the buttons so it is in view whatever the content above has scrolled to -->
+      <StackPanel Grid.Row="1">
+        <Border x:Name="ShortNotice" Background="{DynamicResource Brush.WarningSoft}" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="1" CornerRadius="{DynamicResource Radius.Control}"
+                Padding="{StaticResource Fulfil.CardPad}" Margin="{StaticResource Fulfil.Gap}" Visibility="{Binding HasShortReason, Converter={StaticResource BoolToVisibility}}"
+                AutomationProperties.LiveSetting="Polite">
+          <TextBlock x:Name="ShortReasonText" Style="{DynamicResource Text.Body}" Text="{Binding ShortReason}" TextWrapping="Wrap" />
+        </Border>
+        <!-- The server's refusal (the stock went down after the step opened), above the same buttons -->
+        <Border Background="{DynamicResource Brush.CriticalSoft}" BorderBrush="{DynamicResource Brush.CriticalStroke}" BorderThickness="1" CornerRadius="{DynamicResource Radius.Control}"
+                Padding="{StaticResource Fulfil.CardPad}" Margin="{StaticResource Fulfil.Gap}" Visibility="{Binding HasFormError, Converter={StaticResource BoolToVisibility}}"
+                AutomationProperties.LiveSetting="Assertive">
+          <TextBlock x:Name="FormErrorText" Style="{DynamicResource Text.Body}" Foreground="{DynamicResource Brush.Critical}" Text="{Binding FormError}" TextWrapping="Wrap" />
+        </Border>
+      </StackPanel>
       <!-- The footer: always in view, under the content that scrolls -->
       <UniformGrid x:Name="Footer" Grid.Row="2" Columns="2">
         <Button x:Name="PrimaryButton" Style="{DynamicResource Button.Primary}" Command="{Binding PrimaryCommand}" Content="{Binding PrimaryText}" Margin="{DynamicResource Inset.R8}"
-                controls:ButtonAssist.IsBusy="{Binding IsBusy}" controls:ButtonAssist.BusyText="Issuing" AutomationProperties.Name="{Binding PrimaryText}" />
+                controls:ButtonAssist.IsBusy="{Binding IsBusy}" controls:ButtonAssist.BusyText="Issuing" AutomationProperties.Name="{Binding PrimaryText}"
+                AutomationProperties.HelpText="{Binding ShortReason}" />
         <Button x:Name="CancelButton" Style="{DynamicResource Button.Secondary}" Command="{Binding CancelCommand}" Content="{Binding CancelText}" AutomationProperties.Name="{Binding CancelText}"
                 ToolTip="Keep the request as it is (Esc)" />
       </UniformGrid>

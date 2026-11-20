@@ -33,6 +33,15 @@ public sealed class HoldingServer : HttpMessageHandler
         }
     }
 
+    /// <summary>Ends a held request with a failure, as a connection lost under it does.</summary>
+    public void Fail(int index, Exception failure)
+    {
+        lock (_gate)
+        {
+            _held[index].SetException(failure);
+        }
+    }
+
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         var held = new TaskCompletionSource<HttpResponseMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
