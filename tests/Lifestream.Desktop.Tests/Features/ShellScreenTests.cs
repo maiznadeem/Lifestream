@@ -68,8 +68,14 @@ public sealed class ShellScreenTests
             using (host)
             using (rig)
             {
-                _ = shell.StartAsync();
-                host.Settle(500);
+                // The shell's start-up first: the start page, then the sidebar counts and the profile line in the background, which call some of the routes
+                // counted below. Counted while they were still on their way, a slow start put the counts' call into the first visit (2 calls for one
+                // visit, seen under load). The shell's clock stands still, so no visit reads the counts again (a navigation does once 30 s have passed):
+                // each visit counts only the calls its screen made.
+                shell.Attach(null, new Lifestream.Client.Tests.Fakes.ManualTimeProvider());
+                Hosted.Await(() => shell.StartAsync());
+                Hosted.Await(() => shell.PendingStartup);
+                host.Settle(500); // the start page's view, for the checks of its visit below
                 var result = new List<(string Title, Type? View, string Heading)>();
                 // The call each screen makes for its own data. In direction A the shell (sidebar counts, read once at start) and the dashboard (stock
                 // meters) call some of the same routes, so the calls are counted per visit: what the route's count grew by while the screen opened.
@@ -203,7 +209,9 @@ public sealed class ShellScreenTests
             {
                 if (title == "Dashboard")
                 {
-                    _ = shell.StartAsync();
+                    // The start page once the shell's start-up has ended (the sidebar counts included), then time for the charts to draw.
+                    Hosted.Await(() => shell.StartAsync());
+                    Hosted.Await(() => shell.PendingStartup);
                     host.Settle(1500);
                 }
                 else

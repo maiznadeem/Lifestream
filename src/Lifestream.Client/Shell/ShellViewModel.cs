@@ -422,9 +422,14 @@ public sealed partial class ShellViewModel : ViewModelBase
 
         await OpenAsync(_catalog[0]).ConfigureAwait(true);
         _started = true;
-        _ = RefreshCountsAsync();
-        _ = LoadProfileLineAsync();
+        PendingStartup = Task.WhenAll(RefreshCountsAsync(), LoadProfileLineAsync());
     }
+
+    /// <summary>
+    /// Completes when the work <see cref="StartAsync"/> leaves running in the background (the sidebar counts and the profile line) has ended, for tests
+    /// that count the calls a later screen makes: until then those calls may still be on their way.
+    /// </summary>
+    internal Task PendingStartup { get; private set; } = Task.CompletedTask;
 
     /// <summary>Reads the profile once for the sidebar's "Doctor, morning shift" line; quiet on failure.</summary>
     private async Task LoadProfileLineAsync()
