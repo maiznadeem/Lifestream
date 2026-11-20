@@ -98,12 +98,7 @@ public partial class ShellView : UserControl
 
         SearchField.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
         CompactSearch.Visibility = compact ? Visibility.Visible : Visibility.Collapsed;
-        NotificationsButton.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
-        if (compact)
-        {
-            _model?.Notifications.Close(); // the bell is hidden in a compact window, and a flyout never hangs under a control that is not there
-        }
-
+        // The bell stays at every width: it is the only way to what needs attention from a screen other than the dashboard.
         AvatarButton.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
         ApplyPageMargin();
         LegacyTitle.Margin = compact ? ThemeTokens.Inset("Inset.L22T18R16") : ThemeTokens.Inset("Inset.L32T24R32");
