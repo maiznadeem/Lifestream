@@ -66,6 +66,12 @@ public static class DatabaseProblems
     public const string RestingTitle = "The demo is resting until the 1st of next month.";
     public const string WakingTitle = "The database is waking up. Try again in a moment.";
     public static readonly TimeSpan WakingRetryAfter = TimeSpan.FromSeconds(15);
+
+    /// <summary>
+    /// The Retry-After of a readiness check that found the database still waking: the same interval a waiting request tries at, so the
+    /// client's readiness poll sees a resumed database as soon as a request would.
+    /// </summary>
+    public static TimeSpan ReadinessRetryAfter(DatabaseSettings settings) => TimeSpan.FromSeconds(Math.Clamp(settings.MaxRetryDelaySeconds, 1, 15));
 }
 
 public sealed class ProblemMiddleware(RequestDelegate next, ILogger<ProblemMiddleware> logger)

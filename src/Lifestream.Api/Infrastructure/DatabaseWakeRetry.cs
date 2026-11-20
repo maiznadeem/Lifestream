@@ -48,7 +48,8 @@ public static class DatabaseErrors
 
 /// <summary>
 /// Retries transient failures for up to <see cref="DatabaseSettings.WakeBudgetSeconds"/> in total (a paused serverless database
-/// takes up to about a minute to resume) with a capped exponential back-off; after that EF throws and the API answers 503.
+/// takes about a minute to resume) and never waits longer than <see cref="DatabaseSettings.MaxRetryDelaySeconds"/> between two tries;
+/// after the budget EF throws and the API answers 503. A database whose free allowance is used up (42119) is not retried at all.
 /// </summary>
 public sealed class WakeAwareExecutionStrategy(ExecutionStrategyDependencies dependencies, DatabaseSettings settings)
     : SqlServerRetryingExecutionStrategy(dependencies, int.MaxValue, TimeSpan.FromSeconds(settings.MaxRetryDelaySeconds), [.. DatabaseErrors.RetryNumbers])
@@ -70,7 +71,8 @@ public sealed class WakeAwareExecutionStrategy(ExecutionStrategyDependencies dep
             return null;
         }
 
-        // EF waits at least 5 seconds after "database not available"; MaxRetryDelaySeconds is the real ceiling (tests lower it).
+        // EF's own wait after "database not available" (40613) starts at 5 seconds and doubles; MaxRetryDelaySeconds is the real ceiling,
+        // so while a database resumes the tries come at that steady interval and the first one that can succeed is at most that late.
         var ceiling = TimeSpan.FromSeconds(settings.MaxRetryDelaySeconds);
         var left = _budget - elapsed;
         var wait = delay.Value < ceiling ? delay.Value : ceiling;

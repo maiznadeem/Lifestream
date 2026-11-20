@@ -68,7 +68,12 @@ public sealed class DatabaseSettings
     /// <summary>How long a request keeps retrying while the database resumes, before answering 503.</summary>
     public int WakeBudgetSeconds { get; set; } = 120;
 
-    public int MaxRetryDelaySeconds { get; set; } = 10;
+    /// <summary>
+    /// The longest wait between two tries of a request while the database resumes, so a resumed database is noticed within this
+    /// time. It was 10 s up to 2.1.2, which left a request waiting about 5 s on a database that was already back. A try against a
+    /// database that is still resuming is one refused login; at 2 s that is at most 30 a minute for each waiting request.
+    /// </summary>
+    public int MaxRetryDelaySeconds { get; set; } = 2;
 
     /// <summary>The readiness probe waits this long for one connection before reporting "waking".</summary>
     public int ReadinessTimeoutSeconds { get; set; } = 5;

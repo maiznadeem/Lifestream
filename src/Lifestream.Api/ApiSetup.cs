@@ -218,7 +218,7 @@ public static class ApiSetup
         // The client calls it when its sign-in window opens, so it also starts the sign-in warm-up, in the background and once: after
         // this request's own connection has its answer (the two would compete for the processor), when that answer is "ready" or
         // "waking". The answer does not wait for the warm-up and does not depend on it.
-        app.MapGet(ApiRoutes.Readyz, async (IDatabaseProbe probe, SignInWarmUp warmUp, CancellationToken ct) =>
+        app.MapGet(ApiRoutes.Readyz, async (IDatabaseProbe probe, SignInWarmUp warmUp, DatabaseSettings database, CancellationToken ct) =>
         {
             try
             {
@@ -244,7 +244,7 @@ public static class ApiSetup
                     StatusCodes.Status503ServiceUnavailable,
                     ProblemCodes.DatabaseWaking,
                     DatabaseProblems.WakingTitle,
-                    DatabaseProblems.WakingRetryAfter,
+                    DatabaseProblems.ReadinessRetryAfter(database),
                     new Dictionary<string, object?> { ["database"] = DatabaseStates.Waking });
             }
         });

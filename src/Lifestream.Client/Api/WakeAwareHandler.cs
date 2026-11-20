@@ -13,8 +13,11 @@ public sealed record WakePolicy
     /// <summary>How long a call may be slow, or be retried, before the "waking up the server" state is shown.</summary>
     public TimeSpan ShowWakingAfter { get; init; } = TimeSpan.FromSeconds(3);
 
-    /// <summary>A single attempt that takes longer than this is abandoned and retried.</summary>
-    public TimeSpan AttemptTimeout { get; init; } = TimeSpan.FromSeconds(20);
+    /// <summary>
+    /// The longest any one call may last: the budget plus a margin for the answer that arrives as the budget ends. The handler itself
+    /// stops at the budget; this is the limit the operation scope puts on top (<see cref="ScopedApiClient"/>).
+    /// </summary>
+    public TimeSpan Ceiling => Budget + TimeSpan.FromSeconds(20);
 
     public TimeSpan FirstBackoff { get; init; } = TimeSpan.FromSeconds(1);
 
@@ -24,9 +27,13 @@ public sealed record WakePolicy
 }
 
 /// <summary>
-/// Retries a call, with exponential backoff, while the server or database is waking up: on a connection failure, an
-/// attempt timeout, a 502/503/504, or a <c>database_waking</c> problem. The retry re-sends the same request headers, so
-/// the Idempotency-Key is identical on every attempt. The caller's cancellation token stops it at any moment.
+/// Waits for a server or database that is waking up. A request that is out and unanswered is left alone for as long as the
+/// budget lasts: the server is working on it (starting the container, waiting for the database to resume), and giving up on it
+/// would cancel that work on the server and start it again. A request is sent again, with exponential backoff, only when the
+/// last one is over without an answer worth keeping: a connection failure, a 502/503/504, or a <c>database_waking</c> problem.
+/// The retry re-sends the same request headers, so the Idempotency-Key is identical on every attempt. The caller's
+/// cancellation token stops it at any moment, down to the request in flight. A connection that has died is not waited on:
+/// <see cref="ApiHttpClientFactory"/> has the connection checked while a request waits, and its failure is retried here.
 /// </summary>
 public sealed class WakeAwareHandler(WakePolicy policy, ServerStatus status, HttpMessageHandler inner) : DelegatingHandler(inner)
 {
@@ -48,14 +55,17 @@ public sealed class WakeAwareHandler(WakePolicy policy, ServerStatus status, Htt
         var call = new CallState(status);
         using var slowTimer = clock.CreateTimer(_ => call.Enter(), null, policy.ShowWakingAfter, Timeout.InfiniteTimeSpan);
         var backoff = policy.FirstBackoff;
+
+        // The one time limit of a call: an attempt still unanswered when the budget ends is given up. Nothing shorter cuts an attempt off.
+        // (A budget of zero means one attempt and no retry; that attempt is not cut off at all.)
+        using var budget = policy.Budget > TimeSpan.Zero ? new CancellationTokenSource(policy.Budget, clock) : new CancellationTokenSource();
+        using var attempt = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, budget.Token);
         try
         {
             while (true)
             {
                 HttpResponseMessage? response = null;
                 Exception? failure = null;
-                using var attemptTimeout = new CancellationTokenSource(policy.AttemptTimeout, clock);
-                using var attempt = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, attemptTimeout.Token);
                 try
                 {
                     using var copy = Clone(request, body);
@@ -68,7 +78,7 @@ public sealed class WakeAwareHandler(WakePolicy policy, ServerStatus status, Htt
                 }
                 catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
                 {
-                    failure = ex; // the attempt timed out, not the caller
+                    failure = ex; // the budget ended with the attempt unanswered; the caller did not cancel
                 }
 
                 if (response is not null)
