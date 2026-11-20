@@ -42,10 +42,35 @@ public abstract class FormViewModelBase : ViewModelBase, INotifyDataErrorInfo, I
     public IEnumerable GetErrors(string? propertyName) =>
         propertyName is not null && _errors.TryGetValue(propertyName, out var message) ? new[] { message } : Array.Empty<string>();
 
+    private readonly Dictionary<string, string> _inputErrors = [];
+
+    /// <summary>
+    /// Called by an input control whose text is not a value at all (the date field holding "31 Feb 2030"): the field's bound value is still the
+    /// previous one, so the form must not be saved until the text is put right. The message is shown and blocks <see cref="ValidateAll"/> like
+    /// any other; null means the text is a value again.
+    /// </summary>
+    public void SetInputError(string field, string? message)
+    {
+        ArgumentNullException.ThrowIfNull(field);
+        _inputErrors.Remove(field, out var old);
+        if (message is not null)
+        {
+            _inputErrors[field] = message;
+            SetError(field, message);
+        }
+        else if (old is not null && GetError(field) == old)
+        {
+            SetError(field, null);
+        }
+    }
+
+    /// <summary>The message of a field: what its input control refused, else what the form's own rules say.</summary>
+    private string? MessageFor(string field) => _inputErrors.GetValueOrDefault(field) ?? ValidateField(field);
+
     /// <summary>Validates one field (call from the field's LostFocus).</summary>
     public bool ValidateOnBlur(string field)
     {
-        var message = ValidateField(field);
+        var message = MessageFor(field);
         SetError(field, message);
         return message is null;
     }
@@ -53,12 +78,12 @@ public abstract class FormViewModelBase : ViewModelBase, INotifyDataErrorInfo, I
     /// <summary>Validates every declared field; on failure asks the view to focus the first invalid one in visual order.</summary>
     public bool ValidateAll()
     {
-        foreach (var field in _fieldOrder)
+        foreach (var field in _fieldOrder.Concat(_inputErrors.Keys.Except(_fieldOrder).ToList()))
         {
-            SetError(field, ValidateField(field));
+            SetError(field, MessageFor(field));
         }
 
-        var first = _fieldOrder.FirstOrDefault(f => _errors.ContainsKey(f));
+        var first = _fieldOrder.FirstOrDefault(f => _errors.ContainsKey(f)) ?? _inputErrors.Keys.FirstOrDefault();
         if (first is not null)
         {
             FocusRequested?.Invoke(this, first);

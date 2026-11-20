@@ -1,11 +1,15 @@
 name: Release
 
-# On a version tag (v2.1.0): gate, publish the desktop app self-contained for win-x64 with ReadyToRun, scan it, pack the
-# Velopack installer and update packages, scan those, upload to a GitHub Release with SHA-256 checksums, and build the
-# Microsoft Store MSIX as an extra workflow artifact. Unsigned unless a signing certificate secret is configured.
+# A FALLBACK, started by hand only. Releases are made on the owner's PC with tools/release-local.ps1, which does what the
+# `release` job below does (same switches, same asset names) without GitHub Actions minutes, and creates the tag itself.
+# A tag push starts nothing.
+# To use the fallback: push the tag (git tag v2.1.1 <commit> && git push origin v2.1.1), then run this workflow ON THAT TAG
+# (Actions > Release > Run workflow > Use workflow from: Tags > v2.1.1, or `gh workflow run release.yml --ref v2.1.1`).
+# It then does: gate, publish the desktop app self-contained for win-x64 with ReadyToRun, scan it, pack the Velopack installer and
+# update packages, scan those, upload to a GitHub Release with SHA-256 checksums, and build the Microsoft Store MSIX as an extra
+# workflow artifact. Unsigned unless a signing certificate secret is configured. About 15 to 20 minutes.
 on:
-  push:
-    tags: ['v*']
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -73,6 +77,7 @@ jobs:
         shell: pwsh
         run: |
           $tag = $env:GITHUB_REF_NAME
+          if ($env:GITHUB_REF_TYPE -ne 'tag') { throw "Run this workflow on a version tag (Use workflow from: Tags), not on the $env:GITHUB_REF_TYPE '$tag'." }
           if ($tag -notmatch '^v(?<v>\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?)$') { throw "Tag '$tag' is not v<major>.<minor>.<patch>[-suffix]" }
           "version=$($Matches.v)" >> $env:GITHUB_OUTPUT
           "tag=$tag" >> $env:GITHUB_OUTPUT

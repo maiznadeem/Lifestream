@@ -268,6 +268,11 @@ public sealed class ListScreenTests
 
         var load = vm.LoadAsync();
         Assert.Equal(LoadState.Loading, vm.State);
+        for (var i = 0; i < 2500 && rig.Fake.CountOf("GetDonorsAsync") == 0; i++)
+        {
+            await Task.Delay(2); // the request is on its way before the clock moves: the limit times the wait for the server
+        }
+
         rig.Clock.Advance(TimeSpan.FromSeconds(10));
         await load;
 

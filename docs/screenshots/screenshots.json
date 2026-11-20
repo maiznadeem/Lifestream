@@ -1,14 +1,14 @@
 {
   "dataset": "demo",
   "generatedBy": "tools/generate-screenshots.ps1",
-  "source": "real API over a fresh database filled by DemoDataGenerator, signed in with Try the demo, data relative to 2026-11-20 as the clinic stood at 06:58 UTC, times in the clinic's own zone (UTC)",
+  "source": "real API over a fresh database filled by DemoDataGenerator, signed in with Try the demo, data relative to 2026-11-20 as the clinic stood at 10:57 UTC, times in the clinic's own zone (UTC)",
   "dashboard": {
     "Donors": 40,
     "Patients": 35,
     "Pending appointments": 70,
     "Pending requests": 40,
-    "Units in stock": 39,
-    "Expiring within 7 days": 8
+    "Units in stock": 47,
+    "Expiring within 7 days": 7
   },
   "files": [
     {
@@ -16,70 +16,70 @@
       "file": "login.png",
       "width": 1366,
       "height": 768,
-      "sha256": "87ef7b740b9c9fa928ae34d31e4529bf1bd36f3a56f8a61eb331b70323362f66"
+      "sha256": "7decb182d041cbfaece6df545cb326d1b5855f60d2f07db2505efde545f96a83"
     },
     {
       "screen": "dashboard",
       "file": "dashboard.png",
       "width": 1366,
       "height": 768,
-      "sha256": "55a72576d30131bfe676d0351e582bab467e49dbd74fe20677cb0a04f3a36b6b"
+      "sha256": "89d745ec4b871499e8edd49dbd4d4be58ac5c49d1f6f7183879197f5b3bee436"
     },
     {
       "screen": "donors",
       "file": "donors.png",
       "width": 1366,
       "height": 768,
-      "sha256": "dcba5e624e8c56fb9fe160616fd85950d2446d7a38fde3e6fa0c5df8004c040e"
+      "sha256": "3101a36ad6fefe8f3aa5495d8f15e202d5bd7a010901fffc490726cb3a4a8ab1"
     },
     {
       "screen": "patients",
       "file": "patients.png",
       "width": 1366,
       "height": 768,
-      "sha256": "a598b646f974900422fb1c0110ab40da6a6ec518e0fc350fb758b8a09dcf11f2"
+      "sha256": "3eff6a6d579cf610a157e06b0eeb21d890e411408546a6b158db9707461a92f0"
     },
     {
       "screen": "appointments",
       "file": "appointments.png",
       "width": 1366,
       "height": 768,
-      "sha256": "f272061ea610c1325cca814b6dbecde40ee34c2f9fa66b44ba52303ab4431181"
+      "sha256": "c08a43c580b184aed5820e89bb5766f7eed678cd9d0d6fcb077bf68c5df6537b"
     },
     {
       "screen": "requests",
       "file": "requests.png",
       "width": 1366,
       "height": 768,
-      "sha256": "0fc1e529e579a770889878f42f7205db81f1f0bcea6001b5d4bc393c2c646c0d"
+      "sha256": "320d1b877b29eeceb9c9c4be1dbb5442f89b62a0c93d24843fbfd2b915c37ecb"
     },
     {
       "screen": "stock",
       "file": "stock.png",
       "width": 1366,
       "height": 768,
-      "sha256": "d386cc30af5321c5dfd2ed4cc472eb5386b6eef63d938e647f5128dc3c0925e8"
+      "sha256": "037656fd877ba6d781d88b939b440e4205d9946bf0b438f046b3ea7681200713"
     },
     {
       "screen": "receipts",
       "file": "receipts.png",
       "width": 1366,
       "height": 768,
-      "sha256": "424be3c199cde0f3dd98a17d99f5e8b16611ed6e1742ece071d70aa6493b715d"
+      "sha256": "bd870db9441a95ef1e558719f865d6848a00d3af917daf675840ced892b323f0"
     },
     {
       "screen": "staff",
       "file": "staff.png",
       "width": 1366,
       "height": 768,
-      "sha256": "d1d1d12cfbdc5f8a4ce4e00921ca4d60124a806972b548d1842a555363902474"
+      "sha256": "d18841962ca6ae9e772fa84ab126c5f807622ba0121872fc6decc80ffbc6b13f"
     },
     {
       "screen": "profile",
       "file": "profile.png",
       "width": 1366,
       "height": 768,
-      "sha256": "481328a90284b99e4699ba4cbfaef18822fd9df541e1efcc9781cb61d2546af4"
+      "sha256": "18e1bf8f380cb04bbcf8aa9ae5d5bda4268f905dd4f2ef5f02df4119917a9b57"
     }
   ]
 }

@@ -1,44 +1,85 @@
-# Bundled font: Onest
+# Bundled font: Google Sans Flex
 
-The app uses one font family, **Onest**, for all text, at four weights: Regular 400, Medium 500, SemiBold 600 and Bold 700 (direction A,
+The app uses one font family, **Google Sans Flex**, for all text, at four weights: Regular 400, Medium 500, SemiBold 600 and Bold 700 (direction A,
 docs/design-system.md). They ship inside `Lifestream.exe` as WPF resources, so nothing has to be installed on the user's PC. Icons are vector
 geometry (`Controls/Icon.cs`), not a font.
 
-## Why these files are built, not downloaded
-
-The Onest files Google Fonts serves are **unhinted** (no `fpgm`, no glyph instructions), and the upstream release is a variable font. WPF
-cannot pick weights from a variable font's axis, and draws unhinted outlines soft at 12 to 14 px. So `tools/fonts/build-onest.py`:
-
-1. reads the official variable font `Onest[wght].ttf` from google/fonts at commit `4c1db3aec83c67dd223dd82a68c039cab30917a9`
-   (`ofl/onest/Onest%5Bwght%5D.ttf`, font version 2.001, SHA-256 `966C5C29B4755DA84B6854D5C21DD4EAA2420225D0E9874DE602DE176D4A9F31`; the script refuses any other file);
-2. cuts static instances at wght 400, 500, 600 and 700 with fontTools' instancer, named so WPF groups them as one family "Onest";
-3. hints each one with ttfautohint (ttfautohint-py 0.6.1; the same auto-hinter Google Fonts uses for its hinted families): quantized stems for
-   grayscale and DirectWrite/WPF ClearType, strong stems for GDI ClearType, hinting from 8 to 50 px, x-height rounding limited at 14 px.
-
-Rebuild: `python -m pip install --user fonttools ttfautohint-py` then
-`python tools/fonts/build-onest.py <Onest[wght].ttf> src/Lifestream.Desktop/Fonts`. The output is byte-for-byte reproducible.
+## Source and licence
 
 | | |
 |---|---|
-| Source | https://github.com/google/fonts/tree/4c1db3aec83c67dd223dd82a68c039cab30917a9/ofl/onest |
-| Licence | SIL Open Font License 1.1, in `OFL.txt` next to the fonts (copied from `ofl/onest/OFL.txt`, SHA-256 `071195D8806E226FAEEE60259C28CA67B458227AF5195A73F5CFCAB06E3003BC`). Copyright 2021 The Onest Project Authors. The hinted instances are a Modified Version under the OFL; the Reserved Font Name clause does not apply (Onest declares none). |
+| Font | `GoogleSansFlex[ROND,opsz,slnt,wdth,wght].ttf`, version 5.000, 3,910,784 bytes, SHA-256 `A9AC770798857D5E8AC593CED42B22E40A7C08CEC98319F92B0ECCC2783A77BA` |
+| Source | https://github.com/google/fonts/tree/fa826bb2a3e26df8c1bee99351fc0d039aeed7d2/ofl/googlesansflex (Google Fonts) |
+| Upstream | https://github.com/googlefonts/googlesans-flex, release `v5.000` (commit `cedf1e9cef08ddf33d711dd259601ea3017b7cd4`); the font in `GoogleSansFlex-v5.000.zip` is the same file, byte for byte |
+| Licence | SIL Open Font License 1.1, in `OFL.txt` next to the fonts (copied from `ofl/googlesansflex/OFL.txt` at the commit above, SHA-256 `FC13D69F63E36D284B6E383D4D1463D8AD404F0AA065E57CF961252D51063137`). Copyright 2015 The Google Sans Flex Authors. |
+
+The licence allows this use: "Original or Modified Versions of the Font Software may be bundled, redistributed and/or sold with any software, provided
+that each copy contains the above copyright notice and this license" (condition 2). The files here are a Modified Version (static instances, hinted);
+the licence names no Reserved Font Name, so they keep the family name. The licence travels with the app as `OFL.txt`.
+
+"Google", "Google Sans" and "Google Sans Flex" are trademarks of Google LLC (`TRADEMARKS.md` beside the font in google/fonts). The app names the
+typeface only to say which font it uses; it must never suggest that Google made or endorses Lifestream, and the name must not appear in the product's name.
+
+## Why these files are built, not downloaded
+
+Google publishes one variable font with five axes and **no hinting** (no `fpgm`, no glyph instructions). WPF cannot select an instance of a variable
+font: it takes the default one. And in the whole-pixel text layout the app uses, WPF draws unhinted outlines ragged. So
+`tools/fonts/build-google-sans-flex.py`:
+
+1. reads the variable font above (it refuses any other file: the SHA-256 is pinned);
+2. cuts static instances at wght 400, 500, 600 and 700 with fontTools' instancer (fontTools 4.64.0), with every other axis fixed (below), named so WPF
+   groups them as one family "Google Sans Flex";
+3. hints each one with ttfautohint (ttfautohint-py 0.6.1; the auto-hinter Google Fonts uses for its hinted families): quantized stems for grayscale
+   and DirectWrite, strong stems for GDI ClearType, hinting from 8 to 50 px, x-height rounding limited at 14 px.
+
+Rebuild (`-I` keeps the downloaded font away from Python's search path):
+`python -m pip install fonttools==4.64.0 ttfautohint-py==0.6.1`, then
+`python -I tools/fonts/build-google-sans-flex.py "<GoogleSansFlex[ROND,opsz,slnt,wdth,wght].ttf>" src/Lifestream.Desktop/Fonts`.
+The output is the same bytes on every run (the modification time written into the files is the upstream font's, not the time of the build).
 
 | File | SHA-256 |
 |---|---|
-| `Onest-Regular.ttf` | `5EBE461C3559D999551AB5F3D305880FB52DB6846EE2098A09F949D5FD20AC99` |
-| `Onest-Medium.ttf` | `50914F2741FD8EE26CE890BA63D3B251B68D79463ECB93260E937F50DD7453F0` |
-| `Onest-SemiBold.ttf` | `BD3BEF0BAD11EC6018233FF8AFCA91B1701D14D11ED0F59700F46391A0BAFC91` |
-| `Onest-Bold.ttf` | `E7B6AB8D8624E3B1D33324BEBC5705718E6F5A0D3DD60FCE0A70929542BF4F13` |
+| `GoogleSansFlex-Regular.ttf` | `F888CF0B68BE683523C2479F4D30C8239CEEBF385264CDA03FCB9831DE527926` |
+| `GoogleSansFlex-Medium.ttf` | `74F63E93E88115243C8B84EE2CB6EBE3099578373B36EE36B133B6FA57A83565` |
+| `GoogleSansFlex-SemiBold.ttf` | `1A3437DBCC9A2B9015F8469FF5AAC56DB584AF8CD79E10A985EEE37DCFC33B18` |
+| `GoogleSansFlex-Bold.ttf` | `09B61042AA53A1F5EED025A43E13909D8A1C154A308F1E9BD666CAC689C1AE67` |
 
-## Crispness check
+## The axes
 
-`tools/fonts/render-ladder.cs` (`dotnet run tools/fonts/render-ladder.cs -- out.png "label=path\x.ttf#Family" ...`) draws a size ladder (12, 13, 14,
-15, 16, 20, 28 px at 400/500/600) with WPF's own text stack, off-screen, in Display and Ideal formatting on the light and dark layers. Compared
-with the unhinted instances and with the hinted Inter of 2.0.2: the hinted Onest keeps stems on whole pixels and even letter spacing down to
-12 px with Display formatting, where the unhinted files run letters together ("Greenleaf") and blur 400 against 500. Inter is still a touch
-tighter at 12 px, but the difference is small enough that Onest is used for every size. Ideal formatting softens 12 and 13 px text, so the
-window uses Display formatting and only the 20 px and larger styles switch to Ideal (Theme/Typography.xaml).
+| Axis | Range | Value | Why |
+|---|---|---|---|
+| Weight `wght` | 1 to 1000 | 400, 500, 600, 700 | the four weights the type ramp uses |
+| Optical size `opsz` | 1 to 144 | 14 | Most text is 12 to 15 px, and at 14 the letters are open and evenly spaced at those sizes. **One** value for every size: a heading cut at 28 beside body text cut at 14 is a visibly tighter, finer design, and the app must read as one typeface. At 18 (the font's default) 12 px text runs together ("31Oct"); at 12, titles look loose. |
+| Width `wdth` | 25 to 151 | 100 | the normal width; a condensed cut would save room in tables at the cost of legibility at 12 px |
+| Roundness `ROND` | 0 to 100 | 0 | plain stroke ends: rounded ends soften small text and suit a playful product, not clinical records |
+| Slant `slnt` | -10 to 0 | 0 | upright; the app sets no running text in italics (the receipt's one italic line is slanted by WPF) |
 
-The theme refers to the font in `Theme/Typography.xaml` (`Font.Family`); the charts load `Onest-Regular.ttf` into Skia (`Theme/FontSetup.cs`)
-and the printed receipt uses `Font.Family`. `Lifestream.Desktop.Tests/FontTests.cs` checks the hashes above, the hinting, the licence file and
-that every text style resolves to these files.
+Version 5.000 has no grade axis (Google Fonts removed it).
+
+What the app relies on, checked in the built files: tabular figures (`tnum`, for right-aligned numeric columns; figures are proportional otherwise),
+a real minus sign U+2212 as wide as the plus (blood groups such as "O−"), and every character of the app's own text and of the demo data
+(ö ü Ö á í ó ć ş, the en dash, curly quotes, the middle dot).
+
+## Rendering
+
+Every text of the app is drawn the same way, set once in `Theme/TextDefaults.cs`: **Display** formatting, **grayscale** anti-aliasing,
+**kerning off**. It was chosen from captures of real windows at 100 % scale (96 DPI), where a 12 px letter is 12 device pixels:
+
+- *Display, not Ideal.* Ideal formatting ignores hinting altogether (hinted and unhinted files give the same pixels) and draws the horizontal
+  strokes of 12 to 14 px text across two rows of pixels: soft. Display formatting puts glyphs on whole pixels and uses the hinting: crisp.
+- *Hinted, not as published.* In Display formatting the unhinted outlines come out ragged, with some letters heavier than their neighbours.
+- *Kerning off.* Display formatting rounds each kerning pair to a whole pixel. With kerning on, "2.1.0" read "21.0" and "10:30" and "made-up"
+  closed up at 12 and 13 px. Without it the spacing is even, at every size.
+- *Grayscale, not ClearType.* WPF cannot draw ClearType on a transparent surface, so text on Mica (the title bar, the sidebar, the right side of
+  the sign-in window) and in the dialogs is grayscale whatever is asked for. Only grayscale is the same on every surface.
+- *One mode for every size.* 2.1.0 set its headings in Ideal formatting over Display text, and part of each window in grayscale beside ClearType;
+  with a font whose hinting reshaped the small sizes, a window read as two typefaces.
+
+The comparison is made with `tests/Lifestream.Desktop.Tests/EndToEnd/RealWindowTextTests.cs`, which shows the sign-in window, a list screen and a
+size ladder in real windows outside every monitor and captures what the compositor draws (set `LIFESTREAM_REALWINDOW_DIR`; never part of a normal
+test run). `tools/fonts/render-ladder.cs` draws a size ladder off-screen with WPF alone, which is always grayscale.
+
+The theme refers to the font in `Theme/Typography.xaml` (`Font.Family`); the charts load `GoogleSansFlex-Regular.ttf` into Skia
+(`Theme/FontSetup.cs`) and the printed receipt uses `Font.Family`. `Lifestream.Desktop.Tests/FontTests.cs` checks the hashes above, the hinting, the
+licence file and that every text style resolves to these files; `RedesignA/TextChecks.cs` checks on every rendered screen that every piece of text is
+drawn from these files, in one family, with one set of rendering settings.

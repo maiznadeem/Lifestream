@@ -197,7 +197,10 @@ public abstract partial class ViewModelBase : ObservableObject, IDisposable
     /// <summary>True while a skeleton should be on screen: Loading and Waking.</summary>
     public bool ShowSkeleton => IsLoading;
 
-    /// <summary>How long a load may stay in Loading before it turns into an error state with Retry (SHELL-28).</summary>
+    /// <summary>
+    /// How long a load may wait for the server's answer before it turns into an error state with Retry (SHELL-28). Only the time a call of the
+    /// load is out and unanswered counts; the app's own work never does.
+    /// </summary>
     public TimeSpan LoadTimeout { get; init; } = TimeSpan.FromSeconds(10);
 
     internal TimeProvider Clock { get; set; } = TimeProvider.System;
@@ -257,19 +260,25 @@ public abstract partial class ViewModelBase : ObservableObject, IDisposable
         ErrorMessage = null;
         ErrorDetail = null;
         State = LoadState.Loading;
-        StartTimeout(cts);
         StartWakingWatch(cts);
 
+        var loaded = false;
         try
         {
-            await Operations.RunAsync(ct => FetchAsync(ct), cts.Token).ConfigureAwait(true);
+            var fetch = Operations.RunAsync(ct => FetchAsync(ct), cts.Token, out var operation);
+            StartTimeout(cts, operation);
+            await fetch.ConfigureAwait(true);
             if (cts.IsCancellationRequested)
             {
                 return;
             }
 
+            // The server has answered: from here on nothing may report "the server is taking too long", however long showing the answer takes.
+            _timeoutTimer?.Dispose();
+            _timeoutTimer = null;
             Apply();
             State = HasNoData ? LoadState.Empty : LoadState.Ready;
+            loaded = true;
         }
         catch (OperationCanceledException)
         {
@@ -301,6 +310,20 @@ public abstract partial class ViewModelBase : ObservableObject, IDisposable
 
             cts.Dispose();
         }
+
+        if (loaded)
+        {
+            OnLoaded();
+        }
+    }
+
+    /// <summary>
+    /// Called on the original (UI) context when a load has finished and the screen shows its data (Ready or Empty), after the load's timers have
+    /// stopped. Anything that waits on the person, a dialog above all, starts here and never in <see cref="Apply"/>: a modal dialog opened from
+    /// <see cref="Apply"/> holds the load open behind it, and the load's time limit then reports a server that had long answered.
+    /// </summary>
+    protected virtual void OnLoaded()
+    {
     }
 
     private bool _timedOut;
@@ -328,18 +351,48 @@ public abstract partial class ViewModelBase : ObservableObject, IDisposable
 
     private AsyncRelayCommand? _cancelLoadCommand;
 
-    private void StartTimeout(CancellationTokenSource cts)
+    /// <summary>How often the load's time limit looks whether a call of the load is still waiting on the server.</summary>
+    private static readonly TimeSpan ServerWaitTick = TimeSpan.FromMilliseconds(250);
+
+    private readonly Lock _serverWaitGate = new();
+
+    /// <summary>
+    /// Starts the load's time limit (SHELL-28). It times the wait for the server and nothing else: time counts only while a call of this load
+    /// is out and unanswered (<see cref="OperationScope.HasCallInFlight"/>). The app's own work (the load waiting for a free thread, reading
+    /// the answer, showing it) is never counted, so a busy PC shows the skeleton for longer and never an error that blames the server.
+    /// </summary>
+    private void StartTimeout(CancellationTokenSource cts, OperationScope operation)
     {
         _timedOut = false;
         _timeoutTimer?.Dispose();
+        var waited = TimeSpan.Zero;
+        var last = Clock.GetTimestamp();
         _timeoutTimer = Clock.CreateTimer(
             _ =>
             {
-                // Only a plain Loading state times out: the Waking state has its own 120 s budget inside the API client.
                 try
                 {
-                    if (State == LoadState.Loading && ReferenceEquals(_loadCts, cts))
+                    lock (_serverWaitGate)
                     {
+                        var now = Clock.GetTimestamp();
+                        var since = Clock.GetElapsedTime(last, now);
+                        last = now;
+
+                        // Only a plain Loading state times out: the Waking state has its own 120 s budget inside the API client.
+                        if (_timedOut || State != LoadState.Loading || !ReferenceEquals(_loadCts, cts) || !operation.HasCallInFlight)
+                        {
+                            return;
+                        }
+
+                        // A tick that comes late means the app itself was not running (a saturated or sleeping PC), so the answer may be here,
+                        // unread: such a gap counts as two ticks at most. Only time the app was there to see no answer is the server's.
+                        var limit = ServerWaitTick + ServerWaitTick;
+                        waited += since < limit ? since : limit;
+                        if (waited < LoadTimeout)
+                        {
+                            return;
+                        }
+
                         if (_serverStatus?.State == ServerState.Waking)
                         {
                             // Another call is already waking the server: this call gets the long budget too, not the 10 s one.
@@ -358,8 +411,8 @@ public abstract partial class ViewModelBase : ObservableObject, IDisposable
                 }
             },
             null,
-            LoadTimeout,
-            Timeout.InfiniteTimeSpan);
+            ServerWaitTick,
+            ServerWaitTick);
     }
 
     /// <summary>
@@ -446,7 +499,7 @@ public abstract partial class ViewModelBase : ObservableObject, IDisposable
     /// <summary>The error state's cause and fix when the server can't be reached (design system 7.5: name the cause, then what to do).</summary>
     public const string UnreachableMessage = "Can't reach the server. Check your internet connection, then retry.";
 
-    /// <summary>The cause and fix when a load ran past its time limit.</summary>
+    /// <summary>The cause and fix when the server left a load's call unanswered for the whole time limit.</summary>
     public const string TimeoutMessage = "The server is taking too long to answer. Check your connection, then retry.";
 
     /// <summary>The cause and fix when the server failed while answering.</summary>

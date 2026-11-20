@@ -33,7 +33,7 @@ public sealed class GalleryTests
             board.SetResourceReference(TextElement.ForegroundProperty, "Brush.Ink");
             var root = new Border { Child = board };
             root.SetResourceReference(Border.BackgroundProperty, "Brush.Canvas");
-            TextOptions.SetTextFormattingMode(root, TextFormattingMode.Display);
+            TextDefaults.ApplyTo(root); // as every window of the app
 
             var states = new[] { "Rest", "Hover", "Pressed", "Focus", "Disabled", "Busy" };
             foreach (var (style, label, icon) in new[] { ("Button.Primary", "Record donation", IconKind.Drop), ("Button.Secondary", "Edit donor", IconKind.Edit), ("Button.Subtle", "Cancel", IconKind.None), ("Button.Danger", "Delete donor", IconKind.Trash) })

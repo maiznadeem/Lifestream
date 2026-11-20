@@ -1,18 +1,22 @@
 name: CI
 
-# The gate. A pull request cannot merge when any job here fails: the build treats every compiler, analyzer and
-# NuGet audit warning as an error, and every test must pass.
+# GitHub Actions minutes are limited, so what starts by itself is ONE job with a budget of 90 seconds: `fast` builds the Client and
+# Domain projects with their tests (every compiler, analyzer and NuGet audit warning is an error) and runs those tests.
+# The whole build and every test (Api with SQL Server, Desktop, both seeded orders) are proven on the developer's PC before each push;
+# the jobs that do the same here (`api`, `desktop`, `test-order`) are kept and run only when this workflow is started by hand
+# (Actions > CI > Run workflow, or `gh workflow run ci.yml --ref <branch>`).
+# One push starts one run: a branch is checked by its pull request, master by the push of the merge. A newer push cancels the older run.
 on:
   pull_request:
   push:
-    branches: [master, overhaul]
+    branches: [master]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 env:
@@ -20,8 +24,67 @@ env:
   DOTNET_CLI_TELEMETRY_OPTOUT: true
 
 jobs:
+  fast:
+    name: fast (Client and Domain, build and tests, 90 second budget)
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    # The runner stops the job here whatever happens; the budget itself is checked by the last step.
+    timeout-minutes: 2
+    env:
+      BUDGET_SECONDS: 90
+    steps:
+      # The scanner compiles its engine on every start; one compiled copy serves every command of this job.
+      - name: Start the clock
+        run: |
+          echo "FAST_STARTED=$(date +%s)" >> "$GITHUB_ENV"
+          echo "LIFESTREAM_SCAN_ENGINE_CACHE=$RUNNER_TEMP/scan-engine" >> "$GITHUB_ENV"
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: NuGet packages (cache)
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', 'Directory.Build.props', 'global.json', 'src/**/*.csproj', 'tests/**/*.csproj') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      # `dotnet test` builds the test project and what it references (Client, Contracts, Domain), then runs it: one logged command
+      # per project. Output goes to a file, is scanned (both scanners) and is printed only after a clean scan (tools/run-logged.ps1).
+      - name: Build and test (Client, Domain; warnings are errors)
+        shell: pwsh
+        run: |
+          $failed = 0
+          foreach ($project in 'Client', 'Domain') {
+            ./tools/run-logged.ps1 -Log "$env:RUNNER_TEMP/test-logs/fast-$project.log" -Command "dotnet test tests/Lifestream.$project.Tests -c Release"
+            if ($LASTEXITCODE -ne 0) { $failed++ }
+          }
+          if ($failed -gt 0) { exit 1 }
+
+      - name: Scan the test logs for credentials
+        if: always()
+        shell: pwsh
+        run: ./tools/scan-artifacts.ps1 -Path "$env:RUNNER_TEMP/test-logs" -ReportPath "$env:RUNNER_TEMP/scan-test-logs.json"
+
+      # Fails the run when the job took longer than the budget, so a slow job is noticed on the day it becomes slow.
+      # Measured from the first step: the runner's own set-up before it (about 2 seconds) and the cache save after it are not counted.
+      - name: Budget (90 seconds)
+        if: always()
+        run: |
+          elapsed=$(( $(date +%s) - FAST_STARTED ))
+          echo "fast job: ${elapsed}s of ${BUDGET_SECONDS}s"
+          if [ "$elapsed" -gt "$BUDGET_SECONDS" ]; then
+            echo "::error::BUDGET EXCEEDED: the fast job took ${elapsed}s, the budget is ${BUDGET_SECONDS}s. Make it faster or move work to the local gate; do not raise the budget."
+            exit 1
+          fi
+
+  # ---- The full jobs below run only when the workflow is started by hand. Before every push they are proven locally.
   api:
     name: api (build, analyzers, Domain/Data/Api/Client tests)
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -84,6 +147,7 @@ jobs:
 
   desktop:
     name: desktop (build whole solution, Desktop tests)
+    if: github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
@@ -125,10 +189,11 @@ jobs:
 
   # xUnit's default test order comes from the test assembly's path, so a test that leaks state into another passes in one checkout and
   # fails in the next. A seeded order is the same on every machine, so this job runs every test project under two fixed seeds
-  # (`Lifestream.X.Tests :<seed>`, the xUnit v3 runner's seed argument) and fails the pull request when any run fails. A failing seed
+  # (`Lifestream.X.Tests :<seed>`, the xUnit v3 runner's seed argument) and fails when any run fails. A failing seed
   # is reproduced locally with the same command; the build is the one the other jobs already prove.
   test-order:
     name: test order (${{ matrix.name }}, two fixed seeds each)
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 40
     strategy:

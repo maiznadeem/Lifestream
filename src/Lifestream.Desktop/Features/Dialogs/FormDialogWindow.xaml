@@ -3,6 +3,7 @@
                      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                      xmlns:chrome="clr-namespace:Lifestream.Desktop.Chrome"
                      xmlns:services="clr-namespace:Lifestream.Desktop.Services"
+                     xmlns:theme="clr-namespace:Lifestream.Desktop.Theme" theme:TextDefaults.Apply="True"
                      Title="Lifestream" Width="624" MaxHeight="824" SizeToContent="Height" IsDialog="True" ResizeMode="NoResize"
                      WindowStyle="None" AllowsTransparency="True" Background="Transparent" ExtendsContentIntoTitleBar="True" TitleBarHeight="88"
                      WindowStartupLocation="CenterOwner" ShowInTaskbar="False">

@@ -12,7 +12,7 @@ namespace Lifestream.Desktop.Tests;
 
 /// <summary>
 /// The 2.0.1 visual refresh: the app icon is real and embedded in the executable, Button and TextBox carry the shared corner radius, hover and
-/// focus treatment, and the text of a rendered sign-in screen is drawn in the bundled Onest (not a fallback) with crisp small-text layout.
+/// focus treatment, and the text of a rendered sign-in screen is drawn in the bundled font (not a fallback) with crisp small-text layout.
 /// </summary>
 [Collection("Wpf")]
 public sealed class VisualPolishTests
@@ -118,7 +118,7 @@ public sealed class VisualPolishTests
     }
 
     [Fact]
-    public void Font_EveryTextOfARenderedSignInScreen_IsTheBundledOnest_WithRealWeights_AndWindowsUseDisplayFormatting()
+    public void Font_EveryTextOfARenderedSignInScreen_IsTheBundledFont_WithRealWeights_AndWindowsUseDisplayFormatting()
     {
         var (texts, mode) = StaHost.Run(() =>
         {
@@ -151,11 +151,11 @@ public sealed class VisualPolishTests
         Assert.All(texts, t =>
         {
             Assert.True(t.Resolved, $"'{t.Text}' did not resolve to a font");
-            Assert.StartsWith("Onest", t.Family, StringComparison.Ordinal);
-            Assert.Matches(@"(?i)/Lifestream;component/Fonts/onest-(regular|medium|semibold|bold)\.ttf$", t.Uri);
+            Assert.StartsWith("Google Sans Flex", t.Family, StringComparison.Ordinal);
+            Assert.Matches(@"(?i)/Lifestream;component/Fonts/googlesansflex-(regular|medium|semibold|bold)\.ttf$", t.Uri);
             Assert.Equal(t.Requested, t.Weight);                // a real named instance of the weight...
             Assert.Equal(StyleSimulations.None, t.Simulated);  // ...not a synthesised bold
-            Assert.Equal(0, t.Missing);                          // and every character is in Onest: no per-glyph fallback
+            Assert.Equal(0, t.Missing);                          // and every character is in the font: no per-glyph fallback
         });
         Assert.Equal(TextFormattingMode.Display, mode);
     }

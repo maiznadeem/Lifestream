@@ -176,9 +176,23 @@ public sealed class ViewModelTests
         var clock = new ManualTimeProvider();
         var vm = new TestViewModel();
         vm.Attach(null, clock);
-        vm.Fetch = async ct => await Task.Delay(Timeout.Infinite, ct);
+
+        // The load's call is out and the server never answers it (the limit times the wait for the server: a load that makes no call has none).
+        var fake = new FakeApiClient();
+        fake.On<Lifestream.Contracts.Donors.DonorDetail>("GetDonorAsync", async ct =>
+        {
+            await Task.Delay(Timeout.Infinite, ct);
+            throw new InvalidOperationException("unreachable");
+        });
+        var api = ScopedApiClient.Wrap(fake, strict: true);
+        vm.Fetch = async ct => await api.GetDonorAsync(1, ct);
 
         var load = vm.LoadAsync();
+        for (var i = 0; i < 2500 && fake.CountOf("GetDonorAsync") == 0; i++)
+        {
+            await Task.Delay(2); // the request is on its way before the clock moves
+        }
+
         clock.Advance(TimeSpan.FromSeconds(9.9));
         Assert.Equal(LoadState.Loading, vm.State);
         clock.Advance(TimeSpan.FromSeconds(0.2));

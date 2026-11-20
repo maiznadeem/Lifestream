@@ -11,7 +11,7 @@ namespace Lifestream.Desktop.Tests;
 /// </summary>
 public sealed partial class ReleaseConfigTests
 {
-    private const string Version = "2.1.0";
+    private const string Version = "2.1.2";
 
     private static string Text(string relative) => File.ReadAllText(RepoPaths.Find(relative)).Replace("\r\n", "\n", StringComparison.Ordinal);
 
@@ -54,7 +54,8 @@ public sealed partial class ReleaseConfigTests
         // The Store package: the manifest takes the version from the build script, which makes it three parts plus .0 (2.1.0.0).
         Assert.Contains("Version=\"{{VERSION}}\"", Text("packaging/store/AppxManifest.template.xml"), StringComparison.Ordinal);
         Assert.Contains("\"$numeric.0\"", Text("packaging/store/build-msix.ps1"), StringComparison.Ordinal);
-        Assert.Contains($"git tag v{Version}", Text("packaging/store/README.md"), StringComparison.Ordinal);
+        Assert.Contains("tools/release-local.ps1", Text("packaging/store/README.md"), StringComparison.Ordinal); // a release is made on the release PC, not by a tag
+        Assert.Contains($"-Version {Version} ", Text("packaging/store/README.md"), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -64,7 +65,7 @@ public sealed partial class ReleaseConfigTests
         var section = Section(changelog, Version);
 
         Assert.StartsWith("Lifestream 2.1", section, StringComparison.Ordinal);
-        Assert.Contains("### Look and feel", section, StringComparison.Ordinal);
+        Assert.True(section.Contains("### Look and feel", StringComparison.Ordinal) || section.Contains("### Fixed", StringComparison.Ordinal), "the section has a heading users know: Look and feel, or Fixed");
 
         // Release text goes public: no credential, connection string, token, e-mail address, local path or internal run folder.
         var risky = new[]
@@ -92,7 +93,7 @@ public sealed partial class ReleaseConfigTests
         var readme = Text("README.md");
         var install = readme[readme.IndexOf("## Install", StringComparison.Ordinal)..readme.IndexOf("## Try it", StringComparison.Ordinal)];
 
-        Assert.Contains("https://github.com/maiznadeem/lifestream/releases/tag/v2.1.0", install, StringComparison.Ordinal);
+        Assert.Contains("https://github.com/maiznadeem/lifestream/releases/tag/v2.1.2", install, StringComparison.Ordinal);
         Assert.Contains("More info", install, StringComparison.Ordinal);
         Assert.Contains("Run anyway", install, StringComparison.Ordinal);
         Assert.Contains("not code-signed", install, StringComparison.Ordinal);

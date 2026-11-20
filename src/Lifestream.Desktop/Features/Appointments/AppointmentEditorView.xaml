@@ -32,8 +32,8 @@
                 <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.SurfaceSelected}" />
                 <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Brush.Primary}" />
               </Trigger>
-              <Trigger Property="IsKeyboardFocused" Value="True">
-                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Brush.FocusRing}" />
+              <Trigger Property="controls:FocusAssist.ShowRing" Value="True">
+                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Brush.Focus}" />
                 <Setter TargetName="Bd" Property="BorderThickness" Value="2" />
               </Trigger>
               <Trigger Property="IsEnabled" Value="False">

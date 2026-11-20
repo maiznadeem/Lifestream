@@ -97,7 +97,7 @@
         <controls:MeterBar x:Name="Bar" Grid.Column="1" VerticalAlignment="Center" Value="{Binding FillFraction}" Hatched="{Binding ExpiringFraction}" Minimum="{Binding MinimumFraction}"
                            Track="{DynamicResource Brush.Layer2}" TrackStroke="{DynamicResource Brush.Stroke}" Fill="{DynamicResource Brush.Ink2}" Hatch="{DynamicResource Brush.WarningHatch}"
                            Tick="{DynamicResource Brush.Ink3}" />
-        <!-- Proportional figures: Onest's tabular 1 is as wide as an 8, which reads as a gap in "17 units". The counts still line up on their right edge. -->
+        <!-- Proportional figures: a tabular 1 is as wide as an 8, which reads as a gap in "17 units". The counts still line up on their right edge. -->
         <TextBlock x:Name="Count" Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center">
           <Run x:Name="Number" Text="{Binding CountText, Mode=OneWay}" FontWeight="SemiBold" /><Run Text=" " /><Run Text="{Binding UnitText, Mode=OneWay}" Foreground="{DynamicResource Brush.Ink3}" />
         </TextBlock>

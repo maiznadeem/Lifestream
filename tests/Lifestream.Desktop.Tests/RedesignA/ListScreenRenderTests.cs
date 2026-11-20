@@ -2,7 +2,6 @@ using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Documents;
-using System.Windows.Media;
 using Lifestream.Client.Features.Appointments;
 using Lifestream.Client.Features.Donors;
 using Lifestream.Client.Features.Requests;
@@ -512,7 +511,7 @@ public sealed class ListScreenRenderTests
         root.SetResourceReference(TextElement.FontFamilyProperty, "Font.Family");
         root.SetResourceReference(TextElement.FontSizeProperty, "FontSize.Body");
         root.SetResourceReference(TextElement.ForegroundProperty, "Brush.Ink");
-        TextOptions.SetTextFormattingMode(root, TextFormattingMode.Display);
+        TextDefaults.ApplyTo(root); // as every window of the app
         Responsive.SetBreakpoint(root, Responsive.For(windowWidth));
         var host = new ContentControl
         {

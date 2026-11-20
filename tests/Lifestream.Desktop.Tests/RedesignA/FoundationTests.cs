@@ -277,7 +277,12 @@ public sealed class FoundationTests
         Assert.Equal(0, facts.Row);
         Assert.Equal(2, facts.Span);
         Assert.Equal(40, facts.CaptionAfter); // a compact window's 40 DIP title bar is also the drag area
-        Assert.Equal(SystemParameters.WindowResizeBorderThickness, facts.Inset);
+        // The real frame of a maximized window is the resize frame plus the padded border. This line used to expect SystemParameters.WindowResizeBorderThickness,
+        // which is the resize frame alone (4 of the 8 DIP at 100 %): with it a maximized window lost 4 DIP at every screen edge (RealWindows/RealWindowTests).
+        Assert.Equal(RealWindows.ChromeFrameTests.FrameOfASizableWindow(), facts.Inset);
+        var resizeFrame = SystemParameters.WindowResizeBorderThickness;
+        Assert.True(facts.Inset.Left > resizeFrame.Left && facts.Inset.Top > resizeFrame.Top && facts.Inset.Right > resizeFrame.Right && facts.Inset.Bottom > resizeFrame.Bottom,
+            $"the maximized inset {facts.Inset} is not more than the resize frame alone ({resizeFrame})");
     }
 
     [Fact]

@@ -547,11 +547,11 @@ public sealed partial class ThemeTests
     private static partial Regex FontFamilyLiteral();
 
     [Fact]
-    public void Typography_FamilyIsTheBundledOnest_NoSystemFontIsNamed()
+    public void Typography_FamilyIsTheBundledFont_NoSystemFontIsNamed()
     {
         var text = File.ReadAllText(Path.Combine(DesktopDir, "Theme", "Typography.xaml"));
 
-        Assert.Contains("Fonts/#Onest</FontFamily>", text, StringComparison.Ordinal);
+        Assert.Contains("Fonts/#Google Sans Flex</FontFamily>", text, StringComparison.Ordinal);
         Assert.DoesNotContain("Inter", text, StringComparison.Ordinal);
         Assert.DoesNotContain("Segoe UI Variable", text, StringComparison.Ordinal);
     }
@@ -600,7 +600,7 @@ public sealed partial class ThemeTests
     {
         var doc = File.ReadAllText(RepoPaths.Find("docs/design-system.md"));
 
-        foreach (var needle in new[] { "Onest", "`Canvas`", "Brush.<name>", "#F1F3F6", "#111418", "Layer2", "Ink3", "Focus", "Blood", "OFL.txt", "Display", "Caption", "Skeleton", "Record picker", "LogoMark", "Overlay scrollbars", "Motion.PanelOpen", "ChromeWindow", "Sidebar", "Command palette", "Data grid", "SidePanel" })
+        foreach (var needle in new[] { "Google Sans Flex", "`Canvas`", "Brush.<name>", "#F1F3F6", "#111418", "Layer2", "Ink3", "Focus", "Blood", "OFL.txt", "Display", "Caption", "Skeleton", "Record picker", "LogoMark", "Overlay scrollbars", "Motion.PanelOpen", "ChromeWindow", "Sidebar", "Command palette", "Data grid", "SidePanel" })
         {
             Assert.Contains(needle, doc, StringComparison.OrdinalIgnoreCase);
         }
