@@ -228,9 +228,11 @@ public sealed class ConstraintTests(SqlServerDatabaseFixture fixture) : IClassFi
     {
         await using var db = fixture.NewContext();
         var staff = TestRows.Staff(Unique("rcpt"));
-        db.Staff.Add(staff);
+        var donor = TestRows.Donor();
+        db.AddRange(staff, donor);
         await db.SaveChangesAsync(Ct);
-        db.Receipts.Add(new Receipt { StaffId = staff.Id, Kind = ReceiptKind.Donation, BloodType = BloodType.APos, Units = 1 });
+        // With a donor, so that the missing appointment is the only rule broken (a donation without its donor breaks CK_Receipt_Party as well).
+        db.Receipts.Add(new Receipt { StaffId = staff.Id, DonorId = donor.Id, Kind = ReceiptKind.Donation, BloodType = BloodType.APos, Units = 1 });
 
         var error = await Rejected(() => db.SaveChangesAsync(Ct));
 
@@ -283,7 +285,7 @@ public sealed class ConstraintTests(SqlServerDatabaseFixture fixture) : IClassFi
         var error = await Rejected(() => db.SaveChangesAsync(Ct));
 
         Assert.Contains(error.Number, UniqueViolations);
-        Assert.Contains("IX_Receipt_AppointmentId", error.Message, StringComparison.Ordinal);
+        Assert.Contains("IX_Receipt_AppointmentId_DonorId", error.Message, StringComparison.Ordinal);
     }
 
     [Fact]

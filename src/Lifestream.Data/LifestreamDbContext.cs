@@ -76,6 +76,12 @@ public sealed class LifestreamDbContext(DbContextOptions<LifestreamDbContext> op
 
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
+        foreach (var (receipt, appointmentId, requestId) in AddedReceiptsNeedingParty())
+        {
+            receipt.DonorId = appointmentId is { } a ? Appointments.AsNoTracking().Where(x => x.Id == a).Select(x => (int?)x.DonorId).SingleOrDefault() : null;
+            receipt.PatientId = requestId is { } r ? Requests.AsNoTracking().Where(x => x.Id == r).Select(x => (int?)x.PatientId).SingleOrDefault() : null;
+        }
+
         if (!AuditEnabled)
         {
             return base.SaveChanges(acceptAllChangesOnSuccess);
@@ -97,6 +103,12 @@ public sealed class LifestreamDbContext(DbContextOptions<LifestreamDbContext> op
 
     public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
     {
+        foreach (var (receipt, appointmentId, requestId) in AddedReceiptsNeedingParty())
+        {
+            receipt.DonorId = appointmentId is { } a ? await Appointments.AsNoTracking().Where(x => x.Id == a).Select(x => (int?)x.DonorId).SingleOrDefaultAsync(cancellationToken) : null;
+            receipt.PatientId = requestId is { } r ? await Requests.AsNoTracking().Where(x => x.Id == r).Select(x => (int?)x.PatientId).SingleOrDefaultAsync(cancellationToken) : null;
+        }
+
         if (!AuditEnabled)
         {
             return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
@@ -409,6 +421,42 @@ public sealed class LifestreamDbContext(DbContextOptions<LifestreamDbContext> op
         }
 
         return () => undo.ForEach(u => u());
+    }
+
+    /// <summary>
+    /// Receipt.DonorId and Receipt.PatientId are the receipt's party, a copy of its appointment's donor or its request's patient (see
+    /// <see cref="Receipt.DonorId"/>). Every save sets them on the receipts being added, audited or not, so no code that creates a receipt has to:
+    /// a receipt added with its appointment or request as an object gets the id from Entity Framework (the foreign key includes it); one added
+    /// by id takes it here from the appointment or request this context tracks, and the rest are returned to be looked up. A receipt whose
+    /// appointment or request does not exist keeps no party, and the database refuses it.
+    /// </summary>
+    private List<(Receipt Receipt, int? AppointmentId, int? RequestId)> AddedReceiptsNeedingParty()
+    {
+        var lookups = new List<(Receipt, int?, int?)>();
+        foreach (var entry in ChangeTracker.Entries<Receipt>().Where(e => e.State == EntityState.Added).ToList())
+        {
+            var receipt = entry.Entity;
+            if (receipt.Appointment is not null || receipt.Request is not null || receipt.DonorId is not null || receipt.PatientId is not null
+                || (receipt.AppointmentId is null && receipt.RequestId is null))
+            {
+                continue;
+            }
+
+            if (receipt.AppointmentId is { } appointmentId && ChangeTracker.Entries<Appointment>().FirstOrDefault(e => e.Entity.Id == appointmentId) is { } appointment)
+            {
+                receipt.DonorId = appointment.Entity.DonorId;
+            }
+            else if (receipt.RequestId is { } requestId && ChangeTracker.Entries<Request>().FirstOrDefault(e => e.Entity.Id == requestId) is { } request)
+            {
+                receipt.PatientId = request.Entity.PatientId;
+            }
+            else
+            {
+                lookups.Add((receipt, receipt.AppointmentId, receipt.RequestId));
+            }
+        }
+
+        return lookups;
     }
 
     /// <summary>New appointments: those whose donor is already loaded or new get the type directly; the rest need a lookup.</summary>

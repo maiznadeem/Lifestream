@@ -16,7 +16,7 @@ partial class LifestreamDbContextModelSnapshot : ModelSnapshot
     // If you encounter a merge conflict in the line below, it means you need to
     // discard one of the migration branches and recreate its migrations on top of
     // the other branch. See https://aka.ms/efcore-docs-migrations-conflicts for more info.
-    public override string LastMigrationId => "20261119024537_TempLastFailure";
+    public override string LastMigrationId => "20261120204230_ReceiptParty";
 
     protected override void BuildModel(ModelBuilder modelBuilder)
     {
@@ -469,6 +469,9 @@ partial class LifestreamDbContextModelSnapshot : ModelSnapshot
                     .HasColumnType("datetime2(3)")
                     .HasDefaultValueSql("SYSUTCDATETIME()");
 
+                b.Property<int?>("DonorId")
+                    .HasColumnType("int");
+
                 b.Property<string>("Kind")
                     .IsRequired()
                     .HasMaxLength(16)
@@ -478,6 +481,9 @@ partial class LifestreamDbContextModelSnapshot : ModelSnapshot
                 b.Property<string>("Notes")
                     .HasMaxLength(500)
                     .HasColumnType("nvarchar(500)");
+
+                b.Property<int?>("PatientId")
+                    .HasColumnType("int");
 
                 b.Property<int?>("RequestId")
                     .HasColumnType("int");
@@ -490,38 +496,48 @@ partial class LifestreamDbContextModelSnapshot : ModelSnapshot
 
                 b.HasKey("Id");
 
-                var index = b.HasIndex("AppointmentId")
-                    .IsUnique()
-                    .HasFilter("[AppointmentId] IS NOT NULL");
+                var index = b.HasIndex("CreatedAtUtc");
 
-                SqlServerIndexBuilderExtensions.IncludeProperties(index, new[] { "CreatedAtUtc", "Kind", "BloodType" });
-
-                var index0 = b.HasIndex("CreatedAtUtc");
-
-                SqlServerIndexBuilderExtensions.IncludeProperties(index0, new[] { "Kind", "BloodType", "Units", "StaffId", "AppointmentId", "RequestId" });
-
-                var index1 = b.HasIndex("RequestId")
-                    .HasFilter("[RequestId] IS NOT NULL");
-
-                SqlServerIndexBuilderExtensions.IncludeProperties(index1, new[] { "CreatedAtUtc", "Kind", "BloodType" });
+                SqlServerIndexBuilderExtensions.IncludeProperties(index, new[] { "Kind", "BloodType", "Units", "StaffId", "AppointmentId", "RequestId", "DonorId", "PatientId" });
 
                 b.HasIndex("StaffId");
 
-                var index2 = b.HasIndex("BloodType", "CreatedAtUtc");
+                var index0 = b.HasIndex("AppointmentId", "DonorId")
+                    .IsUnique()
+                    .HasFilter("[AppointmentId] IS NOT NULL");
 
-                SqlServerIndexBuilderExtensions.IncludeProperties(index2, new[] { "Kind", "Units", "StaffId", "AppointmentId", "RequestId" });
+                SqlServerIndexBuilderExtensions.IncludeProperties(index0, new[] { "CreatedAtUtc", "Kind", "BloodType" });
+
+                var index1 = b.HasIndex("BloodType", "CreatedAtUtc");
+
+                SqlServerIndexBuilderExtensions.IncludeProperties(index1, new[] { "Kind", "Units", "StaffId", "AppointmentId", "RequestId", "DonorId", "PatientId" });
+
+                var index2 = b.HasIndex("DonorId", "CreatedAtUtc")
+                    .HasFilter("[DonorId] IS NOT NULL");
+
+                SqlServerIndexBuilderExtensions.IncludeProperties(index2, new[] { "Kind", "BloodType", "StaffId" });
 
                 var index3 = b.HasIndex("Kind", "CreatedAtUtc");
 
-                SqlServerIndexBuilderExtensions.IncludeProperties(index3, new[] { "BloodType", "Units", "StaffId", "AppointmentId", "RequestId" });
+                SqlServerIndexBuilderExtensions.IncludeProperties(index3, new[] { "BloodType", "Units", "StaffId", "AppointmentId", "RequestId", "DonorId", "PatientId" });
 
-                var index4 = b.HasIndex("StaffId", "CreatedAtUtc");
+                var index4 = b.HasIndex("PatientId", "CreatedAtUtc")
+                    .HasFilter("[PatientId] IS NOT NULL");
 
-                SqlServerIndexBuilderExtensions.IncludeProperties(index4, new[] { "Kind", "BloodType" });
+                SqlServerIndexBuilderExtensions.IncludeProperties(index4, new[] { "Kind", "BloodType", "StaffId" });
 
-                var index5 = b.HasIndex("Kind", "BloodType", "CreatedAtUtc");
+                var index5 = b.HasIndex("RequestId", "PatientId")
+                    .HasFilter("[RequestId] IS NOT NULL");
 
-                SqlServerIndexBuilderExtensions.IncludeProperties(index5, new[] { "Units", "StaffId", "AppointmentId", "RequestId" });
+                SqlServerIndexBuilderExtensions.IncludeProperties(index5, new[] { "CreatedAtUtc", "Kind", "BloodType" });
+
+                var index6 = b.HasIndex("StaffId", "CreatedAtUtc");
+
+                SqlServerIndexBuilderExtensions.IncludeProperties(index6, new[] { "Kind", "BloodType", "DonorId", "PatientId" });
+
+                var index7 = b.HasIndex("Kind", "BloodType", "CreatedAtUtc");
+
+                SqlServerIndexBuilderExtensions.IncludeProperties(index7, new[] { "Units", "StaffId", "AppointmentId", "RequestId", "DonorId", "PatientId" });
 
                 b.ToTable("Receipt", t =>
                     {
@@ -530,6 +546,8 @@ partial class LifestreamDbContextModelSnapshot : ModelSnapshot
                         t.HasCheckConstraint("CK_Receipt_Kind", "[Kind] IN ('Donation', 'Issue')");
 
                         t.HasCheckConstraint("CK_Receipt_Links", "([Kind] = 'Donation' AND [AppointmentId] IS NOT NULL AND [RequestId] IS NULL) OR ([Kind] = 'Issue' AND [RequestId] IS NOT NULL AND [AppointmentId] IS NULL)");
+
+                        t.HasCheckConstraint("CK_Receipt_Party", "([Kind] = 'Donation' AND [DonorId] IS NOT NULL AND [PatientId] IS NULL) OR ([Kind] = 'Issue' AND [PatientId] IS NOT NULL AND [DonorId] IS NULL)");
 
                         t.HasCheckConstraint("CK_Receipt_Units", "[Units] > 0");
                     });
@@ -922,21 +940,23 @@ partial class LifestreamDbContextModelSnapshot : ModelSnapshot
 
         modelBuilder.Entity("Lifestream.Data.Entities.Receipt", b =>
             {
-                b.HasOne("Lifestream.Data.Entities.Appointment", "Appointment")
-                    .WithMany()
-                    .HasForeignKey("AppointmentId")
-                    .OnDelete(DeleteBehavior.Restrict);
-
-                b.HasOne("Lifestream.Data.Entities.Request", "Request")
-                    .WithMany()
-                    .HasForeignKey("RequestId")
-                    .OnDelete(DeleteBehavior.Restrict);
-
                 b.HasOne("Lifestream.Data.Entities.Staff", "Staff")
                     .WithMany()
                     .HasForeignKey("StaffId")
                     .OnDelete(DeleteBehavior.Restrict)
                     .IsRequired();
+
+                b.HasOne("Lifestream.Data.Entities.Appointment", "Appointment")
+                    .WithMany()
+                    .HasForeignKey("AppointmentId", "DonorId")
+                    .HasPrincipalKey("Id", "DonorId")
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                b.HasOne("Lifestream.Data.Entities.Request", "Request")
+                    .WithMany()
+                    .HasForeignKey("RequestId", "PatientId")
+                    .HasPrincipalKey("Id", "PatientId")
+                    .OnDelete(DeleteBehavior.Restrict);
 
                 b.Navigation("Appointment");
 

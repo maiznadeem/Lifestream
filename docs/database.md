@@ -48,6 +48,8 @@ erDiagram
         int StaffId FK
         int AppointmentId FK "donation only, unique"
         int RequestId FK "issue only"
+        int DonorId FK "donation only: the appointment's donor"
+        int PatientId FK "issue only: the request's patient"
     }
     BloodBag {
         int Id PK
@@ -88,7 +90,17 @@ erDiagram
 - Staff photos live in `StaffPhoto` (at most 30 KB, 256 px). `Staff.HasPhoto` tells the API a photo exists, so a Staff query
   never touches the photo table.
 - `Receipt` is one table for both directions. A `CHECK` requires an appointment (and no request) for a `Donation` and a
-  request (and no appointment) for an `Issue`; a filtered unique index on `AppointmentId` lets an appointment be receipted once.
+  request (and no appointment) for an `Issue`; a filtered unique index on `(AppointmentId, DonorId)` lets an appointment be
+  receipted once.
+- **A receipt stores its party**: `DonorId` on a donation, `PatientId` on an issue, a copy of its appointment's donor or its
+  request's patient, so that "the receipts of these people" is an index seek and not a join through every appointment and
+  request (the receipt search). The database keeps the copy right, whatever writes the row: the foreign keys are
+  `Receipt(AppointmentId, DonorId) -> Appointment(Id, DonorId)` and `Receipt(RequestId, PatientId) -> Request(Id, PatientId)`
+  (on the unique constraints `AK_Appointment_Id_DonorId` and `AK_Request_Id_PatientId`), so a receipt cannot name another donor
+  than its appointment's and the donor of a receipted appointment cannot change; `CK_Receipt_Party` requires the donor on a
+  donation and the patient on an issue, and forbids the other. `LifestreamDbContext` sets the party on every receipt it adds
+  (from the key when the receipt is added with its appointment or request as an object, by a lookup when it is added by id),
+  audited or not, so no code that creates a receipt has to. A row written past the context without its party is refused.
 - `BloodBag` holds one row per unit. `ExpiresOn` is collection date plus 42 days, defined once in `StockRules` (with the
   3-day "fresh" window). A bag is `Issued` only together with an `IssueReceiptId`.
 
@@ -143,8 +155,9 @@ erDiagram
     INCLUDEs the columns the list shows, so a page is read in order from one index and stops after 50 rows (appointments:
     status, donor blood type, slot or placed; requests: status, blood type, placed or requiredBy; receipts: kind, blood type,
     date; donors and patients: name, blood type + name, last donated). A wide covering index is as wide as the table itself, so
-    each of these tables also has a **single-column foreign-key index** (`Appointment.DonorId`, `Request.PatientId`, the three
-    `Receipt` keys): it is the narrowest index and is what `COUNT(*)` and joins read, rather than the clustered index.
+    each of these tables also has a **narrow foreign-key index** (`Appointment.DonorId`, `Request.PatientId`, `Receipt.StaffId`
+    and the receipt's two-column keys): it is the narrowest index and is what `COUNT(*)` and joins read, rather than the
+    clustered index.
   - **Bulk-loaded databases need maintenance before plans mean anything.** Rows arrive in clustered-key order but in random
     order for every other index, so the nonclustered indexes of a freshly loaded table are half empty, look bigger than the table
     itself, and the optimizer then prefers to scan the clustered index; automatic statistics are also sampled, and a sample differs
@@ -178,19 +191,22 @@ erDiagram
       the other rows of the people found, two sets with nothing in common, put together with `UNION ALL`
       (`Id = n OR DonorId IN (...)`, as it was written before, read 60,000 pages at 100x: SQL Server answers an `OR` over a
       subquery row by row).
-    - *Receipts* (`SearchQueries.ReceiptsMatching`) have two statements. A search whose longest word is a text, or seven
-      digits or more of a phone, which is nearly every search, starts from the receipts that word finds: three chains that
-      start at the people found (donor, appointment, receipt; patient, request, receipt; staff, receipt), joined by `UNION`,
-      the statement the search had before. Further words are checked on the receipts found, each chain carrying the ids of
-      the receipt's donor or patient and staff member. Any other search (three to six digits, which may be in every phone:
-      an area code; one or two letters with other words) is answered by a statement that costs the same whatever it finds:
-      a receipt has one party, a donation its appointment's donor and an issue its request's patient, so the two kinds are
-      worked out apart and put together with `UNION ALL` (nothing is found twice, nothing has to be made distinct), each
-      half joined to its appointment or request and `LEFT JOIN`ed per word to the ids of the people and staff that match.
-      The chains are not used there because SQL Server sizes the memory of their `UNION` for 9 % of the people, and with 91 %
-      it spills to disk (500 ms). The matches are filtered by blood type and date, counted and ordered as (id, date, kind,
-      blood type) rows, and only the 50 receipts of the page are then fetched by id. The receipt search is the slowest
-      search: it works the matches out twice, once to count and once for the page.
+    - *Receipts* (`SearchQueries.ReceiptsMatching`) are one statement that reads no appointment and no request: a receipt
+      stores its donor or patient (above), so the search goes from the people a word finds straight to their receipts
+      (`IX_Receipt_DonorId_CreatedAtUtc`, `IX_Receipt_PatientId_CreatedAtUtc`, `IX_Receipt_StaffId_CreatedAtUtc`, each with
+      kind and blood type; the staff index also with the party). A blood group and a code are plain filters on the receipt.
+      Of the words looked for in names the search starts from the one in the fewest names, in four parts that cannot
+      overlap, put together with `UNION ALL` (nothing is found twice, nothing has to be made distinct): the receipts of
+      the donors found, those of the patients found, those of the staff found whose party was not found, and the receipt
+      with that number if nothing else found it. A `UNION` of overlapping parts, the statement before, has to make its rows
+      distinct in memory that SQL Server sizes for 9 % of the people, and spilled to disk when a word was in most phones
+      (500 ms), which is why 2.1.6 had a second, flat statement for those words. Each part starts at the people found, so a
+      name is matched once per person, never once per receipt. With further words each part also joins the other people of
+      its receipts once (the staff member of a donor's or patient's receipt; the donor or patient of a staff member's) and
+      matches the further words on the row; looking them up receipt by receipt was measured at 2,400 pages for a last name
+      and a first name, against 714. The matches are filtered by date, counted and ordered as (id, date, kind, blood type)
+      rows, and only the 50 receipts of the page are then fetched by id. Until 2.1.6 the party was reached through the
+      appointment or the request: a phone fragment, two words or an area code joined all of both tables.
     - *The plan* (`SearchPlanInterceptor`). SQL Server cannot estimate how many names contain a word: it assumes 9 % of them
       for every word. With that guess and a page of 50 to fill it reads the big table in the list's order and looks each
       row's person up until it has 50 matches, which is the whole table when few match (9,000 pages for a last name). Every
@@ -203,9 +219,7 @@ erDiagram
     - *What would make it a seek.* A migration: a table of name words (person, word) with an index on the word, or a
       full-text index on the three name columns, for word starts; nothing short of an n-gram index for the middle of a word.
       Not needed at this size: the read grows with the number of people (not of appointments or receipts) and is 3 ms at 100x.
-      The receipt search would gain most from the donor or patient id being stored on `Receipt` (as `Appointment` stores
-      `DonorBloodType`): its joins to `Appointment` and `Request`, most of its cost, would go, and with them the need for two
-      statements.
+      What is left of a receipt search's cost is this scan of every donor, patient and staff name for the word.
   - "Appointments of donors with blood type X" uses `Appointment.DonorBloodType`, a copy of the donor's blood type kept by
     `LifestreamDbContext` (set when an appointment is added; rewritten in the same transaction when the donor's blood type
     changes, with an audit row per rewritten appointment; see Audit). A `BulkUpdateAsync` of `Donor.BloodType` keeps it in
