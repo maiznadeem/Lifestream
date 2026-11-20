@@ -2,6 +2,14 @@
 
 All notable changes to Lifestream are listed here. The section of a version is also the text of its release on the GitHub Releases page.
 
+## [2.1.2] - 2026-11-20
+
+Lifestream 2.1.2 fixes defects found by using the app end to end against a real server.
+
+### Fixed
+
+- PLACEHOLDER
+
 ## [2.1.1] - 2026-11-20
 
 Lifestream 2.1.1 fixes what 2.1.0 got wrong in a real window, and brings a new typeface.
