@@ -86,6 +86,7 @@ public sealed class FailingStaffWriteFixture : ApiFixture
 }
 
 /// <summary>API-03, API-36: lockout and failure counting hold under concurrency. Replays the verifier's sequences P05, P17 and P20 against a real SQL Server.</summary>
+[Collection(Lifestream.Api.Tests.Support.Bursts.Name)] // a burst of concurrent requests: runs after the parallel classes, alone
 public sealed class LoginLockoutConcurrencyTests(ApiFixture fx) : IClassFixture<ApiFixture>
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
