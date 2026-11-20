@@ -394,11 +394,8 @@ public sealed partial class ShellViewModel : ViewModelBase
     [RunsInOperation("RefreshCountsAsync runs it inside Operations.RunAsync.")]
     private async Task RefreshCountsCoreAsync(CancellationToken ct)
     {
-        var local = Clock.GetLocalNow();
-        var startOfDay = new DateTimeOffset(local.Date, local.Offset).UtcDateTime;
-        var endOfDay = new DateTimeOffset(local.Date.AddDays(1), local.Offset).UtcDateTime;
         var api = _api!;
-        var appointments = await api.GetAppointmentsAsync(new Contracts.Appointments.AppointmentQuery(Status: Domain.AppointmentStatus.Pending, FromUtc: startOfDay, ToUtc: endOfDay, PageSize: 1), ct).ConfigureAwait(true);
+        var appointments = await api.GetAppointmentsAsync(Features.Appointments.LocalDay.Of(Clock).Query(Domain.AppointmentStatus.Pending, pageSize: 1), ct).ConfigureAwait(true);
         var requests = await api.GetRequestsAsync(new Contracts.Requests.RequestQuery(Status: Domain.RequestStatus.Pending, PageSize: 1), ct).ConfigureAwait(true);
         var stock = await api.GetStockAsync(ct).ConfigureAwait(true);
         Post(() =>
@@ -487,18 +484,17 @@ public sealed partial class ShellViewModel : ViewModelBase
             return null;
         }
 
-        var local = Clock.GetLocalNow();
-        var from = new DateTimeOffset(local.Date, local.Offset).UtcDateTime;
-        var to = from.AddDays(1);
-        var result = await _api.GetAppointmentsAsync(new Contracts.Appointments.AppointmentQuery(Status: Domain.AppointmentStatus.Pending, FromUtc: from, ToUtc: to, PageSize: 50, Sort: Contracts.SortKeys.Slot)).ConfigureAwait(true);
+        var day = Features.Appointments.LocalDay.Of(Clock);
+        var result = await _api.GetAppointmentsAsync(day.Query(Domain.AppointmentStatus.Pending, sort: Contracts.SortKeys.Slot)).ConfigureAwait(true);
         if (!result.IsOk)
         {
             return null;
         }
 
+        var today = result.Value.Items.Where(day.Holds).ToList();
         var earliest = Clock.GetUtcNow().UtcDateTime.AddHours(-1);
-        return result.Value.Items.Where(a => a.SlotStartUtc >= earliest).OrderBy(a => a.SlotStartUtc).FirstOrDefault()
-            ?? result.Value.Items.OrderBy(a => a.SlotStartUtc).FirstOrDefault();
+        return today.Where(a => a.SlotStartUtc >= earliest).OrderBy(a => a.SlotStartUtc).FirstOrDefault()
+            ?? today.OrderBy(a => a.SlotStartUtc).FirstOrDefault();
     }
 
     private void OnPreferencesChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)

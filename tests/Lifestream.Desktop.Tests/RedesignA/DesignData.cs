@@ -84,7 +84,7 @@ public static class DesignData
         api.RequestsFor = q => q is { PageSize: 1, Status: RequestStatus.Pending, PatientId: null, View: null }
             ? ApiResult<PagedResult<RequestListItem>>.Ok(new PagedResult<RequestListItem>([], RequestDesignData.In(RequestView.Open).Count, 1, 1))
             : null;
-        api.AppointmentsFor = q => q is { PageSize: 1, Status: AppointmentStatus.Pending, DonorId: null, View: null, FromUtc: { } from, ToUtc: { } to }
+        api.AppointmentsFor = q => q is { PageSize: 1, Status: AppointmentStatus.Pending, DonorId: null, View: AppointmentView.Today, FromUtc: { } from, ToUtc: { } to }
             ? ApiResult<PagedResult<AppointmentListItem>>.Ok(new PagedResult<AppointmentListItem>([], appointments.Count(a => a.Status == AppointmentStatus.Pending && a.SlotStartUtc >= from && a.SlotStartUtc < to), 1, 1))
             : null;
 

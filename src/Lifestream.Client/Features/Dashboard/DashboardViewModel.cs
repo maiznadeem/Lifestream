@@ -404,14 +404,13 @@ public sealed partial class DashboardViewModel : ViewModelBase
         var dashboard = _api.GetDashboardAsync(start, end, offsetMinutes, ct);
         // The blocks of direction A's dashboard come from the existing endpoints, in parallel with the dashboard call. Each is best effort: a block whose
         // call failed shows its empty state, and only the dashboard call itself can fail the screen.
-        var local = Clock.GetLocalNow();
-        var dayStart = new DateTimeOffset(local.Date, local.Offset).UtcDateTime;
+        var day = Appointments.LocalDay.Of(Clock);
         var stock = Quietly(() => _api.GetStockAsync(ct));
-        var todays = Quietly(() => _api.GetAppointmentsAsync(new Contracts.Appointments.AppointmentQuery(FromUtc: dayStart, ToUtc: dayStart.AddDays(1), PageSize: 50, Sort: Contracts.SortKeys.Slot), ct));
+        var todays = Quietly(() => _api.GetAppointmentsAsync(day.Query(sort: Contracts.SortKeys.Slot), ct));
         var requests = Quietly(() => _api.GetRequestsAsync(new Contracts.Requests.RequestQuery(Status: RequestStatus.Pending, PageSize: 50, Sort: Contracts.SortKeys.RequiredBy), ct));
         _fetched = (await dashboard.ConfigureAwait(false)).Unwrap();
         _stock = (await stock.ConfigureAwait(false)) is { IsOk: true } s ? s.Value : [];
-        _today = (await todays.ConfigureAwait(false)) is { IsOk: true } t ? [.. t.Value.Items.Where(a => a.Status != AppointmentStatus.Cancelled).OrderBy(a => a.SlotStartUtc)] : [];
+        _today = (await todays.ConfigureAwait(false)) is { IsOk: true } t ? [.. t.Value.Items.Where(a => a.Status != AppointmentStatus.Cancelled && day.Holds(a)).OrderBy(a => a.SlotStartUtc)] : [];
         _requests = (await requests.ConfigureAwait(false)) is { IsOk: true } r ? r.Value.Items : [];
 
         // First-time donors among those still to come. The appointment list says so itself (no completed donation before the slot), so the dashboard is

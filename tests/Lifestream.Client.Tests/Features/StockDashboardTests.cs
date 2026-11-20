@@ -173,7 +173,7 @@ public sealed class StockDashboardTests
     public async Task Dashboard_MarksFirstTimeDonorsFromTheAppointmentList_WithoutAskingForEachDonor()
     {
         var rig = new FeatureRig();
-        var slot = DateTime.UtcNow.Date.AddHours(12);
+        var slot = Lifestream.Client.Features.Appointments.LocalDay.Of(rig.Clock).StartUtc.AddHours(12); // noon of the rig clock's local day: the dashboard shows that day only
         Lifestream.Contracts.Appointments.AppointmentListItem[] today =
         [
             new(1, 101, "Returning Donor", BloodType.OPos, slot.AddDays(-3), slot, AppointmentStatus.Pending),
