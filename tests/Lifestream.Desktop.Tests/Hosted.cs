@@ -41,10 +41,14 @@ public sealed class Hosted : IDisposable
             TextDefaults.ApplyTo(element); // and its text is laid out and drawn as in every window (Theme/TextDefaults.cs), so widths are the app's
         }
 
+        TestWindowGuard.Install(); // a focused element must never activate this window (it took the person's foreground on 2026-11-20/21)
         var parameters = new HwndSourceParameters("LifestreamHosted", (int)Math.Ceiling(width), (int)Math.Ceiling(height))
         {
             ParentWindow = new IntPtr(-3),
             WindowStyle = 0,
+            ExtendedWindowStyle = TestWindowGuard.NoActivate,
+            PositionX = TestWindowGuard.OffMonitors,
+            PositionY = TestWindowGuard.OffMonitors,
         };
         var source = new HwndSource(parameters) { RootVisual = element, SizeToContent = SizeToContent.Manual };
         var hosted = new Hosted(element, source);

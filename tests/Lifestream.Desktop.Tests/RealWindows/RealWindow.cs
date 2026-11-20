@@ -256,16 +256,17 @@ internal sealed class RealWindow : IDisposable
 
     /// <summary>
     /// What the compositor draws for this window, the non-client area included. Waits until the content is drawn: for the first moments after a
-    /// window is shown the compositor holds an empty frame.
+    /// window is shown the compositor holds an empty frame. A window that shows little (its content hidden) may say how few colours count as
+    /// drawn; it is then taken when two captures in a row are the same.
     /// </summary>
-    public WindowCapture Capture(int timeoutMilliseconds = 60_000)
+    public WindowCapture Capture(int timeoutMilliseconds = 60_000, int drawnColours = 24)
     {
         var started = System.Diagnostics.Stopwatch.StartNew();
         WindowCapture? previous = null;
         while (true)
         {
             var capture = CaptureNow();
-            var drawn = capture.DistinctColours(24) >= 24;
+            var drawn = capture.DistinctColours(drawnColours) >= drawnColours;
             if (drawn && previous is not null && capture.Pixels.AsSpan().SequenceEqual(previous.Pixels))
             {
                 return capture;

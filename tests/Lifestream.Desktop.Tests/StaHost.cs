@@ -23,6 +23,7 @@ public static class StaHost
         {
             try
             {
+                TestWindowGuard.Install(); // no window of this thread can be activated or take the person's keyboard
                 result = work();
             }
             catch (Exception ex)
@@ -48,10 +49,14 @@ public static class StaHost
     /// <summary>Hosts the element off-screen at the given size, lets it load and draw, and returns a PNG.</summary>
     public static byte[] RenderPng(FrameworkElement element, int width, int height, int settleMilliseconds = 1500)
     {
+        TestWindowGuard.Install();
         var parameters = new HwndSourceParameters("LifestreamOffscreen", width, height)
         {
             ParentWindow = MessageOnlyParent,
             WindowStyle = 0,
+            ExtendedWindowStyle = TestWindowGuard.NoActivate,
+            PositionX = TestWindowGuard.OffMonitors,
+            PositionY = TestWindowGuard.OffMonitors,
         };
         using var source = new HwndSource(parameters) { RootVisual = element, SizeToContent = SizeToContent.Manual };
 
