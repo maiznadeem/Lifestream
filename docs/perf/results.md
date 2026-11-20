@@ -34,7 +34,7 @@ The client and desktop code changed after this run (the touch-up merge `ddb502b`
 
 ## The two misses in context
 
-**2.0.1 on the same machine state misses both budgets too.** 2.0.1 (`d916671`) and this branch (`b0f4530`) were measured back to back on 8 logical processors (cores 0-7) on a quiet machine, both at low priority, with the same harness (the `screens` phase and 7 cold dashboards). That pair of runs is the like-for-like comparison; its branch figures differ from the main run above because the priority differs.
+**2.0.1 on the same machine state misses both budgets too.** 2.0.1 (`d916671`) and this branch (`b0f4530`) were measured back to back on 8 logical processors (cores 0-7) on a quiet machine, both at low priority, with the same harness (the `screens` phase and 7 cold dashboards). That pair of runs is the like-for-like comparison; it was taken at a different priority from the main run above, and its branch figures differ from it.
 
 | | 2.0.1 | 2.1 branch | Limit |
 |---|---|---|---|
