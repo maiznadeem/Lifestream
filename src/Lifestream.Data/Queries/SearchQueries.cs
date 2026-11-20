@@ -407,206 +407,186 @@ public static partial class SearchQueries
     /// The receipts a search finds, as (id, date, kind, blood type) rows: every word must match the receipt's donor or patient (name, phone), the staff
     /// member who issued it (name), its blood group, or its code or number.
     /// <para>
-    /// A search whose longest word is a text, or seven digits or more of a phone, which is nearly every search, starts from the receipts that word
-    /// finds (<see cref="ReceiptsOfOneWord"/>, the statement the search had before: 43 ms for a name at 100x) and checks the other words on those
-    /// (<see cref="ReceiptsOfOneWordWithParties"/>). The longest word first because it is in the fewest names.
+    /// A receipt stores its party (<see cref="Receipt.DonorId"/>, <see cref="Receipt.PatientId"/>), so the search goes from the people a word finds
+    /// straight to their receipts (IX_Receipt_DonorId_CreatedAtUtc, IX_Receipt_PatientId_CreatedAtUtc, IX_Receipt_StaffId_CreatedAtUtc): no
+    /// appointment and no request is read. Until 2.1.6 the party was reached through them, which joined all of both tables whenever a word could be
+    /// in most phones (three to six digits) or there were two words: 110 to 140 ms at 100x.
     /// </para>
     /// <para>
-    /// Any other search may find most receipts (a few digits: an area code is in every phone; one or two letters with other words) and is answered
-    /// by a statement that costs the same whatever it finds (78 ms). A receipt has exactly one party (a donation its appointment's donor, an
-    /// issue its request's patient; the table's CHECK says so), so the two kinds are worked out apart and put together with <c>UNION ALL</c>:
-    /// nothing is found twice, so nothing has to be made distinct. Each half is the receipts of its kind joined to their appointment or request
-    /// for the person's id, then LEFT JOINed, per word, to the ids of the people and of the staff that match the word. With the list's
-    /// <paramref name="kind"/> filter the other half is not built at all.
+    /// A blood group and a code are plain filters on the receipt. Of the words looked for in names the search starts from ONE, the one in the fewest
+    /// names, in four parts that cannot overlap, put together with <c>UNION ALL</c> (nothing is found twice, so nothing has to be made distinct; a
+    /// <c>UNION</c> has to, in memory sized for SQL Server's guess of 9 % of the people, and spilled to disk when a word was in most phones):
+    /// the receipts of the staff found, those of the donors found whose staff member was NOT found (a donation has a donor and no patient), those
+    /// of the patients found likewise (an issue the reverse), and the receipt with that number if nothing else found it.
     /// </para>
     /// <para>
-    /// Measured and not used: <c>EXISTS (...) OR EXISTS (...)</c> per receipt (SQL Server runs it once per receipt: minutes); counting the words
-    /// that missed and filtering once at the end (60 ms for every extra word); one join per person table with a bit per word (the name match is
-    /// then worked out once per receipt: 150 ms for one word); four chains that do not overlap, run as index seeks (160 to 440 ms).
+    /// Each part starts at the people found, so a name is matched once per person and never once per receipt. With further words every part also
+    /// joins the other people of its receipts once (the staff member of a donor's or patient's receipt; the donor or patient of a staff
+    /// member's), and a further word is matched on the row. Looking every word up for every receipt found was measured and not used: 2,400 pages
+    /// for a last name and a first name, 1,500 with only the staff member looked up.
     /// </para>
     /// </summary>
     public static IQueryable<ReceiptHit> ReceiptsMatching(LifestreamDbContext db, Query query, ReceiptKind? kind = null)
     {
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(query);
-        var readings = query.Words.OrderByDescending(w => w.Text.Length).Select(w => Read(w, Codes.Receipt, hasBloodGroup: true)).ToList();
-        if (readings.Count == 1 && IsInFewNames(readings[0]))
+        var readings = query.Words.Select(w => Read(w, Codes.Receipt, hasBloodGroup: true)).ToList();
+
+        var receipts = kind is { } only ? db.Receipts.Where(r => r.Kind == only) : db.Receipts;
+        foreach (var reading in readings.Where(r => r.TextPattern is null))
         {
-            return ReceiptsOfOneWord(db, readings[0], kind).TagWith(PlanTag);
+            var number = reading.Id ?? 0; // no receipt has the number 0
+            receipts = reading.BloodGroup is { } group ? receipts.Where(r => r.BloodType == group) : receipts.Where(r => r.Id == number);
         }
 
-        if (readings.Count > 1 && IsInFewNames(readings[0]) && !readings[0].AtWordStart)
+        // The words looked for in names, the one in the fewest names first (a real word or a long number before a short one, then the longest).
+        var named = readings.Where(r => r.TextPattern is not null).OrderByDescending(IsInFewNames).ThenByDescending(r => r.TextPattern!.Length).ToList();
+        if (named.Count == 0)
         {
-            var found = ReceiptsOfOneWordWithParties(db, readings[0], kind);
-            foreach (var reading in readings.Skip(1))
+            return receipts.Select(r => new ReceiptHit { Id = r.Id, CreatedAtUtc = r.CreatedAtUtc, Kind = r.Kind, BloodType = r.BloodType }).TagWith(PlanTag);
+        }
+
+        var first = named[0];
+        var further = named.Skip(1).ToList();
+        var donors = db.Donors.Where(DonorFound(first));
+        var patients = db.Patients.Where(PatientFound(first));
+        var staff = db.Staff.Where(StaffFound(first, orUsername: false));
+
+        // "DonorId is not null" is said, though the join implies it: SQL Server uses a filtered index for a scan only when the query states the filter.
+        var ofDonors = receipts.Where(r => r.DonorId != null);
+        var ofPatients = receipts.Where(r => r.PatientId != null);
+        IQueryable<Row> byDonor, byPatient, byStaff;
+        // The parts do not overlap: the staff part takes every receipt of the staff found, the donor and the patient part those whose staff
+        // member was NOT found. That way round because what a search costs is matching the word against names (and phones), and "was not
+        // found" matches a second time: the staff are a tenth of the people, and the other way round every donor and patient was matched twice.
+        if (further.Count == 0)
+        {
+            byStaff = from s in staff join r in receipts on s.Id equals r.StaffId select new Row { Receipt = r };
+            byDonor = from d in donors join r in ofDonors on (int?)d.Id equals r.DonorId where !staff.Any(s => s.Id == r.StaffId) select new Row { Receipt = r };
+            byPatient = from p in patients join r in ofPatients on (int?)p.Id equals r.PatientId where !staff.Any(s => s.Id == r.StaffId) select new Row { Receipt = r };
+        }
+        else
+        {
+            // With further words every row carries the people of its receipt, joined once: the further words are then matched on the row, with
+            // no lookup per receipt. A receipt always has its staff member; of donor and patient it has one.
+            var staffNotFound = Expression.Lambda<Func<Row, bool>>(Expression.Not(On(StaffFound(first, orUsername: false), Expression.Property(RowParameter, nameof(Row.Staff)))), RowParameter);
+            byStaff =
+                from s in staff
+                join r in receipts on s.Id equals r.StaffId
+                join d in db.Donors on r.DonorId equals (int?)d.Id into receiptDonors
+                from d in receiptDonors.DefaultIfEmpty()
+                join p in db.Patients on r.PatientId equals (int?)p.Id into receiptPatients
+                from p in receiptPatients.DefaultIfEmpty()
+                select new Row { Receipt = r, Donor = d, Patient = p, Staff = s };
+            byDonor = (
+                from d in donors
+                join r in ofDonors on (int?)d.Id equals r.DonorId
+                join s in db.Staff on r.StaffId equals s.Id
+                select new Row { Receipt = r, Donor = d, Staff = s }).Where(staffNotFound);
+            byPatient = (
+                from p in patients
+                join r in ofPatients on (int?)p.Id equals r.PatientId
+                join s in db.Staff on r.StaffId equals s.Id
+                select new Row { Receipt = r, Patient = p, Staff = s }).Where(staffNotFound);
+        }
+
+        var byNumber = first.Id is { } firstNumber
+            ? receipts.Where(r => r.Id == firstNumber && !donors.Any(d => (int?)d.Id == r.DonorId) && !patients.Any(p => (int?)p.Id == r.PatientId) && !staff.Any(s => s.Id == r.StaffId))
+            : null;
+
+        foreach (var word in further)
+        {
+            var number = word.Id ?? 0;
+            byDonor = byDonor.Where(Matches(word, donor: true, patient: false, staff: true));
+            byPatient = byPatient.Where(Matches(word, donor: false, patient: true, staff: true));
+            byStaff = byStaff.Where(Matches(word, donor: true, patient: true, staff: true));
+            if (byNumber is not null)
             {
-                found = Keep(found, db, reading, donors: true, patients: true);
+                // One receipt at most: looked up.
+                var wordDonors = db.Donors.Where(DonorFound(word));
+                var wordPatients = db.Patients.Where(PatientFound(word));
+                var wordStaff = db.Staff.Where(StaffFound(word, orUsername: false));
+                byNumber = byNumber.Where(r =>
+                    r.Id == number || wordDonors.Any(d => (int?)d.Id == r.DonorId) || wordPatients.Any(p => (int?)p.Id == r.PatientId) || wordStaff.Any(s => s.Id == r.StaffId));
             }
-
-            return found.Select(x => new ReceiptHit { Id = x.Id, CreatedAtUtc = x.CreatedAtUtc, Kind = x.Kind, BloodType = x.BloodType }).TagWith(PlanTag);
         }
 
-        var donations =
-            from r in db.Receipts
-            where r.Kind == ReceiptKind.Donation
-            join a in db.Appointments on r.AppointmentId equals (int?)a.Id
-            select new ReceiptParties { Id = r.Id, CreatedAtUtc = r.CreatedAtUtc, Kind = r.Kind, BloodType = r.BloodType, StaffId = r.StaffId, DonorId = (int?)a.DonorId, PatientId = (int?)null };
-        var issues =
-            from r in db.Receipts
-            where r.Kind == ReceiptKind.Issue
-            join q in db.Requests on r.RequestId equals (int?)q.Id
-            select new ReceiptParties { Id = r.Id, CreatedAtUtc = r.CreatedAtUtc, Kind = r.Kind, BloodType = r.BloodType, StaffId = r.StaffId, DonorId = (int?)null, PatientId = (int?)q.PatientId };
-        foreach (var reading in readings)
+        var hits = byStaff.Select(x => new ReceiptHit { Id = x.Receipt.Id, CreatedAtUtc = x.Receipt.CreatedAtUtc, Kind = x.Receipt.Kind, BloodType = x.Receipt.BloodType });
+        if (kind != ReceiptKind.Issue)
         {
-            donations = Keep(donations, db, reading, donors: true, patients: false);
-            issues = Keep(issues, db, reading, donors: false, patients: true);
+            hits = hits.Concat(byDonor.Select(x => new ReceiptHit { Id = x.Receipt.Id, CreatedAtUtc = x.Receipt.CreatedAtUtc, Kind = x.Receipt.Kind, BloodType = x.Receipt.BloodType }));
         }
 
-        var parties = kind switch
+        if (kind != ReceiptKind.Donation)
         {
-            ReceiptKind.Donation => donations,
-            ReceiptKind.Issue => issues,
-            _ => donations.Concat(issues),
-        };
-        return parties.Select(x => new ReceiptHit { Id = x.Id, CreatedAtUtc = x.CreatedAtUtc, Kind = x.Kind, BloodType = x.BloodType }).TagWith(PlanTag);
+            hits = hits.Concat(byPatient.Select(x => new ReceiptHit { Id = x.Receipt.Id, CreatedAtUtc = x.Receipt.CreatedAtUtc, Kind = x.Receipt.Kind, BloodType = x.Receipt.BloodType }));
+        }
+
+        if (byNumber is not null)
+        {
+            hits = hits.Concat(byNumber.Select(r => new ReceiptHit { Id = r.Id, CreatedAtUtc = r.CreatedAtUtc, Kind = r.Kind, BloodType = r.BloodType }));
+        }
+
+        return hits.TagWith(PlanTag);
     }
 
     /// <summary>
     /// A word that finds few people: any word looked for in names (a short one matches word starts only, a fifth of the names at most; a longer
     /// one is a part of few names), unless it is also three to six digits of a phone, which may be in every phone (an area code). Seven digits
-    /// or more are few phones again (the fewest the search took for a phone before).
+    /// or more are few phones again.
     /// </summary>
     private static bool IsInFewNames(Reading reading) => reading.TextPattern is not null && reading.PhonePattern is not { Length: < 9 };
 
-    /// <summary>
-    /// The receipts ONE word finds, as chains that start at the people found and are put together with <c>UNION</c>: the donors' receipts (donor,
-    /// appointment, receipt), the patients' (patient, request, receipt), those of the staff whose name contains the word, and the receipt with that
-    /// number. Only the receipts of the people found pass through the joins, which is why it is the quickest statement for a word in few names. It
-    /// is NOT used for a word that may be in most phones (three to six digits, an area code): SQL Server sizes the memory of the <c>UNION</c> for
-    /// 9 % of the people, and with 91 % it spills to disk (500 ms at 100x).
-    /// </summary>
-    private static IQueryable<ReceiptHit> ReceiptsOfOneWord(LifestreamDbContext db, Reading reading, ReceiptKind? kind)
+    /// <summary>A receipt on its way through the search, with the people of it that the part of the statement it is in has joined.</summary>
+    private sealed class Row
     {
-        var byDonor =
-            from d in db.Donors.Where(DonorFound(reading))
-            join a in db.Appointments on d.Id equals a.DonorId
-            join r in db.Receipts.Where(r => r.AppointmentId != null) on a.Id equals r.AppointmentId
-            select new ReceiptHit { Id = r.Id, CreatedAtUtc = r.CreatedAtUtc, Kind = r.Kind, BloodType = r.BloodType };
-        var byPatient =
-            from p in db.Patients.Where(PatientFound(reading))
-            join q in db.Requests on p.Id equals q.PatientId
-            join r in db.Receipts.Where(r => r.RequestId != null) on q.Id equals r.RequestId
-            select new ReceiptHit { Id = r.Id, CreatedAtUtc = r.CreatedAtUtc, Kind = r.Kind, BloodType = r.BloodType };
-        var byStaff =
-            from s in db.Staff.Where(StaffFound(reading, orUsername: false))
-            join r in db.Receipts on s.Id equals r.StaffId
-            select new ReceiptHit { Id = r.Id, CreatedAtUtc = r.CreatedAtUtc, Kind = r.Kind, BloodType = r.BloodType };
-        var hits = byDonor.Union(byPatient).Union(byStaff);
-        if (reading.Id is { } number)
-        {
-            hits = hits.Union(db.Receipts.Where(r => r.Id == number).Select(r => new ReceiptHit { Id = r.Id, CreatedAtUtc = r.CreatedAtUtc, Kind = r.Kind, BloodType = r.BloodType }));
-        }
+        public Receipt Receipt { get; set; } = null!;
 
-        return kind is { } only ? hits.Where(h => h.Kind == only) : hits;
+        public Donor? Donor { get; set; }
+
+        public Patient? Patient { get; set; }
+
+        public Staff? Staff { get; set; }
     }
 
     /// <summary>
-    /// <see cref="ReceiptsOfOneWord"/> for a search of several words: the same chains, each also carrying the ids of the receipt's donor or patient
-    /// and of its staff member, so the other words are checked on the receipts found (<see cref="Keep"/>) without the receipt table being passed
-    /// over again. The donor's and the patient's chain have the id at hand; the staff chain looks the receipt's appointment or request up for it.
+    /// "A further word matches this row": its number, or one of the people the row carries (a person the row does not have is null there, and
+    /// nothing matches null).
     /// </summary>
-    private static IQueryable<ReceiptParties> ReceiptsOfOneWordWithParties(LifestreamDbContext db, Reading reading, ReceiptKind? kind)
+    private static Expression<Func<Row, bool>> Matches(Reading word, bool donor, bool patient, bool staff)
     {
-        var byDonor =
-            from d in db.Donors.Where(DonorFound(reading))
-            join a in db.Appointments on d.Id equals a.DonorId
-            join r in db.Receipts.Where(r => r.AppointmentId != null) on a.Id equals r.AppointmentId
-            select new ReceiptParties { Id = r.Id, CreatedAtUtc = r.CreatedAtUtc, Kind = r.Kind, BloodType = r.BloodType, StaffId = r.StaffId, DonorId = (int?)d.Id, PatientId = (int?)null };
-        var byPatient =
-            from p in db.Patients.Where(PatientFound(reading))
-            join q in db.Requests on p.Id equals q.PatientId
-            join r in db.Receipts.Where(r => r.RequestId != null) on q.Id equals r.RequestId
-            select new ReceiptParties { Id = r.Id, CreatedAtUtc = r.CreatedAtUtc, Kind = r.Kind, BloodType = r.BloodType, StaffId = r.StaffId, DonorId = (int?)null, PatientId = (int?)p.Id };
-        var byStaff = WithParties(
-            from s in db.Staff.Where(StaffFound(reading, orUsername: false))
-            join r in db.Receipts on s.Id equals r.StaffId
-            select r,
-            db);
-        var rows = byDonor.Union(byPatient).Union(byStaff);
-        if (reading.Id is { } number)
+        var number = word.Id ?? 0; // no receipt has the number 0
+        Expression<Func<Row, bool>> byNumber = x => x.Receipt.Id == number;
+        var row = RowParameter;
+        var body = On(byNumber, row);
+        if (donor)
         {
-            rows = rows.Union(WithParties(db.Receipts.Where(r => r.Id == number), db));
+            body = Expression.OrElse(body, On(DonorFound(word), Expression.Property(row, nameof(Row.Donor))));
         }
 
-        return kind is { } only ? rows.Where(x => x.Kind == only) : rows;
+        if (patient)
+        {
+            body = Expression.OrElse(body, On(PatientFound(word), Expression.Property(row, nameof(Row.Patient))));
+        }
+
+        if (staff)
+        {
+            body = Expression.OrElse(body, On(StaffFound(word, orUsername: false), Expression.Property(row, nameof(Row.Staff))));
+        }
+
+        return Expression.Lambda<Func<Row, bool>>(body, row);
     }
 
-    /// <summary>Receipts with the id of their donor (through the appointment) or patient (through the request).</summary>
-    private static IQueryable<ReceiptParties> WithParties(IQueryable<Receipt> receipts, LifestreamDbContext db) =>
-        from r in receipts
-        join a in db.Appointments on r.AppointmentId equals (int?)a.Id into appointments
-        from a in appointments.DefaultIfEmpty()
-        join q in db.Requests on r.RequestId equals (int?)q.Id into requests
-        from q in requests.DefaultIfEmpty()
-        select new ReceiptParties { Id = r.Id, CreatedAtUtc = r.CreatedAtUtc, Kind = r.Kind, BloodType = r.BloodType, StaffId = r.StaffId, DonorId = (int?)a.DonorId, PatientId = (int?)q.PatientId };
+    private static readonly ParameterExpression RowParameter = Expression.Parameter(typeof(Row), "x");
 
-    /// <summary>
-    /// The receipts one word keeps: those with the blood group or the number; or, LEFT JOINed to the ids of the donors, patients and staff the word
-    /// finds, those where one of them is there. <paramref name="donors"/> and <paramref name="patients"/> say which of the two the rows can have
-    /// (a half of one kind has only one of them, so the other join is left out).
-    /// </summary>
-    private static IQueryable<ReceiptParties> Keep(IQueryable<ReceiptParties> rows, LifestreamDbContext db, Reading reading, bool donors, bool patients)
+    /// <summary>The body of <paramref name="predicate"/> with <paramref name="target"/> in the place of its parameter.</summary>
+    private static Expression On<T>(Expression<Func<T, bool>> predicate, Expression target) => new Substitute(predicate.Parameters[0], target).Visit(predicate.Body);
+
+    private sealed class Substitute(ParameterExpression from, Expression to) : ExpressionVisitor
     {
-        if (reading.BloodGroup is { } group)
-        {
-            return rows.Where(x => x.BloodType == group);
-        }
-
-        var id = reading.Id ?? 0; // no receipt has the number 0
-        if (reading.TextPattern is null)
-        {
-            return rows.Where(x => x.Id == id);
-        }
-
-        var staff = db.Staff.Where(StaffFound(reading, orUsername: false)).Select(s => (int?)s.Id);
-        var donorIds = db.Donors.Where(DonorFound(reading)).Select(d => (int?)d.Id);
-        var patientIds = db.Patients.Where(PatientFound(reading)).Select(p => (int?)p.Id);
-        if (donors && patients)
-        {
-            return rows
-                .LeftJoin(donorIds, x => x.DonorId, found => found, (x, donor) => new { Row = x, Donor = donor })
-                .LeftJoin(patientIds, x => x.Row.PatientId, found => found, (x, patient) => new { x.Row, x.Donor, Patient = patient })
-                .LeftJoin(staff, x => (int?)x.Row.StaffId, found => found, (x, member) => new { x.Row, x.Donor, x.Patient, Member = member })
-                .Where(x => x.Donor != null || x.Patient != null || x.Member != null || x.Row.Id == id)
-                .Select(x => x.Row);
-        }
-
-        return donors
-            ? rows
-                .LeftJoin(donorIds, x => x.DonorId, found => found, (x, donor) => new { Row = x, Party = donor })
-                .LeftJoin(staff, x => (int?)x.Row.StaffId, found => found, (x, member) => new { x.Row, x.Party, Member = member })
-                .Where(x => x.Party != null || x.Member != null || x.Row.Id == id)
-                .Select(x => x.Row)
-            : rows
-                .LeftJoin(patientIds, x => x.PatientId, found => found, (x, patient) => new { Row = x, Party = patient })
-                .LeftJoin(staff, x => (int?)x.Row.StaffId, found => found, (x, member) => new { x.Row, x.Party, Member = member })
-                .Where(x => x.Party != null || x.Member != null || x.Row.Id == id)
-                .Select(x => x.Row);
-    }
-
-    /// <summary>A receipt on its way through the search: what the list filters and orders by, and the ids its words are matched through.</summary>
-    private sealed class ReceiptParties
-    {
-        public int Id { get; set; }
-        public DateTime CreatedAtUtc { get; set; }
-        public ReceiptKind Kind { get; set; }
-        public BloodType BloodType { get; set; }
-        public int StaffId { get; set; }
-        public int? DonorId { get; set; }
-        public int? PatientId { get; set; }
+        protected override Expression VisitParameter(ParameterExpression node) => node == from ? to : base.VisitParameter(node);
     }
 }
-
 /// <summary>What a receipt search keeps of each match: enough to filter, count and order the matches.</summary>
 public sealed class ReceiptHit
 {
