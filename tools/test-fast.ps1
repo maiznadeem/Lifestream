@@ -3,9 +3,9 @@
 Builds the solution once and runs every test of the four test projects in about two minutes.
 
 .DESCRIPTION
-Domain and Client run first, then the Desktop tests, with Api beside all of them: Api starts with Domain and Client
-(it is the longest single piece and nothing in it can be shortened by more processes), the Desktop shards start when
-Domain and Client have ended.
+All four projects start together: Api is the longest single piece, and one Domain test runs 'dotnet build' twice,
+which takes 3 to 40 seconds depending on what else the machine does, so nothing waits for anything else. With
+-DomainAndClientFirst, Api and the Desktop tests start when Domain and Client have ended.
 
 Desktop: a WPF test process runs its tests one at a time (WPF cannot build views on several threads of one process),
 so the Desktop test executable is started several times, each process (a shard) running its own share of the test
@@ -47,15 +47,18 @@ param(
     # How many classes one Api process runs at once (0: the allowed processors shared over the Api processes, so that SQL Server
     # gets as many classes at once as in an unsharded run; more than that and tests with a time window fail).
     [int]$ApiThreads = 0,
-    # How many worker processes the walk over every command starts (0: the test's own default, one per two processors, which is
-    # meant for a walk that has the processors to itself; here the other shards and Api run beside it).
-    [int]$Walkers = 6,
+    # How many worker processes the walk over every command starts. 0: 8 when at least three quarters of the allowed processors are
+    # free, else 6 (a worker is 40 % processor time and 60 % fixed waits; more of them finish sooner but starve the rest when
+    # processors are short). The test's own default, one per two processors, is meant for a walk that runs by itself.
+    [int]$Walkers = 0,
     # dotnet.exe of the SDK to build with (default: tools/dotnet beside the worktrees folder when it exists, else PATH).
     [string]$Dotnet,
     # Where logs and result files go (default: a folder per checkout under the temp folder).
     [string]$Out,
     # The class durations file (default: tools/test-fast.durations.json of the checkout, else the one beside this script).
     [string]$Durations,
+    # Run Domain and Client by themselves first; Api and the Desktop tests start when both have ended.
+    [switch]$DomainAndClientFirst,
     # Skip the build (the Release output must be up to date).
     [switch]$NoBuild,
     # Write the class durations measured by this run to the durations file of the checkout.
@@ -287,7 +290,7 @@ function Get-DesktopPlan($cases, $known, [string[]]$alone, $split, [int]$count) 
         $seconds = Get-Seconds @($class) $known
         $short = $class.Substring($class.LastIndexOf('.') + 1)
         if ($alone -contains $class) {
-            $shard = New-Shard "$short (starts its own worker processes)"
+            $shard = New-Shard "$short (starts its own worker processes: $script:WalkerCount)"
             [void]$shard.Classes.Add($class)
             $shard.Seconds = $seconds
             [void]$plan.Add($shard)
@@ -441,9 +444,9 @@ try {
     Write-Host "  logs and results: $Out"
 
     # What else is using the allowed processors: this run needs most of them, and tests that wait real time fail when they get too little.
+    $busy = 0.0
+    $allowed = 0
     try {
-        $busy = 0.0
-        $allowed = 0
         foreach ($sample in (Get-Counter '\Processor(*)\% Processor Time' -SampleInterval 1 -MaxSamples 1).CounterSamples) {
             if ($sample.InstanceName -match '^\d+$' -and (($Affinity -shr [int]$sample.InstanceName) -band 1)) {
                 $busy += $sample.CookedValue / 100
@@ -460,6 +463,13 @@ try {
     }
     catch {
         Write-Verbose "The processor load could not be read: $_"
+    }
+
+    if ($Walkers -le 0) {
+        $Walkers = 6
+        if ($allowed -gt 0 -and ($allowed - $busy) -ge 0.75 * $allowed) {
+            $Walkers = 8
+        }
     }
 
     $buildSeconds = 0.0
@@ -496,7 +506,7 @@ try {
         return $run
     }
 
-    # Domain and Client run while the unsharded Api and Desktop executables list what they hold: the reference everything below is checked against.
+    # Domain and Client start while the unsharded executables list what they hold: the reference everything below is checked against.
     $first = @((Start-Tests 'Domain' 'Domain'), (Start-Tests 'Client' 'Client'))
     $listings = [ordered]@{
         Domain = Start-Listing $projects['Domain'] 'tests'
@@ -526,6 +536,7 @@ try {
     $classes = @{ Desktop = @($casesOf.Keys | Sort-Object); Api = @(Read-Listing $listings['ApiClasses'] | Sort-Object -Unique) }
 
     # Every listed Desktop test case and every Api class is given to exactly one shard, before anything runs.
+    $script:WalkerCount = $Walkers
     $plans = @{
         Desktop = @(Get-DesktopPlan $cases $known $settings.ownShard $split $Shards)
         Api = @(Get-ApiPlan $classes.Api $known $settings.apiTogether $settings.apiLast $ApiShards)
@@ -582,6 +593,10 @@ try {
         }
     }
 
+    if ($DomainAndClientFirst) {
+        Wait-Runs $first $TimeoutMinutes
+    }
+
     $second = New-Object System.Collections.ArrayList
     $apiLast = $null
     if ($ApiThreads -le 0) {
@@ -608,8 +623,6 @@ try {
         }
     }
 
-    Wait-Runs $first $TimeoutMinutes
-
     for ($i = 0; $i -lt $plans.Desktop.Count; $i++) {
         $shard = $plans.Desktop[$i]
         $label = "Desktop-{0:D2}" -f ($i + 1)
@@ -618,16 +631,13 @@ try {
         # Each shard writes its render captures to its own folder, so two processes never write one file.
         $captures = Join-Path $Out ("captures\$label")
         [void](New-Item -ItemType Directory -Force -Path $captures)
-        $environment = @{ LIFESTREAM_CAPTURE_DIR = $captures }
-        if ($Walkers -gt 0) {
-            $environment['LIFESTREAM_WAKING_WALKERS'] = $Walkers
-        }
+        $environment = @{ LIFESTREAM_CAPTURE_DIR = $captures; LIFESTREAM_WAKING_WALKERS = $Walkers }
 
         [void]$second.Add((Start-Tests $label 'Desktop' $filter $environment $shard.Note))
     }
 
     while ($true) {
-        $running = Update-Runs $second $TimeoutMinutes
+        $running = (Update-Runs $second $TimeoutMinutes) -bor (Update-Runs $first $TimeoutMinutes)
         if ($apiLast -and @($second | Where-Object { $_.Project -eq 'Api' -and $_.Watch.IsRunning }).Count -eq 0) {
             # The run-alone classes start when no other Api process is left: SQL Server is theirs, as it is at the end of an unsharded run.
             [void]$second.Add((Start-Tests $apiLast.Label 'Api' $apiLast.Filter @{} $apiLast.Note))
@@ -642,6 +652,7 @@ try {
         Start-Sleep -Milliseconds 100
     }
 
+    Complete-Runs $first
     Complete-Runs $second
     $tests.Stop()
 
