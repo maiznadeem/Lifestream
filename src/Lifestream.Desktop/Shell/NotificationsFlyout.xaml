@@ -53,7 +53,8 @@
                         <StackPanel Grid.Column="1">
                           <TextBlock Style="{DynamicResource Text.BodyStrong}" Text="{Binding Title}" TextWrapping="Wrap" />
                           <TextBlock Style="{DynamicResource Text.Secondary}" Text="{Binding Detail}" TextWrapping="Wrap" />
-                          <Button Style="{DynamicResource Button.Secondary.Small}" Content="{Binding ActionText}" HorizontalAlignment="Left" Margin="{DynamicResource Inset.T8}"
+                          <!-- TabIndex 0: the items' actions come before "View all" in the tab order (it is declared first, to dock at the bottom), so opening the flyout puts the focus on the first item. -->
+                          <Button Style="{DynamicResource Button.Secondary.Small}" Content="{Binding ActionText}" HorizontalAlignment="Left" Margin="{DynamicResource Inset.T8}" TabIndex="0"
                                   Command="{Binding DataContext.RunCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}"
                                   AutomationProperties.Name="{Binding ActionText}" AutomationProperties.HelpText="{Binding Title}" />
                         </StackPanel>
@@ -97,7 +98,7 @@
                   <controls:Icon Kind="Alert" Size="18" Foreground="{DynamicResource Brush.Critical}" VerticalAlignment="Top" Margin="{DynamicResource Inset.R10}" />
                   <TextBlock x:Name="ErrorText" Style="{DynamicResource Text.Body}" Text="{Binding ErrorMessage}" TextWrapping="Wrap" MaxWidth="340" />
                 </StackPanel>
-                <Button x:Name="RetryButton" Style="{DynamicResource Button.Secondary.Small}" Content="Retry" Command="{Binding RetryCommand}" HorizontalAlignment="Left" Margin="{DynamicResource Inset.T8}"
+                <Button x:Name="RetryButton" Style="{DynamicResource Button.Secondary.Small}" Content="Retry" Command="{Binding RetryCommand}" HorizontalAlignment="Left" Margin="{DynamicResource Inset.T8}" TabIndex="0"
                         AutomationProperties.Name="Retry" />
               </StackPanel>
             </Grid>
