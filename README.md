@@ -26,12 +26,17 @@ What changed for users is in [CHANGELOG.md](CHANGELOG.md).
 Start the app and press **Try the demo**. No account, username or password is needed. The demo runs against synthetic
 data only (see [docs/data-retention.md](docs/data-retention.md)) and is reset every day. The first request after a quiet period can take up to a minute while the server wakes up.
 
+The demo clinic has a day in progress: today's appointments are in it, the earlier ones already donated, the rest
+still to come. It keeps its hours in UTC (09:00 to 16:30), so they appear at those hours in your own time.
+
 ## Screenshots
 
 Rendered off-screen through the real app from the real demo dataset (never real data) by `tools/generate-screenshots.ps1`:
 it fills a fresh local database with the demo data generator, starts the real API over it, signs in with "Try the demo" and
-captures every screen. A screen that shows an error or empty state, or a dashboard whose counts differ from the demo
-dataset's, fails the run. Regenerate them by running that script, never edit them by hand.
+captures every screen. A screen that shows an error or empty state, a dashboard whose counts differ from the demo
+dataset's, or a day without appointments fails the run. The times on them are the demo clinic's own (UTC), whatever the
+time zone of the PC that took them, and today's agenda is as far on as the clock was then (`screenshots.json` records it).
+Regenerate them by running that script, never edit them by hand.
 
 | | |
 |---|---|
@@ -39,7 +44,7 @@ dataset's, fails the run. Regenerate them by running that script, never edit the
 | ![Donors](docs/screenshots/donors.png) | ![Patients](docs/screenshots/patients.png) |
 | ![Appointments](docs/screenshots/appointments.png) | ![Requests](docs/screenshots/requests.png) |
 | ![Stock](docs/screenshots/stock.png) | ![Receipts](docs/screenshots/receipts.png) |
-| ![Staff](docs/screenshots/staff.png) | |
+| ![Staff](docs/screenshots/staff.png) | ![Profile](docs/screenshots/profile.png) |
 
 ## Architecture
 

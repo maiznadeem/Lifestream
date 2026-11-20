@@ -11,6 +11,9 @@
        off-screen capture test (Category=Screenshots, tests/Lifestream.Desktop.Tests/EndToEnd/DemoScreenshotTests.cs) with LIFESTREAM_CAPTURE_DIR set to a
        temporary folder. That test opens the sign-in screen, presses "Try the demo" and opens every screen as the demo account; it fails (and writes no image of
        the screen) on an error or empty state, or when the dashboard counts differ from the demo dataset's. It also writes dataset.json.
+       The demo clinic is in UTC and the app shows times in the PC's zone, so the capture test runs with UTC as its local zone: the images show the clinic's
+       own hours on any PC. The demo is built for the instant it is created at, so the agenda of today is as far on as the clock (UTC) when the script runs:
+       all still to come before 09:45, part done until about 17:15, all done after.
        The API and the database are stopped and dropped at the end, whatever happened.
     3. Fails (exit 2) unless every expected screen produced a valid PNG of at least 1366x768 (the Store minimum), and dataset.json is there.
     4. Scans the images for credentials, copies them to docs/screenshots (README) and packaging/store/screenshots (Store) and writes screenshots.json
@@ -134,7 +137,7 @@ try {
     & (Join-Path $PSScriptRoot 'scan-artifacts.ps1') -Path $capture | Out-Host
     if ($LASTEXITCODE -ne 0) { Write-Host "ERROR: the screenshots failed the credential scan"; exit 1 }
 
-    $manifest = [pscustomobject]@{ dataset = 'demo'; generatedBy = 'tools/generate-screenshots.ps1'; source = $(if ($dataset) { "real API over a fresh database filled by $($dataset.generator), signed in with Try the demo, data relative to $($dataset.today)" } else { 'fake capture' }); dashboard = $(if ($dataset) { $dataset.dashboard } else { $null }); files = $records }
+    $manifest = [pscustomobject]@{ dataset = 'demo'; generatedBy = 'tools/generate-screenshots.ps1'; source = $(if ($dataset) { "real API over a fresh database filled by $($dataset.generator), signed in with Try the demo, data relative to $($dataset.today)" + $(if ($dataset.takenAtUtc) { " as the clinic stood at $($dataset.takenAtUtc) UTC, times in the clinic's own zone ($($dataset.timeZone))" }) } else { 'fake capture' }); dashboard = $(if ($dataset) { $dataset.dashboard } else { $null }); files = $records }
     foreach ($target in $OutputDir, $StoreDir) {
         New-Item -ItemType Directory -Path $target -Force | Out-Null
         Get-ChildItem $target -Filter '*.png' -ErrorAction SilentlyContinue | Remove-Item -Force

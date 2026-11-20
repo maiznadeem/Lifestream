@@ -19,6 +19,7 @@ namespace Lifestream.Desktop.Tests.EndToEnd;
 /// <c>LIFESTREAM_SHOTS_TODAY</c> (the date the data is relative to) and <c>LIFESTREAM_CAPTURE_DIR</c>. The test opens the sign-in screen, presses "Try the demo", and opens every screen of the
 /// sidebar as the demo account would. A capture is only written for a screen that finished loading with data: an error or empty state, an unloaded view model or a dashboard whose
 /// counts differ from the demo dataset's fails the test and writes nothing. No fake data is involved (the fake API and DemoData.cs are not used here).
+/// The times on the images are the demo clinic's own (UTC, where it is open 09:00 to 17:00), not those of the PC that takes them (<see cref="ClinicTimeZone"/>).
 /// All of it runs on one UI thread, as in the app. Nothing is shown on the desktop and no focus is taken.
 /// </summary>
 [Collection("Wpf")]
@@ -89,6 +90,9 @@ public sealed class DemoScreenshotTests
         var api = Required("LIFESTREAM_SHOTS_API");
         var today = DateOnly.ParseExact(Required("LIFESTREAM_SHOTS_TODAY"), "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
         var expected = ExpectedCards(today);
+
+        // The images show the demo clinic in its own time zone, whatever the zone of the PC that takes them (ClinicTimeZone).
+        using var clinicZone = ClinicTimeZone.Use();
 
         var (problems, observed, saved) = StaHost.Run(() =>
         {
@@ -222,10 +226,23 @@ public sealed class DemoScreenshotTests
         Assert.True(problems.Count == 0, string.Join("; ", problems));
         Assert.Equal(["login", "dashboard", "donors", "patients", "appointments", "requests", "stock", "receipts", "staff", "profile"], saved);
 
+        // The clinic's zone held to the end: the screens' own formatting shows a UTC time as it is.
+        Assert.Equal(new TimeOnly(9, 30), Lifestream.Client.Features.ListScreens.RecordFormatting.LocalTime(new DateTime(2026, 11, 19, 9, 30, 0, DateTimeKind.Utc)));
+
         // What the images show, for the manifest the script writes next to them.
         File.WriteAllText(
             Path.Combine(Hosted.CaptureDirectory, "dataset.json"),
-            JsonSerializer.Serialize(new { dataset = "demo", generator = nameof(DemoDataGenerator), today = today.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture), expected, dashboard = observed }));
+            JsonSerializer.Serialize(new
+            {
+                dataset = "demo",
+                generator = nameof(DemoDataGenerator),
+                today = today.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
+                // How far the clinic's day had got (the demo is built for the instant, and today's agenda moves on with it), and whose clock the images show.
+                takenAtUtc = DateTime.UtcNow.ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture),
+                timeZone = ClinicTimeZone.Zone.Id,
+                expected,
+                dashboard = observed,
+            }));
     }
 
     // ---- the checks themselves can fail: they are exercised here without an API ----

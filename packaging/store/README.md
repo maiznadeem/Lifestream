@@ -8,7 +8,8 @@ Store as an MSIX. Nothing here is submitted automatically; the Store listing nee
 | File | Purpose |
 |---|---|
 | `AppxManifest.template.xml` | Full-trust desktop app manifest with placeholders for the Store identity. |
-| `build-msix.ps1` | Lays out the published app, fills the manifest, generates placeholder tile art and runs `makeappx` to produce an unsigned `Lifestream-<version>-x64.msix`. |
+| `build-msix.ps1` | Lays out the published app, fills the manifest, adds the tile art from `Assets/` and runs `makeappx` to produce an unsigned `Lifestream-<version>-x64.msix`. |
+| `Assets/` | The tile art: the Lifestream mark at 44x44, 150x150 and 50x50 (`Square44x44Logo.png`, `Square150x150Logo.png`, `StoreLogo.png`). |
 | `screenshots/` | Created by `tools/generate-screenshots.ps1` (demo dataset only, at least 1366x768), with `screenshots.json` recording the dataset. |
 
 ## One-time setup (about 30 minutes)
@@ -22,8 +23,8 @@ Store as an MSIX. Nothing here is submitted automatically; the Store listing nee
 4. In the GitHub repository open **Settings > Secrets and variables > Actions > Variables** and add these three as
    repository **variables** (they are identifiers, not secrets): `STORE_IDENTITY_NAME`, `STORE_PUBLISHER`,
    `STORE_PUBLISHER_DISPLAY_NAME`. Until they exist, `release.yml` skips the MSIX and says so in the run summary.
-5. Replace the generated tile art (`Assets/*.png`, red square with a white dot) with real artwork if you want: put your PNGs
-   in `packaging/store/Assets/` named `Square44x44Logo.png`, `Square150x150Logo.png` and `StoreLogo.png` (44x44, 150x150 and 50x50); `build-msix.ps1` uses them instead of the generated ones.
+5. The tile art in `packaging/store/Assets/` is the Lifestream mark. To change it, replace `Square44x44Logo.png`, `Square150x150Logo.png` and
+   `StoreLogo.png` there (44x44, 150x150 and 50x50). Only when one of them is missing does `build-msix.ps1` draw a placeholder (a red square with a white dot).
 
 ## Every release
 
