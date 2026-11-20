@@ -187,6 +187,7 @@ public sealed partial class ShellViewModel : ViewModelBase
             return Task.CompletedTask;
         });
         Toasts.Actions.Changed += OnToastActionsChanged;
+        Toasts.Toasts.CollectionChanged += OnToastsChanged;
         navigation.CurrentChanged += OnCurrentChanged;
         serverStatus.DemoResetObserved += OnDemoReset;
         serverStatus.Changed += OnServerStatusChanged;
@@ -653,6 +654,18 @@ public sealed partial class ShellViewModel : ViewModelBase
         }
     }
 
+    /// <summary>
+    /// A success toast means a record was just added, changed, fulfilled, cancelled, deleted or restored, on whichever screen: the sidebar's
+    /// counts are read again at once, not at the next navigation half a minute later (the Requests count stayed 40 beside a page saying 41 open).
+    /// </summary>
+    private void OnToastsChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    {
+        if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Add && e.NewItems is { } added && added.OfType<ToastItem>().Any(t => t.Kind == ToastKind.Success))
+        {
+            _ = RefreshCountsAsync();
+        }
+    }
+
     private void OnDemoReset(object? sender, EventArgs e)
     {
         void Handle()
@@ -704,6 +717,7 @@ public sealed partial class ShellViewModel : ViewModelBase
             Preferences.PropertyChanged -= OnPreferencesChanged;
             _serverStatus.Changed -= OnServerStatusChanged;
             Toasts.Actions.Changed -= OnToastActionsChanged;
+            Toasts.Toasts.CollectionChanged -= OnToastsChanged;
             _serverStatus.DemoResetObserved -= OnDemoReset;
             Navigation.Reset();
         }
