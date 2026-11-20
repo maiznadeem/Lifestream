@@ -70,7 +70,8 @@
           </Button>
         </controls:PageHeader.Actions>
       </controls:PageHeader>
-      <lists:ListToolbar x:Name="Toolbar" Grid.Row="1" Margin="{StaticResource Donors.ToolbarGap}" SearchPlaceholder="Search donors">
+      <!-- The search field is 300 wide (320 elsewhere) so that the three chips stay on its line at 1440 with the side panel open. -->
+      <lists:ListToolbar x:Name="Toolbar" Grid.Row="1" Margin="{StaticResource Donors.ToolbarGap}" SearchPlaceholder="Search donors" SearchWidth="300">
         <lists:ListToolbar.Filters>
           <StackPanel Orientation="Horizontal">
             <lists:FilterChip AutomationProperties.AutomationId="EligibilityChip" Label="Eligibility" AutomationProperties.Name="Eligibility filter" ItemsSource="{Binding EligibilityOptions}"
