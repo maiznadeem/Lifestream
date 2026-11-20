@@ -174,7 +174,8 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
 
     /// <summary>
     /// Why "Fulfil request" is disabled for the selected request, shown under the action row: none of its group is in stock ("No O− in stock. The request stays open
-    /// until stock arrives."). Null when it can be fulfilled, or while the stock is unknown (the server still checks).
+    /// until stock arrives."), or fewer units than it needs ("Only 2 of the 3 units of O− needed are in stock, 1 unit short. ..."): the server issues a request in
+    /// full or not at all. Null when it can be fulfilled, or while the stock is unknown (the server still checks).
     /// </summary>
     public string? FulfilHoldReason => Detail is { Status: RequestStatus.Pending } r ? DetailCover?.HoldReason(r.BloodType) : null;
 
@@ -454,8 +455,8 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
 
     /// <summary>
     /// Opens the fulfil step asked for by another screen as soon as it can run: the request's detail is in the panel, the stock behind its cover has been read
-    /// (the list's load brings it), and no operation of the screen keeps the step's command disabled. A request that is no longer pending, one with none of its
-    /// group in stock, or another selection, drops the wish.
+    /// (the list's load brings it), and no operation of the screen keeps the step's command disabled. A request that is no longer pending, one the stock does not
+    /// cover in full, or another selection, drops the wish.
     /// </summary>
     private void TryStartPendingFulfil()
     {
@@ -468,7 +469,7 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
 
         if (detail.Status != RequestStatus.Pending || FulfilHoldReason is not null)
         {
-            _fulfilWhenOpen = null; // closed, or nothing in stock to fulfil it with (the panel says why)
+            _fulfilWhenOpen = null; // closed, or the stock does not cover it (the panel says why)
             _fulfilSettled?.TrySetResult();
             return;
         }
@@ -568,6 +569,7 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
 
         var dialog = new FulfilRequestDialogViewModel(_api, request);
         bool done;
+        var shortWhenClosed = false;
         try
         {
             // In the side panel: the step closes itself after a fulfilled request, or on "Not now"; a refusal (not enough stock) keeps it open with the message.
@@ -577,6 +579,7 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
             Fulfilment = dialog;
             await closed.Task.ConfigureAwait(true);
             done = dialog.Completed;
+            shortWhenClosed = dialog.StockIsShort;
         }
         finally
         {
@@ -586,7 +589,14 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
 
         if (!done)
         {
-            return; // not now, or the API refused (insufficient stock): nothing changed, so the list is left as it was
+            // Not now, or the API refused (insufficient stock): nothing was issued. When the step found the stock short, the list's figure was out of date (that
+            // is how a short request got this far), so the list is read again: the Cover and the Fulfil action then say what the server will do.
+            if (shortWhenClosed)
+            {
+                await RefreshAfterActionAsync(request.Id).ConfigureAwait(true);
+            }
+
+            return;
         }
 
         var receiptId = dialog.Receipt?.Id;

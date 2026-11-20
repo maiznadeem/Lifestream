@@ -11,9 +11,10 @@ namespace Lifestream.Client.Features.Requests;
 
 /// <summary>
 /// The "Fulfil request" step, opened from a request (FEAT-16). It shows what will be issued, the bags the API will take (the oldest unexpired bags of the group, in
-/// that order, with their codes, collection and expiry dates, audit R3) and how much of that blood is in stock; the API issues them in one step. When the stock is not
-/// enough the API changes nothing, and the step says so in plain words and stays open. A successful call issues the receipt, available as <see cref="Receipt"/>.
-/// "Not now" leaves the request as it is.
+/// that order, with their codes, collection and expiry dates, audit R3) and how much of that blood is in stock; the API issues them in one step. The API issues a
+/// request in full or not at all: while the stock is known to be short the step says how many units are missing, lists what is in stock (not as "bags to issue")
+/// and does not offer "Fulfil request", which the server would refuse. A successful call issues the receipt, available as <see cref="Receipt"/>. "Not now" leaves
+/// the request as it is.
 /// </summary>
 [NoUserInput("It shows what will be issued and asks to confirm; there is no field to type in.")]
 public sealed partial class FulfilRequestDialogViewModel : DialogViewModel
@@ -37,9 +38,42 @@ public sealed partial class FulfilRequestDialogViewModel : DialogViewModel
     [ObservableProperty]
     public partial IReadOnlyList<SuggestedBagRow> Bags { get; set; } = [];
 
-    /// <summary>A line above or instead of the bags: what the list is, that it could not be loaded, or how many are missing.</summary>
+    /// <summary>A line above or instead of the bags: what the list is, that it could not be loaded, or that there are too few to issue.</summary>
     [ObservableProperty]
     public partial string? BagsNote { get; set; }
+
+    /// <summary>What the list of bags is, for a screen reader: the bags the fulfil will issue, or (when short) only what is in stock.</summary>
+    public string BagsLabel => StockIsShort ? "Bags in stock" : "Bags to issue";
+
+    /// <summary>
+    /// While the stock is known to be short: how many units are missing and that nothing can be issued yet ("Only 2 of the 3 units of O− needed are in stock,
+    /// 1 unit short. A request is issued in full, so it stays open until more arrives."). Null when the stock covers the request or is unknown.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasShortReason))]
+    public partial string? ShortReason { get; set; }
+
+    public bool HasShortReason => ShortReason is not null;
+
+    /// <summary>"Fulfil request" is offered only while the server will accept it: not while the stock is known to be short.</summary>
+    protected override bool CanRunPrimary => !StockIsShort;
+
+    partial void OnStockIsShortChanged(bool value)
+    {
+        OnPropertyChanged(nameof(BagsLabel));
+        RaisePrimaryChanged();
+    }
+
+    /// <summary>True once the bags to issue have answered: their count is the server's own, so a stock list that answers later does not replace it.</summary>
+    private bool _bagsCounted;
+
+    private void ShowAvailable(int available)
+    {
+        StockText = $"In stock: {RecordFormatting.Units(available)} of {BloodTypeText}";
+        var cover = RequestCoverage.Of(_request.Units, available);
+        ShortReason = cover.HoldReason(_request.BloodType);
+        StockIsShort = cover.Kind != CoverKind.CanFulfil;
+    }
 
     private async Task LoadBagsAsync()
     {
@@ -57,9 +91,11 @@ public sealed partial class FulfilRequestDialogViewModel : DialogViewModel
             Donors.DonationHistory.BagCode(b.Id),
             $"Collected {Formatting.Date(RecordFormatting.LocalDate(b.CollectedAtUtc, zone))}" + (b.DonorName is { Length: > 0 } donor ? $" from {donor}" : string.Empty),
             "Use by " + Formatting.Date(b.ExpiresOn)))];
-        var missing = _request.Units - preview.Bags.Count;
+        // The same query the fulfil runs counted these: this is what the server will find, so the step follows it (the stock list may be a moment older).
+        _bagsCounted = true;
+        ShowAvailable(preview.Available);
         BagsNote = preview.Bags.Count == 0 ? $"There is no {BloodTypeText} blood in stock that has not expired."
-            : missing > 0 ? $"Only {RecordFormatting.Units(preview.Bags.Count)} can be issued; {RecordFormatting.Units(missing)} short."
+            : StockIsShort ? "Not enough to issue. In stock now, oldest first:"
             : "These bags are issued, oldest first:";
     }
 
@@ -68,7 +104,8 @@ public sealed partial class FulfilRequestDialogViewModel : DialogViewModel
 
     public string PatientName => _request.PatientName;
 
-    public string BloodTypeText => _request.BloodType.ToDisplay();
+    /// <summary>The request's group as every badge writes it, with a true minus sign ("O−").</summary>
+    public string BloodTypeText => _request.BloodType.ToTypographic();
 
     public string UnitsText => RecordFormatting.Units(_request.Units);
 
@@ -84,7 +121,7 @@ public sealed partial class FulfilRequestDialogViewModel : DialogViewModel
     [ObservableProperty]
     public partial string StockText { get; set; } = "Checking stock...";
 
-    /// <summary>True when the stock is known to be smaller than the request: shown as a warning, but the API still decides.</summary>
+    /// <summary>True when the stock is known to be smaller than the request: shown as a warning, and "Fulfil request" is not offered (the server would refuse it).</summary>
     [ObservableProperty]
     public partial bool StockIsShort { get; set; }
 
@@ -98,18 +135,19 @@ public sealed partial class FulfilRequestDialogViewModel : DialogViewModel
         var result = await RunOperationAsync(ct => _api.GetStockAsync(ct)).ConfigureAwait(true);
         if (!result.IsOk)
         {
-            StockText = "Stock couldn't be checked. The server checks it when you fulfil.";
+            if (!_bagsCounted)
+            {
+                StockText = "Stock couldn't be checked. The server checks it when you fulfil.";
+            }
+
             return;
         }
 
-        var available = result.Value.FirstOrDefault(s => s.BloodType == _request.BloodType)?.Available ?? 0;
-        ShowStock(available);
-    }
-
-    private void ShowStock(int available)
-    {
-        StockText = $"In stock: {RecordFormatting.Units(available)} of {BloodTypeText}";
-        StockIsShort = available < _request.Units;
+        if (!_bagsCounted)
+        {
+            // The bags to issue have not answered yet (or could not be listed): the stock list is the figure until they do.
+            ShowAvailable(result.Value.FirstOrDefault(s => s.BloodType == _request.BloodType)?.Available ?? 0);
+        }
     }
 
     protected override Func<CancellationToken, Task<ApiProblem?>> PrepareSubmit()
@@ -132,8 +170,11 @@ public sealed partial class FulfilRequestDialogViewModel : DialogViewModel
     {
         if (problem.Code == ProblemCodes.InsufficientStock)
         {
-            FormError = $"There isn't enough {BloodTypeText} blood in stock: this request needs {RecordFormatting.Units(_request.Units)}. Nothing was issued.";
+            // The stock went down after the step opened (another fulfil, a bag expired or was discarded). Nothing was issued; read what is there now, which says
+            // how many units are short and takes "Fulfil request" away.
+            FormError = $"Nothing was issued: there is no longer enough {BloodTypeText} in stock for the {RecordFormatting.Units(_request.Units)} this request needs.";
             StockIsShort = true;
+            _bagsCounted = false;
             PendingStock = LoadStockAsync(); // show the current figure
             PendingBags = LoadBagsAsync(); // and the bags there are now
             return;

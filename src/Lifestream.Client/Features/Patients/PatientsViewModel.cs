@@ -30,7 +30,7 @@ public sealed class PatientsViewModel : SortedRecordListViewModel<PatientListIte
             (parameter, _) => parameter is PatientRequestRow { CanFulfil: true } row && Detail is { } patient
                 ? this.navigation.NavigateTo<RequestsViewModel>(new RelatedRecord(RecordKind.Request, row.Id, patient.Name))
                 : Task.CompletedTask,
-            parameter => parameter is not PatientRequestRow { CanFulfil: false }); // no stock at all: nothing to fulfil with (the card says why)
+            parameter => parameter is not PatientRequestRow { CanFulfil: false }); // the stock does not cover it: the server would refuse (the card says why)
         PropertyChanged += (_, e) =>
         {
             if (e.PropertyName is nameof(Detail) or nameof(Editor))

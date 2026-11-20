@@ -230,7 +230,7 @@ public sealed class ListScreenFinishTests
     });
 
     [Fact]
-    public async Task Requests_ShortStock_TheStepListsWhatCanBeIssued_AndSaysHowManyAreShort()
+    public async Task Requests_ShortStock_TheStepListsWhatIsInStock_SaysHowManyAreShort_AndDoesNotOfferFulfil()
     {
         var rig = new Part2Rig();
         rig.Fake.On("GetRequestsAsync", ApiResult<PagedResult<RequestListItem>>.Ok(new([Samples2.RequestRow(7, 3)], 1, 1, 50)));
@@ -244,7 +244,12 @@ public sealed class ListScreenFinishTests
         var step = Assert.IsType<FulfilRequestDialogViewModel>(vm.Fulfilment);
         await step.PendingBags;
         Assert.Single(step.Bags);
-        Assert.Equal("Only 1 unit can be issued; 2 units short.", step.BagsNote);
+        // Nothing can be issued (the server issues a request in full or not at all), so the one bag is listed as what is in stock, not as what "can be issued"
+        // (2.1.2: "Only 1 unit can be issued; 2 units short.", with an enabled Fulfil that the server then refused).
+        Assert.Equal("Not enough to issue. In stock now, oldest first:", step.BagsNote);
+        Assert.Equal("Bags in stock", step.BagsLabel);
+        Assert.Equal("Only 1 of the 3 units of A− needed is in stock, 2 units short. A request is issued in full, so it stays open until more arrives.", step.ShortReason);
+        Assert.False(step.PrimaryCommand.CanExecute(null));
         await step.CancelCommand.ExecuteAsync();
         await run;
         Assert.Equal(0, rig.Recorder.CountOf("FulfilRequestAsync")); // "Not now" issues nothing
@@ -262,7 +267,7 @@ public sealed class ListScreenFinishTests
         rig.Fake.On("GetRequestsAsync", ApiResult<PagedResult<RequestListItem>>.Ok(new(
             [new(139, 53, "Noor Fairbanks", BloodType.ONeg, 1, placed, rig.Today.AddDays(3), RequestStatus.Pending), new(152, 53, "Noor Fairbanks", BloodType.ONeg, 2, placed, rig.Today.AddDays(11), RequestStatus.Pending)], 2, 1, 10)));
         rig.Fake.On("GetStockAsync", ApiResult<IReadOnlyList<StockItem>>.Ok([new StockItem(BloodType.ONeg, 1, 0, 10, true)]));
-        var vm = rig.Patients();
+        var vm = rig.Patients(); // one unit of O− in stock: it covers the first request (1 unit) and not the second (2 units)
         await vm.LoadAsync();
         vm.SelectedItem = vm.Items[0];
         await vm.PendingDetail;
@@ -279,10 +284,14 @@ public sealed class ListScreenFinishTests
         Assert.Equal("2 requests waiting for blood", vm.OpenRequestsText);
         Assert.Contains(vm.PanelFacts, f => f.Label == "Can receive" && f.Value == "O−");
 
+        // Fulfil opens the request the stock covers; the one it covers only in part is not offered a fulfil the server would refuse.
         await vm.FulfilRequestCommand.ExecuteAsync(vm.WaitingRequests[1]);
+        Assert.Empty(rig.Navigation.Visits);
+        Assert.False(vm.WaitingRequests[1].CanFulfil);
+        await vm.FulfilRequestCommand.ExecuteAsync(vm.WaitingRequests[0]);
         var visit = Assert.Single(rig.Navigation.Visits);
         Assert.Equal(typeof(RequestsViewModel), visit.ViewModel);
-        Assert.Equal(new RelatedRecord(Client.Api.RecordKind.Request, 152, "Noor Fairbanks"), visit.Parameter);
+        Assert.Equal(new RelatedRecord(Client.Api.RecordKind.Request, 139, "Noor Fairbanks"), visit.Parameter);
     }
 
     // ---- Appointments ----
