@@ -70,8 +70,9 @@ BeforeAll {
         Set-Content -LiteralPath (Join-Path $planted 'src/Lifestream.Desktop/VerifierPlant.cs') -Encoding utf8 ('[assembly: System.Reflection.AssemblyMetadata("cs", "' + $script:Plant + '")]')
         $xaml = Join-Path $planted 'src/Lifestream.Desktop/Auth/LoginView.xaml'
         $lines = [Collections.Generic.List[string]](Get-Content -LiteralPath $xaml)
-        $at = ($lines.FindIndex({ param($l) $l -match 'Image\.Logo' }))
-        if ($at -lt 0) { throw 'LoginView.xaml has no Image.Logo line to plant after' }
+        # After the logo of the sign-in form (one self-closed element in a StackPanel; 2.0 had an Image there, the redesign a LogoMark).
+        $at = ($lines.FindIndex({ param($l) $l -match '<controls:LogoMark [^>]*/>\s*$' }))
+        if ($at -lt 0) { throw 'LoginView.xaml has no <controls:LogoMark ... /> line to plant after' }
         $lines.Insert($at + 1, '        <TextBlock Visibility="Collapsed" Tag="' + $script:Plant + '" />')
         Set-Content -LiteralPath $xaml -Value $lines -Encoding utf8
 
