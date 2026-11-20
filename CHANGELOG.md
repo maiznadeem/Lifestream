@@ -2,13 +2,26 @@
 
 All notable changes to Lifestream are listed here. The section of a version is also the text of its release on the GitHub Releases page.
 
-## [Unreleased]
+## [2.1.1] - 2026-11-20
+
+Fixes for what 2.1.0 got wrong in a real window, and a new typeface.
 
 ### Look and feel
 
 - A new typeface, Google Sans Flex (open source, SIL Open Font License), replaces Onest.
 - Every text in a window is now drawn the same way, so headings and small print read as one typeface. In 2.1.0 the headings and the small text were drawn differently and could look like two fonts.
 - Small text is evenly spaced: "2.1.0" and times such as "10:30" no longer close up.
+
+### Fixed
+
+- The title bar showed every button twice (minimize, maximize, close) on Windows 11: Windows drew its own buttons under ours. There is one set now.
+- Dialogs no longer show a rectangular outline around the card.
+- A maximized window no longer loses a few pixels at each screen edge, and the top rows of a page can be clicked again instead of dragging the window.
+- The bell in the title bar opens a list of what needs attention, each with its action, instead of jumping to the dashboard.
+- Change password: opening it from the account menu no longer reloads the Profile page behind it and fails with "The server is taking too long to answer". The demo account, which has no password to change, is told so instead of being offered the dialog.
+- A focus ring shows only when you move with the keyboard, never after a mouse click, and it follows the shape of the control.
+- The collapsed sidebar keeps each page's count, as a badge on its icon.
+- Appointments: times such as 09:00 are no longer cut off when the list opens, and its columns keep their widths.
 
 ## [2.1.0] - 2026-11-20
 
