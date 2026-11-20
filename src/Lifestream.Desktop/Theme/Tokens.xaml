@@ -186,6 +186,8 @@
   <CornerRadius x:Key="Radius.ContentCorner">8,0,0,0</CornerRadius>
   <!-- The keyboard focus ring sits 4 DIP outside a control (2 offset + 2 ring), so its radius is the control's plus 4 -->
   <CornerRadius x:Key="Radius.FocusRing">10</CornerRadius>
+  <!-- The same ring around a control with the small radius (a check box): 4 + 4. With the 10 of a 6 radius control it drew a circle around a square -->
+  <CornerRadius x:Key="Radius.FocusRingSmall">8</CornerRadius>
   <!-- The bottom accent line of a focused input follows the field's rounded bottom corners -->
   <CornerRadius x:Key="Radius.Underline">0,0,6,6</CornerRadius>
   <CornerRadius x:Key="Radius.Pill">4</CornerRadius>
