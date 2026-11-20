@@ -77,6 +77,7 @@ public sealed class ViewModelCatalog : IDisposable
         {
             [typeof(LoginViewModel)] = () => Own(_di.Get<LoginViewModel>()),
             [typeof(ShellViewModel)] = () => Own(_di.Get<ShellViewModel>()),
+            [typeof(NotificationsViewModel)] = () => Own(new NotificationsViewModel(api)),
             [typeof(AccessDeniedViewModel)] = () => Own(_di.Get<AccessDeniedViewModel>()),
             [typeof(DashboardPlaceholderViewModel)] = () => Own(new DashboardPlaceholderViewModel()),
             [typeof(DonorsPlaceholderViewModel)] = () => Own(new DonorsPlaceholderViewModel()),

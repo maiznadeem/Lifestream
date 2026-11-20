@@ -230,6 +230,12 @@ public sealed partial class DashboardViewModel : ViewModelBase
     /// <summary>What needs doing now, most urgent first: requests the stock cannot cover, bags about to expire, groups below their minimum, requests due soon.</summary>
     public ObservableCollection<AttentionItem> Attention { get; } = [];
 
+    /// <summary>
+    /// True when <see cref="Attention"/> rests on all three of its lists. The dashboard shows what it could read (a block whose call failed is simply
+    /// empty), but the bell only takes a list that is whole: it must never say "nothing needs attention" because a call failed.
+    /// </summary>
+    public bool AttentionIsComplete { get; private set; }
+
     /// <summary>"5 items" when every row is shown, "4 of 5" when the list is cut to what fits (it always says what is on screen).</summary>
     [ObservableProperty]
     public partial string AttentionCountText { get; set; } = string.Empty;
@@ -409,9 +415,13 @@ public sealed partial class DashboardViewModel : ViewModelBase
         var todays = Quietly(() => _api.GetAppointmentsAsync(day.Query(sort: Contracts.SortKeys.Slot), ct));
         var requests = Quietly(() => _api.GetRequestsAsync(new Contracts.Requests.RequestQuery(Status: RequestStatus.Pending, PageSize: 50, Sort: Contracts.SortKeys.RequiredBy), ct));
         _fetched = (await dashboard.ConfigureAwait(false)).Unwrap();
-        _stock = (await stock.ConfigureAwait(false)) is { IsOk: true } s ? s.Value : [];
-        _today = (await todays.ConfigureAwait(false)) is { IsOk: true } t ? [.. t.Value.Items.Where(a => a.Status != AppointmentStatus.Cancelled && day.Holds(a)).OrderBy(a => a.SlotStartUtc)] : [];
-        _requests = (await requests.ConfigureAwait(false)) is { IsOk: true } r ? r.Value.Items : [];
+        var stockResult = await stock.ConfigureAwait(false);
+        var todayResult = await todays.ConfigureAwait(false);
+        var requestResult = await requests.ConfigureAwait(false);
+        _stock = stockResult is { IsOk: true } s ? s.Value : [];
+        _today = todayResult is { IsOk: true } t ? [.. t.Value.Items.Where(a => a.Status != AppointmentStatus.Cancelled && day.Holds(a)).OrderBy(a => a.SlotStartUtc)] : [];
+        _requests = requestResult is { IsOk: true } r ? r.Value.Items : [];
+        AttentionIsComplete = stockResult is { IsOk: true } && todayResult is { IsOk: true } && requestResult is { IsOk: true };
 
         // First-time donors among those still to come. The appointment list says so itself (no completed donation before the slot), so the dashboard is
         // four requests, one per data set, however many people come today: it does not ask for each donor.
@@ -518,65 +528,19 @@ public sealed partial class DashboardViewModel : ViewModelBase
     }
 
     /// <summary>
-    /// Builds "Needs attention" from the stock, the open requests and today's appointments (direction A): a request that no compatible stock can cover,
-    /// bags expiring within 7 days (and the request that could use them), the groups below their minimum, and the next request that is due within
-    /// 3 days and can be fulfilled.
+    /// Builds "Needs attention" from the stock, the open requests and today's appointments (direction A), with <see cref="AttentionBuilder"/>, which
+    /// the title bar's notifications use too.
     /// </summary>
     private void ApplyAttention()
     {
         Attention.Clear();
-        var today = DateOnly.FromDateTime(Clock.GetLocalNow().DateTime);
-        var available = _stock.ToDictionary(i => i.BloodType, i => i.Available);
-        int Cover(BloodType patient) => available.Where(p => p.Key.CanGiveTo(patient)).Sum(p => p.Value);
-        static string Day(DateOnly d) => d.ToString("ddd d MMM", CultureInfo.CurrentCulture);
-
-        foreach (var request in _requests.Where(r => Cover(r.BloodType) < r.Units).OrderBy(r => r.RequiredBy).Take(2))
+        foreach (var item in AttentionBuilder.Build(_stock, _requests, _today, Clock))
         {
-            var cover = Cover(request.BloodType);
-            var title = available.GetValueOrDefault(request.BloodType) == 0 ? $"{request.BloodType.ToTypographic()} is out of stock" : $"Not enough blood for {request.PatientName}";
-            var detail = $"{request.PatientName} needs {Units(request.Units)} by {Day(request.RequiredBy)}" + (cover > 0 ? $"; {Units(cover)} can be given." : ".");
-            var donor = Today.FirstOrDefault(t => t.State != TodayState.Done && _today.First(a => a.Id == t.Id).DonorBloodType.CanGiveTo(request.BloodType));
-            if (donor is not null)
-            {
-                detail += $" {donor.DonorName} ({donor.Group}) comes in at {donor.Time}.";
-            }
-
-            Attention.Add(new(AttentionKind.Critical, "Alert", title, detail, "Open request", "Requests", new ListPrefilter(RecordId: request.Id)));
-        }
-
-        foreach (var item in _stock.Where(i => i.ExpiringSoon > 0).OrderByDescending(i => i.ExpiringSoon).Take(1))
-        {
-            var detail = "Use them first.";
-            var user = _requests.Where(r => item.BloodType.CanGiveTo(r.BloodType)).OrderBy(r => r.BloodType == item.BloodType ? 0 : 1).ThenBy(r => r.RequiredBy).FirstOrDefault();
-            if (user is not null)
-            {
-                detail = $"Use them for {user.PatientName}’s request ({Units(user.Units)}, due {user.RequiredBy.ToString("ddd", CultureInfo.CurrentCulture)}).";
-            }
-
-            Attention.Add(new(AttentionKind.Warning, "Clock", $"{item.ExpiringSoon} {item.BloodType.ToTypographic()} {(item.ExpiringSoon == 1 ? "bag expires" : "bags expire")} within 7 days", detail,
-                "Review bags", "Stock", new ListPrefilter(BloodType: item.BloodType, StockView: StockFilter.ExpiringSoon)));
-        }
-
-        var low = _stock.Where(i => i.BelowThreshold).OrderBy(i => i.BloodType).ToList();
-        if (low.Count > 0)
-        {
-            var threshold = low.Max(i => i.Threshold);
-            Attention.Add(new(AttentionKind.Critical, "Stock", low.Count == 1 ? $"{low[0].BloodType.ToTypographic()} is below {threshold} units" : $"{low.Count} of {_stock.Count} blood groups are below {threshold} units",
-                string.Join(", ", low.Select(i => $"{i.BloodType.ToTypographic()} {i.Available}")) + ".", "Open stock", "Stock", new ListPrefilter(StockView: StockFilter.BelowThreshold)));
-        }
-
-        foreach (var request in _requests.Where(r => Cover(r.BloodType) >= r.Units && r.RequiredBy <= today.AddDays(3)).OrderBy(r => r.RequiredBy).Take(1))
-        {
-            var due = request.RequiredBy == today ? "today" : request.RequiredBy == today.AddDays(1) ? "tomorrow" : $"on {request.RequiredBy.ToString("dddd", CultureInfo.CurrentCulture)}";
-            var same = available.GetValueOrDefault(request.BloodType);
-            Attention.Add(new(AttentionKind.Info, "Request", $"{request.PatientName}’s request is due {due}",
-                $"{request.BloodType.ToTypographic()}, {Units(request.Units)}. {same} {request.BloodType.ToTypographic()} {(same == 1 ? "bag is" : "bags are")} available.", "Fulfil", "Requests", new ListPrefilter(RecordId: request.Id)));
+            Attention.Add(item);
         }
 
         ApplyAttentionLimit();
     }
-
-    private static string Units(int n) => n == 1 ? "1 unit" : $"{n.ToString("N0", CultureInfo.CurrentCulture)} units";
 
     private void RebuildChart()
     {
