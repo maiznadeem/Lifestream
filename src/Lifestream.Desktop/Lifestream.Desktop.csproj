@@ -11,6 +11,10 @@
     <StartupObject>Lifestream.Desktop.Program</StartupObject>
     <!-- LibraryImport (source-generated P/Invoke) emits unsafe marshalling code. -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- No dynamic PGO (docs/perf/results.md, "UI-thread gap"): the app ships ReadyToRun, and with PGO on, every method that gets hot goes from its
+         ReadyToRun code through an instrumented copy before its optimized one, which made the first two visits of every screen cost about twice the
+         later ones. The Desktop test project sets the same, so the screens are measured as they run in the app. -->
+    <TieredPGO>false</TieredPGO>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="WPF-UI" />
