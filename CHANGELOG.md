@@ -10,6 +10,7 @@ Lifestream 2.1.7 fixes the last items found by using the app end to end, and bri
 
 - Recording a donation opens its dialog over the page it was started from, instead of switching pages first.
 - The command palette says when more results are below the ones shown, and keeps the selected result in view as you move through them.
+- The record picker writes a blood group the way the badges do ("O−"); typing "O-" still finds it.
 
 ### Changed
 
