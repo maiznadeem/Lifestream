@@ -16,6 +16,7 @@ Lifestream 2.1.7 fixes the last items found by using the app end to end, and bri
 
 ### Changed
 
+- Opening a screen for the first time is quicker: a side panel is built when it first opens, not with its screen, which cuts the work of a first visit by 40 to 70 percent.
 - Searching Receipts is about twice as fast: each receipt now stores its donor or patient, so a search goes straight from the people found to their receipts.
 - The charts and the photo processing use SkiaSharp 4 and LiveCharts 2.2. The charts look the same; the shaded area under a line now fades evenly, as in the rest of the app.
 - The security policy (`docs/SECURITY.md`) says how to report a problem and how the repository is scanned for secrets.
