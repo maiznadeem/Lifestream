@@ -222,13 +222,13 @@ public sealed partial class ShellViewModel : ViewModelBase
     /// </summary>
     public bool HasNotifications => Notifications.IsKnown ? Notifications.Count > 0 : LowStockGroups > 0;
 
-    /// <summary>The bell's name and tooltip: "Notifications, 4 items need attention".</summary>
-    public string NotificationsSummary => Notifications.IsKnown ? Notifications.Summary : LowStockGroups switch
-    {
-        0 => "Notifications",
-        1 => "Notifications, 1 blood group is below its minimum",
-        var low => $"Notifications, {low} blood groups are below their minimum",
-    };
+    /// <summary>
+    /// The bell's name and tooltip: "Notifications, 4 items need attention". Until the list has been read (the dashboard or the flyout loads
+    /// it) the shell only knows whether stock is low, which is one item of that list and seldom the only one: it says "at least 1", never the
+    /// one item as if it were everything.
+    /// </summary>
+    public string NotificationsSummary => Notifications.IsKnown ? Notifications.Summary
+        : LowStockGroups > 0 ? "Notifications, at least 1 item needs attention" : "Notifications";
 
     partial void OnLowStockGroupsChanged(int value) => RaiseNotifications();
 
