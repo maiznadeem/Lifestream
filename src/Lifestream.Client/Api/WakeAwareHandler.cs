@@ -52,7 +52,7 @@ public sealed class WakeAwareHandler(WakePolicy policy, ServerStatus status, Htt
         var started = clock.GetTimestamp();
         byte[]? body = request.Content is null ? null : await request.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
 
-        var call = new CallState(status);
+        var call = new CallState(status, clock);
         using var slowTimer = clock.CreateTimer(_ => call.Enter(), null, policy.ShowWakingAfter, Timeout.InfiniteTimeSpan);
         var backoff = policy.FirstBackoff;
 
@@ -88,7 +88,14 @@ public sealed class WakeAwareHandler(WakePolicy policy, ServerStatus status, Htt
                         status.NotifyDemoReset();
                     }
 
-                    if (!await IsWakingAsync(response).ConfigureAwait(false))
+                    var answer = await ReadAnswerAsync(request, response).ConfigureAwait(false);
+                    if (answer.FromServer)
+                    {
+                        // The server itself answered, so its container is up; what it said about its database decides the phase shown.
+                        status.Heard(clock, answer.DatabaseWaking);
+                    }
+
+                    if (!answer.IsWaking)
                     {
                         return response;
                     }
@@ -133,29 +140,41 @@ public sealed class WakeAwareHandler(WakePolicy policy, ServerStatus status, Htt
         return response;
     }
 
-    private static async Task<bool> IsWakingAsync(HttpResponseMessage response)
+    /// <summary>
+    /// What an answer means for the wait. <c>IsWaking</c>: try again. <c>FromServer</c>: the API itself wrote it (a 502, a 504 or a 503
+    /// without a problem code comes from the platform in front of a container that is not up yet). <c>DatabaseWaking</c>: true when the
+    /// API said so, false when the answer came out of the database, null when the answer says nothing about the database.
+    /// </summary>
+    private readonly record struct Answer(bool IsWaking, bool FromServer, bool? DatabaseWaking);
+
+    private static async Task<Answer> ReadAnswerAsync(HttpRequestMessage request, HttpResponseMessage response)
     {
         if (response.StatusCode is HttpStatusCode.BadGateway or HttpStatusCode.GatewayTimeout)
         {
-            return true;
+            return new Answer(IsWaking: true, FromServer: false, DatabaseWaking: null);
         }
 
         if (response.StatusCode != HttpStatusCode.ServiceUnavailable)
         {
-            return false;
+            // /healthz never touches the database, and an error answer may not have either; any other success came out of the database.
+            var fromDatabase = response.IsSuccessStatusCode && request.RequestUri?.AbsolutePath.EndsWith(ApiRoutes.Healthz, StringComparison.OrdinalIgnoreCase) != true;
+            return new Answer(IsWaking: false, FromServer: true, DatabaseWaking: fromDatabase ? false : null);
         }
 
-        // A "resting" database (free allowance used up) will not wake by waiting, so it is returned as is.
         try
         {
             var text = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
             using var doc = JsonDocument.Parse(text);
             var code = JsonText.Property(doc.RootElement, "code");
-            return code != ProblemCodes.DatabaseResting;
+
+            // A "resting" database (free allowance used up) will not wake by waiting, so it is returned as is.
+            return code == ProblemCodes.DatabaseResting ? new Answer(IsWaking: false, FromServer: true, DatabaseWaking: null)
+                : code == ProblemCodes.DatabaseWaking ? new Answer(IsWaking: true, FromServer: true, DatabaseWaking: true)
+                : new Answer(IsWaking: true, FromServer: code is not null, DatabaseWaking: null);
         }
         catch (Exception ex) when (ex is JsonException or InvalidOperationException or ArgumentException or NotSupportedException)
         {
-            return true;
+            return new Answer(IsWaking: true, FromServer: false, DatabaseWaking: null);
         }
     }
 
@@ -180,7 +199,7 @@ public sealed class WakeAwareHandler(WakePolicy policy, ServerStatus status, Htt
     }
 
     /// <summary>Tracks whether this call put the server into the waking state, and takes it out again exactly once.</summary>
-    private sealed class CallState(ServerStatus status)
+    private sealed class CallState(ServerStatus status, TimeProvider clock)
     {
         private readonly Lock _gate = new();
         private bool _entered;
@@ -198,7 +217,7 @@ public sealed class WakeAwareHandler(WakePolicy policy, ServerStatus status, Htt
                 _entered = true;
             }
 
-            status.Enter();
+            status.Enter(clock);
         }
 
         public void Complete()
