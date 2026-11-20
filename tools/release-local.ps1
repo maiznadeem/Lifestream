@@ -36,6 +36,8 @@
 .PARAMETER Version   The version to release, for example 2.1.1 (the tag is v2.1.1). A suffix (2.2.0-beta.1) makes a pre-release.
 .PARAMETER DryRun    Everything except tagging, creating the release and uploading.
 .PARAMETER RepoRoot  The checkout to release (default: the repository this script is in). HEAD may be a detached origin/master.
+.PARAMETER Dotnet    The dotnet executable of the SDK global.json asks for (default: LIFESTREAM_DOTNET, else dotnet on PATH). Give the full
+                     path when that SDK is not the first dotnet on PATH; the script calls it by path and does not change PATH.
 .PARAMETER WorkDir   Where the publish folder, the packages, the logs and the vpk tool go (default: lifestream-release in the temp folder).
                      Never inside the repository: the release needs a clean tree.
 .PARAMETER MaxCores  How many cores the script and its children may use (default 8).
@@ -50,6 +52,7 @@ param(
     [Parameter(Mandatory)][ValidatePattern('^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$')][string]$Version,
     [switch]$DryRun,
     [string]$RepoRoot,
+    [string]$Dotnet = $(if ($env:LIFESTREAM_DOTNET) { $env:LIFESTREAM_DOTNET } else { 'dotnet' }),
     [string]$WorkDir = (Join-Path ([IO.Path]::GetTempPath()) 'lifestream-release'),
     [string]$Repo = 'maiznadeem/lifestream',
     [string]$VpkVersion = '1.2.161',
@@ -130,7 +133,14 @@ Push-Location $root
 try {
     $sha = $null
     Step 'Checks (clean tree, origin/master, version, changelog, tag)' {
-        foreach ($tool in 'git', 'gh', 'dotnet') { if (-not (Get-Command $tool -ErrorAction SilentlyContinue)) { throw "$tool is not on PATH" } }
+        foreach ($tool in 'git', 'gh') { if (-not (Get-Command $tool -ErrorAction SilentlyContinue)) { throw "$tool is not on PATH" } }
+        $found = Get-Command $Dotnet -ErrorAction SilentlyContinue
+        if (-not $found) { throw "dotnet not found: '$Dotnet'. Pass -Dotnet <path of dotnet.exe>." }
+        $script:Dotnet = $found.Source
+        # Run in the checkout, so global.json decides: the wrong SDK is refused here, not in the middle of the publish.
+        $sdk = & $script:Dotnet --version 2>&1
+        if ($LASTEXITCODE -ne 0) { throw "'$($script:Dotnet)' has no SDK that satisfies global.json: $(($sdk | Out-String).Trim()) Pass -Dotnet <path of the right dotnet.exe>." }
+        Write-Host "   SDK $sdk ($($script:Dotnet))"
         $dirty = @(Native 'git status' { git status --porcelain })
         if ($dirty.Count -gt 0) { throw "The working tree is not clean ($($dirty.Count) changed or untracked files). Commit or remove them first." }
         $script:sha = (Native 'git rev-parse' { git rev-parse HEAD } | Select-Object -First 1).Trim()
@@ -177,7 +187,7 @@ try {
     }
 
     Step 'Publish the desktop app (self-contained, win-x64, ReadyToRun)' {
-        Logged 'dotnet publish' (Join-Path $work 'publish.log') "dotnet publish src/Lifestream.Desktop -c Release -r win-x64 --self-contained -p:PublishReadyToRun=true -p:Version=$Version -o `"$publish`""
+        Logged 'dotnet publish' (Join-Path $work 'publish.log') "& `"$Dotnet`" publish src/Lifestream.Desktop -c Release -r win-x64 --self-contained -p:PublishReadyToRun=true -p:Version=$Version -o `"$publish`""
         $exe = Join-Path $publish 'Lifestream.exe'
         if (-not (Test-Path $exe)) { throw "The publish folder has no Lifestream.exe: $publish" }
         $info = (Get-Item $exe).VersionInfo
@@ -191,11 +201,11 @@ try {
     }
 
     Step "Velopack CLI $VpkVersion (dotnet tool in $toolsDir)" {
-        $installed = if (Test-Path $vpk) { (dotnet tool list --tool-path $toolsDir 2>$null | Select-String '^vpk\s+(\S+)').Matches | ForEach-Object { $_.Groups[1].Value } } else { $null }
+        $installed = if (Test-Path $vpk) { (& $Dotnet tool list --tool-path $toolsDir 2>$null | Select-String '^vpk\s+(\S+)').Matches | ForEach-Object { $_.Groups[1].Value } } else { $null }
         if ($installed -eq $VpkVersion) { Write-Host "   already installed" }
         else {
-            if ($installed) { Native 'dotnet tool uninstall vpk' { dotnet tool uninstall vpk --tool-path $toolsDir } | Out-Null }
-            Native 'dotnet tool install vpk' { dotnet tool install vpk --version $VpkVersion --tool-path $toolsDir } | Out-Null
+            if ($installed) { Native 'dotnet tool uninstall vpk' { & $Dotnet tool uninstall vpk --tool-path $toolsDir } | Out-Null }
+            Native 'dotnet tool install vpk' { & $Dotnet tool install vpk --version $VpkVersion --tool-path $toolsDir } | Out-Null
             Write-Host "   installed"
         }
     }
