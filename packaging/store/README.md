@@ -30,10 +30,12 @@ Store as an MSIX. Nothing here is submitted automatically; the Store listing nee
 1. Push the tag (`git tag v2.1.0 && git push origin v2.1.0`). `release.yml` publishes the app, scans it, builds the GitHub release
    and, when the variables above exist, the workflow artifact **store-msix** (`Lifestream-2.1.0-x64.msix`).
 2. Download the artifact from the workflow run page (Actions > Release > the run > Artifacts).
-3. Generate screenshots: run the **Screenshots** workflow (Actions > Screenshots > Run workflow) and download its artifact.
+3. Screenshots: use the committed `packaging/store/screenshots/` (check `screenshots.json` and the images are from this
+   release's look). To regenerate them, run `tools/generate-screenshots.ps1` on a machine with a local SQL Server (it needs
+   one at `localhost`, which a GitHub-hosted runner does not have, so the **Screenshots** workflow runs only by hand) and commit the result.
 4. In Partner Center open the reserved app, choose **Start your submission**, then:
    - **Packages**: upload the `.msix` (the Store signs it; no certificate is needed).
-   - **Store listings**: upload the screenshots from the artifact (at least one, 1366x768 or larger), add the description and
+   - **Store listings**: upload the screenshots from `packaging/store/screenshots/` (at least one, 1366x768 or larger), add the description and
      a short privacy statement. The demo data is synthetic; say that the demo account is shared.
    - **Properties**: category *Health & fitness* or *Medical*; declare that the app uses the internet.
    - **Age ratings**: complete the questionnaire (no user-generated content, no purchases).
