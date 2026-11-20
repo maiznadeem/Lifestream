@@ -236,7 +236,9 @@ function Read-Results([string]$file) {
 
 # The listing prints a test's name as it is; the result file writes the quotes inside it with a backslash. One form for comparing the two.
 function Get-NameKey([string]$name) {
-    return ($name -replace '\\', '')
+    # A character outside ASCII (the infinity sign of a theory row) reaches this script through the listing's console output in whatever
+    # encoding the caller's console has, so it can arrive as another character or as several: any run of them counts as one.
+    return (($name -replace '\\', '') -replace '[^\x20-\x7E]+', '?')
 }
 
 function New-Shard([string]$note) {
