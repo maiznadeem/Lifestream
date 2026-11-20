@@ -310,6 +310,7 @@ internal static partial class Program
             case "key":
             case "focus":
             case "focused":
+            case "layout":
             case "size":
                 {
                     var reply = Agent(string.Join(' ', w));

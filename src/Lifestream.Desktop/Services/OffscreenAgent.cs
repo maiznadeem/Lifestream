@@ -133,6 +133,9 @@ internal static partial class OffscreenAgent
                     return "ok " + string.Join(" | ", fields);
                 }
 
+            case "layout":
+                return "ok " + Layout(Find(rest) as System.Windows.Controls.DataGrid ?? throw new InvalidOperationException("not a data grid: " + rest));
+
             case "focused":
                 return "ok " + (Keyboard.FocusedElement is DependencyObject d ? Describe(d) : "(none)");
             default:
@@ -296,6 +299,52 @@ internal static partial class OffscreenAgent
         ?? throw new InvalidOperationException("no window");
 
     /// <summary>id=AutomationId or x:Name, name=automation name, name~=part of it, type=WPF type name; '#n' the n-th match; newest window first.</summary>
+    /// <summary>A data grid's scrolling and its selected row's place, and every ancestor's bounds and clip up to the window (for a row cut at an edge).</summary>
+    private static string Layout(System.Windows.Controls.DataGrid grid)
+    {
+        var window = Window.GetWindow(grid) ?? throw new InvalidOperationException("not in a window");
+        string Box(FrameworkElement e) { var r = e.TransformToAncestor(window).TransformBounds(new Rect(e.RenderSize)); return $"{r.Top:N1}-{r.Bottom:N1} (h {r.Height:N1})"; }
+        IEnumerable<DependencyObject> Below(DependencyObject root)
+        {
+            for (var i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
+            {
+                var child = VisualTreeHelper.GetChild(root, i);
+                yield return child;
+                foreach (var inner in Below(child))
+                {
+                    yield return inner;
+                }
+            }
+        }
+
+        var viewer = Below(grid).OfType<System.Windows.Controls.ScrollViewer>().First(v => ReferenceEquals(v.TemplatedParent, grid));
+        var presenter = Below(viewer).OfType<System.Windows.Controls.ScrollContentPresenter>().First();
+        var lines = new List<string>
+        {
+            $"viewer offset={viewer.VerticalOffset:N2} viewport={viewer.ViewportHeight:N2} extent={viewer.ExtentHeight:N2} scrollable={viewer.ScrollableHeight:N2} contentScroll={viewer.CanContentScroll}",
+            $"presenter {Box(presenter)}",
+        };
+        if (Below(grid).OfType<System.Windows.Controls.DataGridRow>().FirstOrDefault(r => r.IsVisible && ReferenceEquals(r.Item, grid.SelectedItem)) is { } row)
+        {
+            var inPresenter = row.TransformToAncestor(presenter).TransformBounds(new Rect(row.RenderSize));
+            lines.Add($"row {Box(row)} in presenter {inPresenter.Top:N1}-{inPresenter.Bottom:N1}");
+        }
+        else
+        {
+            lines.Add("row: the selected row is not realized");
+        }
+
+        for (DependencyObject? node = presenter; node is not null && node != window; node = VisualTreeHelper.GetParent(node))
+        {
+            if (node is FrameworkElement fe)
+            {
+                lines.Add($"{fe.GetType().Name} {fe.Name} {Box(fe)} clip={(VisualTreeHelper.GetClip(fe)?.Bounds.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "-")} clipToBounds={fe.ClipToBounds}");
+            }
+        }
+
+        return string.Join(" || ", lines);
+    }
+
     private static DependencyObject? Find(string selector)
     {
         var index = 0;
