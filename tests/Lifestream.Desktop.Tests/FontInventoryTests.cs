@@ -149,6 +149,74 @@ public sealed partial class FontInventoryTests
         Assert.Contains("ReceiptDocumentBuilder.Build(", view, StringComparison.Ordinal);
     }
 
+    // ---- rendering: one way of drawing text, set in one place ----------------------------------------------------------------
+
+    /// <summary>The three inherited text settings of an element.</summary>
+    private static (TextFormattingMode, TextRenderingMode, bool) TextSettings(DependencyObject element) =>
+        (TextOptions.GetTextFormattingMode(element), TextOptions.GetTextRenderingMode(element), Typography.GetKerning(element));
+
+    [Fact]
+    public void EveryWindowOfTheApp_AndEveryToolTipAndContextMenu_DrawsItsTextWithTheAppsDefaults()
+    {
+        var found = StaHost.Run(() =>
+        {
+            var theme = ThemeLoader.Resources;
+            var list = new List<(string Name, (TextFormattingMode, TextRenderingMode, bool) Settings)>();
+            foreach (var type in ViewTypes().Where(t => typeof(Window).IsAssignableFrom(t) && t != typeof(Lifestream.Desktop.Chrome.ChromeWindow)))
+            {
+                var window = (Window)Activator.CreateInstance(type)!; // never shown
+                list.Add((type.Name, TextSettings(window)));
+                window.Close();
+            }
+
+            // The two controls that open in a tree of their own and inherit nothing from a window: styled by the theme, as in the app.
+            var tip = new ToolTip { Content = "Sample" };
+            tip.Resources.MergedDictionaries.Add(theme);
+            tip.ApplyTemplate();
+            list.Add(("ToolTip", TextSettings(tip)));
+            var menu = new ContextMenu();
+            menu.Resources.MergedDictionaries.Add(theme);
+            menu.ApplyTemplate();
+            list.Add(("ContextMenu", TextSettings(menu)));
+            return list;
+        });
+
+        Assert.True(found.Count(f => f.Name.EndsWith("Window", StringComparison.Ordinal)) >= 4, $"only {found.Count} windows were found: {string.Join(", ", found.Select(f => f.Name))}");
+        var expected = (TextDefaults.Formatting, TextDefaults.Rendering, TextDefaults.Kerning);
+        Assert.Equal((TextFormattingMode.Display, TextRenderingMode.Grayscale, false), expected); // the choice itself: Fonts/README.md, "Rendering"
+        Assert.All(found, f => Assert.True(f.Settings == expected, $"{f.Name} draws text as {f.Settings}, the app as {expected}: put theme:TextDefaults.Apply=\"True\" on its root"));
+    }
+
+    [Fact]
+    public void NoViewOrStyle_SetsItsOwnTextRendering()
+    {
+        // A heading in another formatting mode, or a panel in another rendering mode, than the text beside it reads as another typeface (2.1.0). The settings
+        // live in Theme/TextDefaults.cs alone. Chrome/Chrome.xaml still carries the window style's old setters, which every window root overrides (it belongs
+        // to another change); LifestreamDataGrid copies a block's own settings to measure it.
+        var setter = TextRenderingSetter();
+        var offenders = new List<string>();
+        var folder = RepoPaths.Find("src/Lifestream.Desktop");
+        foreach (var file in Directory.EnumerateFiles(folder, "*.*", SearchOption.AllDirectories).Where(f => f.EndsWith(".xaml", StringComparison.Ordinal) || f.EndsWith(".cs", StringComparison.Ordinal)))
+        {
+            var relative = Path.GetRelativePath(folder, file).Replace('\\', '/');
+            if (relative.StartsWith("obj/", StringComparison.Ordinal) || relative.StartsWith("bin/", StringComparison.Ordinal)
+                || relative is "Chrome/Chrome.xaml" or "Theme/TextDefaults.cs" or "Controls/LifestreamDataGrid.cs")
+            {
+                continue;
+            }
+
+            foreach (Match match in setter.Matches(File.ReadAllText(file)))
+            {
+                offenders.Add($"{relative}: {match.Value}");
+            }
+        }
+
+        Assert.True(offenders.Count == 0, string.Join(Environment.NewLine, offenders));
+    }
+
+    [GeneratedRegex("""TextOptions\.Text(?:Formatting|Rendering)Mode\s*=|Property="TextOptions\.Text(?:Formatting|Rendering)Mode"|Typography\.Kerning\s*=|Property="Typography\.Kerning"|TextOptions\.SetText(?:Formatting|Rendering)Mode|Typography\.SetKerning""", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 5000)]
+    private static partial Regex TextRenderingSetter();
+
     // ---- code: no literal font anywhere but the theme and the font setup -----------------------------------------------------
 
     [Fact]
