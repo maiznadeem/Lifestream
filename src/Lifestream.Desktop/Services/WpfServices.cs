@@ -58,6 +58,11 @@ public sealed class WpfDialogPresenter(Func<Window?> ownerProvider) : IDialogPre
             dialog.WindowStartupLocation = WindowStartupLocation.CenterScreen;
         }
 
+        if (OffscreenMode.Enabled)
+        {
+            OffscreenMode.Prepare(dialog); // test-only: WPF keeps a centred dialog inside the nearest monitor, so place it off the desktop itself
+        }
+
         dialog.ShowDialog();
     }
 

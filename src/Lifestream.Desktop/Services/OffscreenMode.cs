@@ -27,6 +27,7 @@ internal static partial class OffscreenMode
 
     private const int WhCbt = 5;
     private const int WhCallWndProc = 4;
+    private const int WhCallWndProcRet = 12;
     private const int HcbtCreateWnd = 3;
     private const int HcbtActivate = 5;
     private const int WmWindowPosChanging = 0x0046;
@@ -42,9 +43,11 @@ internal static partial class OffscreenMode
 
     private static readonly HookProc CbtProc = OnCbt;
     private static readonly HookProc CallProc = OnCallWndProc;
+    private static readonly HookProc CallRetProc = OnCallWndProcRet;
     private static readonly WinEventProc ShowProc = OnWinEvent;
     private static IntPtr _cbtHook;
     private static IntPtr _callHook;
+    private static IntPtr _callRetHook;
     private static IntPtr _eventHook;
     private static IntPtr _locationHook;
     private static Rect32 _desktop;
@@ -72,11 +75,12 @@ internal static partial class OffscreenMode
         _desktop = new Rect32(GetSystemMetrics(76), GetSystemMetrics(77), GetSystemMetrics(76) + GetSystemMetrics(78), GetSystemMetrics(77) + GetSystemMetrics(79));
         _cbtHook = SetWindowsHookExW(WhCbt, CbtProc, IntPtr.Zero, GetCurrentThreadId());
         _callHook = SetWindowsHookExW(WhCallWndProc, CallProc, IntPtr.Zero, GetCurrentThreadId());
+        _callRetHook = SetWindowsHookExW(WhCallWndProcRet, CallRetProc, IntPtr.Zero, GetCurrentThreadId());
         var pid = (uint)Environment.ProcessId;
         _eventHook = SetWinEventHook(EventObjectShow, EventObjectShow, IntPtr.Zero, ShowProc, pid, 0, 0);
         _locationHook = SetWinEventHook(EventObjectLocationChange, EventObjectLocationChange, IntPtr.Zero, ShowProc, pid, 0, 0);
-        Log($"installed desktop={_desktop.Left},{_desktop.Top},{_desktop.Right},{_desktop.Bottom} offset={OffsetX},{OffsetY} uiThread={GetCurrentThreadId()} cbt={_cbtHook != IntPtr.Zero} call={_callHook != IntPtr.Zero} event={_eventHook != IntPtr.Zero}");
-        if (_cbtHook == IntPtr.Zero || _callHook == IntPtr.Zero)
+        Log($"installed desktop={_desktop.Left},{_desktop.Top},{_desktop.Right},{_desktop.Bottom} offset={OffsetX},{OffsetY} uiThread={GetCurrentThreadId()} cbt={_cbtHook != IntPtr.Zero} call={_callHook != IntPtr.Zero} ret={_callRetHook != IntPtr.Zero} event={_eventHook != IntPtr.Zero}");
+        if (_cbtHook == IntPtr.Zero || _callHook == IntPtr.Zero || _callRetHook == IntPtr.Zero)
         {
             throw new InvalidOperationException("LIFESTREAM_OFFSCREEN: the window hook could not be installed; refusing to show windows on the desktop.");
         }
@@ -130,31 +134,60 @@ internal static partial class OffscreenMode
         if (code >= 0)
         {
             var call = (CallWndProcStruct*)lParam;
-            if (call->Message == WmWindowPosChanging && GetAncestor(call->Hwnd, GaRoot) == call->Hwnd)
+            if (call->Message == WmWindowPosChanging)
             {
-                var pos = (WindowPos*)call->LParam;
-                pos->Flags |= SwpNoActivate;
-                if ((pos->Flags & SwpNoMove) == 0)
-                {
-                    var width = pos->Cx;
-                    var height = pos->Cy;
-                    if ((pos->Flags & SwpNoSize) != 0 && GetWindowRect(call->Hwnd, out var current))
-                    {
-                        width = current.Right - current.Left;
-                        height = current.Bottom - current.Top;
-                    }
-
-                    if (TouchesDesktop(pos->X, pos->Y, Math.Max(width, 1), Math.Max(height, 1)))
-                    {
-                        Log($"move 0x{call->Hwnd:X} to {pos->X},{pos->Y} {width}x{height} -> moved off");
-                        pos->X += OffsetX;
-                        pos->Y += OffsetY;
-                    }
-                }
+                Rewrite(call->Hwnd, (WindowPos*)call->LParam, "move");
             }
         }
 
         return CallNextHookEx(IntPtr.Zero, code, wParam, lParam);
+    }
+
+    /// <summary>
+    /// After the window procedure: WPF's own WM_WINDOWPOSCHANGING handling can put back a position on the desktop (a dialog sized to its content
+    /// was set to 0,0 that way, 2026-11-20), and Windows applies the WINDOWPOS only after this returns.
+    /// </summary>
+    private static unsafe IntPtr OnCallWndProcRet(int code, IntPtr wParam, IntPtr lParam)
+    {
+        if (code >= 0)
+        {
+            var call = (CallWndProcRetStruct*)lParam;
+            if (call->Message == WmWindowPosChanging)
+            {
+                Rewrite(call->Hwnd, (WindowPos*)call->LParam, "after-wndproc");
+            }
+        }
+
+        return CallNextHookEx(IntPtr.Zero, code, wParam, lParam);
+    }
+
+    private static unsafe void Rewrite(IntPtr hwnd, WindowPos* pos, string stage)
+    {
+        if (GetAncestor(hwnd, GaRoot) != hwnd)
+        {
+            return;
+        }
+
+        pos->Flags |= SwpNoActivate;
+        if ((pos->Flags & SwpNoMove) != 0)
+        {
+            return;
+        }
+
+        var width = pos->Cx;
+        var height = pos->Cy;
+        if ((pos->Flags & SwpNoSize) != 0 && GetWindowRect(hwnd, out var current))
+        {
+            width = current.Right - current.Left;
+            height = current.Bottom - current.Top;
+        }
+
+        if (TouchesDesktop(pos->X, pos->Y, Math.Max(width, 1), Math.Max(height, 1)))
+        {
+            Log($"{stage} 0x{hwnd:X} to {pos->X},{pos->Y} {width}x{height} -> moved off");
+            pos->X += OffsetX;
+            pos->Y += OffsetY;
+        }
     }
 
     private static void OnWinEvent(IntPtr hook, uint @event, IntPtr hwnd, int idObject, int idChild, uint thread, uint time)
@@ -204,6 +237,16 @@ internal static partial class OffscreenMode
     [StructLayout(LayoutKind.Sequential)]
     private struct CallWndProcStruct
     {
+        public IntPtr LParam;
+        public IntPtr WParam;
+        public int Message;
+        public IntPtr Hwnd;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct CallWndProcRetStruct
+    {
+        public IntPtr LResult;
         public IntPtr LParam;
         public IntPtr WParam;
         public int Message;

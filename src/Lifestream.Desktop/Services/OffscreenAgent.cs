@@ -91,7 +91,9 @@ internal static partial class OffscreenAgent
                         throw new InvalidOperationException("the button is disabled");
                     }
 
-                    typeof(ButtonBase).GetMethod("OnClick", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(button, null);
+                    // Queued, not run here: a click that opens a modal window would otherwise hold this command until the window closes.
+                    var onClick = typeof(ButtonBase).GetMethod("OnClick", BindingFlags.Instance | BindingFlags.NonPublic)!;
+                    button.Dispatcher.BeginInvoke(() => onClick.Invoke(button, null));
                     return "ok clicked " + Describe(button);
                 }
 
@@ -156,6 +158,49 @@ internal static partial class OffscreenAgent
 
         var element = target as UIElement ?? Keyboard.FocusedElement as UIElement ?? MainWindow();
         var source = PresentationSource.FromVisual(element) ?? throw new InvalidOperationException("the element is not shown");
+        if (modifiers != ModifierKeys.None)
+        {
+            // A shortcut: run the key binding a real key press would match, from the element up (WPF reads modifier keys from the system only
+            // while one of its windows is active, which these never are).
+            for (DependencyObject? node = element; node is not null; node = VisualTreeHelper.GetParent(node) ?? LogicalTreeHelper.GetParent(node))
+            {
+                if (node is not UIElement ui)
+                {
+                    continue;
+                }
+
+                foreach (var binding in ui.InputBindings.OfType<KeyBinding>())
+                {
+                    if (binding.Gesture is KeyGesture gesture1 && gesture1.Key == key && gesture1.Modifiers == modifiers && binding.Command is { } command)
+                    {
+                        var target1 = binding.CommandTarget ?? ui;
+                        if (command is RoutedCommand routed)
+                        {
+                            if (!routed.CanExecute(binding.CommandParameter, target1))
+                            {
+                                return $"ok key {gesture} matched on {Describe(ui)} but cannot execute now";
+                            }
+
+                            ui.Dispatcher.BeginInvoke(() => routed.Execute(binding.CommandParameter, target1));
+                        }
+                        else
+                        {
+                            if (!command.CanExecute(binding.CommandParameter))
+                            {
+                                return $"ok key {gesture} matched on {Describe(ui)} but cannot execute now";
+                            }
+
+                            ui.Dispatcher.BeginInvoke(() => command.Execute(binding.CommandParameter));
+                        }
+
+                        return $"ok key {gesture} ran the binding on {Describe(ui)}";
+                    }
+                }
+            }
+
+            return $"ok key {gesture}: no key binding matched from {Describe(element)} up";
+        }
+
         var state = new byte[256];
         _ = GetKeyboardState(state);
         var saved = (byte[])state.Clone();
@@ -196,27 +241,16 @@ internal static partial class OffscreenAgent
                 if (field.FieldType == typeof(PresentationSource))
                 {
                     var old = field.GetValue(device);
-                    if (old is null)
-                    {
-                        field.SetValue(device, source);
-                        return () => field.SetValue(device, old);
-                    }
-
-                    return () => { };
+                    field.SetValue(device, source);
+                    return () => field.SetValue(device, old);
                 }
 
                 if (field.FieldType.IsGenericType && field.FieldType.GetGenericArguments() is [var arg] && arg == typeof(PresentationSource))
                 {
                     var wrapper = field.GetValue(device);
-                    var value = wrapper is null ? null : field.FieldType.GetProperty("Value", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(wrapper);
-                    if (value is null)
-                    {
-                        var created = Activator.CreateInstance(field.FieldType, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, [source], null);
-                        field.SetValue(device, created);
-                        return () => field.SetValue(device, wrapper);
-                    }
-
-                    return () => { };
+                    var created = Activator.CreateInstance(field.FieldType, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, [source], null);
+                    field.SetValue(device, created);
+                    return () => field.SetValue(device, wrapper);
                 }
             }
         }
