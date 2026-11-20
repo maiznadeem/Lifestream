@@ -199,7 +199,8 @@ All data comes from code, never from a backup.
     appointment is pending. Nothing is done before its time and no row carries a time after the reset, in any time zone. What can happen is the
     reverse: an appointment whose time passes after the reset stays pending until someone records it, as in the app itself.
   - The last appointment of today and of tomorrow belongs to a donor who has never donated; today's and tomorrow's other donors last donated more
-    than 90 days ago, so they are eligible. The totals do not depend on the time of day (`SeedSizes`): today's rows come out of the same counts.
+    than 90 days ago (a few of them not yet either), so they are eligible. The totals do not depend on the time of day (`SeedSizes`): today's rows
+    come out of the same counts.
   - **Nobody breaks the donation rule** (`Eligibility.MinDaysBetweenDonations`, and the age limits). A donor's donations are at least that many days
     apart; every appointment, whatever became of it, is on a day the donor was (or will be) eligible as the API judges a booking; and a donor's open
     bookings keep the same distance from each other. That is why the demo has 100 donors: a year of 180 donations needs more donors than the 40
