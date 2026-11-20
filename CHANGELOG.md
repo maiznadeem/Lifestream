@@ -2,6 +2,17 @@
 
 All notable changes to Lifestream are listed here. The section of a version is also the text of its release on the GitHub Releases page.
 
+## [2.1.5] - 2026-11-20
+
+Lifestream 2.1.5 makes waiting for the server shorter where it can be, and honest where it cannot.
+
+### Fixed
+
+- Signing in right after the window says "Server ready" is quick: the server prepares for the sign-in while the window is open.
+- When the server's database has just woken up, the app carries on within a couple of seconds, and it no longer gives up on a request the server is still working on only to start it again.
+- The sign-in window says what it is waiting for: "Step 1 of 2: starting the server", then "Step 2 of 2: the server is up and its database is waking". The notices say a wake takes about a minute and a half, and "longer than usual" appears only when it is.
+- When the demo database has used its free monthly allowance the app says so, and when it is back, instead of waiting for it.
+
 ## [2.1.4] - 2026-11-20
 
 Lifestream 2.1.4 fixes the rest of what using the app end to end against a real server turned up in the shell, the forms and the dashboard.
