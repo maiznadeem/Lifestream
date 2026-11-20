@@ -8,7 +8,10 @@ Lifestream 2.1.2 fixes defects found by using the app end to end against a real 
 
 ### Fixed
 
-- PLACEHOLDER
+- The Theme submenu in the account menu opens, so Light, Dark and Match Windows can be chosen there.
+- A form can no longer be saved while its date field holds something that is not a date; before, the old date was kept without a word.
+- "The server is taking too long to answer" is shown only when the server really is slow; the app's own work no longer sets it off.
+- The sign-in window's status no longer stays on "Waking the server" after one slow call.
 
 ## [2.1.1] - 2026-11-20
 
