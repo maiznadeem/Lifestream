@@ -19,8 +19,10 @@ public partial class ReceiptsView : UserControl
     {
         InitializeComponent();
 
-        // The "..." menu lives outside the visual tree: give it the screen's model, so its commands are bound before it opens.
-        MoreButton.ContextMenu.SetBinding(FrameworkElement.DataContextProperty, new System.Windows.Data.Binding(nameof(DataContext)) { Source = this });
+        // The "..." menu lives outside the visual tree: give it the screen's model, so its commands are bound before it opens. It is in the side panel,
+        // which builds its content when it first opens.
+        PanelContent.Built += (_, _) => ((FrameworkElement)LogicalTreeHelper.FindLogicalNode(PanelContent.Child, "MoreButton")).ContextMenu
+            .SetBinding(FrameworkElement.DataContextProperty, new System.Windows.Data.Binding(nameof(DataContext)) { Source = this });
     }
 
     private void OnRowDoubleClick(object sender, MouseButtonEventArgs e)

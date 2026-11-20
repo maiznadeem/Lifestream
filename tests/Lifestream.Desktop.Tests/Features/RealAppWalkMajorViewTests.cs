@@ -28,8 +28,13 @@ public sealed class RealAppWalkMajorViewTests
             var view = FeatureHarness.DonorsView(vm);
             using var host = Hosted.Create(view, 1440, 900);
             Hosted.Await(() => vm.LoadAsync());
+            Hosted.Await(() =>
+            {
+                vm.SelectedItem = vm.Items[0]; // the side panel builds its content when it first opens
+                return vm.PendingDetail;
+            });
             host.Settle(300);
-            var pane = (RecordDetailPane)view.FindName("DetailPane"); // by name: the side panel is closed until a donor is chosen, and the menu is not opened here
+            var pane = host.Find<RecordDetailPane>("DetailPane"); // by name: the menu is not opened here
             var item = (MenuItem)pane.FindName("DeleteItem");
             // The item's text is what its header shows: a string, or the text of the element in it.
             var text = item.Header as string ?? (item.Header as TextBlock)?.Text;

@@ -209,127 +209,132 @@
     <!-- The selected person, or the add / edit form. -->
     <controls:SidePanel x:Name="Panel" Grid.Column="1" IsOpen="{Binding IsPanelOpen}" Overline="{Binding PanelOverline}" CloseCommand="{Binding ClosePanelCommand}" lists:DetailPaneFrame.IsInPanel="True"
                         lists:PanelBleed.IsEnabled="True" AutomationProperties.Name="Staff member details">
-      <Grid>
-        <Grid Visibility="{Binding Editor, Converter={StaticResource NullToVisible}}">
-          <controls:Skeleton Kind="Detail" Visibility="{Binding ShowDetailSkeleton, Converter={StaticResource BoolToVisibility}}" />
-          <controls:ErrorState Message="{Binding DetailError}" RetryCommand="{Binding RetryDetailCommand}" Visibility="{Binding HasDetailError, Converter={StaticResource BoolToVisibility}}" />
-          <ScrollViewer x:Name="PanelBody" Style="{DynamicResource ScrollViewer.Panel}" VerticalScrollBarVisibility="Auto" Focusable="False" Visibility="{Binding HasDetail, Converter={StaticResource BoolToVisibility}}">
-            <StackPanel feat:Edge.Bottom="{DynamicResource Space.24}">
-              <!-- Who: the avatar (photo once loaded), the name, what they do, and their role and account badges. -->
-              <Grid>
-                <Grid.ColumnDefinitions>
-                  <ColumnDefinition Width="Auto" />
-                  <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <controls:Avatar x:Name="PanelAvatar" Size="52" Initials="{Binding DetailInitials}" Source="{Binding SelectedItem.Photo, Converter={StaticResource Photo}}"
-                                 VerticalAlignment="Top" feat:Edge.Right="{DynamicResource Space.16}" />
-                <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                  <TextBlock x:Name="PanelName" Style="{DynamicResource Text.Section}" Text="{Binding Detail.DisplayName}" TextWrapping="Wrap" AutomationProperties.HeadingLevel="Level2" />
-                  <TextBlock x:Name="PanelSubtitle" Style="{DynamicResource Text.Secondary}" Text="{Binding DetailSubtitle}" TextWrapping="Wrap" feat:Edge.Top="{DynamicResource Space.4}" />
+      <!-- Built the first time the panel opens: showing the screen does not build the panel it has not opened yet. -->
+      <controls:DeferredContent x:Name="PanelContent">
+        <DataTemplate>
+          <Grid>
+            <Grid Visibility="{Binding Editor, Converter={StaticResource NullToVisible}}">
+              <controls:Skeleton Kind="Detail" Visibility="{Binding ShowDetailSkeleton, Converter={StaticResource BoolToVisibility}}" />
+              <controls:ErrorState Message="{Binding DetailError}" RetryCommand="{Binding RetryDetailCommand}" Visibility="{Binding HasDetailError, Converter={StaticResource BoolToVisibility}}" />
+              <ScrollViewer x:Name="PanelBody" Style="{DynamicResource ScrollViewer.Panel}" VerticalScrollBarVisibility="Auto" Focusable="False" Visibility="{Binding HasDetail, Converter={StaticResource BoolToVisibility}}">
+                <StackPanel feat:Edge.Bottom="{DynamicResource Space.24}">
+                  <!-- Who: the avatar (photo once loaded), the name, what they do, and their role and account badges. -->
+                  <Grid>
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="Auto" />
+                      <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <controls:Avatar x:Name="PanelAvatar" Size="52" Initials="{Binding DetailInitials}" Source="{Binding SelectedItem.Photo, Converter={StaticResource Photo}}"
+                                     VerticalAlignment="Top" feat:Edge.Right="{DynamicResource Space.16}" />
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                      <TextBlock x:Name="PanelName" Style="{DynamicResource Text.Section}" Text="{Binding Detail.DisplayName}" TextWrapping="Wrap" AutomationProperties.HeadingLevel="Level2" />
+                      <TextBlock x:Name="PanelSubtitle" Style="{DynamicResource Text.Secondary}" Text="{Binding DetailSubtitle}" TextWrapping="Wrap" feat:Edge.Top="{DynamicResource Space.4}" />
+                    </StackPanel>
+                  </Grid>
+                  <WrapPanel x:Name="Badges" feat:Edge.Top="{DynamicResource Space.12}">
+                    <controls:Badge x:Name="AdminBadge" Text="Administrator" Kind="Info" Icon="Key" feat:Edge.Right="{DynamicResource Space.8}" feat:Edge.Bottom="{DynamicResource Space.4}"
+                                    Visibility="{Binding DetailIsAdmin, Converter={StaticResource BoolToVisibility}}" />
+                    <controls:Badge x:Name="StaffBadge" Text="Staff" Kind="Neutral" Icon="User" feat:Edge.Right="{DynamicResource Space.8}" feat:Edge.Bottom="{DynamicResource Space.4}"
+                                    Visibility="{Binding DetailIsAdmin, Converter={StaticResource NotVisible}}" />
+                    <controls:Badge Text="Manages staff" Kind="Success" Icon="Staff" feat:Edge.Right="{DynamicResource Space.8}" feat:Edge.Bottom="{DynamicResource Space.4}"
+                                    Visibility="{Binding DetailIsAdmin, Converter={StaticResource BoolToVisibility}}" />
+                    <controls:Badge Text="Protected account" Kind="Neutral" Icon="Lock" feat:Edge.Bottom="{DynamicResource Space.4}"
+                                    Visibility="{Binding DetailIsProtected, Converter={StaticResource BoolToVisibility}}" ToolTip="The owner account can't be deleted or lose its administrator role." />
+                  </WrapPanel>
+
+                  <!-- Actions, as on every list screen: the one filled primary (Edit, which fills the row), then Reset password, and a "..." menu with Delete staff
+                       member (it says why when it can't be used: your own or a protected account, or the demo account; the delete asks first). -->
+                  <Grid x:Name="ActionsRow" feat:Edge.Top="{DynamicResource Space.16}">
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="*" />
+                      <ColumnDefinition Width="Auto" />
+                      <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Button x:Name="EditButton" Style="{DynamicResource Button.Primary}" Command="{Binding EditCommand}" IsEnabled="{Binding CanManageStaff}" feat:Edge.Right="{DynamicResource Space.8}"
+                            AutomationProperties.Name="Edit">
+                      <StackPanel Orientation="Horizontal">
+                        <controls:Icon Kind="Edit" Size="16" VerticalAlignment="Center" feat:Edge.Right="{DynamicResource Space.8}" />
+                        <TextBlock Text="Edit" VerticalAlignment="Center" />
+                      </StackPanel>
+                    </Button>
+                    <Button x:Name="ResetButton" Grid.Column="1" Style="{DynamicResource Button.Secondary}" Command="{Binding ResetPasswordCommand}" AutomationProperties.Name="Reset password">
+                      <StackPanel Orientation="Horizontal">
+                        <controls:Icon Kind="Key" Size="16" VerticalAlignment="Center" feat:Edge.Right="{DynamicResource Space.8}" />
+                        <TextBlock Text="Reset password" VerticalAlignment="Center" />
+                      </StackPanel>
+                    </Button>
+                    <lists:MenuButton x:Name="MoreButton" Grid.Column="2" Style="{DynamicResource Button.Icon}" feat:Edge.Left="{DynamicResource Space.8}" AutomationProperties.Name="More actions" ToolTip="More actions">
+                      <controls:Icon Kind="More" Size="18" />
+                      <lists:MenuButton.ContextMenu>
+                        <ContextMenu>
+                          <MenuItem x:Name="DeleteItem" Header="Delete staff member" Command="{Binding DeleteCommand}" Foreground="{DynamicResource Brush.Critical}"
+                                    ToolTip="{Binding DeleteDisabledReason}" ToolTipService.ShowOnDisabled="True" AutomationProperties.Name="Delete staff member">
+                            <MenuItem.Icon>
+                              <controls:Icon Kind="Trash" Size="16" />
+                            </MenuItem.Icon>
+                          </MenuItem>
+                        </ContextMenu>
+                      </lists:MenuButton.ContextMenu>
+                    </lists:MenuButton>
+                  </Grid>
+
+                  <!-- Access: what the role can do in the app. -->
+                  <TextBlock Style="{DynamicResource Text.Heading}" Text="Access" feat:Edge.Top="{DynamicResource Space.16}" feat:Edge.Bottom="{DynamicResource Space.8}" AutomationProperties.HeadingLevel="Level3" />
+                  <Grid x:Name="Access">
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="Auto" />
+                      <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                      <RowDefinition Height="Auto" />
+                      <RowDefinition Height="Auto" />
+                      <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <controls:Icon Style="{StaticResource AccessIcon}" feat:Edge.Right="{DynamicResource Space.12}" feat:Edge.Bottom="{DynamicResource Space.8}" />
+                    <TextBlock Grid.Column="1" Style="{DynamicResource Text.Body}" Text="Donors, patients, appointments and requests" TextWrapping="Wrap" feat:Edge.Bottom="{DynamicResource Space.8}" />
+                    <controls:Icon Grid.Row="1" Style="{StaticResource AccessIcon}" feat:Edge.Right="{DynamicResource Space.12}" feat:Edge.Bottom="{DynamicResource Space.8}" />
+                    <TextBlock Grid.Row="1" Grid.Column="1" Style="{DynamicResource Text.Body}" Text="Stock and receipts" TextWrapping="Wrap" feat:Edge.Bottom="{DynamicResource Space.8}" />
+                    <controls:Icon x:Name="StaffAccessIcon" Grid.Row="2" feat:Edge.Right="{DynamicResource Space.12}">
+                      <controls:Icon.Style>
+                        <Style TargetType="controls:Icon" BasedOn="{StaticResource AccessIcon}">
+                          <Setter Property="Kind" Value="Lock" />
+                          <Setter Property="Foreground" Value="{DynamicResource Brush.Ink3}" />
+                          <Style.Triggers>
+                            <DataTrigger Binding="{Binding DetailIsAdmin}" Value="True">
+                              <Setter Property="Kind" Value="Checkc" />
+                              <Setter Property="Foreground" Value="{DynamicResource Brush.Success}" />
+                            </DataTrigger>
+                          </Style.Triggers>
+                        </Style>
+                      </controls:Icon.Style>
+                    </controls:Icon>
+                    <TextBlock x:Name="StaffAccessText" Grid.Row="2" Grid.Column="1" Style="{DynamicResource Text.Body}" Text="{Binding DetailStaffAccessText}" TextWrapping="Wrap" />
+                  </Grid>
+
+                  <!-- Details: label and value, as in every A panel. -->
+                  <TextBlock Style="{DynamicResource Text.Heading}" Text="Details" feat:Edge.Top="{DynamicResource Space.16}" feat:Edge.Bottom="{DynamicResource Space.8}" AutomationProperties.HeadingLevel="Level3" />
+                  <ItemsControl x:Name="Facts" ItemsSource="{Binding DetailFacts}" Focusable="False" AutomationProperties.Name="Record details">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate>
+                        <Grid feat:Edge.Bottom="{DynamicResource Space.8}">
+                          <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="130" />
+                            <ColumnDefinition Width="*" />
+                          </Grid.ColumnDefinitions>
+                          <TextBlock Style="{DynamicResource Text.Secondary}" Text="{Binding Label}" TextWrapping="Wrap" />
+                          <TextBlock Grid.Column="1" Style="{DynamicResource Text.Body}" Text="{Binding Value}" TextWrapping="Wrap" />
+                        </Grid>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
                 </StackPanel>
-              </Grid>
-              <WrapPanel x:Name="Badges" feat:Edge.Top="{DynamicResource Space.12}">
-                <controls:Badge x:Name="AdminBadge" Text="Administrator" Kind="Info" Icon="Key" feat:Edge.Right="{DynamicResource Space.8}" feat:Edge.Bottom="{DynamicResource Space.4}"
-                                Visibility="{Binding DetailIsAdmin, Converter={StaticResource BoolToVisibility}}" />
-                <controls:Badge x:Name="StaffBadge" Text="Staff" Kind="Neutral" Icon="User" feat:Edge.Right="{DynamicResource Space.8}" feat:Edge.Bottom="{DynamicResource Space.4}"
-                                Visibility="{Binding DetailIsAdmin, Converter={StaticResource NotVisible}}" />
-                <controls:Badge Text="Manages staff" Kind="Success" Icon="Staff" feat:Edge.Right="{DynamicResource Space.8}" feat:Edge.Bottom="{DynamicResource Space.4}"
-                                Visibility="{Binding DetailIsAdmin, Converter={StaticResource BoolToVisibility}}" />
-                <controls:Badge Text="Protected account" Kind="Neutral" Icon="Lock" feat:Edge.Bottom="{DynamicResource Space.4}"
-                                Visibility="{Binding DetailIsProtected, Converter={StaticResource BoolToVisibility}}" ToolTip="The owner account can't be deleted or lose its administrator role." />
-              </WrapPanel>
-
-              <!-- Actions, as on every list screen: the one filled primary (Edit, which fills the row), then Reset password, and a "..." menu with Delete staff
-                   member (it says why when it can't be used: your own or a protected account, or the demo account; the delete asks first). -->
-              <Grid x:Name="ActionsRow" feat:Edge.Top="{DynamicResource Space.16}">
-                <Grid.ColumnDefinitions>
-                  <ColumnDefinition Width="*" />
-                  <ColumnDefinition Width="Auto" />
-                  <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <Button x:Name="EditButton" Style="{DynamicResource Button.Primary}" Command="{Binding EditCommand}" IsEnabled="{Binding CanManageStaff}" feat:Edge.Right="{DynamicResource Space.8}"
-                        AutomationProperties.Name="Edit">
-                  <StackPanel Orientation="Horizontal">
-                    <controls:Icon Kind="Edit" Size="16" VerticalAlignment="Center" feat:Edge.Right="{DynamicResource Space.8}" />
-                    <TextBlock Text="Edit" VerticalAlignment="Center" />
-                  </StackPanel>
-                </Button>
-                <Button x:Name="ResetButton" Grid.Column="1" Style="{DynamicResource Button.Secondary}" Command="{Binding ResetPasswordCommand}" AutomationProperties.Name="Reset password">
-                  <StackPanel Orientation="Horizontal">
-                    <controls:Icon Kind="Key" Size="16" VerticalAlignment="Center" feat:Edge.Right="{DynamicResource Space.8}" />
-                    <TextBlock Text="Reset password" VerticalAlignment="Center" />
-                  </StackPanel>
-                </Button>
-                <lists:MenuButton x:Name="MoreButton" Grid.Column="2" Style="{DynamicResource Button.Icon}" feat:Edge.Left="{DynamicResource Space.8}" AutomationProperties.Name="More actions" ToolTip="More actions">
-                  <controls:Icon Kind="More" Size="18" />
-                  <lists:MenuButton.ContextMenu>
-                    <ContextMenu>
-                      <MenuItem x:Name="DeleteItem" Header="Delete staff member" Command="{Binding DeleteCommand}" Foreground="{DynamicResource Brush.Critical}"
-                                ToolTip="{Binding DeleteDisabledReason}" ToolTipService.ShowOnDisabled="True" AutomationProperties.Name="Delete staff member">
-                        <MenuItem.Icon>
-                          <controls:Icon Kind="Trash" Size="16" />
-                        </MenuItem.Icon>
-                      </MenuItem>
-                    </ContextMenu>
-                  </lists:MenuButton.ContextMenu>
-                </lists:MenuButton>
-              </Grid>
-
-              <!-- Access: what the role can do in the app. -->
-              <TextBlock Style="{DynamicResource Text.Heading}" Text="Access" feat:Edge.Top="{DynamicResource Space.16}" feat:Edge.Bottom="{DynamicResource Space.8}" AutomationProperties.HeadingLevel="Level3" />
-              <Grid x:Name="Access">
-                <Grid.ColumnDefinitions>
-                  <ColumnDefinition Width="Auto" />
-                  <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <Grid.RowDefinitions>
-                  <RowDefinition Height="Auto" />
-                  <RowDefinition Height="Auto" />
-                  <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
-                <controls:Icon Style="{StaticResource AccessIcon}" feat:Edge.Right="{DynamicResource Space.12}" feat:Edge.Bottom="{DynamicResource Space.8}" />
-                <TextBlock Grid.Column="1" Style="{DynamicResource Text.Body}" Text="Donors, patients, appointments and requests" TextWrapping="Wrap" feat:Edge.Bottom="{DynamicResource Space.8}" />
-                <controls:Icon Grid.Row="1" Style="{StaticResource AccessIcon}" feat:Edge.Right="{DynamicResource Space.12}" feat:Edge.Bottom="{DynamicResource Space.8}" />
-                <TextBlock Grid.Row="1" Grid.Column="1" Style="{DynamicResource Text.Body}" Text="Stock and receipts" TextWrapping="Wrap" feat:Edge.Bottom="{DynamicResource Space.8}" />
-                <controls:Icon x:Name="StaffAccessIcon" Grid.Row="2" feat:Edge.Right="{DynamicResource Space.12}">
-                  <controls:Icon.Style>
-                    <Style TargetType="controls:Icon" BasedOn="{StaticResource AccessIcon}">
-                      <Setter Property="Kind" Value="Lock" />
-                      <Setter Property="Foreground" Value="{DynamicResource Brush.Ink3}" />
-                      <Style.Triggers>
-                        <DataTrigger Binding="{Binding DetailIsAdmin}" Value="True">
-                          <Setter Property="Kind" Value="Checkc" />
-                          <Setter Property="Foreground" Value="{DynamicResource Brush.Success}" />
-                        </DataTrigger>
-                      </Style.Triggers>
-                    </Style>
-                  </controls:Icon.Style>
-                </controls:Icon>
-                <TextBlock x:Name="StaffAccessText" Grid.Row="2" Grid.Column="1" Style="{DynamicResource Text.Body}" Text="{Binding DetailStaffAccessText}" TextWrapping="Wrap" />
-              </Grid>
-
-              <!-- Details: label and value, as in every A panel. -->
-              <TextBlock Style="{DynamicResource Text.Heading}" Text="Details" feat:Edge.Top="{DynamicResource Space.16}" feat:Edge.Bottom="{DynamicResource Space.8}" AutomationProperties.HeadingLevel="Level3" />
-              <ItemsControl x:Name="Facts" ItemsSource="{Binding DetailFacts}" Focusable="False" AutomationProperties.Name="Record details">
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate>
-                    <Grid feat:Edge.Bottom="{DynamicResource Space.8}">
-                      <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="130" />
-                        <ColumnDefinition Width="*" />
-                      </Grid.ColumnDefinitions>
-                      <TextBlock Style="{DynamicResource Text.Secondary}" Text="{Binding Label}" TextWrapping="Wrap" />
-                      <TextBlock Grid.Column="1" Style="{DynamicResource Text.Body}" Text="{Binding Value}" TextWrapping="Wrap" />
-                    </Grid>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
-            </StackPanel>
-          </ScrollViewer>
-        </Grid>
-        <ContentControl x:Name="EditorHost" Content="{Binding Editor}" ContentTemplateSelector="{x:Static services:ViewLocator.Instance}" IsTabStop="False" Focusable="False"
-                        HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" Visibility="{Binding Editor, Converter={StaticResource NullToCollapsed}}" />
-      </Grid>
+              </ScrollViewer>
+            </Grid>
+            <ContentControl x:Name="EditorHost" Content="{Binding Editor}" ContentTemplateSelector="{x:Static services:ViewLocator.Instance}" IsTabStop="False" Focusable="False"
+                            HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" Visibility="{Binding Editor, Converter={StaticResource NullToCollapsed}}" />
+          </Grid>
+        </DataTemplate>
+      </controls:DeferredContent>
     </controls:SidePanel>
   </Grid>
 </UserControl>
