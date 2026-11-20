@@ -6,6 +6,7 @@ using Lifestream.Api.Tests.Support;
 using Lifestream.Contracts;
 using Lifestream.Data.Queries;
 using Lifestream.Domain;
+using Microsoft.Data.SqlClient;
 
 namespace Lifestream.Api.Tests;
 
@@ -381,30 +382,129 @@ public sealed class SearchRuleApiTests(ApiFixture fx) : IClassFixture<ApiFixture
         }
     }
 
+    private const string PlanHint = "DISABLE_OPTIMIZER_ROWGOAL";
+
+    /// <summary>The statements that carry what was typed: one of their parameters holds the word (the pattern a name or a phone is matched against).</summary>
+    private static List<(string Sql, List<SqlParameter> Parameters)> Carrying(List<(string Sql, List<SqlParameter> Parameters)> statements, string word) =>
+        [.. statements.Where(s => s.Parameters.Any(p => p.Value is string text && text.Contains(word, StringComparison.OrdinalIgnoreCase)))];
+
+    /// <summary>
+    /// Judged on the statements of the request itself (StatementCapture.OfAsync), and of those on the ones that search: the statements that carry
+    /// the word typed are sent with the hint, and nothing else is. A request runs more than its endpoint's statements (the identity layer's session
+    /// and daily demo checks, see the next test), so "every statement of a search request has the hint" was never true; it only held while another
+    /// test of the class had made the first signed-in request.
+    /// </summary>
     [Fact]
     public async Task EveryStatementWithASearch_IsSentWithTheSearchHint_AndAListWithoutOneIsNot()
     {
         var rows = await RowsAsync();
         foreach (var route in new[] { ApiRoutes.Donors, ApiRoutes.Patients, ApiRoutes.Appointments, ApiRoutes.Requests, ApiRoutes.Receipts, ApiRoutes.Staff, ApiRoutes.LookupDonors, ApiRoutes.LookupRequests, ApiRoutes.ReceiptCounts, ApiRoutes.AppointmentViews, ApiRoutes.RequestViews })
         {
-            foreach (var (query, hinted) in new[] { ("?search=eastwood", true), ("", false) })
+            var (searched, withSearch) = await fx.Statements.OfAsync(rows.Client, ApiRoutes.Path(route) + "?search=eastwood", Ct);
+            using (searched)
             {
-                fx.Statements.Drain();
-                fx.Statements.Recording = true;
-                try
-                {
-                    using var response = await rows.Client.GetAsync(ApiRoutes.Path(route) + query, Ct);
-                    Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-                }
-                finally
-                {
-                    fx.Statements.Recording = false;
-                }
-
-                var statements = fx.Statements.Drain().Where(s => !s.Sql.Contains("[RefreshToken]", StringComparison.Ordinal) && !s.Sql.Contains("[DemoState]", StringComparison.Ordinal)).ToList();
-                Assert.NotEmpty(statements);
-                Assert.All(statements, s => Assert.Equal(hinted, s.Sql.Contains("DISABLE_OPTIMIZER_ROWGOAL", StringComparison.Ordinal)));
+                Assert.Equal(HttpStatusCode.OK, searched.StatusCode);
             }
+
+            var searching = Carrying(withSearch, "eastwood");
+            Assert.True(searching.Count > 0, $"{route}: no statement of the request carries the word typed");
+            Assert.All(searching, s => Assert.Contains(PlanHint, s.Sql, StringComparison.Ordinal));
+            Assert.All(withSearch.Except(searching), s => Assert.DoesNotContain(PlanHint, s.Sql, StringComparison.Ordinal));
+
+            var (listed, withoutSearch) = await fx.Statements.OfAsync(rows.Client, ApiRoutes.Path(route), Ct);
+            using (listed)
+            {
+                Assert.Equal(HttpStatusCode.OK, listed.StatusCode);
+            }
+
+            Assert.True(withoutSearch.Count > 0, $"{route}: the request sent no statement");
+            Assert.All(withoutSearch, s => Assert.DoesNotContain(PlanHint, s.Sql, StringComparison.Ordinal));
         }
+    }
+
+    /// <summary>
+    /// The identity layer in front of every signed-in request asks once per UTC day whether the demo data is due for its daily reset
+    /// (IdentityMiddleware, DemoDirectory.EnsureDailyResetAsync), inside whichever request comes first that day: also a search. Its statements (the
+    /// DemoState row, the server's clock) are then really sent inside the search request. They are not search statements: they get no hint, the
+    /// search's own do, the search answers as on any other request, and the next request of the day does not ask again.
+    /// </summary>
+    [Fact]
+    public async Task TheDailyDemoCheck_RunsInsideTheFirstSignedInRequestOfADay_AlsoWhenItIsASearch_AndIsNotASearchStatement()
+    {
+        var rows = await RowsAsync();
+        var day = TimeSpan.FromDays(1);
+        fx.Clock.Advance(day); // tomorrow: nobody has signed in yet today (the fixture keeps the reset itself from being due)
+        try
+        {
+            var staff = await fx.AddStaffAsync(Role.Staff); // a session of that day
+            var url = $"{ApiRoutes.Path(ApiRoutes.Donors)}?search=eastwood&pageSize=200";
+
+            var (first, statements) = await fx.Statements.OfAsync(staff.Client, url, Ct);
+            using (first)
+            {
+                var body = await first.Content.ReadAsStringAsync(Ct);
+                Assert.True(first.IsSuccessStatusCode, body);
+                Assert.Contains(JsonElement.Parse(body).GetProperty("items").EnumerateArray(), d => d.GetProperty("id").GetInt32() == rows["donor:eastwood"]);
+            }
+
+            var daily = statements.Where(s => StatementCapture.IsIdentityCheck(s.Sql)).ToList();
+            Assert.Contains(daily, s => s.Sql.Contains("[DemoState]", StringComparison.Ordinal));
+            Assert.Contains(daily, s => s.Sql.Contains("SYSUTCDATETIME()", StringComparison.Ordinal));
+            Assert.All(daily, s => Assert.DoesNotContain(PlanHint, s.Sql, StringComparison.Ordinal));
+            var searching = Carrying(statements, "eastwood");
+            Assert.NotEmpty(searching);
+            Assert.All(searching, s => Assert.Contains(PlanHint, s.Sql, StringComparison.Ordinal));
+
+            var (second, again) = await fx.Statements.OfAsync(staff.Client, url, Ct);
+            using (second)
+            {
+                Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+            }
+
+            Assert.DoesNotContain(again, s => s.Sql.Contains("SYSUTCDATETIME()", StringComparison.Ordinal) || s.Sql.Contains("[DemoState]", StringComparison.Ordinal));
+            Assert.NotEmpty(Carrying(again, "eastwood"));
+        }
+        finally
+        {
+            fx.Clock.Advance(-day); // the other tests' sessions are of today
+        }
+    }
+
+    /// <summary>
+    /// A number alone is ambiguous by the rule, and a test that needs ONE record must not search by it: digits are the record's own number, and also a
+    /// word of a name ("Unknown Male 3") and, from three digits, a part of a phone. The receipt's code names the record and nothing else.
+    /// (RequestStockTests searched receipts by a bare id and asserted a single hit; it found a second receipt whenever another test's donor was
+    /// called "... 7" while the receipt was number 7.)
+    /// </summary>
+    [Fact]
+    public async Task ANumberAlone_FindsTheRecordOfThatNumber_AndTheNamesThatHoldIt_TheCodeFindsTheRecordOnly()
+    {
+        var rows = await RowsAsync();
+        var number = rows["receipt:mukherjee"];
+        await using var db = fx.Db.NewContext();
+        var staff = await db.Staff.FindAsync([rows["staff:crowhurst"]], Ct);
+        var namesake = TestRows.Donor($"Unknown Male {number}", Gender.Male, BloodType.BNeg);
+        namesake.Phone = null;
+        var visit = TestRows.Appointment(namesake, Seed.Slot(-5, 12));
+        visit.Status = AppointmentStatus.Completed;
+        var other = TestRows.Donation(staff!, visit);
+        db.AddRange(namesake, visit, other);
+        await db.SaveChangesAsync(Ct);
+        Assert.NotEqual(number, other.Id);
+
+        async Task<HashSet<int>> ReceiptsAsync(string search)
+        {
+            using var response = await rows.Client.GetAsync($"{ApiRoutes.Path(ApiRoutes.Receipts)}?search={Uri.EscapeDataString(search)}&pageSize=200", Ct);
+            var text = await response.Content.ReadAsStringAsync(Ct);
+            Assert.True(response.IsSuccessStatusCode, text);
+            return [.. JsonElement.Parse(text).GetProperty("items").EnumerateArray().Select(i => i.GetProperty("id").GetInt32())];
+        }
+
+        var byNumber = await ReceiptsAsync(number.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        Assert.Contains(number, byNumber); // the receipt of that number
+        Assert.Contains(other.Id, byNumber); // and the receipt of the donor whose name holds it
+
+        Assert.Equal([number], await ReceiptsAsync($"RC-{number}"));
+        Assert.Equal([number], await ReceiptsAsync($"rc-{number:0000}")); // as the lists print it, in either case
     }
 }
