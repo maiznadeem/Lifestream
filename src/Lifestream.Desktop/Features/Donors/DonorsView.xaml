@@ -210,150 +210,155 @@
     <!-- The selected donor, or the donor form -->
     <controls:SidePanel x:Name="Panel" Grid.Column="2" IsOpen="{Binding IsDetailOpen, Mode=OneWay}" CloseCommand="{Binding CloseDetailCommand}" Overline="{Binding DetailCode}"
                         lists:PanelBleed.IsEnabled="True" lists:DetailPaneFrame.IsInPanel="True">
-      <Grid>
-        <lists:RecordDetailPane x:Name="DetailPane" FactsSource="{Binding PanelFacts}" DeleteText="Delete donor"
-                                IsCompact="{Binding (controls:Responsive.Breakpoint), RelativeSource={RelativeSource Self}, Converter={StaticResource IsCompact}}" Visibility="{Binding Editor, Converter={StaticResource NullToVisible}}">
-          <lists:RecordDetailPane.Header>
-            <Grid>
-              <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-              </Grid.ColumnDefinitions>
-              <controls:Avatar Initials="{Binding DetailInitials}" IsBlood="True" Size="52" VerticalAlignment="Center" />
-              <StackPanel Grid.Column="1" Margin="{StaticResource Donors.HeaderGap}" VerticalAlignment="Center">
-                <TextBlock Style="{DynamicResource Text.Section}" Text="{Binding DetailTitle}" TextWrapping="Wrap" AutomationProperties.HeadingLevel="Level2" />
-                <TextBlock Style="{DynamicResource Text.Secondary}" Text="{Binding DetailSubtitle}" TextWrapping="Wrap" />
-              </StackPanel>
-              <controls:BloodGroupTag Grid.Column="2" Text="{Binding DetailBloodGroup}" IsLarge="True" VerticalAlignment="Top" />
-            </Grid>
-          </lists:RecordDetailPane.Header>
-          <lists:RecordDetailPane.RelatedActions>
-            <Button Style="{DynamicResource Button.Primary}" Command="{Binding BookAppointmentCommand}" HorizontalAlignment="Stretch" AutomationProperties.Name="Book appointment">
-              <StackPanel Orientation="Horizontal">
-                <controls:Icon Kind="Calplus" Size="16" VerticalAlignment="Center" />
-                <TextBlock Text="Book appointment" VerticalAlignment="Center" Margin="{DynamicResource Inset.L8}" />
-              </StackPanel>
-            </Button>
-          </lists:RecordDetailPane.RelatedActions>
-          <lists:RecordDetailPane.Body>
-            <!-- The eligibility card: eligible (green), waiting or on hold (amber), not eligible (red, with the reason), not checked (neutral) -->
-            <Border DataContext="{Binding EligibilityCard}" Visibility="{Binding Converter={StaticResource NullToCollapsed}}" BorderThickness="1"
-                    CornerRadius="{DynamicResource Radius.Panel}" Padding="{StaticResource Donors.CardPad}" Margin="{StaticResource Donors.CardGap}" SnapsToDevicePixels="True"
-                    AutomationProperties.Name="{Binding Headline}">
-              <Border.Style>
-                <Style TargetType="Border">
-                  <Setter Property="Background" Value="{DynamicResource Brush.Layer2}" />
-                  <Setter Property="BorderBrush" Value="{DynamicResource Brush.Stroke}" />
-                  <Setter Property="TextElement.Foreground" Value="{DynamicResource Brush.Ink2}" />
-                  <Style.Triggers>
-                    <DataTrigger Binding="{Binding Kind}" Value="Eligible">
-                      <Setter Property="Background" Value="{DynamicResource Brush.SuccessSoft}" />
-                      <Setter Property="BorderBrush" Value="{DynamicResource Brush.SuccessStroke}" />
-                      <Setter Property="TextElement.Foreground" Value="{DynamicResource Brush.Success}" />
-                    </DataTrigger>
-                    <DataTrigger Binding="{Binding Kind}" Value="Waiting">
-                      <Setter Property="Background" Value="{DynamicResource Brush.WarningSoft}" />
+      <!-- Built the first time the panel opens: showing the screen does not build the panel it has not opened yet. -->
+      <controls:DeferredContent x:Name="PanelContent">
+        <DataTemplate>
+          <Grid>
+            <lists:RecordDetailPane x:Name="DetailPane" FactsSource="{Binding PanelFacts}" DeleteText="Delete donor"
+                                    IsCompact="{Binding (controls:Responsive.Breakpoint), RelativeSource={RelativeSource Self}, Converter={StaticResource IsCompact}}" Visibility="{Binding Editor, Converter={StaticResource NullToVisible}}">
+              <lists:RecordDetailPane.Header>
+                <Grid>
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                  </Grid.ColumnDefinitions>
+                  <controls:Avatar Initials="{Binding DetailInitials}" IsBlood="True" Size="52" VerticalAlignment="Center" />
+                  <StackPanel Grid.Column="1" Margin="{StaticResource Donors.HeaderGap}" VerticalAlignment="Center">
+                    <TextBlock Style="{DynamicResource Text.Section}" Text="{Binding DetailTitle}" TextWrapping="Wrap" AutomationProperties.HeadingLevel="Level2" />
+                    <TextBlock Style="{DynamicResource Text.Secondary}" Text="{Binding DetailSubtitle}" TextWrapping="Wrap" />
+                  </StackPanel>
+                  <controls:BloodGroupTag Grid.Column="2" Text="{Binding DetailBloodGroup}" IsLarge="True" VerticalAlignment="Top" />
+                </Grid>
+              </lists:RecordDetailPane.Header>
+              <lists:RecordDetailPane.RelatedActions>
+                <Button Style="{DynamicResource Button.Primary}" Command="{Binding BookAppointmentCommand}" HorizontalAlignment="Stretch" AutomationProperties.Name="Book appointment">
+                  <StackPanel Orientation="Horizontal">
+                    <controls:Icon Kind="Calplus" Size="16" VerticalAlignment="Center" />
+                    <TextBlock Text="Book appointment" VerticalAlignment="Center" Margin="{DynamicResource Inset.L8}" />
+                  </StackPanel>
+                </Button>
+              </lists:RecordDetailPane.RelatedActions>
+              <lists:RecordDetailPane.Body>
+                <!-- The eligibility card: eligible (green), waiting or on hold (amber), not eligible (red, with the reason), not checked (neutral) -->
+                <Border DataContext="{Binding EligibilityCard}" Visibility="{Binding Converter={StaticResource NullToCollapsed}}" BorderThickness="1"
+                        CornerRadius="{DynamicResource Radius.Panel}" Padding="{StaticResource Donors.CardPad}" Margin="{StaticResource Donors.CardGap}" SnapsToDevicePixels="True"
+                        AutomationProperties.Name="{Binding Headline}">
+                  <Border.Style>
+                    <Style TargetType="Border">
+                      <Setter Property="Background" Value="{DynamicResource Brush.Layer2}" />
                       <Setter Property="BorderBrush" Value="{DynamicResource Brush.Stroke}" />
-                      <Setter Property="TextElement.Foreground" Value="{DynamicResource Brush.Warning}" />
-                    </DataTrigger>
-                    <DataTrigger Binding="{Binding Kind}" Value="NotEligible">
-                      <Setter Property="Background" Value="{DynamicResource Brush.CriticalSoft}" />
-                      <Setter Property="BorderBrush" Value="{DynamicResource Brush.CriticalStroke}" />
-                      <Setter Property="TextElement.Foreground" Value="{DynamicResource Brush.Critical}" />
-                    </DataTrigger>
-                  </Style.Triggers>
-                </Style>
-              </Border.Style>
-              <Grid>
-                <Grid.ColumnDefinitions>
-                  <ColumnDefinition Width="Auto" />
-                  <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <controls:Icon Size="20" VerticalAlignment="Top" Margin="{StaticResource Donors.IconGap}">
-                  <controls:Icon.Style>
-                    <Style TargetType="controls:Icon">
-                      <Setter Property="Kind" Value="Info" />
+                      <Setter Property="TextElement.Foreground" Value="{DynamicResource Brush.Ink2}" />
                       <Style.Triggers>
                         <DataTrigger Binding="{Binding Kind}" Value="Eligible">
-                          <Setter Property="Kind" Value="Checkc" />
+                          <Setter Property="Background" Value="{DynamicResource Brush.SuccessSoft}" />
+                          <Setter Property="BorderBrush" Value="{DynamicResource Brush.SuccessStroke}" />
+                          <Setter Property="TextElement.Foreground" Value="{DynamicResource Brush.Success}" />
                         </DataTrigger>
                         <DataTrigger Binding="{Binding Kind}" Value="Waiting">
-                          <Setter Property="Kind" Value="Clock" />
+                          <Setter Property="Background" Value="{DynamicResource Brush.WarningSoft}" />
+                          <Setter Property="BorderBrush" Value="{DynamicResource Brush.Stroke}" />
+                          <Setter Property="TextElement.Foreground" Value="{DynamicResource Brush.Warning}" />
                         </DataTrigger>
                         <DataTrigger Binding="{Binding Kind}" Value="NotEligible">
-                          <Setter Property="Kind" Value="Alert" />
+                          <Setter Property="Background" Value="{DynamicResource Brush.CriticalSoft}" />
+                          <Setter Property="BorderBrush" Value="{DynamicResource Brush.CriticalStroke}" />
+                          <Setter Property="TextElement.Foreground" Value="{DynamicResource Brush.Critical}" />
                         </DataTrigger>
                       </Style.Triggers>
                     </Style>
-                  </controls:Icon.Style>
-                </controls:Icon>
-                <StackPanel Grid.Column="1">
-                  <TextBlock Style="{DynamicResource Text.BodyStrong}" Foreground="{Binding (TextElement.Foreground), RelativeSource={RelativeSource AncestorType=Border}}"
-                             Text="{Binding Headline}" TextWrapping="Wrap" />
-                  <TextBlock Style="{DynamicResource Text.Secondary}" Text="{Binding Message}" TextWrapping="Wrap" Margin="{DynamicResource Inset.T4}" />
+                  </Border.Style>
+                  <Grid>
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="Auto" />
+                      <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <controls:Icon Size="20" VerticalAlignment="Top" Margin="{StaticResource Donors.IconGap}">
+                      <controls:Icon.Style>
+                        <Style TargetType="controls:Icon">
+                          <Setter Property="Kind" Value="Info" />
+                          <Style.Triggers>
+                            <DataTrigger Binding="{Binding Kind}" Value="Eligible">
+                              <Setter Property="Kind" Value="Checkc" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding Kind}" Value="Waiting">
+                              <Setter Property="Kind" Value="Clock" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding Kind}" Value="NotEligible">
+                              <Setter Property="Kind" Value="Alert" />
+                            </DataTrigger>
+                          </Style.Triggers>
+                        </Style>
+                      </controls:Icon.Style>
+                    </controls:Icon>
+                    <StackPanel Grid.Column="1">
+                      <TextBlock Style="{DynamicResource Text.BodyStrong}" Foreground="{Binding (TextElement.Foreground), RelativeSource={RelativeSource AncestorType=Border}}"
+                                 Text="{Binding Headline}" TextWrapping="Wrap" />
+                      <TextBlock Style="{DynamicResource Text.Secondary}" Text="{Binding Message}" TextWrapping="Wrap" Margin="{DynamicResource Inset.T4}" />
+                    </StackPanel>
+                  </Grid>
+                </Border>
+              </lists:RecordDetailPane.Body>
+              <lists:RecordDetailPane.Extra>
+                <!-- The donation history (design system 7.6 step 4): newest first, a dot (filled when issued, ringed while in stock, hollow when unused), the date, the bag at
+                     the right and where it went under it; "Show all" when there are more than four. -->
+                <StackPanel AutomationProperties.AutomationId="History" Margin="{StaticResource Donors.HistoryTop}" Visibility="{Binding HasHistorySection, Converter={StaticResource BoolToVisibility}}"
+                            AutomationProperties.Name="Donation history">
+                  <Grid Margin="{DynamicResource Inset.B12}">
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="*" />
+                      <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Style="{DynamicResource Text.Heading}" Text="Donation history" VerticalAlignment="Center" AutomationProperties.HeadingLevel="Level3" />
+                    <Button AutomationProperties.AutomationId="ShowAllHistory" Grid.Column="1" Style="{DynamicResource Button.Subtle.Small}" Command="{Binding ShowAllHistoryCommand}" Content="{Binding HistoryMoreText}"
+                            controls:ButtonAssist.BusyText="" Visibility="{Binding HistoryMoreText, Converter={StaticResource HasContent}}" />
+                  </Grid>
+                  <ItemsControl AutomationProperties.AutomationId="HistoryList" ItemsSource="{Binding VisibleHistory}" Focusable="False" AutomationProperties.Name="Donations">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate>
+                        <Grid Margin="{StaticResource Donors.HistoryRow}">
+                          <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                          </Grid.ColumnDefinitions>
+                          <Ellipse Width="10" Height="10" VerticalAlignment="Top" Margin="{StaticResource Donors.DotGap}" StrokeThickness="1.5">
+                            <Ellipse.Style>
+                              <Style TargetType="Ellipse">
+                                <Setter Property="Fill" Value="{DynamicResource Brush.Blood}" />
+                                <Setter Property="Stroke" Value="{DynamicResource Brush.Blood}" />
+                                <Style.Triggers>
+                                  <DataTrigger Binding="{Binding Fate}" Value="InStock">
+                                    <Setter Property="Fill" Value="{DynamicResource Brush.BloodSoft}" />
+                                  </DataTrigger>
+                                  <DataTrigger Binding="{Binding Fate}" Value="Unused">
+                                    <Setter Property="Fill" Value="{DynamicResource Brush.Layer}" />
+                                    <Setter Property="Stroke" Value="{DynamicResource Brush.Stroke2}" />
+                                  </DataTrigger>
+                                </Style.Triggers>
+                              </Style>
+                            </Ellipse.Style>
+                          </Ellipse>
+                          <StackPanel Grid.Column="1">
+                            <TextBlock Style="{DynamicResource Text.BodyStrong}" Text="{Binding DateText}" />
+                            <TextBlock Style="{DynamicResource Text.Secondary}" Text="{Binding FateText}" TextWrapping="Wrap" />
+                          </StackPanel>
+                          <TextBlock Grid.Column="2" Style="{DynamicResource Text.Caption}" Text="{Binding CodeText}" VerticalAlignment="Top" Margin="{DynamicResource Inset.L12}"
+                                     Typography.NumeralAlignment="Tabular" />
+                        </Grid>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                  <TextBlock AutomationProperties.AutomationId="HistoryNote" Style="{DynamicResource Text.Caption}" Text="{Binding HistoryNote}" TextWrapping="Wrap"
+                             Visibility="{Binding HistoryNote, Converter={StaticResource HasContent}}" />
                 </StackPanel>
-              </Grid>
-            </Border>
-          </lists:RecordDetailPane.Body>
-          <lists:RecordDetailPane.Extra>
-            <!-- The donation history (design system 7.6 step 4): newest first, a dot (filled when issued, ringed while in stock, hollow when unused), the date, the bag at
-                 the right and where it went under it; "Show all" when there are more than four. -->
-            <StackPanel AutomationProperties.AutomationId="History" Margin="{StaticResource Donors.HistoryTop}" Visibility="{Binding HasHistorySection, Converter={StaticResource BoolToVisibility}}"
-                        AutomationProperties.Name="Donation history">
-              <Grid Margin="{DynamicResource Inset.B12}">
-                <Grid.ColumnDefinitions>
-                  <ColumnDefinition Width="*" />
-                  <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <TextBlock Style="{DynamicResource Text.Heading}" Text="Donation history" VerticalAlignment="Center" AutomationProperties.HeadingLevel="Level3" />
-                <Button AutomationProperties.AutomationId="ShowAllHistory" Grid.Column="1" Style="{DynamicResource Button.Subtle.Small}" Command="{Binding ShowAllHistoryCommand}" Content="{Binding HistoryMoreText}"
-                        controls:ButtonAssist.BusyText="" Visibility="{Binding HistoryMoreText, Converter={StaticResource HasContent}}" />
-              </Grid>
-              <ItemsControl AutomationProperties.AutomationId="HistoryList" ItemsSource="{Binding VisibleHistory}" Focusable="False" AutomationProperties.Name="Donations">
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate>
-                    <Grid Margin="{StaticResource Donors.HistoryRow}">
-                      <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                      </Grid.ColumnDefinitions>
-                      <Ellipse Width="10" Height="10" VerticalAlignment="Top" Margin="{StaticResource Donors.DotGap}" StrokeThickness="1.5">
-                        <Ellipse.Style>
-                          <Style TargetType="Ellipse">
-                            <Setter Property="Fill" Value="{DynamicResource Brush.Blood}" />
-                            <Setter Property="Stroke" Value="{DynamicResource Brush.Blood}" />
-                            <Style.Triggers>
-                              <DataTrigger Binding="{Binding Fate}" Value="InStock">
-                                <Setter Property="Fill" Value="{DynamicResource Brush.BloodSoft}" />
-                              </DataTrigger>
-                              <DataTrigger Binding="{Binding Fate}" Value="Unused">
-                                <Setter Property="Fill" Value="{DynamicResource Brush.Layer}" />
-                                <Setter Property="Stroke" Value="{DynamicResource Brush.Stroke2}" />
-                              </DataTrigger>
-                            </Style.Triggers>
-                          </Style>
-                        </Ellipse.Style>
-                      </Ellipse>
-                      <StackPanel Grid.Column="1">
-                        <TextBlock Style="{DynamicResource Text.BodyStrong}" Text="{Binding DateText}" />
-                        <TextBlock Style="{DynamicResource Text.Secondary}" Text="{Binding FateText}" TextWrapping="Wrap" />
-                      </StackPanel>
-                      <TextBlock Grid.Column="2" Style="{DynamicResource Text.Caption}" Text="{Binding CodeText}" VerticalAlignment="Top" Margin="{DynamicResource Inset.L12}"
-                                 Typography.NumeralAlignment="Tabular" />
-                    </Grid>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
-              <TextBlock AutomationProperties.AutomationId="HistoryNote" Style="{DynamicResource Text.Caption}" Text="{Binding HistoryNote}" TextWrapping="Wrap"
-                         Visibility="{Binding HistoryNote, Converter={StaticResource HasContent}}" />
-            </StackPanel>
-          </lists:RecordDetailPane.Extra>
-        </lists:RecordDetailPane>
-        <ContentControl x:Name="EditorHost" Content="{Binding Editor}" ContentTemplateSelector="{x:Static services:ViewLocator.Instance}" IsTabStop="False" Focusable="False"
-                        HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" Visibility="{Binding Editor, Converter={StaticResource NullToCollapsed}}" />
-      </Grid>
+              </lists:RecordDetailPane.Extra>
+            </lists:RecordDetailPane>
+            <ContentControl x:Name="EditorHost" Content="{Binding Editor}" ContentTemplateSelector="{x:Static services:ViewLocator.Instance}" IsTabStop="False" Focusable="False"
+                            HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" Visibility="{Binding Editor, Converter={StaticResource NullToCollapsed}}" />
+          </Grid>
+        </DataTemplate>
+      </controls:DeferredContent>
     </controls:SidePanel>
   </Grid>
 </UserControl>

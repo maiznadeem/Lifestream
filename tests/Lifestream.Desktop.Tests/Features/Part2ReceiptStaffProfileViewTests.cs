@@ -57,7 +57,9 @@ public sealed class Part2ReceiptStaffProfileViewTests
     /// <summary>The panel's "Delete staff member" item of its "..." menu, bound to the screen's model before the menu opens (it is not opened here).</summary>
     private static MenuItem DeleteItem(StaffView view)
     {
-        var item = (MenuItem)view.FindName("DeleteItem");
+        // The menu is in the side panel's content, which is built when the panel first opens (a name scope of its own).
+        var panel = (Lifestream.Desktop.Controls.DeferredContent)view.FindName("PanelContent");
+        var item = (MenuItem)((FrameworkElement)panel.Child).FindName("DeleteItem");
         Assert.Equal("Delete staff member", item.Header);
         return item;
     }

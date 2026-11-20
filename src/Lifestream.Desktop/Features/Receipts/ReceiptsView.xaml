@@ -180,94 +180,99 @@
     <!-- The selected receipt. -->
     <controls:SidePanel x:Name="Panel" Grid.Column="1" IsOpen="{Binding IsPanelOpen}" Overline="{Binding PanelOverline}" CloseCommand="{Binding ClosePanelCommand}"
                         lists:PanelBleed.IsEnabled="True" AutomationProperties.Name="Receipt details">
-      <Grid>
-        <controls:Skeleton Kind="Detail" Visibility="{Binding ShowDetailSkeleton, Converter={StaticResource BoolToVisibility}}" />
-        <controls:ErrorState Message="{Binding DetailError}" RetryCommand="{Binding RetryDetailCommand}" Visibility="{Binding HasDetailError, Converter={StaticResource BoolToVisibility}}" />
-        <ScrollViewer x:Name="PanelBody" Style="{DynamicResource ScrollViewer.Panel}" VerticalScrollBarVisibility="Auto" Focusable="False" Visibility="{Binding HasDetail, Converter={StaticResource BoolToVisibility}}">
-          <StackPanel feat:Edge.Bottom="{DynamicResource Space.24}">
-            <Grid>
-              <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-              </Grid.ColumnDefinitions>
-              <StackPanel>
-                <TextBlock x:Name="PanelParty" Style="{DynamicResource Text.Section}" Text="{Binding DetailPartyName}" TextWrapping="Wrap" AutomationProperties.HeadingLevel="Level2" />
-                <TextBlock x:Name="PanelSubtitle" Style="{DynamicResource Text.Secondary}" Text="{Binding DetailSubtitle}" TextWrapping="Wrap" feat:Edge.Top="{DynamicResource Space.4}" />
+      <!-- Built the first time the panel opens: showing the screen does not build the panel it has not opened yet. -->
+      <controls:DeferredContent x:Name="PanelContent">
+        <DataTemplate>
+          <Grid>
+            <controls:Skeleton Kind="Detail" Visibility="{Binding ShowDetailSkeleton, Converter={StaticResource BoolToVisibility}}" />
+            <controls:ErrorState Message="{Binding DetailError}" RetryCommand="{Binding RetryDetailCommand}" Visibility="{Binding HasDetailError, Converter={StaticResource BoolToVisibility}}" />
+            <ScrollViewer x:Name="PanelBody" Style="{DynamicResource ScrollViewer.Panel}" VerticalScrollBarVisibility="Auto" Focusable="False" Visibility="{Binding HasDetail, Converter={StaticResource BoolToVisibility}}">
+              <StackPanel feat:Edge.Bottom="{DynamicResource Space.24}">
+                <Grid>
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                  </Grid.ColumnDefinitions>
+                  <StackPanel>
+                    <TextBlock x:Name="PanelParty" Style="{DynamicResource Text.Section}" Text="{Binding DetailPartyName}" TextWrapping="Wrap" AutomationProperties.HeadingLevel="Level2" />
+                    <TextBlock x:Name="PanelSubtitle" Style="{DynamicResource Text.Secondary}" Text="{Binding DetailSubtitle}" TextWrapping="Wrap" feat:Edge.Top="{DynamicResource Space.4}" />
+                  </StackPanel>
+                  <controls:BloodGroupTag Grid.Column="1" Text="{Binding DetailGroupText}" IsLarge="True" VerticalAlignment="Top" feat:Edge.Left="{DynamicResource Space.12}" />
+                </Grid>
+
+                <TextBlock x:Name="PanelIssuedBy" Style="{DynamicResource Text.Secondary}" TextWrapping="Wrap" feat:Edge.Top="{DynamicResource Space.4}">
+                  <Run Text="Issued by " /><Run Text="{Binding DetailIssuedBy, Mode=OneWay}" />
+                </TextBlock>
+
+                <!-- Actions: Print (the one primary on the screen), the record it was issued for, and a "..." menu with the rarer actions. -->
+                <!-- As on every list screen: the one filled primary fills the row, then the secondary, then "...". -->
+                <Grid x:Name="ActionsRow" feat:Edge.Top="{DynamicResource Space.16}">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                  </Grid.ColumnDefinitions>
+                  <Button x:Name="PrintButton" Style="{DynamicResource Button.Primary}" Command="{Binding PrintCommand}" feat:Edge.Right="{DynamicResource Space.8}" AutomationProperties.Name="Print a copy"
+                          ToolTip="Print a copy of this receipt" controls:ButtonAssist.IsBusy="{Binding PrintCommand.IsRunning}" controls:ButtonAssist.BusyText="Printing">
+                    <StackPanel Orientation="Horizontal">
+                      <controls:Icon Kind="Print" Size="16" VerticalAlignment="Center" feat:Edge.Right="{DynamicResource Space.8}" />
+                      <TextBlock Text="Print" VerticalAlignment="Center" />
+                    </StackPanel>
+                  </Button>
+                  <Button x:Name="SourceButton" Grid.Column="1" Style="{DynamicResource Button.Secondary}" Command="{Binding OpenSourceCommand}"
+                          AutomationProperties.Name="{Binding SourceActionText}">
+                    <StackPanel Orientation="Horizontal">
+                      <TextBlock Text="{Binding SourceActionText}" VerticalAlignment="Center" />
+                      <controls:Icon Kind="Arrowright" Size="16" VerticalAlignment="Center" feat:Edge.Left="{DynamicResource Space.8}">
+                        <controls:Icon.Style>
+                          <Style TargetType="controls:Icon">
+                            <Style.Triggers>
+                              <!-- A compact window's panel is 352 wide: the arrow goes, so Print keeps its whole label. -->
+                              <DataTrigger Binding="{Binding (controls:Responsive.Breakpoint), RelativeSource={RelativeSource Self}}" Value="{x:Static controls:Breakpoint.Compact}">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                              </DataTrigger>
+                            </Style.Triggers>
+                          </Style>
+                        </controls:Icon.Style>
+                      </controls:Icon>
+                    </StackPanel>
+                  </Button>
+                  <lists:MenuButton x:Name="MoreButton" Grid.Column="2" Style="{DynamicResource Button.Icon}" feat:Edge.Left="{DynamicResource Space.8}" AutomationProperties.Name="More actions" ToolTip="More actions">
+                    <controls:Icon Kind="More" Size="18" />
+                    <lists:MenuButton.ContextMenu>
+                      <ContextMenu>
+                        <MenuItem x:Name="OpenItem" Header="Open receipt" Command="{Binding OpenReceiptCommand}">
+                          <MenuItem.Icon>
+                            <controls:Icon Kind="Receipt" Size="16" />
+                          </MenuItem.Icon>
+                        </MenuItem>
+                        <MenuItem x:Name="PdfItem" Header="Save as PDF" Command="{Binding SavePdfCommand}">
+                          <MenuItem.Icon>
+                            <controls:Icon Kind="Print" Size="16" />
+                          </MenuItem.Icon>
+                        </MenuItem>
+                      </ContextMenu>
+                    </lists:MenuButton.ContextMenu>
+                  </lists:MenuButton>
+                </Grid>
+
+                <!-- The receipt as it prints: the same document the printer gets, on white paper in either theme, scaled to the panel. -->
+                <Grid feat:Edge.Top="{DynamicResource Space.16}" feat:Edge.Bottom="{DynamicResource Space.8}">
+                  <TextBlock Style="{DynamicResource Text.Heading}" Text="Receipt" AutomationProperties.HeadingLevel="Level3" />
+                  <TextBlock Style="{DynamicResource Text.Caption}" Text="Reprints are marked as copies" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                </Grid>
+                <controls:ElevatedSurface x:Name="Paper" Level="Flyout" CornerRadius="{DynamicResource Radius.Small}">
+                  <controls:CrispBorder BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="1" CornerRadius="{DynamicResource Radius.Small}" ClipToBounds="True">
+                    <Viewbox Stretch="Uniform" StretchDirection="DownOnly">
+                      <receipts:ReceiptPrintView x:Name="Preview" Width="560" Receipt="{Binding Preview}" IsHitTestVisible="False" />
+                    </Viewbox>
+                  </controls:CrispBorder>
+                </controls:ElevatedSurface>
               </StackPanel>
-              <controls:BloodGroupTag Grid.Column="1" Text="{Binding DetailGroupText}" IsLarge="True" VerticalAlignment="Top" feat:Edge.Left="{DynamicResource Space.12}" />
-            </Grid>
-
-            <TextBlock x:Name="PanelIssuedBy" Style="{DynamicResource Text.Secondary}" TextWrapping="Wrap" feat:Edge.Top="{DynamicResource Space.4}">
-              <Run Text="Issued by " /><Run Text="{Binding DetailIssuedBy, Mode=OneWay}" />
-            </TextBlock>
-
-            <!-- Actions: Print (the one primary on the screen), the record it was issued for, and a "..." menu with the rarer actions. -->
-            <!-- As on every list screen: the one filled primary fills the row, then the secondary, then "...". -->
-            <Grid x:Name="ActionsRow" feat:Edge.Top="{DynamicResource Space.16}">
-              <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
-              </Grid.ColumnDefinitions>
-              <Button x:Name="PrintButton" Style="{DynamicResource Button.Primary}" Command="{Binding PrintCommand}" feat:Edge.Right="{DynamicResource Space.8}" AutomationProperties.Name="Print a copy"
-                      ToolTip="Print a copy of this receipt" controls:ButtonAssist.IsBusy="{Binding PrintCommand.IsRunning}" controls:ButtonAssist.BusyText="Printing">
-                <StackPanel Orientation="Horizontal">
-                  <controls:Icon Kind="Print" Size="16" VerticalAlignment="Center" feat:Edge.Right="{DynamicResource Space.8}" />
-                  <TextBlock Text="Print" VerticalAlignment="Center" />
-                </StackPanel>
-              </Button>
-              <Button x:Name="SourceButton" Grid.Column="1" Style="{DynamicResource Button.Secondary}" Command="{Binding OpenSourceCommand}"
-                      AutomationProperties.Name="{Binding SourceActionText}">
-                <StackPanel Orientation="Horizontal">
-                  <TextBlock Text="{Binding SourceActionText}" VerticalAlignment="Center" />
-                  <controls:Icon Kind="Arrowright" Size="16" VerticalAlignment="Center" feat:Edge.Left="{DynamicResource Space.8}">
-                    <controls:Icon.Style>
-                      <Style TargetType="controls:Icon">
-                        <Style.Triggers>
-                          <!-- A compact window's panel is 352 wide: the arrow goes, so Print keeps its whole label. -->
-                          <DataTrigger Binding="{Binding (controls:Responsive.Breakpoint), RelativeSource={RelativeSource Self}}" Value="{x:Static controls:Breakpoint.Compact}">
-                            <Setter Property="Visibility" Value="Collapsed" />
-                          </DataTrigger>
-                        </Style.Triggers>
-                      </Style>
-                    </controls:Icon.Style>
-                  </controls:Icon>
-                </StackPanel>
-              </Button>
-              <lists:MenuButton x:Name="MoreButton" Grid.Column="2" Style="{DynamicResource Button.Icon}" feat:Edge.Left="{DynamicResource Space.8}" AutomationProperties.Name="More actions" ToolTip="More actions">
-                <controls:Icon Kind="More" Size="18" />
-                <lists:MenuButton.ContextMenu>
-                  <ContextMenu>
-                    <MenuItem x:Name="OpenItem" Header="Open receipt" Command="{Binding OpenReceiptCommand}">
-                      <MenuItem.Icon>
-                        <controls:Icon Kind="Receipt" Size="16" />
-                      </MenuItem.Icon>
-                    </MenuItem>
-                    <MenuItem x:Name="PdfItem" Header="Save as PDF" Command="{Binding SavePdfCommand}">
-                      <MenuItem.Icon>
-                        <controls:Icon Kind="Print" Size="16" />
-                      </MenuItem.Icon>
-                    </MenuItem>
-                  </ContextMenu>
-                </lists:MenuButton.ContextMenu>
-              </lists:MenuButton>
-            </Grid>
-
-            <!-- The receipt as it prints: the same document the printer gets, on white paper in either theme, scaled to the panel. -->
-            <Grid feat:Edge.Top="{DynamicResource Space.16}" feat:Edge.Bottom="{DynamicResource Space.8}">
-              <TextBlock Style="{DynamicResource Text.Heading}" Text="Receipt" AutomationProperties.HeadingLevel="Level3" />
-              <TextBlock Style="{DynamicResource Text.Caption}" Text="Reprints are marked as copies" HorizontalAlignment="Right" VerticalAlignment="Center" />
-            </Grid>
-            <controls:ElevatedSurface x:Name="Paper" Level="Flyout" CornerRadius="{DynamicResource Radius.Small}">
-              <controls:CrispBorder BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="1" CornerRadius="{DynamicResource Radius.Small}" ClipToBounds="True">
-                <Viewbox Stretch="Uniform" StretchDirection="DownOnly">
-                  <receipts:ReceiptPrintView x:Name="Preview" Width="560" Receipt="{Binding Preview}" IsHitTestVisible="False" />
-                </Viewbox>
-              </controls:CrispBorder>
-            </controls:ElevatedSurface>
-          </StackPanel>
-        </ScrollViewer>
-      </Grid>
+            </ScrollViewer>
+          </Grid>
+        </DataTemplate>
+      </controls:DeferredContent>
     </controls:SidePanel>
   </Grid>
 </UserControl>

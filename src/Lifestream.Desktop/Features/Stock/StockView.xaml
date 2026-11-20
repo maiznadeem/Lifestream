@@ -276,119 +276,124 @@
     <!-- The selected group's panel. -->
     <controls:SidePanel x:Name="Panel" Grid.Column="1" IsOpen="{Binding IsPanelOpen}" Overline="{Binding PanelOverline}" CloseCommand="{Binding ClosePanelCommand}"
                         lists:PanelBleed.IsEnabled="True" AutomationProperties.Name="Blood group details">
-      <ScrollViewer Style="{DynamicResource ScrollViewer.Panel}" VerticalScrollBarVisibility="Auto" Focusable="False">
-        <StackPanel x:Name="PanelBody" feat:Edge.Bottom="{DynamicResource Space.24}">
-          <Grid DataContext="{Binding SelectedTile}">
-            <Grid.ColumnDefinitions>
-              <ColumnDefinition Width="*" />
-              <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-            <StackPanel>
-              <TextBlock x:Name="PanelUnits" Style="{DynamicResource Text.Section}" AutomationProperties.HeadingLevel="Level2" TextWrapping="Wrap">
-                <Run Text="{Binding UnitsText, Mode=OneWay}" /><Run Text=" in stock" />
-              </TextBlock>
-              <TextBlock x:Name="PanelMinimum" Style="{DynamicResource Text.Secondary}" Text="{Binding MinimumSentence}" TextWrapping="Wrap" feat:Edge.Top="{DynamicResource Space.4}" />
+      <!-- Built the first time the panel opens: showing the screen does not build the panel it has not opened yet. -->
+      <controls:DeferredContent x:Name="PanelContent">
+        <DataTemplate>
+          <ScrollViewer Style="{DynamicResource ScrollViewer.Panel}" VerticalScrollBarVisibility="Auto" Focusable="False">
+            <StackPanel x:Name="PanelBody" feat:Edge.Bottom="{DynamicResource Space.24}">
+              <Grid DataContext="{Binding SelectedTile}">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="*" />
+                  <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                  <TextBlock x:Name="PanelUnits" Style="{DynamicResource Text.Section}" AutomationProperties.HeadingLevel="Level2" TextWrapping="Wrap">
+                    <Run Text="{Binding UnitsText, Mode=OneWay}" /><Run Text=" in stock" />
+                  </TextBlock>
+                  <TextBlock x:Name="PanelMinimum" Style="{DynamicResource Text.Secondary}" Text="{Binding MinimumSentence}" TextWrapping="Wrap" feat:Edge.Top="{DynamicResource Space.4}" />
+                </StackPanel>
+                <controls:BloodGroupTag Grid.Column="1" Text="{Binding GroupText}" IsLarge="True" VerticalAlignment="Top" feat:Edge.Left="{DynamicResource Space.12}" />
+              </Grid>
+
+              <!-- Actions, as on every list screen: the one filled primary fills the row (the page header's Refresh is secondary), then the group's requests.
+                   A blood group has nothing to edit or delete, so there is no "..." menu. -->
+              <Grid x:Name="ActionsRow" feat:Edge.Top="{DynamicResource Space.16}" feat:Edge.Bottom="{DynamicResource Space.8}" Visibility="{Binding CanNavigate, Converter={StaticResource BoolToVisibility}}">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="*" />
+                  <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <Button x:Name="FindDonorsButton" Style="{DynamicResource Button.Primary}" Command="{Binding FindDonorsCommand}" feat:Edge.Right="{DynamicResource Space.8}"
+                        AutomationProperties.Name="Find donors of this group">
+                  <StackPanel Orientation="Horizontal">
+                    <controls:Icon Kind="Donor" Size="16" VerticalAlignment="Center" feat:Edge.Right="{DynamicResource Space.8}" />
+                    <TextBlock VerticalAlignment="Center"><Run Text="Find " /><Run Text="{Binding SelectedTile.GroupText, Mode=OneWay}" /><Run Text=" donors" /></TextBlock>
+                  </StackPanel>
+                </Button>
+                <Button Grid.Column="1" Style="{DynamicResource Button.Secondary}" Command="{Binding OpenRequestsCommand}" AutomationProperties.Name="Open requests for this group">
+                  <StackPanel Orientation="Horizontal">
+                    <controls:Icon Kind="Request" Size="16" VerticalAlignment="Center" feat:Edge.Right="{DynamicResource Space.8}" />
+                    <TextBlock Text="Requests" VerticalAlignment="Center" />
+                  </StackPanel>
+                </Button>
+              </Grid>
+
+              <!-- Shelf life and compatibility: label and value, as in every A panel. -->
+              <TextBlock Style="{DynamicResource Text.Heading}" Text="Details" feat:Edge.Top="{DynamicResource Space.16}" feat:Edge.Bottom="{DynamicResource Space.8}" AutomationProperties.HeadingLevel="Level3" />
+              <Grid x:Name="Facts" DataContext="{Binding SelectedTile}">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="148" />
+                  <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                  <RowDefinition Height="Auto" />
+                  <RowDefinition Height="Auto" />
+                  <RowDefinition Height="Auto" />
+                  <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <TextBlock Style="{DynamicResource Text.Secondary}" TextWrapping="Wrap" Text="More than 7 days left" feat:Edge.Bottom="{DynamicResource Space.8}" />
+                <TextBlock x:Name="PanelFresh" Grid.Column="1" Style="{DynamicResource Text.Body}" Text="{Binding FreshText}" feat:Edge.Bottom="{DynamicResource Space.8}" />
+                <TextBlock Grid.Row="1" Style="{DynamicResource Text.Secondary}" TextWrapping="Wrap" Text="Expires within 7 days" feat:Edge.Bottom="{DynamicResource Space.8}" />
+                <TextBlock x:Name="PanelExpiring" Grid.Row="1" Grid.Column="1" Style="{DynamicResource Text.Body}" Text="{Binding ExpiringNumber}" feat:Edge.Bottom="{DynamicResource Space.8}" />
+                <TextBlock Grid.Row="2" Style="{DynamicResource Text.Secondary}" TextWrapping="Wrap" Text="Can be given to" feat:Edge.Bottom="{DynamicResource Space.8}" />
+                <TextBlock x:Name="GivesTo" Grid.Row="2" Grid.Column="1" Style="{DynamicResource Text.Body}" Text="{Binding GivesToText}" TextWrapping="Wrap" feat:Edge.Bottom="{DynamicResource Space.8}" />
+                <TextBlock Grid.Row="3" Style="{DynamicResource Text.Secondary}" TextWrapping="Wrap" Text="Can receive" />
+                <TextBlock x:Name="ReceivesFrom" Grid.Row="3" Grid.Column="1" Style="{DynamicResource Text.Body}" Text="{Binding ReceivesFromText}" TextWrapping="Wrap" />
+              </Grid>
+
+              <!-- The bags, in the order to use them: oldest collection first (the order a fulfil issues them in). -->
+              <Grid feat:Edge.Top="{DynamicResource Space.24}" feat:Edge.Bottom="{DynamicResource Space.8}">
+                <TextBlock Style="{DynamicResource Text.Heading}" Text="Bags" AutomationProperties.HeadingLevel="Level3" />
+                <TextBlock Style="{DynamicResource Text.Caption}" Text="Use from the top" HorizontalAlignment="Right" VerticalAlignment="Center" />
+              </Grid>
+              <controls:Skeleton Kind="Detail" Visibility="{Binding ShowBagsSkeleton, Converter={StaticResource BoolToVisibility}}" />
+              <StackPanel Visibility="{Binding HasBagsError, Converter={StaticResource BoolToVisibility}}" AutomationProperties.LiveSetting="Assertive">
+                <TextBlock Style="{DynamicResource Text.Body}" Text="{Binding BagsErrorText}" TextWrapping="Wrap" />
+                <Button Style="{DynamicResource Button.Secondary.Small}" Content="Retry" Command="{Binding RetryBagsCommand}" HorizontalAlignment="Left" feat:Edge.Top="{DynamicResource Space.8}"
+                        AutomationProperties.Name="Retry loading the bags" />
+              </StackPanel>
+              <TextBlock Style="{DynamicResource Text.Secondary}" Text="No bags of this group are in stock." TextWrapping="Wrap" Visibility="{Binding HasNoBags, Converter={StaticResource BoolToVisibility}}" />
+              <controls:CrispBorder x:Name="BagList" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="1" CornerRadius="{DynamicResource Radius.Panel}"
+                                    Visibility="{Binding HasBags, Converter={StaticResource BoolToVisibility}}">
+                <ItemsControl ItemsSource="{Binding Bags}" Focusable="False" AutomationProperties.Name="Bags in use-first order">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="{x:Type stock:StockBagRow}">
+                      <Border x:Name="Row" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="0,0,0,1" Padding="{DynamicResource Inset.H12V8}" AutomationProperties.Name="{Binding AutomationName}">
+                        <Grid>
+                          <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                          </Grid.ColumnDefinitions>
+                          <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                          </Grid.RowDefinitions>
+                          <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{DynamicResource Text.Body}" FontWeight="Medium" Text="{Binding Code}" VerticalAlignment="Center" />
+                            <controls:Badge x:Name="First" Text="Use first" Kind="Info" Icon="Arrowright" feat:Edge.Left="{DynamicResource Space.8}" VerticalAlignment="Center" Visibility="Collapsed" />
+                          </StackPanel>
+                          <controls:Badge x:Name="Left" Grid.Column="1" Text="{Binding DaysLeftText}" Kind="Neutral" Icon="Clock" VerticalAlignment="Center" feat:Edge.Left="{DynamicResource Space.8}" />
+                          <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Style="{DynamicResource Text.Caption}" TextWrapping="Wrap" feat:Edge.Top="{DynamicResource Space.4}">
+                            <Run Text="Collected " /><Run Text="{Binding CollectedText, Mode=OneWay}" /><Run Text=", expires " /><Run Text="{Binding ExpiresText, Mode=OneWay}" />
+                          </TextBlock>
+                        </Grid>
+                      </Border>
+                      <DataTemplate.Triggers>
+                        <DataTrigger Binding="{Binding IsFirst}" Value="True">
+                          <Setter TargetName="First" Property="Visibility" Value="Visible" />
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding IsExpiring}" Value="True">
+                          <Setter TargetName="Left" Property="Kind" Value="Warning" />
+                        </DataTrigger>
+                      </DataTemplate.Triggers>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </controls:CrispBorder>
+              <TextBlock Style="{DynamicResource Text.Caption}" Text="{Binding BagsMoreText}" TextWrapping="Wrap" feat:Edge.Top="{DynamicResource Space.8}" />
             </StackPanel>
-            <controls:BloodGroupTag Grid.Column="1" Text="{Binding GroupText}" IsLarge="True" VerticalAlignment="Top" feat:Edge.Left="{DynamicResource Space.12}" />
-          </Grid>
-
-          <!-- Actions, as on every list screen: the one filled primary fills the row (the page header's Refresh is secondary), then the group's requests.
-               A blood group has nothing to edit or delete, so there is no "..." menu. -->
-          <Grid x:Name="ActionsRow" feat:Edge.Top="{DynamicResource Space.16}" feat:Edge.Bottom="{DynamicResource Space.8}" Visibility="{Binding CanNavigate, Converter={StaticResource BoolToVisibility}}">
-            <Grid.ColumnDefinitions>
-              <ColumnDefinition Width="*" />
-              <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-            <Button x:Name="FindDonorsButton" Style="{DynamicResource Button.Primary}" Command="{Binding FindDonorsCommand}" feat:Edge.Right="{DynamicResource Space.8}"
-                    AutomationProperties.Name="Find donors of this group">
-              <StackPanel Orientation="Horizontal">
-                <controls:Icon Kind="Donor" Size="16" VerticalAlignment="Center" feat:Edge.Right="{DynamicResource Space.8}" />
-                <TextBlock VerticalAlignment="Center"><Run Text="Find " /><Run Text="{Binding SelectedTile.GroupText, Mode=OneWay}" /><Run Text=" donors" /></TextBlock>
-              </StackPanel>
-            </Button>
-            <Button Grid.Column="1" Style="{DynamicResource Button.Secondary}" Command="{Binding OpenRequestsCommand}" AutomationProperties.Name="Open requests for this group">
-              <StackPanel Orientation="Horizontal">
-                <controls:Icon Kind="Request" Size="16" VerticalAlignment="Center" feat:Edge.Right="{DynamicResource Space.8}" />
-                <TextBlock Text="Requests" VerticalAlignment="Center" />
-              </StackPanel>
-            </Button>
-          </Grid>
-
-          <!-- Shelf life and compatibility: label and value, as in every A panel. -->
-          <TextBlock Style="{DynamicResource Text.Heading}" Text="Details" feat:Edge.Top="{DynamicResource Space.16}" feat:Edge.Bottom="{DynamicResource Space.8}" AutomationProperties.HeadingLevel="Level3" />
-          <Grid x:Name="Facts" DataContext="{Binding SelectedTile}">
-            <Grid.ColumnDefinitions>
-              <ColumnDefinition Width="148" />
-              <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
-            <Grid.RowDefinitions>
-              <RowDefinition Height="Auto" />
-              <RowDefinition Height="Auto" />
-              <RowDefinition Height="Auto" />
-              <RowDefinition Height="Auto" />
-            </Grid.RowDefinitions>
-            <TextBlock Style="{DynamicResource Text.Secondary}" TextWrapping="Wrap" Text="More than 7 days left" feat:Edge.Bottom="{DynamicResource Space.8}" />
-            <TextBlock x:Name="PanelFresh" Grid.Column="1" Style="{DynamicResource Text.Body}" Text="{Binding FreshText}" feat:Edge.Bottom="{DynamicResource Space.8}" />
-            <TextBlock Grid.Row="1" Style="{DynamicResource Text.Secondary}" TextWrapping="Wrap" Text="Expires within 7 days" feat:Edge.Bottom="{DynamicResource Space.8}" />
-            <TextBlock x:Name="PanelExpiring" Grid.Row="1" Grid.Column="1" Style="{DynamicResource Text.Body}" Text="{Binding ExpiringNumber}" feat:Edge.Bottom="{DynamicResource Space.8}" />
-            <TextBlock Grid.Row="2" Style="{DynamicResource Text.Secondary}" TextWrapping="Wrap" Text="Can be given to" feat:Edge.Bottom="{DynamicResource Space.8}" />
-            <TextBlock x:Name="GivesTo" Grid.Row="2" Grid.Column="1" Style="{DynamicResource Text.Body}" Text="{Binding GivesToText}" TextWrapping="Wrap" feat:Edge.Bottom="{DynamicResource Space.8}" />
-            <TextBlock Grid.Row="3" Style="{DynamicResource Text.Secondary}" TextWrapping="Wrap" Text="Can receive" />
-            <TextBlock x:Name="ReceivesFrom" Grid.Row="3" Grid.Column="1" Style="{DynamicResource Text.Body}" Text="{Binding ReceivesFromText}" TextWrapping="Wrap" />
-          </Grid>
-
-          <!-- The bags, in the order to use them: oldest collection first (the order a fulfil issues them in). -->
-          <Grid feat:Edge.Top="{DynamicResource Space.24}" feat:Edge.Bottom="{DynamicResource Space.8}">
-            <TextBlock Style="{DynamicResource Text.Heading}" Text="Bags" AutomationProperties.HeadingLevel="Level3" />
-            <TextBlock Style="{DynamicResource Text.Caption}" Text="Use from the top" HorizontalAlignment="Right" VerticalAlignment="Center" />
-          </Grid>
-          <controls:Skeleton Kind="Detail" Visibility="{Binding ShowBagsSkeleton, Converter={StaticResource BoolToVisibility}}" />
-          <StackPanel Visibility="{Binding HasBagsError, Converter={StaticResource BoolToVisibility}}" AutomationProperties.LiveSetting="Assertive">
-            <TextBlock Style="{DynamicResource Text.Body}" Text="{Binding BagsErrorText}" TextWrapping="Wrap" />
-            <Button Style="{DynamicResource Button.Secondary.Small}" Content="Retry" Command="{Binding RetryBagsCommand}" HorizontalAlignment="Left" feat:Edge.Top="{DynamicResource Space.8}"
-                    AutomationProperties.Name="Retry loading the bags" />
-          </StackPanel>
-          <TextBlock Style="{DynamicResource Text.Secondary}" Text="No bags of this group are in stock." TextWrapping="Wrap" Visibility="{Binding HasNoBags, Converter={StaticResource BoolToVisibility}}" />
-          <controls:CrispBorder x:Name="BagList" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="1" CornerRadius="{DynamicResource Radius.Panel}"
-                                Visibility="{Binding HasBags, Converter={StaticResource BoolToVisibility}}">
-            <ItemsControl ItemsSource="{Binding Bags}" Focusable="False" AutomationProperties.Name="Bags in use-first order">
-              <ItemsControl.ItemTemplate>
-                <DataTemplate DataType="{x:Type stock:StockBagRow}">
-                  <Border x:Name="Row" BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="0,0,0,1" Padding="{DynamicResource Inset.H12V8}" AutomationProperties.Name="{Binding AutomationName}">
-                    <Grid>
-                      <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                      </Grid.ColumnDefinitions>
-                      <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                      </Grid.RowDefinitions>
-                      <StackPanel Orientation="Horizontal">
-                        <TextBlock Style="{DynamicResource Text.Body}" FontWeight="Medium" Text="{Binding Code}" VerticalAlignment="Center" />
-                        <controls:Badge x:Name="First" Text="Use first" Kind="Info" Icon="Arrowright" feat:Edge.Left="{DynamicResource Space.8}" VerticalAlignment="Center" Visibility="Collapsed" />
-                      </StackPanel>
-                      <controls:Badge x:Name="Left" Grid.Column="1" Text="{Binding DaysLeftText}" Kind="Neutral" Icon="Clock" VerticalAlignment="Center" feat:Edge.Left="{DynamicResource Space.8}" />
-                      <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Style="{DynamicResource Text.Caption}" TextWrapping="Wrap" feat:Edge.Top="{DynamicResource Space.4}">
-                        <Run Text="Collected " /><Run Text="{Binding CollectedText, Mode=OneWay}" /><Run Text=", expires " /><Run Text="{Binding ExpiresText, Mode=OneWay}" />
-                      </TextBlock>
-                    </Grid>
-                  </Border>
-                  <DataTemplate.Triggers>
-                    <DataTrigger Binding="{Binding IsFirst}" Value="True">
-                      <Setter TargetName="First" Property="Visibility" Value="Visible" />
-                    </DataTrigger>
-                    <DataTrigger Binding="{Binding IsExpiring}" Value="True">
-                      <Setter TargetName="Left" Property="Kind" Value="Warning" />
-                    </DataTrigger>
-                  </DataTemplate.Triggers>
-                </DataTemplate>
-              </ItemsControl.ItemTemplate>
-            </ItemsControl>
-          </controls:CrispBorder>
-          <TextBlock Style="{DynamicResource Text.Caption}" Text="{Binding BagsMoreText}" TextWrapping="Wrap" feat:Edge.Top="{DynamicResource Space.8}" />
-        </StackPanel>
-      </ScrollViewer>
+          </ScrollViewer>
+        </DataTemplate>
+      </controls:DeferredContent>
     </controls:SidePanel>
   </Grid>
 </UserControl>
