@@ -102,7 +102,7 @@
           </Border>
         </controls:PageHeader.Tabs>
       </controls:PageHeader>
-      <lists:ListToolbar x:Name="Toolbar" Grid.Row="1" Margin="{StaticResource Reqs.ToolbarGap}" SearchPlaceholder="Search patient or request ID" SearchWidth="300">
+      <lists:ListToolbar x:Name="Toolbar" Grid.Row="1" Margin="{StaticResource Reqs.ToolbarGap}" SearchPlaceholder="Patient name, phone or ID" SearchWidth="300">
         <lists:ListToolbar.Filters>
           <!-- The status chip only while a link from another screen has set a status (the tabs replace it otherwise), so it can be cleared -->
           <lists:FilterChip Label="Status" AutomationProperties.Name="Status filter" ItemsSource="{Binding StatusOptions}" SelectedItem="{Binding StatusFilter, Mode=TwoWay}" DisplayMemberPath="Display"

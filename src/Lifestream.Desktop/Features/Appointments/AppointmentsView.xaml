@@ -101,7 +101,7 @@
           </Border>
         </controls:PageHeader.Tabs>
       </controls:PageHeader>
-      <lists:ListToolbar x:Name="Toolbar" Grid.Row="1" Margin="{StaticResource Appts.ToolbarGap}" SearchPlaceholder="Search donors" SearchWidth="280">
+      <lists:ListToolbar x:Name="Toolbar" Grid.Row="1" Margin="{StaticResource Appts.ToolbarGap}" SearchPlaceholder="Donor name, phone or ID" SearchWidth="280">
         <lists:ListToolbar.Filters>
           <StackPanel Orientation="Horizontal">
             <!-- One donor's appointments (also set by "Book appointment" on a donor): a chip that opens the donor search -->

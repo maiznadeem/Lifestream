@@ -1076,7 +1076,7 @@ edges and `Radius.ContentCorner` at its top-left.
 
 ### 6.3 Title bar content (main window)
 
-Logo and "Lifestream" at the left; the search button (`TitleSearch` style, "Search donors, patients, requests and bags", `Width.TitleSearch` 440, opens
+Logo and "Lifestream" at the left; the search button (`TitleSearch` style, "Search donors, patients and requests", `Width.TitleSearch` 440, opens
 the palette) next; then the bell (`Bell`, a 6 px `Critical` dot while anything needs attention; it opens the notifications flyout, below; its name says
 how many items, "Notifications, 4 items need attention") and the avatar button (opens the account menu); then the caption buttons. In a Compact window the title bar is 40 DIP, the search becomes a
 "Search" icon plus `Ctrl K` key caps button, and the bell and avatar are hidden. Text on Mica uses grayscale rendering.

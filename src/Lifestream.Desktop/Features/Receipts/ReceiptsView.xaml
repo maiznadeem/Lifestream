@@ -63,7 +63,7 @@
       <!-- Toolbar: search (Ctrl F, Enter searches at once), the blood group chip, Clear filters. -->
       <WrapPanel Grid.Row="1" feat:Edge.Top="{DynamicResource Space.16}" feat:Edge.Bottom="{DynamicResource Space.12}">
         <TextBox x:Name="SearchBox" Style="{DynamicResource TextBox.Search}" Width="320" Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" MaxLength="100"
-                 controls:SearchAssist.Shortcut="Ctrl F" controls:InputAssist.Placeholder="Search receipts or names" ToolTip="Search by receipt number, donor or patient" feat:Edge.Right="{DynamicResource Space.8}"
+                 controls:SearchAssist.Shortcut="Ctrl F" controls:InputAssist.Placeholder="Name, phone or receipt ID" ToolTip="Search by donor, patient or staff name, phone, blood group or receipt number" feat:Edge.Right="{DynamicResource Space.8}"
                  AutomationProperties.Name="Search receipts">
           <TextBox.InputBindings>
             <KeyBinding Key="Enter" Command="{Binding SearchNowCommand}" />

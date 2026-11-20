@@ -70,7 +70,7 @@
           </Button>
         </controls:PageHeader.Actions>
       </controls:PageHeader>
-      <lists:ListToolbar x:Name="Toolbar" Grid.Row="1" Margin="{StaticResource Patients.ToolbarGap}" SearchPlaceholder="Search patients" />
+      <lists:ListToolbar x:Name="Toolbar" Grid.Row="1" Margin="{StaticResource Patients.ToolbarGap}" SearchPlaceholder="Name, phone or patient ID" />
       <lists:ScreenWakingNotice Grid.Row="2" />
       <!-- The table's frame is inside the load surface: an error or empty state stands alone as one card, not inside an empty framed panel -->
       <controls:LoadSurface x:Name="ListSurface" Grid.Row="3" State="{Binding State}" SkeletonKind="List" SkeletonColumns="2*,80,*,*,*"

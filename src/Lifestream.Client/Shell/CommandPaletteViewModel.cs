@@ -15,7 +15,8 @@ public sealed record PaletteItem(string Group, string Title, string? Subtitle, s
 
 /// <summary>
 /// The command palette (Ctrl+K, docs/design-system.md "Command palette"): go to any screen, run the primary actions, change the theme, and find donors,
-/// patients and requests through the API's record search (debounced 150 ms). Results are grouped; Up and Down move, Enter runs, Esc closes. With an empty
+/// patients and requests through the API's record search (debounced 150 ms; it finds what the lists' search finds: a part of a name or of a phone number, a blood
+/// group, a record code). Results are grouped; Up and Down move, Enter runs, Esc closes. With an empty
 /// query it shows what was run recently, then the actions and screens. Each action shows its shortcut.
 /// </summary>
 public sealed partial class CommandPaletteViewModel : ObservableObject
@@ -265,6 +266,6 @@ public sealed partial class CommandPaletteViewModel : ObservableObject
         }
 
         SelectedIndex = Items.Count > 0 ? 0 : -1;
-        EmptyText = Items.Count == 0 && query.Length > 0 && !IsSearching ? $"Nothing matches “{query}”. Try a name, a phone number or a request number." : null;
+        EmptyText = Items.Count == 0 && query.Length > 0 && !IsSearching ? $"Nothing matches “{query}”. Try part of a name or of a phone number, a blood group or a record code." : null;
     }
 }

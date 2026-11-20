@@ -35,7 +35,7 @@ public partial class ListToolbar : UserControl
         Unloaded += (_, _) => Detach();
     }
 
-    /// <summary>The search field's placeholder, naming what it searches ("Search name, phone or donor ID").</summary>
+    /// <summary>The search field's placeholder, naming what it searches ("Name, phone or donor ID"); it must fit the field (SearchPlaceholderTests).</summary>
     public string SearchPlaceholder { get => (string)GetValue(SearchPlaceholderProperty); set => SetValue(SearchPlaceholderProperty, value); }
 
     /// <summary>The search field's width in DIP.</summary>

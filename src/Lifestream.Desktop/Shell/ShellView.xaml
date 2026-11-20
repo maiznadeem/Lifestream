@@ -70,7 +70,7 @@
         <ColumnDefinition Width="Auto" />
         <ColumnDefinition Width="{x:Static shell:ShellView.CaptionButtonsColumn}" />
       </Grid.ColumnDefinitions>
-      <Button x:Name="SearchField" Style="{DynamicResource TitleSearch}" Content="Search donors, patients, requests and bags" HorizontalAlignment="Left"
+      <Button x:Name="SearchField" Style="{DynamicResource TitleSearch}" Content="Search donors, patients and requests" HorizontalAlignment="Left"
               Width="{DynamicResource Width.TitleSearch}" MaxWidth="{DynamicResource Width.TitleSearch}" Command="{Binding OpenPaletteCommand}"
               AutomationProperties.Name="Search and commands" AutomationProperties.AcceleratorKey="Ctrl+K" ToolTip="Search and commands (Ctrl+K)" />
       <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="{DynamicResource Inset.R8}">
