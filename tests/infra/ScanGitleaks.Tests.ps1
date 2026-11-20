@@ -320,3 +320,104 @@ Describe 'INFRA-01 logs: run-logged.ps1 writes the output to a file, scans it, a
         (Get-Content -Raw $log) | Should -Match $script:V -Because 'the file stays on the runner for the later scan step, only the job log is protected'
     }
 }
+
+# The history scan (gitleaks-action in secret-scan.yml) reads .gitleaks.toml at the repository root. It keeps every default rule and
+# adds ONE exception to ONE rule: a XAML resource key (x:Key with a dotted design-token name) is not an API key. These tests run the
+# history scan (gitleaks detect over a throw-away git repository, the configuration found at its root, like the action) on the two
+# real false positives and on what the exception must never hide. Every value is put together at run time, so this file stays clean.
+Describe 'the history scan''s configuration (.gitleaks.toml at the repository root) excepts XAML resource keys and nothing else' {
+    BeforeAll {
+        $script:RootConfig = Join-Path $script:Root '.gitleaks.toml'
+        $script:KeyAttr = 'x:K' + 'ey'                              # the XAML attribute
+        $script:Token = 'k9XpQ7' + 'vL4tR8' + 'wZ3nB6' + 'mD2sH5'    # a fake random token (no dot, starts in lower case)
+        $script:Pat = 'gh' + 'p_' + ('Zq7xK2mP9' * 4)                # the shape of a GitHub token (fake)
+        $open = '<ResourceDictionary>'; $close = '</ResourceDictionary>'
+        $brush = "    <SolidColorBrush $($script:KeyAttr)=`"Brush.Stroke2`" Color=`"{StaticResource Color.Stroke2}`" />"
+        $script:HistoryCases = [ordered]@{
+            'ui/brush.xaml'           = "$open`n$brush`n$close`n"
+            'ui/radius.xaml'          = "$open`n    <CornerRadius $($script:KeyAttr)=`"Radius.Left8`">8,0,0,8</CornerRadius>`n$close`n"
+            'ui/token-as-key.xaml'    = "$open`n    <sys:String $($script:KeyAttr)=`"$($script:Token)`">x</sys:String>`n$close`n"
+            'ui/token-beside.xaml'    = "$open`n    <sys:String $($script:KeyAttr)=`"Brush.Stroke2`" Api$('K' + 'ey')=`"$($script:Token)`" />`n$close`n"
+            'ui/token-same-line.xaml' = "$open`n    <sys:String $($script:KeyAttr)=`"Brush.Stroke2`">x</sys:String> <sys:String $('Sec' + 'ret')=`"$($script:Token)`" />`n$close`n"
+            'ui/pat-as-text.xaml'     = "$open`n    <sys:String $($script:KeyAttr)=`"Service.Token1`">$($script:Pat)</sys:String>`n$close`n"
+            'ui/other-attribute.xaml' = "$open`n    <TextBox $('Pass' + 'word')=`"Brush.Stroke2`" />`n$close`n"
+            'ui/apikey-attribute.xaml' = "$open`n    <sys:String Tag=`"x`" Api$('K' + 'ey')=`"Brush.Stroke2`" />`n$close`n"
+            'ui/key-with-suffix.xaml' = "$open`n    <sys:String $($script:KeyAttr)=`"Brush.Stroke2-$($script:Token)`">x</sys:String>`n$close`n"
+            'ui/digits-in-family.xaml' = "$open`n    <sys:String $($script:KeyAttr)=`"Zq7xK2mP9.Mx4tR8wZ3`">x</sys:String>`n$close`n"
+            'src/not-xaml.cs'         = "class C { string $('K' + 'ey')=`"Brush.Stroke2`"; }`n"
+        }
+        $script:Allowed = @('ui/brush.xaml', 'ui/radius.xaml')
+
+        function script:Invoke-History([switch]$NoConfig) {
+            $repo = New-Folder ('hist-' + [guid]::NewGuid().ToString('N'))
+            foreach ($name in $script:HistoryCases.Keys) {
+                $f = Join-Path $repo $name
+                New-Item -ItemType Directory -Force -Path (Split-Path $f) | Out-Null
+                [IO.File]::WriteAllText($f, $script:HistoryCases[$name])
+            }
+            $git = @('-C', $repo, '-c', 'core.autocrlf=false', '-c', 'user.email=test@example.invalid', '-c', 'user.name=test', '-c', 'commit.gpgsign=false')
+            & git @git init -q -b master 2>&1 | Out-Null
+            & git @git add -A 2>&1 | Out-Null
+            & git @git commit -q -m cases 2>&1 | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw 'could not commit the cases' }
+            if (-not $NoConfig) { Copy-Item -LiteralPath $script:RootConfig -Destination (Join-Path $repo '.gitleaks.toml') }
+            $report = Join-Path $TestDrive ('hist-' + [guid]::NewGuid().ToString('N') + '.json')
+            # the action's command line (its report is SARIF; JSON here, to read the findings)
+            $out = & $script:Gitleaks detect --source $repo --redact -v --exit-code=2 --report-format=json --report-path=$report --no-banner --log-level=debug 2>&1 | Out-String
+            [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = $out; Findings = @(Get-Content -Raw $report | ConvertFrom-Json) }
+        }
+        $script:With = Invoke-History
+        $script:Without = Invoke-History -NoConfig
+    }
+
+    It 'the action finds the file: gitleaks reads .gitleaks.toml from the root of the repository it scans' {
+        $script:With.Output | Should -Match 'using existing gitleaks config'
+        $script:Without.Output | Should -Match 'no gitleaks config found'
+    }
+
+    It 'without the file every case is reported, the two real resource keys included (the cases are real)' {
+        $script:Without.ExitCode | Should -Be 2
+        foreach ($name in $script:HistoryCases.Keys) { @($script:Without.Findings | Where-Object File -eq $name).Count | Should -BeGreaterThan 0 -Because $name }
+    }
+
+    It 'with the file, <_> (a resource key with a design-token name) is not reported' -ForEach @('ui/brush.xaml', 'ui/radius.xaml') {
+        @($script:With.Findings | Where-Object File -eq $_) | Should -BeNullOrEmpty
+    }
+
+    It 'with the file, <_> is still reported' -ForEach @(
+        'ui/token-as-key.xaml', 'ui/token-beside.xaml', 'ui/token-same-line.xaml', 'ui/pat-as-text.xaml', 'ui/other-attribute.xaml',
+        'ui/apikey-attribute.xaml', 'ui/key-with-suffix.xaml', 'ui/digits-in-family.xaml', 'src/not-xaml.cs'
+    ) {
+        $script:With.ExitCode | Should -Be 2
+        @($script:With.Findings | Where-Object File -eq $_).Count | Should -BeGreaterThan 0 -Because $script:With.Output
+    }
+
+    It 'the token beside a resource key is reported for itself (the exception clears one match, never the line)' {
+        $beside = @($script:With.Findings | Where-Object File -eq 'ui/token-beside.xaml')
+        $beside.Count | Should -Be 1
+        $line = ($script:HistoryCases['ui/token-beside.xaml'] -split "`n")[1]
+        $keyEnds = $line.IndexOf('Brush.Stroke2"') + 'Brush.Stroke2"'.Length
+        $beside[0].StartColumn | Should -BeGreaterThan $keyEnds -Because 'the finding is the second attribute, after the end of the resource key'
+    }
+
+    It 'no value reaches the output (--redact)' {
+        $script:With.Output | Should -Not -Match ([regex]::Escape($script:Token))
+        $script:With.Output | Should -Not -Match ([regex]::Escape($script:Pat))
+    }
+
+    It 'the file keeps every default rule and adds one exception, to generic-api-key, for .xaml, on the whole match, with AND' {
+        $t = Get-Content -Raw $script:RootConfig
+        $body = ($t -split "`r?`n" | Where-Object { $_ -notmatch '^\s*#' }) -join "`n"
+        $body | Should -Match '(?m)^useDefault = true$'
+        [regex]::Matches($body, '(?m)^\[\[rules\]\]').Count | Should -Be 1
+        [regex]::Matches($body, '(?m)^id = ').Count | Should -Be 1
+        $body | Should -Match '(?m)^id = "generic-api-key"$'
+        [regex]::Matches($body, '(?m)^\[\[rules\.allowlists\]\]').Count | Should -Be 1
+        $body | Should -Match '(?m)^condition = "AND"$'
+        $body | Should -Match '(?m)^regexTarget = "match"$'
+        $body | Should -Match "(?m)^paths = \['''\\\.xaml\$'''\]$"
+        $body | Should -Match "(?m)^regexes = \['''\^Key=.*\`$'''\]$" -Because 'the expression is anchored at both ends: the whole match, not a part of it'
+        # nothing that switches a scan off: no global allow-list, no commit or stop-word list, no rule disabled
+        $body | Should -Not -Match '(?m)^\[allowlist\]|^\[\[allowlists\]\]|^commits\s*=|^stopwords\s*=|^disabledRules|^\s*entropy\s*='
+    }
+}

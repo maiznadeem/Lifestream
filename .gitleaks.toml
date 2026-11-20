@@ -1,0 +1,39 @@
+# gitleaks configuration of the HISTORY scan: gitleaks-action in .github/workflows/secret-scan.yml ("Scan the full git history")
+# reads this file from the repository root. Built artifacts and logs are scanned with tools/gitleaks-lifestream.toml instead
+# (tools/scan-artifacts.ps1); the two files are separate on purpose.
+#
+# Every default gitleaks rule is kept, unchanged. One exception is added to ONE rule:
+#
+#   generic-api-key reads a XAML resource key as an API key, because the attribute is called x:Key:
+#       <SolidColorBrush x:Key="Brush.Stroke2" Color="{StaticResource Color.Stroke2}" />
+#   A resource key is the name a style or brush is looked up by, not a value. The rule only reports names that hold a digit
+#   and enough different letters, so most of the 600 keys pass and a new one fails a pull request now and then
+#   (Radius.Left8 on 2026-11-19, Brush.Stroke2 on 2026-11-20).
+#
+# The exception applies only when ALL of this is true (condition = "AND"):
+#   - the rule is generic-api-key (no other rule is touched: provider tokens, private keys, JWTs are reported as before);
+#   - the file is a .xaml file;
+#   - the WHOLE text the rule matched is  Key="Family.Name"  : the attribute is exactly Key (so ApiKey=, SecretKey=, Password=
+#     and every other attribute are still reported), and the value is a dotted design-token name: a family of letters only,
+#     then one to four parts of letters and digits, each starting with a capital letter.
+# So it cannot hide: a token used as the key (no dot, or not that shape), a secret in another attribute or as the element's
+# text on the same line (a separate match, judged on its own), or anything outside .xaml.
+# tests/infra/ScanGitleaks.Tests.ps1 runs these cases against this file ("the history scan's configuration").
+#
+# Syntax note: this is the form that gitleaks 8.24.3 (what gitleaks-action v2 installs) and 8.30.1 (tools/fetch-gitleaks.ps1)
+# both read the same way. Do NOT move it to a global [allowlist] with paths: 8.24.3 ignores `condition` there and treats
+# paths OR regexes, which switches the scan off for every .xaml file; and 8.24.3 does not read [[allowlists]] at all.
+
+title = "Lifestream history scan"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "generic-api-key"
+[[rules.allowlists]]
+description = "a XAML resource key (x:Key) with a dotted design-token name"
+condition = "AND"
+paths = ['''\.xaml$''']
+regexTarget = "match"
+regexes = ['''^Key="[A-Z][A-Za-z]{1,30}(?:\.[A-Z][A-Za-z0-9]{0,30}){1,4}"$''']
