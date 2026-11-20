@@ -200,7 +200,7 @@ public sealed class ListScreenFinishTests
     }
 
     [Fact]
-    public Task Requests_ALinkToOneRequest_ShowsEveryView_AndFulfilFromAnotherScreen_OpensTheStep() => UiThread.RunAsync(async () =>
+    public Task Requests_ALinkToOneRequest_KeepsTheTabThatHoldsIt_AndFulfilFromAnotherScreen_OpensTheStep() => UiThread.RunAsync(async () =>
     {
         var rig = new Part2Rig();
         rig.Fake.On("GetRequestsAsync", ApiResult<PagedResult<RequestListItem>>.Ok(new([Samples2.RequestRow(7, 3, "Omar Haddad")], 1, 1, 50)));
@@ -217,8 +217,10 @@ public sealed class ListScreenFinishTests
         await vm.LoadAsync();
         await vm.PendingFulfil; // the step has opened, or the screen dropped the wish
 
-        Assert.Null(vm.View); // every view: the linked request is in the list whatever its status
-        Assert.Null(rig.Recorder.ArgsOf<RequestQuery>("GetRequestsAsync").First().View);
+        // The tab that holds the linked request (it is pending: Open) stays selected and its list is the one read. Until 2.1.2 the link showed every view: no
+        // tab was selected and the request was one of 150 rows (real-app walk, item 10). A link to a closed request moves to its tab (RealAppWalkMinorTests).
+        Assert.Equal(RequestView.Open, vm.View);
+        Assert.Equal(RequestView.Open, rig.Recorder.ArgsOf<RequestQuery>("GetRequestsAsync").First().View);
         var step = Assert.IsType<FulfilRequestDialogViewModel>(vm.Fulfilment);
         await step.PendingBags;
         Assert.Equal(["B-0011", "B-0012", "B-0013"], step.Bags.Select(b => b.Code));

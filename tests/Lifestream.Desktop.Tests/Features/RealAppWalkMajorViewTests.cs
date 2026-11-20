@@ -11,8 +11,9 @@ using Lifestream.Desktop.Features.ListScreens;
 namespace Lifestream.Desktop.Tests.Features;
 
 /// <summary>
-/// The major defects of the real-app walk of 2.1.0 that only show on screen (run/agents/real-app-walk.md), in the shared detail pane: 12 (the "..." menu's Delete
-/// item had no text) and 18 (the pane drew "Select a donor to see their details." over the record it was showing). The window is never shown.
+/// The defects of the real-app walk of 2.1.0 that only show on screen (run/agents/real-app-walk.md), in the shared detail pane: 12 (the "..." menu's Delete
+/// item had no text), 18 (the pane drew "Select a donor to see their details." over the record it was showing) and 10 (the row of a record opened from another screen
+/// was out of view). The window is never shown.
 /// </summary>
 [Collection("Wpf")]
 public sealed class RealAppWalkMajorViewTests
@@ -68,5 +69,33 @@ public sealed class RealAppWalkMajorViewTests
         Assert.False(f.shown.Placeholder, "the pane says \"Select a donor\" over the donor it is showing"); // released 2.1.0: both were drawn
         Assert.True(f.PlaceholderWhenEmpty); // nothing to show: the placeholder is back
         Assert.False(f.BodyWhenEmpty);
+    }
+
+    [Fact]
+    public void List_ARecordOpenedByAnotherScreen_HasItsRowSelected_AndBroughtIntoView()
+    {
+        // Real-app walk, item 10: a donor opened from the search palette was in the panel while her row, far down the list, was out of view.
+        var f = StaHost.Run(() =>
+        {
+            using var rig = FeatureHarness.NewRig(); // 50 donors on the page, ids 1 to 50
+            rig.Api.DonorById = id => ApiResult<DonorDetail>.Ok(DemoData.DonorDetail(id));
+            var vm = FeatureHarness.Create<DonorsViewModel>(rig);
+            vm.ReceiveParameter(new ListPrefilter(RecordId: 45));
+            var view = FeatureHarness.DonorsView(vm);
+            using var host = Hosted.Create(view, 1440, 900);
+            Hosted.Await(() => vm.LoadAsync());
+            Hosted.PumpUntil(() => vm.HasDetail, 5000);
+            host.Settle(600);
+            var grid = (DataGrid)view.FindName("Grid");
+            var item = vm.Items.Single(i => i.Id == 45);
+            var row = grid.ItemContainerGenerator.ContainerFromItem(item) as DataGridRow;
+            var bounds = row is null ? Rect.Empty : Hosted.BoundsOf(row, grid);
+            return (Selected: ReferenceEquals(grid.SelectedItem, item), Realized: row is not null, bounds.Top, bounds.Bottom, Height: grid.ActualHeight, Rows: vm.Items.Count);
+        });
+
+        Assert.Equal(50, f.Rows);
+        Assert.True(f.Selected, "the opened donor's row is not selected");
+        Assert.True(f.Realized, "the opened donor's row is not in view (the table has not made it)");
+        Assert.True(f.Top >= 0 && f.Bottom <= f.Height + 0.5, $"the opened donor's row is outside the table: {f.Top:N0} to {f.Bottom:N0} of {f.Height:N0}");
     }
 }

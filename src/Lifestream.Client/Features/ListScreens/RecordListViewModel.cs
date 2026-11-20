@@ -30,13 +30,15 @@ public enum StockFilter
 /// the selected record. The editor opens in a side drawer. Delete asks first, names the record, changes the list only after the API
 /// confirms, shows a plain message on failure and offers Undo after success (FEAT-06).
 /// </summary>
-public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListViewModel<TItem>, INavigationParameterReceiver, IHasUnsavedChanges, IScrollMemory
+public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListViewModel<TItem>, INavigationParameterReceiver, IHasUnsavedChanges, IScrollMemory, IRevealsSelection
     where TItem : class
     where TDetail : class
 {
     private CancellationTokenSource? _detailCts;
     private int? _selectedId;
     private int? _openedId; // a record another screen asked to open by id: kept selected while it is not on the loaded page
+    private bool _openedViewChosen; // the tab that holds that record has been chosen (once per link)
+    private int? _revealId; // the record whose row the list brings into view once it is loaded: one opened by id, or one just saved
     private bool _applying;
     private FilterOption<BloodType> _bloodTypeFilter;
 
@@ -290,6 +292,16 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
         DeleteCommand.RaiseCanExecuteChanged();
     }
 
+    /// <summary>
+    /// Moves the screen to the saved view (tab) that lists this record, when the open one does not: called for a record just saved in the editor (a booking for
+    /// tomorrow made from "Today") and, once, for a record another screen opened by id. True when the view changed (the list is then read again). Not remembered:
+    /// the next visit opens on the view the user chose. A screen without saved views has nothing to do.
+    /// </summary>
+    protected virtual bool ShowViewOf(TDetail record) => false;
+
+    /// <summary>Asks the list to bring the selected row into view: raised when the row of a record opened by id, or of one just saved, has been loaded and selected.</summary>
+    public event EventHandler? RevealSelectionRequested;
+
     /// <summary>Whether a deleted record can be offered back with Undo; false for records the API cannot restore (staff).</summary>
     protected virtual bool SupportsUndo => true;
 
@@ -314,6 +326,8 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
         {
             _selectedId = recordId;
             _openedId = recordId;
+            _openedViewChosen = false;
+            _revealId = recordId;
             PendingDetail = LoadDetailAsync(recordId); // the detail does not wait for the list, and does not depend on the record being on its first page
         }
 
@@ -341,6 +355,13 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
             {
                 ClearDetail();
             }
+
+            if (keep is not null && _revealId == _selectedId)
+            {
+                // The row of the record another screen opened, or of the one just saved, is in the list now: it is selected, and the list brings it into view.
+                _revealId = null;
+                RevealSelectionRequested?.Invoke(this, EventArgs.Empty);
+            }
         }
         finally
         {
@@ -357,6 +378,7 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
 
         _selectedId = value is null ? null : IdOf(value);
         _openedId = null; // the user chose something themselves
+        _revealId = null;
         if (value is null)
         {
             ClearDetail();
@@ -429,6 +451,15 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
             Detail = detail;
             DetailFacts = [.. FactsOf(detail), .. extraFacts];
             DetailState = LoadState.Ready;
+            if (_openedId == recordId && !_openedViewChosen)
+            {
+                // A record another screen opened: now that it is known, the tab that lists it (once; the user is free to change tabs afterwards).
+                _openedViewChosen = true;
+                if (ShowViewOf(detail))
+                {
+                    _ = RefreshAsync();
+                }
+            }
         }
         catch (OperationCanceledException)
         {
@@ -533,6 +564,8 @@ public abstract partial class RecordListViewModel<TItem, TDetail> : PagedListVie
             if (e.Record is TDetail saved)
             {
                 _selectedId = IdOfDetail(saved);
+                _revealId = _selectedId;
+                ShowViewOf(saved); // the tab that lists what was saved; the refresh below reads it
             }
 
             _ = RefreshAfterSaveAsync();

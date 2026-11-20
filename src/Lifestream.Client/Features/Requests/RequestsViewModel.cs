@@ -408,13 +408,33 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
             RaiseViewChanged();
             OnFiltersChanged();
         }
-        else if (prefilter.RecordId is not null)
+
+        // A link to one request (a dashboard item, a patient's panel) keeps a tab selected: once the request is in the panel the screen moves to the tab that
+        // holds it (ShowViewOf). Not remembered: the next visit opens on the view the user chose.
+    }
+
+    /// <summary>
+    /// The tab that lists this request: a pending one under Open (or stays under "Due in 48 h" when that tab is open and the request is due by the day after
+    /// tomorrow, the server's rule), a fulfilled one under Fulfilled, a cancelled one under Cancelled. Moves there when another tab is open (a new request added
+    /// from "Fulfilled"; a request another screen opened).
+    /// </summary>
+    protected override bool ShowViewOf(RequestDetail request)
+    {
+        var holds = request.Status switch
         {
-            // A link to one request (a dashboard item, a patient's panel): every view, so the request is in the list whatever its status. Not remembered: the
-            // next visit opens on the view the user chose.
-            _view = null;
-            RaiseViewChanged();
+            RequestStatus.Pending => _view == RequestView.DueSoon && request.RequiredBy <= Today.AddDays(2) ? RequestView.DueSoon : RequestView.Open,
+            RequestStatus.Fulfilled => RequestView.Fulfilled,
+            _ => RequestView.Cancelled,
+        };
+        if (_view is null || _view == holds)
+        {
+            return false; // already listed (every request is shown, or its tab is open)
         }
+
+        _view = holds;
+        Page = 1;
+        RaiseViewChanged();
+        return true;
     }
 
     /// <summary>A prefilter; "request blood for this patient" (a <see cref="RelatedRecord"/> of kind Patient); or "fulfil this request" (kind Request).</summary>
@@ -633,7 +653,7 @@ public sealed class RequestsViewModel : SortedRecordListViewModel<RequestListIte
             return;
         }
 
-        Toasts.ShowForRecord(ToastKind.Success, "Request", request.PatientName, "cancelled");
+        Toasts.Show(ToastKind.Success, $"Request for '{request.PatientName}' cancelled.");
         await RefreshAfterActionAsync(request.Id).ConfigureAwait(true);
     }
 

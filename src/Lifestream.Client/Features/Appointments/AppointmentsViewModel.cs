@@ -429,12 +429,38 @@ public sealed class AppointmentsViewModel : SortedRecordListViewModel<Appointmen
             OnFiltersChanged();
         }
 
-        if (prefilter.Status is not null || prefilter.RecordId is not null)
+        if (prefilter.Status is not null)
         {
-            // A link from another screen (a dashboard card, a receipt): every appointment, so what it points at is in the list whatever its day. Not remembered.
+            // A link to a status (a dashboard card): every appointment with it, whatever its day. Not remembered.
             _view = null;
             RaiseViewChanged();
         }
+
+        // A link to one appointment (a receipt, the dashboard's agenda) keeps a tab selected: once the appointment is in the panel the screen moves to the tab
+        // that holds it (ShowViewOf).
+    }
+
+    /// <summary>
+    /// The tab that lists this appointment, by the server's own rule for the views: cancelled ones under Cancelled, today's under Today, earlier ones under Past, and
+    /// later pending ones under Upcoming. Moves there when another tab is open (a booking for tomorrow made from "Today"; an appointment another screen opened).
+    /// </summary>
+    protected override bool ShowViewOf(AppointmentDetail appointment)
+    {
+        var day = RecordFormatting.LocalDate(appointment.SlotStartUtc, Zone);
+        AppointmentView? holds = appointment.Status == AppointmentStatus.Cancelled ? AppointmentView.Cancelled
+            : day == Today ? AppointmentView.Today
+            : day < Today ? AppointmentView.Past
+            : appointment.Status == AppointmentStatus.Pending ? AppointmentView.Upcoming
+            : null;
+        if (holds is null || _view is null || _view == holds)
+        {
+            return false; // already listed (every appointment is shown, or its tab is open)
+        }
+
+        _view = holds;
+        Page = 1;
+        RaiseViewChanged();
+        return true;
     }
 
     /// <summary>Another screen asked for this one: a prefilter, or "book an appointment for this donor" (a <see cref="RelatedRecord"/> of kind Donor).</summary>
@@ -579,7 +605,7 @@ public sealed class AppointmentsViewModel : SortedRecordListViewModel<Appointmen
             return;
         }
 
-        Toasts.ShowForRecord(ToastKind.Success, "Appointment", appointment.DonorName, "cancelled");
+        Toasts.Show(ToastKind.Success, $"Appointment for '{appointment.DonorName}' cancelled.");
         await RefreshAfterActionAsync(appointment.Id).ConfigureAwait(true);
     }
 
