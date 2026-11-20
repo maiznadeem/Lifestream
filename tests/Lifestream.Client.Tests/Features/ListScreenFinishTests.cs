@@ -200,7 +200,7 @@ public sealed class ListScreenFinishTests
     }
 
     [Fact]
-    public async Task Requests_ALinkToOneRequest_ShowsEveryView_AndFulfilFromAnotherScreen_OpensTheStep()
+    public Task Requests_ALinkToOneRequest_ShowsEveryView_AndFulfilFromAnotherScreen_OpensTheStep() => UiThread.RunAsync(async () =>
     {
         var rig = new Part2Rig();
         rig.Fake.On("GetRequestsAsync", ApiResult<PagedResult<RequestListItem>>.Ok(new([Samples2.RequestRow(7, 3, "Omar Haddad")], 1, 1, 50)));
@@ -212,14 +212,10 @@ public sealed class ListScreenFinishTests
             new SuggestedBag(12, new DateTime(2026, 10, 2, 9, 0, 0, DateTimeKind.Utc), new DateOnly(2026, 11, 13), null, null),
             new SuggestedBag(13, new DateTime(2026, 10, 3, 9, 0, 0, DateTimeKind.Utc), new DateOnly(2026, 11, 14), 6, "Bo Chen"),
         ])));
-        var vm = rig.Requests();
+        var vm = rig.Requests(); // on the UI thread, as navigation makes it: the list's load and the request's detail come back there in turn
         ((INavigationParameterReceiver)vm).ReceiveParameter(new RelatedRecord(Client.Api.RecordKind.Request, 7, "Omar Haddad"));
         await vm.LoadAsync();
-        await vm.PendingDetail;
-        for (var i = 0; i < 20 && vm.Fulfilment is null; i++)
-        {
-            await Task.Yield();
-        }
+        await vm.PendingFulfil; // the step has opened, or the screen dropped the wish
 
         Assert.Null(vm.View); // every view: the linked request is in the list whatever its status
         Assert.Null(rig.Recorder.ArgsOf<RequestQuery>("GetRequestsAsync").First().View);
@@ -231,7 +227,7 @@ public sealed class ListScreenFinishTests
         Assert.Equal("These bags are issued, oldest first:", step.BagsNote);
         Assert.Equal("Not now", step.CancelText);
         await step.CancelCommand.ExecuteAsync();
-    }
+    });
 
     [Fact]
     public async Task Requests_ShortStock_TheStepListsWhatCanBeIssued_AndSaysHowManyAreShort()
