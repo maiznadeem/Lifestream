@@ -12,7 +12,7 @@ public sealed record WakePolicy
 
     /// <summary>
     /// The longest a call keeps retrying while no connection can be made at all (refused, no network, no such host). That is not a server
-    /// waking up: a waking server accepts the connection and answers late or with 502/503/504. It is retried quietly, every
+    /// waking up: a waking server accepts the connection and answers late or with 502/503/504 (or Cloudflare's 520-524). It is retried quietly, every
     /// <see cref="FirstBackoff"/>, for this long from the start of the first attempt that could not connect, in case the network or the
     /// server is back in a moment, and then reported as unreachable. It is well under the 10 s a screen load waits for an answer
     /// (ViewModelBase.LoadTimeout), and a refused connection can take 2 s to fail on Windows: the screen must end on "Can't reach the
@@ -41,7 +41,8 @@ public sealed record WakePolicy
 /// <see cref="WakePolicy.ShowWakingAfter"/>. A request that is out and unanswered is left alone for as long as the budget lasts:
 /// the server is working on it (starting the container, waiting for the database to resume), and giving up on it would cancel
 /// that work on the server and start it again. A request is sent again, with exponential backoff, only when the last one is over
-/// without an answer worth keeping: a 502/503/504, a <c>database_waking</c> problem, or a connection that was lost under it.
+/// without an answer worth keeping: a 502/503/504, a Cloudflare 520-524 (the proxy in front of the API: 524 is its 100-second limit,
+/// which a cold start can reach), a <c>database_waking</c> problem, or a connection that was lost under it.
 /// <para>
 /// A connection that cannot be made at all is a different thing: it is retried quietly for <see cref="WakePolicy.UnreachableBudget"/>
 /// only, never shows the waking state, and then fails as unreachable.
@@ -180,7 +181,7 @@ public sealed class WakeAwareHandler(WakePolicy policy, ServerStatus status, Htt
 
     private static async Task<Answer> ReadAnswerAsync(HttpRequestMessage request, HttpResponseMessage response)
     {
-        if (response.StatusCode is HttpStatusCode.BadGateway or HttpStatusCode.GatewayTimeout)
+        if (response.StatusCode is HttpStatusCode.BadGateway or HttpStatusCode.GatewayTimeout || IsCloudflareOriginError(response.StatusCode))
         {
             return new Answer(IsWaking: true, FromServer: false, DatabaseWaking: null);
         }
@@ -208,6 +209,12 @@ public sealed class WakeAwareHandler(WakePolicy policy, ServerStatus status, Htt
             return new Answer(IsWaking: true, FromServer: false, DatabaseWaking: null);
         }
     }
+
+    /// <summary>
+    /// Cloudflare's own answers about the origin behind it: 520 (unknown error), 521 (refused), 522 (connect timed out), 523 (unreachable)
+    /// and 524 (no answer within 100 seconds). During a cold start they mean what a 502 or 504 means: the server is not answering yet.
+    /// </summary>
+    public static bool IsCloudflareOriginError(HttpStatusCode status) => (int)status is >= 520 and <= 524;
 
     private static HttpRequestMessage Clone(HttpRequestMessage original, byte[]? body)
     {

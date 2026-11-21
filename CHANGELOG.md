@@ -2,6 +2,18 @@
 
 All notable changes to Lifestream are listed here. The section of a version is also the text of its release on the GitHub Releases page.
 
+## [2.1.8] - 2026-11-22
+
+Lifestream 2.1.8 reaches the server through Cloudflare, which now screens every request before it gets there.
+
+### Fixed
+
+- When the server is waking up and Cloudflare answers for it (for example after its 100-second limit), the app keeps waiting as it does for any waking server, instead of showing an error.
+
+### Changed
+
+- The app talks to the server at `api.lifestream.himaiz.com`. Requests pass Cloudflare's firewall first, and the server answers only requests that came through it.
+
 ## [2.1.7] - 2026-11-21
 
 Lifestream 2.1.7 fixes the last items found by using the app end to end, and brings its libraries up to date.

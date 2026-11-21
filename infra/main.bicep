@@ -62,6 +62,14 @@ param jwtSigningKey string
 @description('Initial password of the owner admin account that the migrate job creates. Stored as the job secret owner-admin-password; never committed.')
 param ownerAdminPassword string
 
+@secure()
+@description('Shared secret the Cloudflare Worker lifestream-api-edge (edge/api) sends as X-Origin-Auth. Stored as the Container Apps secret origin-auth and as the Worker secret ORIGIN_AUTH; never committed.')
+param originAuthSecret string
+
+@description('log: requests without the Worker secret are served and logged (rollout). enforce: they get 403. /healthz is always served (the startup probe).')
+@allowed([ 'log', 'enforce' ])
+param originAuthMode string = 'log'
+
 @description('GitHub repository allowed to deploy through OIDC (owner/name).')
 param githubRepository string = 'maiznadeem/Lifestream'
 
@@ -293,6 +301,7 @@ resource api 'Microsoft.App/containerApps@2025-01-01' = {
       }
       secrets: [
         { name: 'jwt-signing-key', value: jwtSigningKey }
+        { name: 'origin-auth', value: originAuthSecret }
       ]
     }
     template: {
@@ -317,6 +326,9 @@ resource api 'Microsoft.App/containerApps@2025-01-01' = {
             { name: 'ConnectionStrings__Lifestream', value: sqlConnectionBase }
             { name: 'Jwt__SigningKey', secretRef: 'jwt-signing-key' }
             { name: 'Demo__Enabled', value: 'true' }
+            // The public hostname is the Cloudflare Worker on api.lifestream.himaiz.com (edge/api); see OriginAuthMiddleware.
+            { name: 'OriginAuth__Secret', secretRef: 'origin-auth' }
+            { name: 'OriginAuth__Mode', value: originAuthMode }
           ]
           probes: [
             {

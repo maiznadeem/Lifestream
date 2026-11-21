@@ -104,6 +104,59 @@ public sealed class WakePhaseTests
         Assert.Equal(ServerState.Online, status.State);
     }
 
+    [Theory]
+    [InlineData(520)]
+    [InlineData(521)]
+    [InlineData(522)]
+    [InlineData(523)]
+    [InlineData(524)]
+    public async Task CloudflareOriginErrors_DuringAColdStart_AreRetried_LikeA504(int cloudflareStatus)
+    {
+        // The API is behind Cloudflare: a request that waits on a cold start for more than 100 s comes back as Cloudflare's 524 (an HTML page),
+        // and an origin still starting can give 520-523. They are the platform answering, not the server: the call keeps waiting.
+        ManualTimeProvider? clock = null;
+        var calls = 0;
+        var handler = new ScriptedHandler((_, _) =>
+        {
+            calls++;
+            return clock!.Elapsed < TimeSpan.FromSeconds(10)
+                ? new HttpResponseMessage((HttpStatusCode)cloudflareStatus) { Content = new StringContent("<html>error code: " + cloudflareStatus + "</html>") }
+                : ScriptedHandler.Json(HttpStatusCode.OK, """{"database":"ready"}""");
+        });
+        clock = new ManualTimeProvider();
+        var status = new ServerStatus();
+        using var http = new HttpClient(new WakeAwareHandler(new WakePolicy { Clock = clock }, status, handler)) { BaseAddress = new Uri("https://api.test/"), Timeout = Timeout.InfiniteTimeSpan };
+        using var api = new LifestreamApiClient(http, new SessionService());
+
+        var call = api.GetReadinessAsync();
+        await PassAsync(clock, 8);
+        Assert.Equal(ServerState.Waking, status.State);
+        Assert.Equal(WakePhase.ServerStarting, status.Phase);
+
+        await PassAsync(clock, 12);
+        var result = await call.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.True(result.IsOk);
+        Assert.True(calls > 1, "the Cloudflare answer was not retried");
+    }
+
+    [Fact]
+    public async Task ACloudflareCertificateError_IsNotAWake()
+    {
+        // 525/526 are TLS failures between Cloudflare and the origin: waiting does not fix them, so they come back at once.
+        var calls = 0;
+        var handler = new ScriptedHandler((_, _) =>
+        {
+            calls++;
+            return new HttpResponseMessage((HttpStatusCode)525) { Content = new StringContent("<html>error code: 525</html>") };
+        });
+        using var http = new HttpClient(new WakeAwareHandler(new WakePolicy { Clock = new ManualTimeProvider() }, new ServerStatus(), handler)) { BaseAddress = new Uri("https://api.test/"), Timeout = Timeout.InfiniteTimeSpan };
+        using var api = new LifestreamApiClient(http, new SessionService());
+
+        var result = await api.GetReadinessAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.False(result.IsOk);
+        Assert.Equal(1, calls);
+    }
+
     [Fact]
     public async Task SignInWindow_ColdStart_SaysStartingTheServer_ThenWakingTheDatabase_ThenReady()
     {

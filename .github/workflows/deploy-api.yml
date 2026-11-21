@@ -164,14 +164,12 @@ jobs:
           az containerapp update --name "$CONTAINER_APP" --resource-group "$AZURE_RESOURCE_GROUP" --subscription "$AZURE_SUBSCRIPTION_ID" \
             --image "$IMAGE:$GITHUB_SHA" --only-show-errors --output none
 
+      # Through the public hostname (the Cloudflare Worker, edge/api): after the ingress lock the container's own address answers Cloudflare only.
       - name: Wait for /healthz to return 200 (up to 5 minutes)
         timeout-minutes: 6
         run: |
           set -euo pipefail
-          fqdn="$(az containerapp show --name "$CONTAINER_APP" --resource-group "$AZURE_RESOURCE_GROUP" --subscription "$AZURE_SUBSCRIPTION_ID" \
-            --query properties.configuration.ingress.fqdn --output tsv)"
-          [ -n "$fqdn" ] || { echo "NO SIGNAL: the container app has no ingress address" >&2; exit 1; }
-          url="https://$fqdn/healthz"
+          url="https://api.lifestream.himaiz.com/healthz"
           started=$(date +%s)
           while true; do
             code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$url" || true)"

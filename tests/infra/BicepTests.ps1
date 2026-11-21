@@ -138,7 +138,7 @@ Describe 'INFRA-06 identities: managed identity for the API, a passwordless migr
     }
 
     It 'takes every secret value from a secure parameter, never a literal' {
-        foreach ($name in 'jwtSigningKey', 'ownerAdminPassword') {
+        foreach ($name in 'jwtSigningKey', 'ownerAdminPassword', 'originAuthSecret') {
             $script:Template.parameters.$name.type | Should -Be 'securestring'
             $script:Template.parameters.$name.PSObject.Properties.Name | Should -Not -Contain 'defaultValue'
         }
@@ -146,6 +146,13 @@ Describe 'INFRA-06 identities: managed identity for the API, a passwordless migr
         $secret = @($api.properties.configuration.secrets | Where-Object name -eq 'jwt-signing-key')
         $secret.Count | Should -Be 1
         $secret[0].value | Should -Be "[parameters('jwtSigningKey')]"
+        $origin = @($api.properties.configuration.secrets | Where-Object name -eq 'origin-auth')
+        $origin.Count | Should -Be 1
+        $origin[0].value | Should -Be "[parameters('originAuthSecret')]"
+        $envs = $api.properties.template.containers[0].env
+        @($envs | Where-Object name -eq 'OriginAuth__Secret')[0].secretRef | Should -Be 'origin-auth'
+        @($envs | Where-Object name -eq 'OriginAuth__Mode')[0].value | Should -Be "[parameters('originAuthMode')]"
+        $script:Template.parameters.originAuthMode.allowedValues | Should -Be @('log', 'enforce')
         $job = Single 'Microsoft.App/jobs' 'the migrate job'
         $jobSecret = @($job.properties.configuration.secrets | Where-Object name -eq 'owner-admin-password')
         $jobSecret.Count | Should -Be 1
@@ -422,6 +429,7 @@ Describe 'parameter file' {
         $text | Should -Match "using '\./main\.bicep'"
         $text | Should -Match "param jwtSigningKey = readEnvironmentVariable\('LIFESTREAM_JWT_SIGNING_KEY'\)"
         $text | Should -Match "param ownerAdminPassword = readEnvironmentVariable\('LIFESTREAM_OWNER_ADMIN_PASSWORD'\)"
+        $text | Should -Match "param originAuthSecret = readEnvironmentVariable\('LIFESTREAM_ORIGIN_AUTH'\)"
         $text | Should -Not -Match "(?im)^\s*param\s+\w*(password|key|secret)\w*\s*=\s*'"
     }
 
@@ -431,6 +439,7 @@ Describe 'parameter file' {
             LIFESTREAM_API_IMAGE = 'ghcr.io/example/image:test'; LIFESTREAM_ENTRA_ADMIN_LOGIN = 'admin-group'
             LIFESTREAM_ENTRA_ADMIN_OBJECT_ID = '00000000-0000-0000-0000-000000000001'; LIFESTREAM_OWNER_EMAIL = 'owner@example.invalid'
             LIFESTREAM_JWT_SIGNING_KEY = 'placeholder-not-a-secret'; LIFESTREAM_OWNER_ADMIN_PASSWORD = 'placeholder-not-a-secret'
+            LIFESTREAM_ORIGIN_AUTH = 'placeholder-not-a-secret'
         }
         $old = @{}
         foreach ($k in $vars.Keys) { $old[$k] = [Environment]::GetEnvironmentVariable($k); [Environment]::SetEnvironmentVariable($k, $vars[$k]) }
@@ -442,5 +451,6 @@ Describe 'parameter file' {
         $p.parameters.entraOnlyAuthentication.value | Should -Be $true
         $p.parameters.enableLocks.value | Should -Be $true
         $p.parameters.apiImage.value | Should -Be 'ghcr.io/example/image:test'
+        $p.parameters.originAuthMode.value | Should -Be 'log'
     }
 }

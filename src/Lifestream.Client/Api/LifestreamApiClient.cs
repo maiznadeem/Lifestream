@@ -586,7 +586,7 @@ public sealed class LifestreamApiClient(HttpClient http, ISessionService session
             404 => ProblemCodes.NotFound,
             409 => ProblemCodes.Conflict,
             429 => ProblemCodes.RateLimited,
-            502 or 503 or 504 => ProblemCodes.DatabaseWaking,
+            502 or 503 or 504 or (>= 520 and <= 524) => ProblemCodes.DatabaseWaking, // 520-524: Cloudflare in front of a server not answering yet
             _ => "error",
         };
         return new ApiProblem(status, code, title ?? response.ReasonPhrase ?? "The request failed.", correlation, detail, errors);
