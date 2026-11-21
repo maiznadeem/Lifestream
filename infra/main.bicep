@@ -146,8 +146,8 @@ resource sqlEntraOnly 'Microsoft.Sql/servers/azureADOnlyAuthentications@2023-08-
 }
 
 // No firewallRules resource is declared on purpose. infra/sync-sql-firewall.ps1 (run by hand through sync-sql-firewall.yml; since
-// 2026-11-19 neither the deploy nor a schedule runs it) makes the rules exactly the environment's outbound addresses, named aca-outbound-<n>, and
-// deletes everything else, including the legacy "Allow anyone" (0.0.0.0-255.255.255.255) and "AllowAllWindowsAzureIps" rules.
+// 2026-11-19 neither the deploy nor a schedule runs it) makes the rules exactly the environment's outbound addresses, named aca-outbound-<n>,
+// plus the "Allow Azure services" rule (kept since 2026-11-21), and deletes everything else, including the legacy "Allow anyone" rule.
 
 resource sqlDatabase 'Microsoft.Sql/servers/databases@2023-08-01' = {
   parent: sqlServer

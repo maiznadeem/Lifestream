@@ -43,7 +43,10 @@ No container registry (images live in GHCR), no Key Vault, no gateway, no privat
   (parameter `location`) next to the database.
 - **No VNet, so the firewall follows the outbound addresses.** The API and the migrate job reach Azure SQL from the environment's
   outbound public addresses, which Azure may change. `infra/sync-sql-firewall.ps1` makes the server's firewall exactly those addresses
-  (`aca-outbound-<n>`), deleting every other rule including "Allow anyone" and `AllowAllWindowsAzureIps`. It runs **by hand only**
+  (`aca-outbound-<n>`) plus the "Allow Azure services" rule `AllowAllWindowsAzureIps` (0.0.0.0), and deletes every other rule, including
+  "Allow anyone". The Azure services rule stays by the owner's decision of 2026-11-21: on that day the API listed 321 outbound
+  addresses while 170 had rules, because the shared pool is larger than the rules and changes, so this rule is what lets the API reach
+  the database from the rest. The script adds it back if it is missing. It runs **by hand only**
   (`sync-sql-firewall.yml`, Run workflow, or the script itself), and it never touches the database. Since 2026-11-19 neither
   `deploy-api.yml` nor a schedule runs it: the Consumption environment's shared outbound pool is 170+ addresses, and adding them one
   rule at a time took longer than the deploy job. Entra-only authentication is the access control (see Security trade-offs). It adds or
@@ -108,15 +111,14 @@ Each step lists what it needs and how to check it. Steps that change Azure are t
    ```
    The script refuses without that switch or without an Entra administrator, changes nothing if it is already on, and fails unless
    `az sql server ad-only-auth get --subscription 88f308cf-f1e5-4e4d-b0bc-3e8b14ef9c65` then reports true. SQL logins, including the old admin login, stop working.
-8. **Make the firewall hold only the API's outbound addresses** (a template cannot delete what it does not declare, so a script does it):
+8. **Make the firewall hold the API's outbound addresses and the Azure services rule** (a template cannot delete what it does not declare, so a script does it):
    ```
    ./infra/sync-sql-firewall.ps1 -SubscriptionId 88f308cf-f1e5-4e4d-b0bc-3e8b14ef9c65 -ResourceGroup Lifestream -Server lifestream-server -Environment lifestream-env
-   az sql server firewall-rule list --subscription 88f308cf-f1e5-4e4d-b0bc-3e8b14ef9c65 -g Lifestream -s lifestream-server    # only aca-outbound-<n> rules
+   az sql server firewall-rule list --subscription 88f308cf-f1e5-4e4d-b0bc-3e8b14ef9c65 -g Lifestream -s lifestream-server    # aca-outbound-<n> rules and AllowAllWindowsAzureIps
    ```
    The script refuses to add any outbound-address rule unless Entra-only authentication reads true back from the server (step 7), because the
-   addresses are shared Azure egress (see Security trade-offs). It deletes "Allow anyone" and `AllowAllWindowsAzureIps`. After this only
-   the environment's outbound addresses can reach the database, so nothing on your own machine can: run any further SQL tooling from
-   the job. If the environment lists no outbound address (no app has started), the script stops and changes nothing. From here on,
+   addresses are shared Azure egress (see Security trade-offs). It deletes "Allow anyone" and keeps `AllowAllWindowsAzureIps`. After this
+   only Azure addresses can reach the database, so nothing on your own machine can: run any further SQL tooling from the job. If the environment lists no outbound address (no app has started), the script stops and changes nothing. From here on,
    run `sync-sql-firewall.yml` by hand when the environment's outbound addresses change: neither the deploy nor a schedule runs it.
 9. **Locks, and the template in step with reality**: rerun step 3 with `LIFESTREAM_ENABLE_LOCKS=true` and
    `Remove-Item Env:LIFESTREAM_ENTRA_ONLY` (the template and parameter file default to Entra-only on; never set it to false again), with `LIFESTREAM_API_IMAGE` set to the **currently running** image
@@ -127,8 +129,8 @@ Each step lists what it needs and how to check it. Steps that change Azure are t
 
 - **The firewall narrows exposure; it is not a tenant boundary.** A plain Consumption environment has no virtual network, so the API
   reaches Azure SQL from outbound public addresses that Azure owns and shares with other customers' Container Apps in the region.
-  Allow-listing them keeps out the rest of the internet and the "all Azure services" rule, but another tenant's container could connect
-  from the same address and reach the login endpoint.
+  Allow-listing them, and keeping the "Allow Azure services" rule (owner's decision, 2026-11-21, see "Two facts that shaped the template"), keeps out the rest of
+  the internet, but a container or VM of another Azure customer can reach the login endpoint.
 - **Authentication is the real control.** Entra-only authentication (no SQL logins, no passwords to guess or leak) and the
   least-privilege contained users (`lifestream-api` reads and writes data only; `lifestream-migrator` is the only DDL identity) are what
   keep other tenants out. That is why `sync-sql-firewall.ps1` refuses to open the firewall to the outbound addresses until Entra-only is on.
@@ -157,7 +159,7 @@ The API container itself gets `ConnectionStrings__Lifestream` with `Authenticati
 | OWN-02, INFRA-09 | `pwsh tests/infra/run.ps1` (allow-list of idle-free resource types over the compiled template, no VNet); `az containerapp show --subscription 88f308cf-f1e5-4e4d-b0bc-3e8b14ef9c65 -n lifestream-api -g Lifestream` shows `minReplicas 0`, `maxReplicas 1`, a `Startup` probe on `/healthz`, ingress `external` with `allowInsecure false`; `az consumption budget list --subscription 88f308cf-f1e5-4e4d-b0bc-3e8b14ef9c65` shows `lifestream-monthly`. |
 | OWN-03, INFRA-12 | After a deploy, `tools/prune-image-versions.ps1` keeps the newest 3 (refusing to delete the deployed image) and `tools/verify-image-versions.ps1` requires at most 3 versions, the deployed SHA among them and `docker manifest inspect` to pass; `tests/infra/ImageVersions.Tests.ps1`. |
 | INFRA-01 | `tools/scan-artifacts.ps1` (see "Credential scanner" below) runs in `secret-scan.yml` (every tracked file of src, tests, infra and packaging; the desktop and API publish output and their logs; every layer of the API image, its configuration and the docker build log), in `deploy-api.yml` on every image layer and the build log before the image is pushed, in `release.yml` on the publish folder and its log, then on the installer, the update packages and the vpk log, and in `ci.yml` on the test logs and render captures before they are uploaded. `tests/infra/ScanRealArtifacts.Tests.ps1` builds the real Desktop publish and vpk Releases with a planted connection string (they fail) and clean (zero findings), and scans the API publish and the stock `mcr.microsoft.com/dotnet/aspnet:11.0` layers (zero findings). |
-| INFRA-04 | `az sql server firewall-rule list --subscription 88f308cf-f1e5-4e4d-b0bc-3e8b14ef9c65 -g Lifestream -s lifestream-server` shows only `aca-outbound-<n>` rules, each a single address from the environment's `outboundIpAddresses`; `tests/infra/SqlFirewall.Tests.ps1`. |
+| INFRA-04 | `az sql server firewall-rule list --subscription 88f308cf-f1e5-4e4d-b0bc-3e8b14ef9c65 -g Lifestream -s lifestream-server` shows only `aca-outbound-<n>` rules, each a single address from the environment's `outboundIpAddresses`, and `AllowAllWindowsAzureIps` (0.0.0.0); `tests/infra/SqlFirewall.Tests.ps1`. |
 | INFRA-05 | `az sql server ad-only-auth get --subscription 88f308cf-f1e5-4e4d-b0bc-3e8b14ef9c65 -g Lifestream -n lifestream-server` shows `azureAdOnlyAuthentication true` (`enable-entra-only.ps1` checks it); `tests/infra/EntraOnly.Tests.ps1`. |
 | INFRA-06 | `bootstrap-sql.ps1` ends with its verification query returning no problems. |
 | INFRA-07 | `az sql server audit-policy show --subscription 88f308cf-f1e5-4e4d-b0bc-3e8b14ef9c65 -g Lifestream -n lifestream-server` returns `Enabled`; rows appear in `lifestream-audit` (`AzureDiagnostics | where Category == "SQLSecurityAuditEvents"`). The row-level "who changed data" trail is the API's `AuditLog` table. |
