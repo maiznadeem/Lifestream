@@ -21,4 +21,4 @@ param enableLocks = toLower(readEnvironmentVariable('LIFESTREAM_ENABLE_LOCKS', '
 param jwtSigningKey = readEnvironmentVariable('LIFESTREAM_JWT_SIGNING_KEY')
 param ownerAdminPassword = readEnvironmentVariable('LIFESTREAM_OWNER_ADMIN_PASSWORD')
 param originAuthSecret = readEnvironmentVariable('LIFESTREAM_ORIGIN_AUTH')
-param originAuthMode = readEnvironmentVariable('LIFESTREAM_ORIGIN_AUTH_MODE', 'log')
+param originAuthMode = readEnvironmentVariable('LIFESTREAM_ORIGIN_AUTH_MODE', 'enforce')
