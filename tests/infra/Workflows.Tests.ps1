@@ -224,14 +224,14 @@ Describe 'INFRA-01 workflows scan every built artifact' {
         $script:Scan.Yaml.on.Keys | Should -Contain 'workflow_dispatch'
         $text = $script:Scan.Text
         $text | Should -Match 'scan-artifacts\.ps1 -Path src,tests,infra,packaging'
-        $text | Should -Match 'gitleaks/gitleaks-action@v2'
+        $text | Should -Match 'gitleaks/gitleaks-action@v3'
         $text | Should -Match 'desktop-publish\.log'
         $text | Should -Match 'api-publish\.log'
         $text | Should -Match 'tools/scan-image\.sh lifestream-api:scan'
         # both scans of the repository job are in the job that runs by itself
         $repo = (@($script:Scan.Yaml.jobs.repository.steps) | ForEach-Object { (Run $_) + ' ' + (Uses $_) }) -join "`n"
         $repo | Should -Match 'scan-artifacts\.ps1 -Path src,tests,infra,packaging -GitTracked'
-        $repo | Should -Match 'gitleaks/gitleaks-action@v2'
+        $repo | Should -Match 'gitleaks/gitleaks-action@v3'
     }
 
     # The desktop job of secret-scan.yml was red from 2026-11-19: it published the API without a runtime identifier, which copies
@@ -382,7 +382,7 @@ Describe 'automatic runs are short: one run per push, under two minutes' {
         $checkout = @($steps | Where-Object { (Uses $_) -like 'actions/checkout@*' })
         $checkout.Count | Should -Be 1
         $checkout[0].with.'fetch-depth' | Should -Be 0 -Because 'every commit, not only the last one'
-        $scan = @($steps | Where-Object { (Uses $_) -eq 'gitleaks/gitleaks-action@v2' })
+        $scan = @($steps | Where-Object { (Uses $_) -eq 'gitleaks/gitleaks-action@v3' })
         $scan.Count | Should -Be 1
         # nothing that narrows the scan: no range, no other configuration, no disabled report
         foreach ($k in 'BASE_REF', 'GITLEAKS_CONFIG', 'GITLEAKS_VERSION') { $scan[0].env.Keys | Should -Not -Contain $k }
