@@ -21,7 +21,33 @@ public static class RateLimitPolicies
     public const string Login = "login";
     public const string Demo = "demo";
 
-    public static string ClientIp(HttpContext context) => context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+    /// <summary>
+    /// The key a client is limited by. IPv4: the address. IPv6: its /64 prefix, because one home or phone line is usually given a whole /64
+    /// and could otherwise take a fresh address, and a fresh limit, for every request (Cloudflare passes IPv6 visitors through to the API).
+    /// </summary>
+    public static string ClientIp(HttpContext context) => KeyOf(context.Connection.RemoteIpAddress);
+
+    public static string KeyOf(System.Net.IPAddress? address)
+    {
+        if (address is null)
+        {
+            return "unknown";
+        }
+
+        if (address.IsIPv4MappedToIPv6)
+        {
+            address = address.MapToIPv4();
+        }
+
+        if (address.AddressFamily != System.Net.Sockets.AddressFamily.InterNetworkV6)
+        {
+            return address.ToString();
+        }
+
+        var bytes = address.GetAddressBytes();
+        Array.Clear(bytes, 8, 8);
+        return new System.Net.IPAddress(bytes) + "/64";
+    }
 
     /// <summary>Global per-IP limit on every endpoint plus separate, tighter per-IP limits for login and demo login.</summary>
     public static void Configure(RateLimiterOptions options, LimitSettings limits)

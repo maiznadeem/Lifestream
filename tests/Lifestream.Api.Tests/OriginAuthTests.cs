@@ -131,6 +131,35 @@ public sealed class OriginAuthEnforceTests(OriginAuthEnforceFixture fx) : IClass
     }
 
     [Fact]
+    public async Task ThroughTheWorker_AnIpv6VisitorIsLimitedByIts64Prefix_NotPerAddress()
+    {
+        // One line usually gets a whole /64: rotating the low 64 bits must not buy a fresh login limit.
+        using var client = fx.NewClient();
+        var statuses = new List<HttpStatusCode>();
+        for (var i = 0; i < 5; i++)
+        {
+            using var request = OriginAuthRequests.Login($"nobody-v6-{i}", OriginAuthFixtureBase.Secret, clientIp: $"2001:db8:1:2::{i + 1:x}");
+            using var response = await client.SendAsync(request, TestContext.Current.CancellationToken);
+            statuses.Add(response.StatusCode);
+        }
+
+        using var otherLine = OriginAuthRequests.Login("nobody-v6-other", OriginAuthFixtureBase.Secret, clientIp: "2001:db8:1:3::1");
+        using var otherResponse = await client.SendAsync(otherLine, TestContext.Current.CancellationToken);
+
+        Assert.Equal(3, statuses.Count(s => s == HttpStatusCode.Unauthorized));
+        Assert.Equal(2, statuses.Count(s => s == HttpStatusCode.TooManyRequests));
+        Assert.Equal(HttpStatusCode.Unauthorized, otherResponse.StatusCode); // another /64 is another visitor
+    }
+
+    [Theory]
+    [InlineData("203.0.113.5", "203.0.113.5")]
+    [InlineData("::ffff:203.0.113.5", "203.0.113.5")]
+    [InlineData("2001:db8:1:2:aaaa:bbbb:cccc:dddd", "2001:db8:1:2::/64")]
+    [InlineData("2001:db8:1:2::1", "2001:db8:1:2::/64")]
+    public void RateLimitKey_IsTheIpv4Address_OrTheIpv6Slash64(string address, string key) =>
+        Assert.Equal(key, RateLimitPolicies.KeyOf(System.Net.IPAddress.Parse(address)));
+
+    [Fact]
     public void EnforceWithoutASecret_RefusesToStart()
     {
         var settings = Options.Create(new OriginAuthSettings { Mode = "enforce" });
