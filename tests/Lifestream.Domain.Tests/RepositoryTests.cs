@@ -205,14 +205,13 @@ public sealed partial class RepositoryTests
         Assert.All(referenced, id => Assert.Contains(id, central));
     }
 
+    // The owner turned Dependabot off on 2026-11-21: package updates are made by hand, and the NuGet audit above still fails the
+    // build on a high-severity advisory.
     [Fact]
-    public void Dependabot_IsEnabled_ForNugetAndGithubActions()
+    public void Dependabot_IsOff()
     {
-        var dependabot = Read(".github/dependabot.yml");
-
-        Assert.Matches(@"package-ecosystem:\s*nuget", dependabot);
-        Assert.Matches(@"package-ecosystem:\s*github-actions", dependabot);
-        Assert.Matches(@"interval:\s*weekly", dependabot);
+        Assert.False(File.Exists(Path.Combine(Root, ".github", "dependabot.yml")));
+        Assert.False(File.Exists(Path.Combine(Root, ".github", "dependabot.yaml")));
     }
 
     // ---- INFRA-14: CI ----
