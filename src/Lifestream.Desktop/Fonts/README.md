@@ -27,13 +27,13 @@ font: it takes the default one. And in the whole-pixel text layout the app uses,
 `tools/fonts/build-google-sans-flex.py`:
 
 1. reads the variable font above (it refuses any other file: the SHA-256 is pinned);
-2. cuts static instances at wght 400, 500, 600 and 700 with fontTools' instancer (fontTools 4.64.0), with every other axis fixed (below), named so WPF
+2. cuts static instances at wght 400, 500, 600 and 700 with fontTools' instancer (fontTools 4.68.0), with every other axis fixed (below), named so WPF
    groups them as one family "Google Sans Flex";
 3. hints each one with ttfautohint (ttfautohint-py 0.6.1; the auto-hinter Google Fonts uses for its hinted families): quantized stems for grayscale
    and DirectWrite, strong stems for GDI ClearType, hinting from 8 to 50 px, x-height rounding limited at 14 px.
 
 Rebuild (`-I` keeps the downloaded font away from Python's search path):
-`python -m pip install fonttools==4.64.0 ttfautohint-py==0.6.1`, then
+`python -m pip install fonttools==4.68.0 ttfautohint-py==0.6.1`, then
 `python -I tools/fonts/build-google-sans-flex.py "<GoogleSansFlex[ROND,opsz,slnt,wdth,wght].ttf>" src/Lifestream.Desktop/Fonts`.
 The output is the same bytes on every run (the modification time written into the files is the upstream font's, not the time of the build).
 

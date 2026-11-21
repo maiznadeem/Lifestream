@@ -359,7 +359,7 @@ instances at 400, 500, 600 and 700 from the official variable font (version 5.00
 ttfautohint (8 to 50 px). The other axes are fixed for the whole app: optical size 14 (one cut for headings and body text, so they are the same
 design), width 100, roundness 0, slant 0. The output is the same bytes on every run.
 
-Rebuild: `python -m pip install fonttools==4.64.0 ttfautohint-py==0.6.1`, then
+Rebuild: `python -m pip install fonttools==4.68.0 ttfautohint-py==0.6.1`, then
 `python -I tools/fonts/build-google-sans-flex.py "<GoogleSansFlex[ROND,opsz,slnt,wdth,wght].ttf>" src/Lifestream.Desktop/Fonts`. `Fonts/README.md`
 lists source, versions, hashes and the reasons for each axis value; the licence is `Fonts/OFL.txt`. Charts load `GoogleSansFlex-Regular.ttf` into Skia
 (`FontSetup.ApplyChartFont`) so chart text matches. If a font cannot load, WPF text falls back to the system UI font and charts to Skia's default,

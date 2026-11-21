@@ -6,7 +6,7 @@ every axis (AXES below, reasons in src/Lifestream.Desktop/Fonts/README.md), name
 "Google Sans Flex", and hints each one with ttfautohint (the auto-hinter Google Fonts uses for its hinted families).
 
 Usage (Python 3.11+, from the repo root; -I keeps the downloaded font away from the interpreter's search path):
-    python -m pip install fonttools==4.64.0 ttfautohint-py==0.6.1
+    python -m pip install fonttools==4.68.0 ttfautohint-py==0.6.1
     python -I tools/fonts/build-google-sans-flex.py "<path to GoogleSansFlex[ROND,opsz,slnt,wdth,wght].ttf>" src/Lifestream.Desktop/Fonts
 
 The variable font comes from

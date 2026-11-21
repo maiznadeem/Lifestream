@@ -21,7 +21,7 @@
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="11.0.0" />
     <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="11.0.0" />
     <PackageVersion Include="Azure.Identity" Version="1.21.0" />
-    <PackageVersion Include="Microsoft.Data.SqlClient.Extensions.Azure" Version="7.1.1" />
+    <PackageVersion Include="Microsoft.Data.SqlClient.Extensions.Azure" Version="7.1.2" />
     <!-- Photo re-encoding in the API, and (through transitive pinning) the SkiaSharp the Desktop's charts load. Keep these two and the
          two Skia pins above on the same version. -->
     <PackageVersion Include="SkiaSharp" Version="4.157.0" />
