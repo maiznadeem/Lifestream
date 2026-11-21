@@ -23,7 +23,7 @@ Donors, patients, appointments, blood requests, stock and receipts, with a dashb
 
 <br>
 
-Version **2.1.7** is a ground-up rewrite of the original course project on .NET 11: a WPF desktop app that talks to an
+Version **2.1.8** is a ground-up rewrite of the original course project on .NET 11: a WPF desktop app that talks to an
 ASP.NET Core API on Azure. What changed for users, release by release, is in [CHANGELOG.md](CHANGELOG.md).
 
 - **Everything in one place.** Donors and patients, the day's appointments, blood requests, stock by blood group, receipts and staff.
@@ -33,7 +33,7 @@ ASP.NET Core API on Azure. What changed for users, release by release, is in [CH
 
 ## Install
 
-1. Open the [v2.1.7 release](https://github.com/maiznadeem/Lifestream/releases/tag/v2.1.7) and download `Lifestream-win-Setup.exe`
+1. Open the [v2.1.8 release](https://github.com/maiznadeem/Lifestream/releases/tag/v2.1.8) and download `Lifestream-win-Setup.exe`
    and `SHA256SUMS.txt`. Lifestream runs on Windows 10 or 11, 64-bit.
 2. Check the download. In PowerShell, in the folder you saved both files to:
 

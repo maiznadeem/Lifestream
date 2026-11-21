@@ -11,7 +11,7 @@ namespace Lifestream.Desktop.Tests;
 /// </summary>
 public sealed partial class ReleaseConfigTests
 {
-    private const string Version = "2.1.7";
+    private const string Version = "2.1.8";
 
     private static string Text(string relative) => File.ReadAllText(RepoPaths.Find(relative)).Replace("\r\n", "\n", StringComparison.Ordinal);
 
@@ -23,10 +23,10 @@ public sealed partial class ReleaseConfigTests
 
         Assert.True(Uri.TryCreate(address, UriKind.Absolute, out var uri), $"'{address}' is not an absolute address");
         Assert.Equal(Uri.UriSchemeHttps, uri.Scheme);
-        Assert.EndsWith(".azurecontainerapps.io", uri.Host, StringComparison.Ordinal);
+        Assert.Equal("api.lifestream.himaiz.com", uri.Host); // the Cloudflare Worker in front of the API (edge/api), never the container's own address
         Assert.False(uri.IsLoopback, "the shipped app must not point at this machine");
         Assert.DoesNotContain("localhost", uri.Host, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal("https://lifestream-api.mangotree-b12eb44b.eastus.azurecontainerapps.io/", uri.AbsoluteUri);
+        Assert.Equal("https://api.lifestream.himaiz.com/", uri.AbsoluteUri);
 
         // The csproj copies the file next to the exe, so the published app reads this very file.
         Assert.Contains("appsettings.json", Text("src/Lifestream.Desktop/Lifestream.Desktop.csproj"), StringComparison.Ordinal);
@@ -93,7 +93,7 @@ public sealed partial class ReleaseConfigTests
         var readme = Text("README.md");
         var install = readme[readme.IndexOf("## Install", StringComparison.Ordinal)..readme.IndexOf("## Try it", StringComparison.Ordinal)];
 
-        Assert.Contains("https://github.com/maiznadeem/Lifestream/releases/tag/v2.1.7", install, StringComparison.Ordinal);
+        Assert.Contains("https://github.com/maiznadeem/Lifestream/releases/tag/v2.1.8", install, StringComparison.Ordinal);
         Assert.Contains("More info", install, StringComparison.Ordinal);
         Assert.Contains("Run anyway", install, StringComparison.Ordinal);
         Assert.Contains("not code-signed", install, StringComparison.Ordinal);

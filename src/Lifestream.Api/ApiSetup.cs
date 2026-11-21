@@ -54,6 +54,10 @@ public static class ApiSetup
         services.Configure<DashboardSettings>(config.GetSection(DashboardSettings.Section));
         services.Configure<DatabaseSettings>(config.GetSection(DatabaseSettings.Section));
         services.Configure<LimitSettings>(config.GetSection(LimitSettings.Section));
+        services.AddOptions<OriginAuthSettings>().Bind(config.GetSection(OriginAuthSettings.Section))
+            .Validate(o => !o.Enforce || !string.IsNullOrEmpty(o.Secret), "OriginAuth:Mode is enforce but OriginAuth:Secret is not set.")
+            .Validate(o => string.IsNullOrEmpty(o.Secret) || o.Secret.Length >= 32, "OriginAuth:Secret must be at least 32 characters.")
+            .ValidateOnStart();
         services.AddSingleton(sp => sp.GetRequiredService<IOptions<DatabaseSettings>>().Value);
 
         services.AddSingleton(TimeProvider.System);
@@ -182,6 +186,7 @@ public static class ApiSetup
     {
         LoginTimingSetup.WarmUp(app.Services); // the dummy hash for unknown names is computed before the first request, not by it
         app.UseForwardedHeaders();
+        app.UseMiddleware<OriginAuthMiddleware>(); // after the forwarded headers: a request from the Cloudflare Worker names its visitor in X-Client-IP
         app.UseMiddleware<CorrelationMiddleware>();
         app.UseMiddleware<ProblemMiddleware>();
         app.UseResponseCompression();
