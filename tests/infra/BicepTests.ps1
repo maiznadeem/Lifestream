@@ -137,6 +137,20 @@ Describe 'INFRA-06 identities: managed identity for the API, a passwordless migr
         $cs[0].value | Should -Be "[variables('sqlConnectionBase')]"
     }
 
+    It 'lets only Cloudflare reach the API ingress: one Allow rule per Cloudflare IPv4 range, and the list is not empty' {
+        $ranges = @($script:Template.parameters.ingressAllowedRanges.defaultValue)
+        $ranges.Count | Should -BeGreaterThan 10
+        foreach ($range in $ranges) { $range | Should -Match '^\d{1,3}(\.\d{1,3}){3}/\d{1,2}$' }
+        $ranges | Should -Contain '173.245.48.0/20'
+        $ranges | Should -Contain '104.16.0.0/13'
+        $api = Single 'Microsoft.App/containerApps' 'the API'
+        $loop = @($api.properties.configuration.ingress.copy | Where-Object name -eq 'ipSecurityRestrictions')
+        $loop.Count | Should -Be 1
+        $loop[0].count | Should -Be "[length(parameters('ingressAllowedRanges'))]"
+        $loop[0].input.action | Should -Be 'Allow'
+        $loop[0].input.ipAddressRange | Should -Be "[parameters('ingressAllowedRanges')[copyIndex('ipSecurityRestrictions')]]"
+    }
+
     It 'takes every secret value from a secure parameter, never a literal' {
         foreach ($name in 'jwtSigningKey', 'ownerAdminPassword', 'originAuthSecret') {
             $script:Template.parameters.$name.type | Should -Be 'securestring'
@@ -153,6 +167,7 @@ Describe 'INFRA-06 identities: managed identity for the API, a passwordless migr
         @($envs | Where-Object name -eq 'OriginAuth__Secret')[0].secretRef | Should -Be 'origin-auth'
         @($envs | Where-Object name -eq 'OriginAuth__Mode')[0].value | Should -Be "[parameters('originAuthMode')]"
         $script:Template.parameters.originAuthMode.allowedValues | Should -Be @('log', 'enforce')
+        $script:Template.parameters.originAuthMode.defaultValue | Should -Be 'enforce'
         $job = Single 'Microsoft.App/jobs' 'the migrate job'
         $jobSecret = @($job.properties.configuration.secrets | Where-Object name -eq 'owner-admin-password')
         $jobSecret.Count | Should -Be 1
@@ -451,6 +466,6 @@ Describe 'parameter file' {
         $p.parameters.entraOnlyAuthentication.value | Should -Be $true
         $p.parameters.enableLocks.value | Should -Be $true
         $p.parameters.apiImage.value | Should -Be 'ghcr.io/example/image:test'
-        $p.parameters.originAuthMode.value | Should -Be 'log'
+        $p.parameters.originAuthMode.value | Should -Be 'enforce'
     }
 }

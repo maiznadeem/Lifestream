@@ -68,7 +68,26 @@ param originAuthSecret string
 
 @description('log: requests without the Worker secret are served and logged (rollout). enforce: they get 403. /healthz is always served (the startup probe).')
 @allowed([ 'log', 'enforce' ])
-param originAuthMode string = 'log'
+param originAuthMode string = 'enforce'
+
+@description('The only addresses the API ingress accepts: the IPv4 ranges of Cloudflare (https://api.cloudflare.com/client/v4/ips, 2026-11-22). The Worker reaches the container from them; the container address has no IPv6. Cloudflare announces changes to the list well ahead; update it here and re-apply. An empty list opens the ingress to everyone.')
+param ingressAllowedRanges array = [
+  '173.245.48.0/20'
+  '103.21.244.0/22'
+  '103.22.200.0/22'
+  '103.31.4.0/22'
+  '141.101.64.0/18'
+  '108.162.192.0/18'
+  '190.93.240.0/20'
+  '188.114.96.0/20'
+  '197.234.240.0/22'
+  '198.41.128.0/17'
+  '162.158.0.0/15'
+  '104.16.0.0/13'
+  '104.24.0.0/14'
+  '172.64.0.0/13'
+  '131.0.72.0/22'
+]
 
 @description('GitHub repository allowed to deploy through OIDC (owner/name).')
 param githubRepository string = 'maiznadeem/Lifestream'
@@ -298,6 +317,13 @@ resource api 'Microsoft.App/containerApps@2025-01-01' = {
         transport: 'auto'
         allowInsecure: false // plain HTTP is redirected to HTTPS
         traffic: [ { latestRevision: true, weight: 100 } ]
+        // Only Cloudflare reaches the container (the Worker on api.lifestream.himaiz.com); every other address gets 403 from the ingress.
+        ipSecurityRestrictions: [for (range, i) in ingressAllowedRanges: {
+          name: 'cloudflare-${i + 1}'
+          action: 'Allow'
+          ipAddressRange: range
+          description: 'Cloudflare IPv4 range'
+        }]
       }
       secrets: [
         { name: 'jwt-signing-key', value: jwtSigningKey }

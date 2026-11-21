@@ -15,7 +15,7 @@ environment variables read by `main.bicepparam`.
 | `lifestream-audit` Log Analytics workspace | Receives SQL sign-in and schema-change audit events. 31-day retention, daily cap 0.1 GB, so it stays inside the free 5 GB a month. |
 | `lifestream-deployer` identity | GitHub Actions signs in as this identity through an OIDC federated credential for `maiznadeem/Lifestream` branch `master`. Contributor on the resource group only. No secret. |
 | Budget `lifestream-monthly` | 1 per month, email alerts at 50% and 100% actual. An alert does not stop spending; the design relies on scale-to-zero and the free offer for that. |
-| Cloudflare Worker `lifestream-api-edge` (not in this template; `edge/api`) | The public hostname `api.lifestream.himaiz.com`, on the shared `himaiz.com` zone, whose WAF runs first. Forwards each request to the container app with the secret header `X-Origin-Auth` (Worker secret `ORIGIN_AUTH` = Container Apps secret `origin-auth` = `lifestream-origin-auth` in the local store) and the visitor's address in `X-Client-IP`. The API trusts `X-Client-IP` only with the right secret (`OriginAuthMiddleware`); `OriginAuth__Mode` is `log` during rollout and `enforce` after it. Deploy from `edge/api` with `npx wrangler@4 deploy` (the account's Cloudflare token works through the VPN only). Free: 100,000 Worker requests a day, shared by all of the owner's projects. |
+| Cloudflare Worker `lifestream-api-edge` (not in this template; `edge/api`) | The public hostname `api.lifestream.himaiz.com`, on the shared `himaiz.com` zone, whose WAF runs first. Forwards each request to the container app with the secret header `X-Origin-Auth` (Worker secret `ORIGIN_AUTH` = Container Apps secret `origin-auth` = `lifestream-origin-auth` in the local store) and the visitor's address in `X-Client-IP`. The API trusts `X-Client-IP` only with the right secret (`OriginAuthMiddleware`); `OriginAuth__Mode` is `enforce`, and the container app's ingress accepts only Cloudflare's IPv4 ranges (`ingressAllowedRanges`), so the container's own address answers 403 to everyone else (locked 2026-11-22). Deploy from `edge/api` with `npx wrangler@4 deploy` (the account's Cloudflare token works through the VPN only). Free: 100,000 Worker requests a day, shared by all of the owner's projects. |
 
 ### Why nothing here bills while there is no traffic (OWN-02)
 
@@ -84,7 +84,7 @@ Each step lists what it needs and how to check it. Steps that change Azure are t
    | `LIFESTREAM_JWT_SIGNING_KEY` | Generate 48+ random bytes (base64) once. Keep it in the secret store. |
    | `LIFESTREAM_OWNER_ADMIN_PASSWORD` | Initial password of the owner admin account (`lifestream-owner-admin` in the store). |
    | `LIFESTREAM_ORIGIN_AUTH` | The Cloudflare Worker's shared secret (`lifestream-origin-auth` in the secret store; the same value as the Worker secret `ORIGIN_AUTH`). |
-   | `LIFESTREAM_ORIGIN_AUTH_MODE` | `log` (default) or `enforce`. Set `enforce` once the ingress is locked to Cloudflare, or a re-apply returns to `log`. |
+   | `LIFESTREAM_ORIGIN_AUTH_MODE` | `enforce` (default) or `log`. `log` only for a rollout or an incident: it serves requests that skipped Cloudflare. |
 
 3. **Dry run**, then apply, which deploys the app with its managed identity (locks off for now because step 8 deletes firewall rules,
    which a lock on the server blocks):
