@@ -1,6 +1,7 @@
 name: Sync SQL firewall
 
-# Makes the SQL server firewall equal to the Container Apps environment's outbound addresses (INFRA-04). Started by hand only:
+# Makes the SQL server firewall equal to the Container Apps environment's outbound addresses plus the 'Allow Azure services' rule
+# (AllowAllWindowsAzureIps, kept by the owner's decision of 2026-11-21; INFRA-04). Started by hand only:
 # since 2026-11-19 neither deploy-api.yml nor a schedule runs it, because the Consumption environment's shared outbound pool is
 # 170+ addresses and adding them one rule at a time took longer than the deploy job; Entra-only authentication is the access
 # control. Run it when the environment's outbound addresses change. It only edits firewall rules; it never connects to the database. Signs in with GitHub OIDC (no stored cloud secret). The logic is in

@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Makes the SQL server firewall hold exactly the Container Apps environment's outbound IP addresses, and nothing else.
+  Makes the SQL server firewall hold exactly the Container Apps environment's outbound IP addresses and the Azure services rule.
 
 .DESCRIPTION
   INFRA-04. The environment is a plain Consumption environment (no virtual network, so no billed public IP or load balancer),
@@ -8,8 +8,11 @@
   then makes the server's firewall rules exactly that set:
 
     - one rule per address, named aca-outbound-<n> (n = 1, 2, ... in ascending address order), start = end = the address;
-    - every other rule is deleted: "Allow anyone" (0.0.0.0-255.255.255.255), "AllowAllWindowsAzureIps" (0.0.0.0-0.0.0.0),
-      stale aca-outbound-* rules, hand-added client rules, anything.
+    - the "Allow Azure services" rule, AllowAllWindowsAzureIps (0.0.0.0-0.0.0.0), is kept, and added back if it is missing.
+      The environment's outbound pool is shared and changes: on 2026-11-21 the API listed 321 addresses while 170 had rules,
+      so this rule is what lets the API reach the database from the rest. The owner chose to keep it that day;
+    - every other rule is deleted: "Allow anyone" (0.0.0.0-255.255.255.255), stale aca-outbound-* rules, hand-added client
+      rules, anything.
 
   Order is add/update first, delete second, so the API is never left without a matching rule. Running it twice changes nothing.
   It never touches the database, only the server's firewall rules.
@@ -49,6 +52,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $ruleNamePrefix = 'aca-outbound-'
+$azureServicesRule = 'AllowAllWindowsAzureIps'   # 0.0.0.0-0.0.0.0 is Azure's "Allow Azure services" range; kept, never deleted
 
 function Invoke-AzJson {
     param([string[]]$Arguments)
@@ -125,6 +129,7 @@ foreach ($ip in $addresses) {
 $sorted = @($addresses | Sort-Object { [version]$_ })
 $desired = [ordered]@{}
 for ($i = 0; $i -lt $sorted.Count; $i++) { $desired["$ruleNamePrefix$($i + 1)"] = $sorted[$i] }
+$desired[$azureServicesRule] = '0.0.0.0'
 
 $existing = @(Invoke-AzJson @('sql', 'server', 'firewall-rule', 'list', '--resource-group', $ResourceGroup, '--server', $Server))
 $existing = @($existing | Where-Object { $_ })
@@ -175,6 +180,6 @@ if ($stale.Count -gt 0) {
 if (-not $WhatIfOnly) {
     $after = @(Invoke-AzJson @('sql', 'server', 'firewall-rule', 'list', '--resource-group', $ResourceGroup, '--server', $Server) | Where-Object { $_ })
     $bad = @($after | Where-Object { -not $desired.Contains([string]$_.name) -or $_.startIpAddress -ne $desired[[string]$_.name] -or $_.endIpAddress -ne $desired[[string]$_.name] })
-    if ($bad.Count -gt 0 -or $after.Count -ne $desired.Count) { throw "FAILED: after the sync the firewall holds $($after.Count) rule(s), expected exactly $($desired.Count) (aca-outbound-*)." }
+    if ($bad.Count -gt 0 -or $after.Count -ne $desired.Count) { throw "FAILED: after the sync the firewall holds $($after.Count) rule(s), expected exactly $($desired.Count) (aca-outbound-* and $azureServicesRule)." }
 }
-Write-Host "OK: firewall of $Server holds exactly $($desired.Count) outbound address(es) ($added added, $updated updated, $removed removed, $kept unchanged)."
+Write-Host "OK: firewall of $Server holds exactly $($desired.Count - 1) outbound address(es) and $azureServicesRule ($added added, $updated updated, $removed removed, $kept unchanged)."

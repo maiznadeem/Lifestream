@@ -61,29 +61,42 @@ BeforeAll {
 AfterAll { Remove-Item function:global:az -ErrorAction SilentlyContinue; Remove-Variable Fake -Scope Global -ErrorAction SilentlyContinue }
 
 Describe 'sync-sql-firewall.ps1 (mocked az)' {
-    It 'removes the Allow anyone and AllowAllWindowsAzureIps rules and adds the environment addresses' {
+    It 'removes the Allow anyone rule, keeps AllowAllWindowsAzureIps, and adds the environment addresses' {
         New-Fake -EnvIps @('20.1.1.2', '20.1.1.1') -Rules @((Rule 'Allow anyone' '0.0.0.0' '255.255.255.255'), (Rule 'AllowAllWindowsAzureIps' '0.0.0.0' '0.0.0.0'))
         Sync
-        RulesNow | Should -Be @('aca-outbound-1=20.1.1.1-20.1.1.1', 'aca-outbound-2=20.1.1.2-20.1.1.2')
+        RulesNow | Should -Be @('aca-outbound-1=20.1.1.1-20.1.1.1', 'aca-outbound-2=20.1.1.2-20.1.1.2', 'AllowAllWindowsAzureIps=0.0.0.0-0.0.0.0')
+        @($global:Fake.Calls | Where-Object { $_ -match 'firewall-rule (update|delete) .*AllowAllWindowsAzureIps' }) | Should -BeNullOrEmpty
+    }
+
+    It 'adds AllowAllWindowsAzureIps back when it is missing (the shared outbound pool is larger than the rules and it changes)' {
+        New-Fake -EnvIps @('20.1.1.1') -Rules @((Rule 'aca-outbound-1' '20.1.1.1' '20.1.1.1'))
+        Sync
+        RulesNow | Should -Be @('aca-outbound-1=20.1.1.1-20.1.1.1', 'AllowAllWindowsAzureIps=0.0.0.0-0.0.0.0')
+    }
+
+    It 'puts AllowAllWindowsAzureIps back to 0.0.0.0-0.0.0.0 if its range was changed' {
+        New-Fake -EnvIps @('20.1.1.1') -Rules @((Rule 'aca-outbound-1' '20.1.1.1' '20.1.1.1'), (Rule 'AllowAllWindowsAzureIps' '0.0.0.0' '255.255.255.255'))
+        Sync
+        RulesNow | Should -Be @('aca-outbound-1=20.1.1.1-20.1.1.1', 'AllowAllWindowsAzureIps=0.0.0.0-0.0.0.0')
     }
 
     It 'adds only the missing addresses and keeps the correct rules untouched' {
-        New-Fake -EnvIps @('20.1.1.1', '20.1.1.2', '20.1.1.3') -Rules @((Rule 'aca-outbound-1' '20.1.1.1' '20.1.1.1'), (Rule 'aca-outbound-2' '20.1.1.2' '20.1.1.2'))
+        New-Fake -EnvIps @('20.1.1.1', '20.1.1.2', '20.1.1.3') -Rules @((Rule 'aca-outbound-1' '20.1.1.1' '20.1.1.1'), (Rule 'aca-outbound-2' '20.1.1.2' '20.1.1.2'), (Rule 'AllowAllWindowsAzureIps' '0.0.0.0' '0.0.0.0'))
         Sync
-        RulesNow | Should -Be @('aca-outbound-1=20.1.1.1-20.1.1.1', 'aca-outbound-2=20.1.1.2-20.1.1.2', 'aca-outbound-3=20.1.1.3-20.1.1.3')
+        RulesNow | Should -Be @('aca-outbound-1=20.1.1.1-20.1.1.1', 'aca-outbound-2=20.1.1.2-20.1.1.2', 'aca-outbound-3=20.1.1.3-20.1.1.3', 'AllowAllWindowsAzureIps=0.0.0.0-0.0.0.0')
         @($global:Fake.Calls | Where-Object { $_ -match 'firewall-rule (create|update|delete)' }).Count | Should -Be 1
     }
 
     It 'removes stale addresses (an old aca-outbound rule and a hand-added client rule)' {
         New-Fake -EnvIps @('20.1.1.1') -Rules @((Rule 'aca-outbound-1' '20.1.1.1' '20.1.1.1'), (Rule 'aca-outbound-2' '20.9.9.9' '20.9.9.9'), (Rule 'my-laptop' '81.2.3.4' '81.2.3.4'))
         Sync
-        RulesNow | Should -Be @('aca-outbound-1=20.1.1.1-20.1.1.1')
+        RulesNow | Should -Be @('aca-outbound-1=20.1.1.1-20.1.1.1', 'AllowAllWindowsAzureIps=0.0.0.0-0.0.0.0')
     }
 
     It 'rewrites a rule that has the right name but the wrong address' {
         New-Fake -EnvIps @('20.1.1.1') -Rules @((Rule 'aca-outbound-1' '20.5.5.5' '20.5.5.5'))
         Sync
-        RulesNow | Should -Be @('aca-outbound-1=20.1.1.1-20.1.1.1')
+        RulesNow | Should -Be @('aca-outbound-1=20.1.1.1-20.1.1.1', 'AllowAllWindowsAzureIps=0.0.0.0-0.0.0.0')
     }
 
     It 'is idempotent: a second run makes no create, update or delete call' {
@@ -122,7 +135,7 @@ Describe 'sync-sql-firewall.ps1 (mocked az)' {
         $other = [pscustomobject]@{ properties = [pscustomobject]@{ environmentId = '/subscriptions/x/resourceGroups/Lifestream/providers/Microsoft.App/managedEnvironments/other-env'; outboundIpAddresses = @('20.3.3.3') } }
         New-Fake -EnvIps @() -Rules @() -Apps @($mine, $other)
         Sync
-        RulesNow | Should -Be @('aca-outbound-1=20.2.2.2-20.2.2.2')
+        RulesNow | Should -Be @('aca-outbound-1=20.2.2.2-20.2.2.2', 'AllowAllWindowsAzureIps=0.0.0.0-0.0.0.0')
     }
 
     It 'passes --subscription with the explicit id on every az call' {
@@ -142,7 +155,7 @@ Describe 'sync-sql-firewall.ps1 (mocked az)' {
         It 'removes the lock, deletes the stale rules, and puts the identical lock back' {
             New-Fake -EnvIps @('20.1.1.1') -Rules @((Rule 'Allow anyone' '0.0.0.0' '255.255.255.255'), (Rule 'AllowAllWindowsAzureIps' '0.0.0.0' '0.0.0.0')) -Locks @(ServerLock)
             Sync
-            RulesNow | Should -Be @('aca-outbound-1=20.1.1.1-20.1.1.1')
+            RulesNow | Should -Be @('aca-outbound-1=20.1.1.1-20.1.1.1', 'AllowAllWindowsAzureIps=0.0.0.0-0.0.0.0')
             @($global:Fake.Locks).Count | Should -Be 1
             $global:Fake.Locks[0].name | Should -Be 'lifestream-server-no-delete'
             $global:Fake.Locks[0].level | Should -Be 'CanNotDelete'
@@ -214,8 +227,8 @@ Describe 'sync-sql-firewall.ps1 (mocked az)' {
         New-Fake -EnvIps @('20.1.1.1') -Rules @()
         Sync
         $calls = @($global:Fake.Calls)
-        $gate = ($calls | Select-String 'sql server ad-only-auth get').LineNumber
-        $firstWrite = ($calls | Select-String 'firewall-rule create').LineNumber
+        $gate = ($calls | Select-String 'sql server ad-only-auth get' | Select-Object -First 1).LineNumber
+        $firstWrite = ($calls | Select-String 'firewall-rule create' | Select-Object -First 1).LineNumber
         $gate | Should -BeLessThan $firstWrite
     }
 
