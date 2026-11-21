@@ -7,13 +7,13 @@
 **Blood-bank management for Windows.**<br>
 Donors, patients, appointments, blood requests, stock and receipts, with a dashboard that shows the day at a glance.
 
-[![Latest release](https://img.shields.io/github/v/release/maiznadeem/lifestream?label=release&color=B4162E)](https://github.com/maiznadeem/lifestream/releases/latest)
-[![CI](https://github.com/maiznadeem/lifestream/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/maiznadeem/lifestream/actions/workflows/ci.yml)
-[![Secret scan](https://github.com/maiznadeem/lifestream/actions/workflows/secret-scan.yml/badge.svg?branch=master)](https://github.com/maiznadeem/lifestream/actions/workflows/secret-scan.yml)
+[![Latest release](https://img.shields.io/github/v/release/maiznadeem/Lifestream?label=release&color=B4162E)](https://github.com/maiznadeem/Lifestream/releases/latest)
+[![CI](https://github.com/maiznadeem/Lifestream/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/maiznadeem/Lifestream/actions/workflows/ci.yml)
+[![Secret scan](https://github.com/maiznadeem/Lifestream/actions/workflows/secret-scan.yml/badge.svg?branch=master)](https://github.com/maiznadeem/Lifestream/actions/workflows/secret-scan.yml)
 ![Windows 10 and 11](https://img.shields.io/badge/Windows-10%20%7C%2011-1B2533)
 ![.NET 11](https://img.shields.io/badge/.NET-11-1B2533)
 
-[**Download**](https://github.com/maiznadeem/lifestream/releases/latest) · [Try the demo](#try-it) · [What's new](CHANGELOG.md) · [Security](docs/SECURITY.md)
+[**Download**](https://github.com/maiznadeem/Lifestream/releases/latest) · [Try the demo](#try-it) · [What's new](CHANGELOG.md) · [Security](docs/SECURITY.md)
 
 <br>
 
@@ -33,7 +33,7 @@ ASP.NET Core API on Azure. What changed for users, release by release, is in [CH
 
 ## Install
 
-1. Open the [v2.1.7 release](https://github.com/maiznadeem/lifestream/releases/tag/v2.1.7) and download `Lifestream-win-Setup.exe`
+1. Open the [v2.1.7 release](https://github.com/maiznadeem/Lifestream/releases/tag/v2.1.7) and download `Lifestream-win-Setup.exe`
    and `SHA256SUMS.txt`. Lifestream runs on Windows 10 or 11, 64-bit.
 2. Check the download. In PowerShell, in the folder you saved both files to:
 
@@ -142,7 +142,7 @@ dotnet run --project src/Lifestream.Desktop     # the desktop client
 
 ### Releases
 
-Installers are on the [Releases page](https://github.com/maiznadeem/lifestream/releases), each with its SHA-256 checksums (see
+Installers are on the [Releases page](https://github.com/maiznadeem/Lifestream/releases), each with its SHA-256 checksums (see
 [Install](#install)). Each release's notes are its section of [CHANGELOG.md](CHANGELOG.md).
 
 <details>

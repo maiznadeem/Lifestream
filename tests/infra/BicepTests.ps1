@@ -389,17 +389,17 @@ Describe 'INFRA-13 keyless deployment identity' {
         $cred.properties.issuer | Should -Be 'https://token.actions.githubusercontent.com'
         $cred.properties.audiences | Should -Contain 'api://AzureADTokenExchange'
         $cred.properties.subject | Should -Be "[format('repo:{0}:ref:refs/heads/{1}', parameters('githubRepository'), parameters('githubBranch'))]"
-        $script:Template.parameters.githubRepository.defaultValue | Should -Be 'maiznadeem/lifestream'
+        $script:Template.parameters.githubRepository.defaultValue | Should -Be 'maiznadeem/Lifestream'
         $script:Template.parameters.githubBranch.defaultValue | Should -Be 'master'
         $script:Template.outputs.PSObject.Properties.Name | Should -Contain 'deployerClientId'
     }
 
-    It 'compiles to exactly the subject GitHub sends for maiznadeem/lifestream on master (case-sensitive)' {
+    It 'compiles to exactly the subject GitHub sends for maiznadeem/Lifestream on master (case-sensitive)' {
         $cred = Single 'Microsoft.ManagedIdentity/userAssignedIdentities/federatedIdentityCredentials' 'GitHub OIDC'
         # The subject is format('repo:{0}:ref:refs/heads/{1}', githubRepository, githubBranch); resolve it with the compiled defaults.
         $cred.properties.subject | Should -Be "[format('repo:{0}:ref:refs/heads/{1}', parameters('githubRepository'), parameters('githubBranch'))]"
         $resolved = 'repo:{0}:ref:refs/heads/{1}' -f $script:Template.parameters.githubRepository.defaultValue, $script:Template.parameters.githubBranch.defaultValue
-        $resolved | Should -BeExactly 'repo:maiznadeem/lifestream:ref:refs/heads/master'
+        $resolved | Should -BeExactly 'repo:maiznadeem/Lifestream:ref:refs/heads/master'
     }
 
     It 'gives the deployer Contributor on the resource group only (no explicit wider scope, no Owner)' {

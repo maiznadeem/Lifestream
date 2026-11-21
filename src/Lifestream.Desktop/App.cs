@@ -34,7 +34,7 @@ public sealed class App : Application
     public App() => ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
     /// <summary>The release feed checked at startup.</summary>
-    public const string ReleaseRepositoryUrl = "https://github.com/maiznadeem/lifestream";
+    public const string ReleaseRepositoryUrl = "https://github.com/maiznadeem/Lifestream";
 
     protected override void OnStartup(StartupEventArgs e)
     {

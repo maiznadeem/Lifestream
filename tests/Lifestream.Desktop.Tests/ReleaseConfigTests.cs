@@ -35,8 +35,8 @@ public sealed partial class ReleaseConfigTests
     [Fact]
     public void UpdateFeed_IsTheRealRepository_InTheCodeAndTheReleaseWorkflow()
     {
-        Assert.Equal("https://github.com/maiznadeem/lifestream", App.ReleaseRepositoryUrl);
-        Assert.Contains("REPO_URL: https://github.com/maiznadeem/lifestream", Text(".github/workflows/release.yml"), StringComparison.Ordinal);
+        Assert.Equal("https://github.com/maiznadeem/Lifestream", App.ReleaseRepositoryUrl);
+        Assert.Contains("REPO_URL: https://github.com/maiznadeem/Lifestream", Text(".github/workflows/release.yml"), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -93,7 +93,7 @@ public sealed partial class ReleaseConfigTests
         var readme = Text("README.md");
         var install = readme[readme.IndexOf("## Install", StringComparison.Ordinal)..readme.IndexOf("## Try it", StringComparison.Ordinal)];
 
-        Assert.Contains("https://github.com/maiznadeem/lifestream/releases/tag/v2.1.7", install, StringComparison.Ordinal);
+        Assert.Contains("https://github.com/maiznadeem/Lifestream/releases/tag/v2.1.7", install, StringComparison.Ordinal);
         Assert.Contains("More info", install, StringComparison.Ordinal);
         Assert.Contains("Run anyway", install, StringComparison.Ordinal);
         Assert.Contains("not code-signed", install, StringComparison.Ordinal);
@@ -125,7 +125,7 @@ public sealed partial class ReleaseConfigTests
     [GeneratedRegex(@"[A-Za-z]:\\|/Users/|/home/|\\\\[a-z0-9.-]+\\", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 5000)]
     private static partial Regex Drive();
 
-    [GeneratedRegex(@"https?://(?!github\.com/maiznadeem/lifestream)\S+", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 5000)]
+    [GeneratedRegex(@"https?://(?!github\.com/maiznadeem/Lifestream)\S+", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 5000)]
     private static partial Regex Url();
 
     [GeneratedRegex(@"(?i)(password|pwd|secret|token|api[_-]?key)\s*[=:]\s*\S+|Server=|Data Source=|eyJ[A-Za-z0-9_-]{10,}|\.database\.windows\.net|\.azurecontainerapps\.io", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 5000)]

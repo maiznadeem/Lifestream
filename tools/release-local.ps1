@@ -54,7 +54,7 @@ param(
     [string]$RepoRoot,
     [string]$Dotnet = $(if ($env:LIFESTREAM_DOTNET) { $env:LIFESTREAM_DOTNET } else { 'dotnet' }),
     [string]$WorkDir = (Join-Path ([IO.Path]::GetTempPath()) 'lifestream-release'),
-    [string]$Repo = 'maiznadeem/lifestream',
+    [string]$Repo = 'maiznadeem/Lifestream',
     [string]$VpkVersion = '1.2.161',
     [ValidateRange(1, 64)][int]$MaxCores = 8,
     [switch]$DryRunAllowExistingTag,

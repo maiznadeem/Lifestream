@@ -75,7 +75,7 @@ Describe 'tools/release-local.ps1 does what the release job of release.yml does'
     It 'creates the release as a draft at the commit, with the title and the notes file, and publishes it only after the upload is verified' {
         $script:Text | Should -Match ([regex]::Escape('$createArgs = @(''release'', ''create'', $tag, ''--repo'', $Repo, ''--target'', $sha, ''--title'', "Lifestream $Version", ''--notes-file'', $notesFile, ''--draft'')'))
         $script:Text | Should -Match ([regex]::Escape('$publishArgs = @(''release'', ''edit'', $tag, ''--repo'', $Repo, ''--draft=false'')'))
-        $script:Text | Should -Match ([regex]::Escape("`$Repo = 'maiznadeem/lifestream'"))
+        $script:Text | Should -Match ([regex]::Escape("`$Repo = 'maiznadeem/Lifestream'"))
     }
 
     It 'a dry run reaches no call that changes GitHub: every one is in the branch a dry run does not take' {

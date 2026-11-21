@@ -63,7 +63,7 @@ param jwtSigningKey string
 param ownerAdminPassword string
 
 @description('GitHub repository allowed to deploy through OIDC (owner/name).')
-param githubRepository string = 'maiznadeem/lifestream'
+param githubRepository string = 'maiznadeem/Lifestream'
 
 @description('Branch whose workflow runs may deploy.')
 param githubBranch string = 'master'

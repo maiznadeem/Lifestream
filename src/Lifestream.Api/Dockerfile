@@ -24,7 +24,7 @@ RUN dotnet publish src/Lifestream.Api/Lifestream.Api.csproj -c Release -r linux-
 
 FROM mcr.microsoft.com/dotnet/aspnet:11.0 AS final
 # Links the GHCR package to the repository, which lets the workflow's GITHUB_TOKEN manage (prune) its versions.
-LABEL org.opencontainers.image.source="https://github.com/maiznadeem/lifestream"
+LABEL org.opencontainers.image.source="https://github.com/maiznadeem/Lifestream"
 LABEL org.opencontainers.image.title="lifestream-api"
 WORKDIR /app
 COPY --from=build /app .
