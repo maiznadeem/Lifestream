@@ -13,7 +13,7 @@ environment variables read by `main.bicepparam`.
 | Container Apps job `lifestream-migrate` | Manual trigger only. Identity `lifestream-migrator` (user-assigned, no password). Secret `owner-admin-password`. |
 | SQL server `lifestream-server` and database `BloodBank` | Declared so the settings are code: free offer (`useFreeLimit`, `AutoPause`; the offer pauses the database after 15 minutes without a session, which is fixed and not a setting), Entra administrator, Entra-only switch, auditing, locks, backup policy. No firewall rule is declared: `sync-sql-firewall.ps1` owns them (see below). |
 | `lifestream-audit` Log Analytics workspace | Receives SQL sign-in and schema-change audit events. 31-day retention, daily cap 0.1 GB, so it stays inside the free 5 GB a month. |
-| `lifestream-deployer` identity | GitHub Actions signs in as this identity through an OIDC federated credential for `maiznadeem/lifestream` branch `master`. Contributor on the resource group only. No secret. |
+| `lifestream-deployer` identity | GitHub Actions signs in as this identity through an OIDC federated credential for `maiznadeem/Lifestream` branch `master`. Contributor on the resource group only. No secret. |
 | Budget `lifestream-monthly` | 1 per month, email alerts at 50% and 100% actual. An alert does not stop spending; the design relies on scale-to-zero and the free offer for that. |
 
 ### Why nothing here bills while there is no traffic (OWN-02)
@@ -104,7 +104,7 @@ Each step lists what it needs and how to check it. Steps that change Azure are t
    `az containerapp job start --subscription 88f308cf-f1e5-4e4d-b0bc-3e8b14ef9c65 -n lifestream-migrate -g Lifestream`. The job must exit 0 (the migrator signed in
    with its identity), and one API request that reads the database must succeed (the API signed in with its identity).
 6. **GitHub settings** (owner, once): repository variables `AZURE_CLIENT_ID` (= `deployerClientId`), `AZURE_TENANT_ID`,
-   `AZURE_SUBSCRIPTION_ID`; secret scanning and push protection on; Dependabot on. These ids are not secrets.
+   `AZURE_SUBSCRIPTION_ID`; secret scanning and push protection on; Dependabot off (owner's decision, 2026-11-21). These ids are not secrets.
 7. **Enable Entra-only authentication**, only after step 5 succeeded:
    ```
    ./infra/enable-entra-only.ps1 -SubscriptionId 88f308cf-f1e5-4e4d-b0bc-3e8b14ef9c65 -ResourceGroup Lifestream -Server lifestream-server -ManagedIdentityLoginProven
