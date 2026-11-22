@@ -58,7 +58,8 @@ flowchart LR
     secret, or with one shorter than 32 characters.
   - **Address allow-list:** the container app's ingress accepts only Cloudflare's 15 published IPv4 ranges (`ingressAllowedRanges` in
     `infra/main.bicep`, applied as `ipSecurityRestrictions` named `cloudflare-1` to `cloudflare-15`). The origin has no IPv6 address.
-- **Keeping the ranges current.** This is done by hand. Cloudflare publishes its ranges at `https://api.cloudflare.com/client/v4/ips` and
+- **Keeping the ranges current.** This is done by hand, with a weekly alert: `cloudflare-ranges.yml` fails every Monday the list differs from
+  `https://www.cloudflare.com/ips-v4`, and prints the added and removed ranges. Cloudflare publishes its ranges at `https://api.cloudflare.com/client/v4/ips` and
   announces changes in advance. When they change, update `ingressAllowedRanges` and apply the template. The live rules can also be set at once with
   `az containerapp ingress access-restriction set --subscription 88f308cf-f1e5-4e4d-b0bc-3e8b14ef9c65 -g Lifestream -n lifestream-api ...`.
   A missing range shows up as 403 for visitors whose Cloudflare data centre uses it.
@@ -80,7 +81,8 @@ All workflows are in `.github/workflows`. Only short jobs start by themselves; t
 |---|---|---|
 | `ci.yml` | pull request, push to `master` | job `fast`: builds Client and Domain (warnings are errors) and runs their tests, within a 90-second budget. The `api`, `desktop` and `test-order` jobs run only when started by hand. |
 | `secret-scan.yml` | pull request, push to `master`; Mondays 04:17 UTC | the credential scanner over the source and the new commits, plus gitleaks over the history. The Monday run scans every branch and tag. |
-| `deploy-api.yml` | push to `master` that changes `src/Lifestream.Api`, `Data`, `Contracts`, `Domain` or `infra/`; or by hand | the CD job below |
+| `deploy-api.yml` | push to `master` that changes `src/Lifestream.Api`, `Data`, `Contracts`, `Domain` or `infra/`, unless every changed file is Markdown (`*.md`); or by hand | the CD job below |
+| `cloudflare-ranges.yml` | Mondays 05:23 UTC; or by hand | compares `ingressAllowedRanges` in `infra/main.bicep` with `https://www.cloudflare.com/ips-v4` (`tools/check-cloudflare-ranges.sh`). Changes nothing; a failed run, which GitHub emails to the owner, means the ranges drifted or could not be read. About 10 seconds. |
 | `release.yml` | by hand only | a fallback for the desktop release (see below) |
 | `screenshots.yml`, `sync-sql-firewall.yml` | by hand only | regenerates the README screenshots; makes the SQL firewall match the environment's outbound addresses |
 

@@ -1,0 +1,30 @@
+name: Cloudflare ranges
+
+# The container app's ingress accepts only Cloudflare's IPv4 ranges, listed by hand in infra/main.bicep (ingressAllowedRanges).
+# If Cloudflare adds a range, its visitors get 403 with no warning. Once a week this compares that list with
+# https://www.cloudflare.com/ips-v4 (tools/check-cloudflare-ranges.sh) and fails on any difference, a failed or empty fetch, or a
+# list it cannot parse. It changes nothing: a failed run is the alert (GitHub emails the owner). The fix is to update the list and
+# apply the template (infra/README.md). About 10 seconds a run, so under a minute of Actions time a month.
+on:
+  schedule:
+    - cron: '23 5 * * 1'   # Mondays 05:23 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Cloudflare IPv4 ranges = ingressAllowedRanges
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: |
+            tools/check-cloudflare-ranges.sh
+            infra/main.bicep
+          sparse-checkout-cone-mode: false
+
+      - name: Compare the ranges
+        run: bash tools/check-cloudflare-ranges.sh infra/main.bicep

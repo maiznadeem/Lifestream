@@ -21,6 +21,7 @@ BeforeAll {
     $script:Scan = Load 'secret-scan.yml'
     $script:Ci = Load 'ci.yml'
     $script:SyncFw = Load 'sync-sql-firewall.yml'
+    $script:CfRanges = Load 'cloudflare-ranges.yml'
 }
 
 Describe 'INFRA-13 deploy-api.yml: keyless, separate from the PR build, no build-and-test job of its own' {
@@ -34,6 +35,15 @@ Describe 'INFRA-13 deploy-api.yml: keyless, separate from the PR build, no build
     It 'triggers on the API, data, contracts, domain and infra paths' {
         $paths = $script:Deploy.Yaml.on.push.paths
         foreach ($p in 'src/Lifestream.Api/**', 'src/Lifestream.Data/**', 'src/Lifestream.Contracts/**', 'src/Lifestream.Domain/**', 'infra/**') { $paths | Should -Contain $p }
+    }
+
+    # GitHub allows no paths-ignore next to paths, and checks the patterns in order (a later match wins), so the exclusion must be the
+    # last entry: a push that changes only Markdown (infra/README.md) must not deploy and wake the database.
+    It 'excludes Markdown-only changes with a negated pattern that is the last path entry' {
+        $paths = @($script:Deploy.Yaml.on.push.paths)
+        $paths[-1] | Should -Be '!**/*.md'
+        @($paths | Where-Object { $_ -like '!*' }).Count | Should -Be 1
+        $script:Deploy.Yaml.on.push.Keys | Should -Not -Contain 'paths-ignore'
     }
 
     # The build and every test are proven on the developer's PC before the push; the deploy does only what cannot be done there.
@@ -191,6 +201,7 @@ Describe 'workflow robustness: the guarded steps cannot be neutered by || true o
         @{ File = 'Release'; Pattern = 'tools/scan-artifacts\.ps1' }
         @{ File = 'Ci'; Pattern = 'tools/scan-artifacts\.ps1' }
         @{ File = 'SyncFw'; Pattern = 'infra/sync-sql-firewall' }
+        @{ File = 'CfRanges'; Pattern = 'tools/check-cloudflare-ranges\.sh' }
     ) {
         $wf = (Get-Variable -Scope Script -Name $File).Value
         $guarded = @()
@@ -214,6 +225,78 @@ Describe 'workflow robustness: the guarded steps cannot be neutered by || true o
                 }
             }
         }
+    }
+}
+
+# The ingress allow-list (ingressAllowedRanges in infra/main.bicep) is kept by hand; a range Cloudflare adds would answer 403 silently.
+Describe 'cloudflare-ranges.yml: a weekly, read-only drift check of the ingress allow-list against Cloudflare''s published ranges' {
+    It 'runs weekly and by hand only, reads only, in one short ubuntu job that runs tools/check-cloudflare-ranges.sh' {
+        $y = $script:CfRanges.Yaml
+        @($y.on.Keys | Sort-Object) | Should -Be @('schedule', 'workflow_dispatch')
+        @($y.on.schedule).Count | Should -Be 1
+        [string]@($y.on.schedule)[0].cron | Should -Match '^\d{1,2} \d{1,2} \* \* [0-6]$'
+        @($y.permissions.Keys) | Should -Be @('contents')
+        $y.permissions.contents | Should -Be 'read'
+        @($y.jobs.Keys).Count | Should -Be 1
+        $job = @($y.jobs.Values)[0]
+        [string]$job.'runs-on' | Should -Be 'ubuntu-latest'
+        [int]$job.'timeout-minutes' | Should -BeLessOrEqual 2
+        $job.ContainsKey('permissions') | Should -BeFalse
+        $checkout = @($job.steps | Where-Object { (Uses $_) -like 'actions/checkout@*' })
+        $checkout.Count | Should -Be 1
+        [string]$checkout[0].with.'sparse-checkout' | Should -Match 'tools/check-cloudflare-ranges\.sh'
+        [string]$checkout[0].with.'sparse-checkout' | Should -Match 'infra/main\.bicep'
+        @($job.steps | Where-Object { (Run $_) -match 'tools/check-cloudflare-ranges\.sh' }).Count | Should -Be 1
+        $script:CfRanges.Text | Should -Not -Match 'secrets\.|\baz |id-token'
+    }
+}
+
+# The script itself, run offline: the published list comes from a file (CLOUDFLARE_IPS_URL), the Bicep is the real one or a copy.
+Describe 'tools/check-cloudflare-ranges.sh: exit 0 when the sets match, 1 on drift, 2 when it cannot tell' {
+    BeforeAll {
+        $script:CfScript = Join-Path $script:Dir '..' '..' 'tools' 'check-cloudflare-ranges.sh'
+        $script:CfBicep = Join-Path $script:Dir '..' '..' 'infra' 'main.bicep'
+        $block = [regex]::Match((Get-Content -Raw $script:CfBicep), '(?ms)^param ingressAllowedRanges array = \[(.*?)^\]').Groups[1].Value
+        $script:CfRangesList = @($block -split "`r?`n" | ForEach-Object { $_.Trim().Trim("'") } | Where-Object { $_ })
+        $script:CfBash = @('C:\Program Files\Git\bin\bash.exe', '/usr/bin/bash', '/bin/bash') | Where-Object { Test-Path $_ } | Select-Object -First 1
+        function script:Invoke-CfCheck([string[]]$Published, [string]$Bicep = $script:CfBicep) {
+            $list = Join-Path $TestDrive ('ips-' + [guid]::NewGuid().ToString('N') + '.txt')
+            [IO.File]::WriteAllText($list, ($Published -join "`n"))
+            $psi = [Diagnostics.ProcessStartInfo]::new($script:CfBash)
+            foreach ($a in '--noprofile', '--norc', $script:CfScript.Replace('\', '/'), $Bicep.Replace('\', '/')) { $psi.ArgumentList.Add($a) }
+            $psi.Environment['CLOUDFLARE_IPS_URL'] = 'file://' + $(if ($IsWindows) { '/' } else { '' }) + $list.Replace('\', '/')
+            $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
+            $proc = [Diagnostics.Process]::Start($psi)
+            $o = $proc.StandardOutput.ReadToEndAsync(); $e = $proc.StandardError.ReadToEndAsync(); $proc.WaitForExit()
+            [pscustomobject]@{ ExitCode = $proc.ExitCode; Output = $o.Result + $e.Result }
+        }
+    }
+
+    It 'reads the 15 ranges of the real Bicep and passes when Cloudflare publishes the same set (in another order)' {
+        $script:CfRangesList.Count | Should -Be 15
+        $r = Invoke-CfCheck ($script:CfRangesList | Sort-Object -Descending)
+        $r.ExitCode | Should -Be 0 -Because $r.Output
+        $r.Output | Should -Match 'OK: the lists match'
+    }
+
+    It 'fails with exit 1 and names the range when Cloudflare adds one' {
+        $r = Invoke-CfCheck ($script:CfRangesList + '203.0.113.0/24')
+        $r.ExitCode | Should -Be 1 -Because $r.Output
+        $r.Output | Should -Match '(?s)ADDED.*203\.0\.113\.0/24'
+    }
+
+    It 'fails with exit 1 and names the range when Cloudflare removes one' {
+        $r = Invoke-CfCheck ($script:CfRangesList | Where-Object { $_ -ne '131.0.72.0/22' })
+        $r.ExitCode | Should -Be 1 -Because $r.Output
+        $r.Output | Should -Match '(?s)REMOVED.*131\.0\.72\.0/22'
+    }
+
+    It 'fails with exit 2 on an empty or non-range answer, and on a Bicep whose list it cannot find' {
+        (Invoke-CfCheck @()).ExitCode | Should -Be 2
+        (Invoke-CfCheck @('<html>error</html>')).ExitCode | Should -Be 2
+        $renamed = Join-Path $TestDrive 'renamed.bicep'
+        [IO.File]::WriteAllText($renamed, (Get-Content -Raw $script:CfBicep).Replace('param ingressAllowedRanges array', 'param ingressRanges array'))
+        (Invoke-CfCheck $script:CfRangesList $renamed).ExitCode | Should -Be 2
     }
 }
 
@@ -300,11 +383,11 @@ Describe 'automatic runs are short: one run per push, under two minutes' {
         function script:Scheduled($job) { $job.ContainsKey('if') -and [string]$job.if -match "github\.event_name == 'schedule'" }
     }
 
-    It 'no workflow starts on a tag or on a branch other than master, and only secret-scan.yml has a schedule, once a week' {
+    It 'no workflow starts on a tag or on a branch other than master, and only secret-scan.yml and cloudflare-ranges.yml have a schedule, once a week' {
         foreach ($name in $script:All.Keys) {
             $on = $script:All[$name].Yaml.on
-            if ($name -eq 'secret-scan.yml') {
-                @($on.schedule).Count | Should -Be 1 -Because 'one weekly run of the full-history scan'
+            if ($name -in 'secret-scan.yml', 'cloudflare-ranges.yml') {
+                @($on.schedule).Count | Should -Be 1 -Because "one weekly run of $name"
                 [string]@($on.schedule)[0].cron | Should -Match '^\d{1,2} \d{1,2} \* \* [0-6]$' -Because 'a minute, an hour and one day of the week'
             }
             else { $on.Keys | Should -Not -Contain 'schedule' -Because $name }
@@ -446,7 +529,7 @@ Describe 'automatic runs are short: one run per push, under two minutes' {
 }
 
 Describe 'actionlint passes on every workflow, ci.yml included' {
-    It 'actionlint (LIFESTREAM_ACTIONLINT or PATH) reports no problem in <_>' -ForEach @('ci.yml', 'deploy-api.yml', 'release.yml', 'screenshots.yml', 'secret-scan.yml', 'sync-sql-firewall.yml') {
+    It 'actionlint (LIFESTREAM_ACTIONLINT or PATH) reports no problem in <_>' -ForEach @('ci.yml', 'cloudflare-ranges.yml', 'deploy-api.yml', 'release.yml', 'screenshots.yml', 'secret-scan.yml', 'sync-sql-firewall.yml') {
         $actionlint = if ($env:LIFESTREAM_ACTIONLINT) { $env:LIFESTREAM_ACTIONLINT } else { (Get-Command actionlint -ErrorAction SilentlyContinue).Source }
         $actionlint | Should -Not -BeNullOrEmpty -Because 'actionlint is required; a missing linter must fail, not skip'
         $out = & $actionlint (Join-Path $script:Dir $_) 2>&1 | Out-String

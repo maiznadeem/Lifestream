@@ -1,6 +1,7 @@
 name: Deploy API
 
-# Separate from the PR build (ci.yml). Runs on a push to master that touches the API, its libraries or the infrastructure.
+# Separate from the PR build (ci.yml). Runs on a push to master that touches the API, its libraries or the infrastructure,
+# unless every changed file is Markdown (a docs edit must not deploy and wake the database).
 # Signs in to Azure with GitHub OIDC (no stored cloud secret; the only secret used is the built-in GITHUB_TOKEN).
 # Order: image (built, scanned, then pushed), Entra-only check, migrate job, app update, health check, prune old image versions.
 # The decisions (which image versions to delete or keep, the count and manifest checks) live in scripts under tools/ with Pester
@@ -20,6 +21,8 @@ on:
       - 'src/Lifestream.Contracts/**'
       - 'src/Lifestream.Domain/**'
       - 'infra/**'
+      # last, so it wins: a change that touches only Markdown (infra/README.md, a README in src/) starts no deploy
+      - '!**/*.md'
   workflow_dispatch:
 
 permissions:
