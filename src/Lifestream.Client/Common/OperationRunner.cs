@@ -374,6 +374,29 @@ public static class WakingTexts
     /// </summary>
     public static readonly TimeSpan LongerThanUsualAfter = TimeSpan.FromSeconds(100);
 
+    /// <summary>The sign-in window's wait card (2.1.9): its title while the server gets ready.</summary>
+    public const string CardTitle = "Getting the server ready";
+
+    public const string CardSigningIn = "Signing you in";
+
+    public const string CardLateServer = "Still starting the server";
+
+    public const string CardLateDatabase = "Still waking the database";
+
+    public const string CardServer = "The free server sleeps when nobody is using it. Waking it takes about a minute and a half. Fill in your details meanwhile: you'll be signed in as soon as it's ready.";
+
+    public const string CardDatabase = "The server is up. Its database is waking from its pause, which takes about a minute.";
+
+    public const string CardLate = "This is taking longer than usual. Keep waiting: you'll be signed in when it's ready.";
+
+    public const string CardReadyDemo = "The server is ready. Opening the demo clinic.";
+
+    public const string CardReadySignIn = "The server is ready. Signing you in.";
+
+    public const string CardServerHint = "about 30–45 s";
+
+    public const string CardDatabaseHint = "about 1 min";
+
     /// <summary>
     /// Shown instead of any waking notice when the server says its database has used up the month's free allowance (Azure SQL error
     /// 42119: the database stays paused until the 1st of the next month, 00:00 UTC). Waiting or retrying does not bring it back.

@@ -192,6 +192,7 @@ public sealed partial class LoginViewModel : ViewModelBase
 
     private async Task RunReadinessCheckAsync(CancellationToken ct)
     {
+        _readinessStartedAt = Clock.GetTimestamp();
         try
         {
             // A server that still says "waking" when the two-minute wait ends is asked once more, so a wake that runs long ends in
@@ -238,6 +239,7 @@ public sealed partial class LoginViewModel : ViewModelBase
     partial void OnIsServerWakingChanged(bool value)
     {
         OnPropertyChanged(nameof(ServerText));
+        RefreshCard();
         _wakingClock?.Dispose();
         _wakingClock = null;
         if (_wakingLongerThanUsual)
@@ -338,6 +340,7 @@ public sealed partial class LoginViewModel : ViewModelBase
                 OnPropertyChanged(nameof(SignInBusyText));
                 OnPropertyChanged(nameof(DemoBusyText));
                 OnPropertyChanged(nameof(CanCancel));
+                RefreshCard();
             }
         }
     }
@@ -368,6 +371,7 @@ public sealed partial class LoginViewModel : ViewModelBase
         OnPropertyChanged(nameof(CanCancel));
         SignInCommand.RaiseCanExecuteChanged();
         DemoCommand.RaiseCanExecuteChanged();
+        RefreshCard();
     }
 
     partial void OnProblemChanged(LoginProblem value) => RetryCommand.RaiseCanExecuteChanged();
@@ -404,6 +408,7 @@ public sealed partial class LoginViewModel : ViewModelBase
             {
                 OnPropertyChanged(nameof(WakingText));
                 OnPropertyChanged(nameof(ServerText));
+                RefreshCard();
             }
 
             if (IsServerWaking)
@@ -443,6 +448,8 @@ public sealed partial class LoginViewModel : ViewModelBase
         {
             _wakingClock?.Dispose();
             _wakingClock = null;
+            _cardTicker?.Dispose();
+            _cardTicker = null;
             if (_serverStatus is not null)
             {
                 _serverStatus.Changed -= OnServerStatusChanged;
@@ -520,6 +527,7 @@ public sealed partial class LoginViewModel : ViewModelBase
         }
         finally
         {
+            _signingInAfterWait = false;
             IsBusy = false;
         }
     }
@@ -535,6 +543,9 @@ public sealed partial class LoginViewModel : ViewModelBase
         try
         {
             await CheckServerAsync(CancellationToken.None).WaitAsync(ct).ConfigureAwait(true);
+
+            // A sign-in that waited and goes now is step 3 of the wait card, before the card can see the wait end.
+            _signingInAfterWait = Server == ServerReadiness.Ready;
         }
         finally
         {
