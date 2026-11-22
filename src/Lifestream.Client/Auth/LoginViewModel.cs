@@ -145,6 +145,27 @@ public sealed partial class LoginViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(ServerText))]
     public partial ServerReadiness Server { get; set; } = ServerReadiness.Checking;
 
+    partial void OnServerChanged(ServerReadiness value)
+    {
+        if (value == ServerReadiness.Ready)
+        {
+            _readyAt = Clock.GetTimestamp();
+        }
+    }
+
+    /// <summary>When the server last said, or showed, that it is ready.</summary>
+    private long? _readyAt;
+
+    /// <summary>
+    /// True when a sign-in must wait for the readiness check before it is sent: one is running, the last one said the server is waking or
+    /// could not reach it, or the server was ready so long ago (<see cref="ServerStatus.ServerStaysUp"/>) that it has gone back to sleep.
+    /// With no readiness check run at all (the window has not asked yet), the sign-in goes straight to the server.
+    /// </summary>
+    internal bool NeedsReadinessFirst =>
+        _readinessCheck is { IsCompleted: false }
+        || Server is ServerReadiness.Waking or ServerReadiness.Unreachable
+        || (Server == ServerReadiness.Ready && _readyAt is { } at && Clock.GetElapsedTime(at) > ServerStatus.ServerStaysUp);
+
     /// <summary>"Server ready" and its siblings, for the footer pill.</summary>
     public string ServerText => Server switch
     {
@@ -163,7 +184,13 @@ public sealed partial class LoginViewModel : ViewModelBase
     /// own warm-up for the first sign-in. A cold demo server answers "waking" until its database is back, about a minute and a half at the
     /// longest measured, which the status line says; the pill turns to "Server ready" within about two seconds of the database answering.
     /// </summary>
-    public async Task CheckServerAsync(CancellationToken ct = default)
+    public Task CheckServerAsync(CancellationToken ct = default) =>
+        _readinessCheck is { IsCompleted: false } running ? running : _readinessCheck = RunReadinessCheckAsync(ct);
+
+    /// <summary>The readiness check that is running or ran last; a sign-in that has to wait for the server waits for this one.</summary>
+    private Task? _readinessCheck;
+
+    private async Task RunReadinessCheckAsync(CancellationToken ct)
     {
         try
         {
@@ -261,7 +288,7 @@ public sealed partial class LoginViewModel : ViewModelBase
     private long? _wakingEnded;
 
     /// <summary>Cancel is offered while an attempt is waiting on a waking server.</summary>
-    public bool CanCancel => IsBusy && IsServerWaking;
+    public bool CanCancel => IsBusy && (IsServerWaking || IsWaitingForServer);
 
     public AsyncRelayCommand SignInCommand { get; }
 
@@ -299,6 +326,27 @@ public sealed partial class LoginViewModel : ViewModelBase
     public string SignInText => IsBusy && _signingInWithPassword ? "Signing in..." : "Sign in";
 
     public string DemoText => IsBusy && !_signingInWithPassword ? "Opening the demo..." : "Try the demo";
+
+    /// <summary>True while a sign-in waits for the readiness check, to be sent the moment the server is ready.</summary>
+    public bool IsWaitingForServer
+    {
+        get;
+        private set
+        {
+            if (SetProperty(ref field, value))
+            {
+                OnPropertyChanged(nameof(SignInBusyText));
+                OnPropertyChanged(nameof(DemoBusyText));
+                OnPropertyChanged(nameof(CanCancel));
+            }
+        }
+    }
+
+    /// <summary>What the Sign in button says while its attempt runs.</summary>
+    public string SignInBusyText => IsWaitingForServer ? "Signing in when the server is ready" : "Signing in";
+
+    /// <summary>What the Try the demo button says while its attempt runs.</summary>
+    public string DemoBusyText => IsWaitingForServer ? "Opening the demo when the server is ready" : "Opening the demo";
 
     public bool CanSignIn => !IsBusy && !string.IsNullOrWhiteSpace(Username) && !string.IsNullOrEmpty(Password);
 
@@ -432,6 +480,11 @@ public sealed partial class LoginViewModel : ViewModelBase
         Message = null;
         try
         {
+            if (NeedsReadinessFirst && !await WaitForServerAsync(ct).ConfigureAwait(true))
+            {
+                return;
+            }
+
             var result = await call(ct).ConfigureAwait(true);
             if (result.IsOk && !IsUsable(result.Value))
             {
@@ -468,6 +521,39 @@ public sealed partial class LoginViewModel : ViewModelBase
         finally
         {
             IsBusy = false;
+        }
+    }
+
+    /// <summary>
+    /// Waits for the readiness check (the one running, or a new one), and says whether the sign-in can go now. When it cannot (the server
+    /// can't be reached, its database is resting, or it is still waking after the check's rounds) the screen already says why.
+    /// The check is not cancelled with the sign-in: it goes on for the footer pill.
+    /// </summary>
+    private async Task<bool> WaitForServerAsync(CancellationToken ct)
+    {
+        IsWaitingForServer = true;
+        try
+        {
+            await CheckServerAsync(CancellationToken.None).WaitAsync(ct).ConfigureAwait(true);
+        }
+        finally
+        {
+            IsWaitingForServer = false;
+        }
+
+        switch (Server)
+        {
+            case ServerReadiness.Ready:
+                return true;
+            case ServerReadiness.Resting:
+                Fail(new ApiProblem(503, ProblemCodes.DatabaseResting, "The demo database is resting."));
+                return false;
+            case ServerReadiness.Unreachable:
+                Fail(new ApiProblem(0, ClientProblemCodes.Unreachable, "The server could not be reached."));
+                return false;
+            default:
+                Fail(new ApiProblem(503, ProblemCodes.DatabaseWaking, "The server is still waking."));
+                return false;
         }
     }
 
