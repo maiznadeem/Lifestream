@@ -188,6 +188,16 @@ Everything else runs only when started by hand (Actions, then the workflow, then
 - the `desktop` and `api-image` scans of `secret-scan.yml` (a run started by hand also scans the whole history);
 - `release.yml`, `screenshots.yml` and `sync-sql-firewall.yml`.
 
+### Deployment
+
+The API is public only at `api.lifestream.himaiz.com`: a Cloudflare Worker that forwards to Azure Container Apps, whose own address
+accepts only Cloudflare. [docs/deployment.md](docs/deployment.md) records the whole live setup:
+- hosting and domains;
+- CI and CD, including the Worker's automatic deploys from `edge/api`;
+- the Cloudflare WAF and origin lock, and bot protection;
+- secrets (names and places only), and the database;
+- how to roll back each part.
+
 ## Security
 
 To report a vulnerability, see [docs/SECURITY.md](docs/SECURITY.md). It also explains what the old history holds: two
