@@ -28,12 +28,15 @@ public sealed class IdentityMiddleware(RequestDelegate next, ILogger<IdentityMid
         if (demoSettings.Value.Enabled)
         {
             await demo.EnsureDailyResetAsync(context.RequestServices, DateOnly.FromDateTime(now), now, ct);
+            // "iat" has whole seconds: a session that began in the same second as the reset, after it, must not count as older than the reset.
             if (demo.LastResetUtc is { } reset && long.TryParse(context.User.FindFirst("iat")?.Value, CultureInfo.InvariantCulture, out var issued)
-                && DateTimeOffset.FromUnixTimeSeconds(issued).UtcDateTime < reset)
+                && issued < new DateTimeOffset(reset, TimeSpan.Zero).ToUnixTimeSeconds())
             {
+                // The value names the reset, so a client acts on each reset once, however many answers of the session repeat it.
+                var value = reset.ToString("O", CultureInfo.InvariantCulture);
                 context.Response.OnStarting(() =>
                 {
-                    context.Response.Headers[ApiHeaders.DemoReset] = "true";
+                    context.Response.Headers[ApiHeaders.DemoReset] = value;
                     return Task.CompletedTask;
                 });
             }

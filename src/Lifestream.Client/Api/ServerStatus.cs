@@ -131,7 +131,30 @@ public sealed class ServerStatus : IServerStatus
         }
     }
 
-    internal void NotifyDemoReset() => DemoResetObserved?.Invoke(this, EventArgs.Empty);
+    /// <summary>
+    /// An answer carried X-Demo-Reset, whose value names the reset. The server repeats it on every answer of a session that began before the
+    /// reset, so each reset is raised once: the same value again is ignored (before 2.1.9 every answer raised it, and the shell's reload at
+    /// each one never let a screen finish loading). No value (a test, or a server older than 2.1.9 that said only "true") always raises it.
+    /// </summary>
+    internal void NotifyDemoReset(string? reset = null)
+    {
+        if (reset is not null)
+        {
+            lock (_gate)
+            {
+                if (reset == _lastReset)
+                {
+                    return;
+                }
+
+                _lastReset = reset;
+            }
+        }
+
+        DemoResetObserved?.Invoke(this, EventArgs.Empty);
+    }
+
+    private string? _lastReset;
 
     private WakePhase CurrentPhase() =>
         !_serverUp ? WakePhase.ServerStarting

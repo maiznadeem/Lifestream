@@ -3,6 +3,7 @@ using Lifestream.Api.Common;
 using Lifestream.Api.Infrastructure;
 using Lifestream.Contracts;
 using Lifestream.Contracts.Auth;
+using Microsoft.Extensions.Options;
 
 namespace Lifestream.Api.Features;
 
@@ -18,11 +19,13 @@ public static class AuthEndpoints
                 new Check().Text("username", request.Username, 50).Text("password", request.Password, 128).ThrowIfInvalid();
                 return Results.Ok(await service.LoginAsync(request, ct));
             })
+            .AddEndpointFilter(DailyResetFirst)
             .RequireRateLimiting(RateLimitPolicies.Login)
             .WithMetadata(new BodyLimitMetadata(BodyLimitKind.Login));
 
         // The demo login has its own, tighter per-IP limit and a tiny body limit (it takes no body at all).
         auth.MapPost(ApiRoutes.AuthDemo, async (AuthService service, CancellationToken ct) => Results.Ok(await service.DemoLoginAsync(ct)))
+            .AddEndpointFilter(DailyResetFirst)
             .RequireRateLimiting(RateLimitPolicies.Demo)
             .WithMetadata(new BodyLimitMetadata(BodyLimitKind.Demo));
 
@@ -45,5 +48,22 @@ public static class AuthEndpoints
             })
             .RequireRateLimiting(RateLimitPolicies.Login)
             .WithMetadata(new BodyLimitMetadata(BodyLimitKind.Login));
+    }
+
+    /// <summary>
+    /// The first sign-in of a UTC day (after a cold start, the usual case) runs that day's demo reset before it hands out the session, so
+    /// the session begins on the new data and is never told "the demo data was reset" about a reset it caused itself. Without this the
+    /// reset ran on the session's first request, after the session had begun, and every answer of that session carried X-Demo-Reset.
+    /// </summary>
+    private static async ValueTask<object?> DailyResetFirst(EndpointFilterInvocationContext context, EndpointFilterDelegate next)
+    {
+        var services = context.HttpContext.RequestServices;
+        if (services.GetRequiredService<IOptions<DemoSettings>>().Value.Enabled)
+        {
+            var now = services.GetRequiredService<TimeProvider>().GetUtcNow().UtcDateTime;
+            await services.GetRequiredService<DemoDirectory>().EnsureDailyResetAsync(services, DateOnly.FromDateTime(now), now, context.HttpContext.RequestAborted);
+        }
+
+        return await next(context);
     }
 }

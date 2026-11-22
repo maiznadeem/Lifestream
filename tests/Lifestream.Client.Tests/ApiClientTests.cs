@@ -200,6 +200,30 @@ public sealed class ApiClientTests
         Assert.Equal(1, raised);
     }
 
+    /// <summary>
+    /// The server repeats X-Demo-Reset on every answer of a session that began before the reset, until the session is renewed. The app acts
+    /// on each reset once: before 2.1.9 every answer raised it again, and the shell's reload of the screen at each one never let the dashboard finish.
+    /// </summary>
+    [Fact]
+    public async Task ApiClient_DemoResetHeader_RepeatedForTheSameReset_RaisesItOnce_ANewResetRaisesItAgain()
+    {
+        var reset = "2026-11-22T02:40:11.0000000Z";
+        var handler = new ScriptedHandler((_, _) => ScriptedHandler.Json(HttpStatusCode.OK, DonorJson, (ApiHeaders.DemoReset, reset)));
+        var (api, status, _, _) = Build(handler);
+        var raised = 0;
+        status.DemoResetObserved += (_, _) => raised++;
+
+        await api.GetDonorAsync(7);
+        await api.GetDonorAsync(7);
+        await api.GetDonorAsync(7);
+        Assert.Equal(1, raised);
+
+        reset = "2026-11-23T00:00:04.0000000Z";
+        await api.GetDonorAsync(7);
+        await api.GetDonorAsync(7);
+        Assert.Equal(2, raised);
+    }
+
     [Fact]
     public async Task ApiClient_SendsBearerToken_FromTheSession_AndNoneWhenSignedOut()
     {
