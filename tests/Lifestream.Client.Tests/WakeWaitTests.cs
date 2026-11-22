@@ -180,7 +180,8 @@ public sealed class WakeWaitTests
         var result = await call.WaitAsync(TimeSpan.FromSeconds(5));
 
         Assert.False(result.IsOk);
-        Assert.True(result.Problem!.IsUnreachable, result.Problem.Code);
+        Assert.Equal(ClientProblemCodes.NoAnswer, result.Problem!.Code); // the server held it: not a connection that could not be made
+        Assert.False(result.Problem.IsUnreachable);
         Assert.Equal(1, server.Arrived);
         Assert.Equal(1, server.Cancelled);
         Assert.Equal(ServerState.Online, status.State);

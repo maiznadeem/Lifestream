@@ -37,6 +37,7 @@ public static class ProblemText
             ProblemCodes.DatabaseResting => WakingTexts.Resting,
             ProblemCodes.RateLimited => "Too many requests. Wait a moment and try again.",
             ClientProblemCodes.Unreachable => "Can't reach the server. Check your internet connection and try again.",
+            ClientProblemCodes.NoAnswer => "The server is taking too long to answer. Try again in a moment.",
             ClientProblemCodes.SessionExpired => "Your session has expired. Sign in again.",
             _ => string.IsNullOrWhiteSpace(problem.Title) ? "The request failed. Try again." : problem.Title,
         };

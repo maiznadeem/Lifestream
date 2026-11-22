@@ -73,6 +73,7 @@ public sealed class WakeAwareHandler(WakePolicy policy, ServerStatus status, Htt
         var call = new CallState(status, clock);
         using var slowTimer = clock.CreateTimer(_ => call.Slow(), null, policy.ShowWakingAfter, Timeout.InfiniteTimeSpan);
         var backoff = policy.FirstBackoff;
+        var answered = false;
         long? unreachableSince = null;
         var unreachableBudget = policy.UnreachableBudget < policy.Budget ? policy.UnreachableBudget : policy.Budget;
 
@@ -104,6 +105,7 @@ public sealed class WakeAwareHandler(WakePolicy policy, ServerStatus status, Htt
 
                 if (response is not null)
                 {
+                    answered = true;
                     if (response.Headers.TryGetValues(ApiHeaders.DemoReset, out var reset))
                     {
                         status.NotifyDemoReset(reset.FirstOrDefault() ?? string.Empty);
@@ -137,6 +139,13 @@ public sealed class WakeAwareHandler(WakePolicy policy, ServerStatus status, Htt
                     if (response is not null)
                     {
                         return response;
+                    }
+
+                    // The budget ended on an attempt still out. When the server had it (an earlier attempt was answered, or this one was out longer
+                    // than a connection takes to fail), the server is slow, not out of reach: the caller says "still waking", never "can't reach".
+                    if (failure is OperationCanceledException && (answered || clock.GetElapsedTime(attemptStarted) >= policy.UnreachableBudget))
+                    {
+                        throw new NoAnswerException(failure);
                     }
 
                     throw failure ?? new HttpRequestException("The server did not respond in time.");
@@ -281,3 +290,10 @@ public sealed class WakeAwareHandler(WakePolicy policy, ServerStatus status, Htt
         }
     }
 }
+
+/// <summary>
+/// The call's budget ended while the server held its request (see <see cref="WakeAwareHandler"/>): a wake that ran long, not a network
+/// problem. The API client reports it as <see cref="ClientProblemCodes.NoAnswer"/>.
+/// </summary>
+public sealed class NoAnswerException(Exception inner) : OperationCanceledException("The server did not answer within the wait.", inner);
+

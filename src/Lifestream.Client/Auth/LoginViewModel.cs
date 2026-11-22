@@ -505,7 +505,7 @@ public sealed partial class LoginViewModel : ViewModelBase
             ProblemCodes.RateLimited => (LoginProblem.LockedOut, "Too many attempts from this computer. Wait a minute and try again."),
             ProblemCodes.DatabaseResting => (LoginProblem.DemoResting, WakingTexts.Resting),
             // Shown only after the attempt has waited its whole two minutes, which is longer than any wake measured: by then it is longer than usual.
-            ProblemCodes.DatabaseWaking => (LoginProblem.ServerWaking, "The server is still waking up, which is taking longer than usual. Retry to keep waiting."),
+            ProblemCodes.DatabaseWaking or ClientProblemCodes.NoAnswer => (LoginProblem.ServerWaking, "The server is still waking up, which is taking longer than usual. Retry to keep waiting."),
             ClientProblemCodes.Unreachable => (LoginProblem.ServerUnreachable, "Can't reach the server. Check your internet connection, then retry."),
             _ when problem.Status == 401 => (LoginProblem.WrongCredentials, "That username and password don't match. Check them and try again."),
             _ => (LoginProblem.Other, "Sign-in didn't work. Try again in a moment."),

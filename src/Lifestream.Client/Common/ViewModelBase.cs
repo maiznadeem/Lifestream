@@ -505,6 +505,7 @@ public abstract partial class ViewModelBase : ObservableObject, IDisposable
             Contracts.ProblemCodes.DatabaseWaking => "The server is still starting up. Try again in a moment.",
             Contracts.ProblemCodes.DatabaseResting => WakingTexts.Resting,
             ClientProblemCodes.Unreachable => UnreachableMessage,
+            ClientProblemCodes.NoAnswer => TimeoutMessage,
             ClientProblemCodes.SessionExpired => "Your session has expired. Sign in again.",
             "forbidden" => "You don't have permission to see this.",
             _ when problem.Status >= 500 => ServerFailedMessage,
