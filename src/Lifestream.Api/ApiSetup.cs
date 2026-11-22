@@ -178,12 +178,17 @@ public static class ApiSetup
         services.AddRateLimiter(_ => { });
         services.AddOptions<RateLimiterOptions>().Configure<IOptions<LimitSettings>>((o, limits) => RateLimitPolicies.Configure(o, limits.Value));
 
-        services.AddLogging(l => l.AddJsonConsole(o => o.IncludeScopes = true));
+        StandardLogging.Configure(builder.Logging, builder.Configuration, "api");
         return builder;
     }
 
     public static WebApplication UseLifestreamApi(this WebApplication app)
     {
+        var startup = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Lifestream.Api");
+        app.Lifetime.ApplicationStarted.Register(() => startup.LogInformation(
+            LogEvents.Startup,
+            "Lifestream API {Version} started",
+            typeof(ApiSetup).Assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false) is [System.Reflection.AssemblyInformationalVersionAttribute v, ..] ? v.InformationalVersion : "unknown"));
         LoginTimingSetup.WarmUp(app.Services); // the dummy hash for unknown names is computed before the first request, not by it
         app.UseForwardedHeaders();
         app.UseMiddleware<OriginAuthMiddleware>(); // after the forwarded headers: a request from the Cloudflare Worker names its visitor in X-Client-IP

@@ -29,6 +29,13 @@ Describe 'API edge Worker' {
         $script:Js | Should -Match 'status: 502'
     }
 
+    It 'forwards the visitor ray as X-CF-Ray and logs one LOGGING.md line per request (edge-worker.test.mjs, run with node)' {
+        $node = Get-Command node -ErrorAction SilentlyContinue
+        if (-not $node) { Set-ItResult -Skipped -Because 'node is not installed'; return }
+        $output = & $node.Source --test (Join-Path $PSScriptRoot 'edge-worker.test.mjs') 2>&1
+        $LASTEXITCODE | Should -Be 0 -Because ($output -join "`n")
+    }
+
     It 'serves only api.lifestream.himaiz.com: no workers.dev or preview address, and the secret is not in the file' {
         $script:Toml | Should -Match 'name = "lifestream-api-edge"'
         $script:Toml | Should -Match 'workers_dev = false'

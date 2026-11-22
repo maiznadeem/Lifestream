@@ -20,7 +20,7 @@ public static class Migrator
     public static async Task<int> RunAsync(string[] args, TimeProvider? time = null, ILoggerProvider? extraLogs = null)
     {
         var builder = Host.CreateApplicationBuilder(args);
-        builder.Logging.AddJsonConsole(o => o.IncludeScopes = true);
+        StandardLogging.Configure(builder.Logging, builder.Configuration, "worker");
         if (extraLogs is not null)
         {
             builder.Logging.AddProvider(extraLogs);
@@ -77,7 +77,7 @@ public static class Migrator
         catch (Exception exception)
         {
             // Type and SQL number only: an exception message could carry a connection detail.
-            logger.LogError("Migration failed: {ExceptionType} (sql {SqlNumber})", exception.GetType().Name, DatabaseErrors.NumberOf(exception));
+            logger.LogError(LogEvents.Exception, "Migration failed: {ExceptionType} (sql {SqlNumber})", exception.GetType().Name, DatabaseErrors.NumberOf(exception));
             return 1;
         }
     }

@@ -37,7 +37,7 @@ Describe 'template shape' {
             $_.type -in 'Microsoft.App/managedEnvironments', 'Microsoft.App/containerApps',
                         'Microsoft.App/jobs', 'Microsoft.ManagedIdentity/userAssignedIdentities', 'Microsoft.OperationalInsights/workspaces'
         }
-        $created.Count | Should -Be 6
+        $created.Count | Should -Be 7
         foreach ($r in $created) { $r.name | Should -Match '^lifestream-' }
     }
 }
@@ -201,8 +201,10 @@ Describe 'INFRA-07 auditing' {
         $diag = Single 'Microsoft.Insights/diagnosticSettings' 'the audit diagnostic setting'
         $diag.scope | Should -Match "databases', parameters\('sqlServerName'\), 'master'"
         @($diag.properties.logs | Where-Object { $_.category -eq 'SQLSecurityAuditEvents' -and $_.enabled }).Count | Should -Be 1
-        $ws = Single 'Microsoft.OperationalInsights/workspaces' 'the audit workspace'
-        "$($ws.properties.workspaceCapping.dailyQuotaGb)" | Should -Match '0\.1'
+        $ws = @(OfType 'Microsoft.OperationalInsights/workspaces' | Where-Object name -eq 'lifestream-audit')
+        $ws.Count | Should -Be 1
+        $diag.properties.workspaceId | Should -Match "'lifestream-audit'"
+        "$($ws[0].properties.workspaceCapping.dailyQuotaGb)" | Should -Match '0\.1'
         $script:Template.parameters.auditRetentionDays.maxValue | Should -BeLessOrEqual 31
     }
 
@@ -237,12 +239,14 @@ Describe 'INFRA-08 locks and backups' {
 }
 
 Describe 'INFRA-09 / OWN-02 container app on Consumption, scale to zero' {
-    It 'runs in a plain environment (no VNet) with only the Consumption profile and no log destination' {
+    It 'runs in a plain environment (no VNet) with only the Consumption profile, logging to the lifestream-logs workspace' {
         $env = Single 'Microsoft.App/managedEnvironments' 'the environment'
         $profiles = @($env.properties.workloadProfiles)
         $profiles.Count | Should -Be 1
         $profiles[0].workloadProfileType | Should -Be 'Consumption'
-        $env.properties.PSObject.Properties.Name | Should -Not -Contain 'appLogsConfiguration' -Because "Azure preflight rejects destination 'none'; no log destination means the property is omitted"
+        $env.properties.appLogsConfiguration.destination | Should -Be 'log-analytics'
+        $env.properties.appLogsConfiguration.logAnalyticsConfiguration.customerId | Should -Match "'lifestream-logs'"
+        $env.properties.appLogsConfiguration.logAnalyticsConfiguration.sharedKey | Should -Match "listKeys\(.*'lifestream-logs'"
         $script:RawJson | Should -Not -Match '"destination"\s*:\s*"none"'
         $env.properties.PSObject.Properties.Name | Should -Not -Contain 'vnetConfiguration'
         $env.properties.zoneRedundant | Should -Be $false
@@ -343,7 +347,7 @@ Describe 'INFRA-09 / OWN-02 container app on Consumption, scale to zero' {
 Describe 'OWN-02 allow-list of resource types that cost nothing while idle' {
     BeforeAll {
         $script:IdleFree = [ordered]@{
-            'Microsoft.App/managedEnvironments'                                             = 'plain Consumption environment: no VNet, so no public IP or load balancer; no log destination (appLogsConfiguration omitted)'
+            'Microsoft.App/managedEnvironments'                                             = 'plain Consumption environment: no VNet, so no public IP or load balancer; logs go to lifestream-logs (capped below)'
             'Microsoft.App/containerApps'                                                   = 'Consumption app, minReplicas 0: no resource charge at zero replicas; first 2M requests a month free'
             'Microsoft.App/jobs'                                                            = 'manual job: bills only while an execution runs'
             'Microsoft.ManagedIdentity/userAssignedIdentities'                              = 'managed identities are free'
@@ -356,7 +360,7 @@ Describe 'OWN-02 allow-list of resource types that cost nothing while idle' {
             'Microsoft.Sql/servers/auditingSettings'                                        = 'Azure Monitor target only (no storage account); ingestion capped, see workspace'
             'Microsoft.Sql/servers/databases'                                               = 'free offer (useFreeLimit) with AutoPause on exhaustion: asserted in the INFRA-10 test'
             'Microsoft.Sql/servers/databases/backupShortTermRetentionPolicies'              = 'included with the database'
-            'Microsoft.OperationalInsights/workspaces'                                      = 'no cost to hold; billed per GB ingested, capped at 0.1 GB a day (3 GB a month, inside the 5 GB free grant), retention 30-31 days included'
+            'Microsoft.OperationalInsights/workspaces'                                      = 'no cost to hold; billed per GB ingested; audit capped at 0.1 GB a day and logs at 0.05 GB (4.5 GB a month together, inside the 5 GB free grant), retention 30-31 days included'
             'Microsoft.Insights/diagnosticSettings'                                         = 'no charge itself; the data it sends is the capped ingestion above'
             'Microsoft.Consumption/budgets'                                                 = 'alerts only'
         }
@@ -373,17 +377,24 @@ Describe 'OWN-02 allow-list of resource types that cost nothing while idle' {
         @($script:IdleFree.Keys | Where-Object { $_ -notin $actual }) | Should -BeNullOrEmpty
     }
 
-    It 'caps the audit workspace ingestion so the free grant cannot be exceeded' {
-        $ws = @($script:Resources | Where-Object type -eq 'Microsoft.OperationalInsights/workspaces')[0]
-        [double]("$($ws.properties.workspaceCapping.dailyQuotaGb)" -replace '[^0-9.]', '') | Should -BeLessOrEqual 0.1
-        $ws.properties.sku.name | Should -Be 'PerGB2018'
-        $ws.properties.retentionInDays | Should -BeLessOrEqual 31
+    It 'caps every workspace so that together they stay inside the free 5 GB a month' {
+        $workspaces = @($script:Resources | Where-Object type -eq 'Microsoft.OperationalInsights/workspaces')
+        @($workspaces.name | Sort-Object) | Should -Be @('lifestream-audit', 'lifestream-logs')
+        $daily = 0.0
+        foreach ($ws in $workspaces) {
+            $cap = [double]("$($ws.properties.workspaceCapping.dailyQuotaGb)" -replace '[^0-9.]', '')
+            $cap | Should -BeGreaterThan 0 -Because "$($ws.name) needs a cap (-1 or none means unlimited)"
+            $daily += $cap
+            $ws.properties.sku.name | Should -Be 'PerGB2018'
+        }
+        $daily * 31 | Should -BeLessOrEqual 5 -Because 'the first 5 GB a month per billing account is free'
+        $script:Template.parameters.logRetentionDays.maxValue | Should -BeLessOrEqual 31
+        $script:Template.parameters.auditRetentionDays.maxValue | Should -BeLessOrEqual 31
     }
 
     It 'keeps the environment without a VNet and the app at zero minimum replicas' {
         $env = @($script:Resources | Where-Object type -eq 'Microsoft.App/managedEnvironments')[0]
         $env.properties.PSObject.Properties.Name | Should -Not -Contain 'vnetConfiguration'
-        $env.properties.PSObject.Properties.Name | Should -Not -Contain 'appLogsConfiguration' -Because "Azure preflight rejects destination 'none'; no log destination means the property is omitted"
         $script:RawJson | Should -Not -Match '"destination"\s*:\s*"none"'
         @($env.properties.workloadProfiles | Where-Object workloadProfileType -ne 'Consumption') | Should -BeNullOrEmpty
         @($script:Resources | Where-Object type -eq 'Microsoft.App/containerApps')[0].properties.template.scale.minReplicas | Should -Be 0
