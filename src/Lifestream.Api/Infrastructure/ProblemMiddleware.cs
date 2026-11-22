@@ -131,7 +131,7 @@ public sealed class ProblemMiddleware(RequestDelegate next, ILogger<ProblemMiddl
 
         if (DatabaseErrors.IsResting(exception))
         {
-            logger.LogWarning("The database is paused for the rest of the month: its free allowance is used up (sql {SqlNumber}). It is back on the 1st, 00:00 UTC.", DatabaseErrors.FreeAllowanceExhausted);
+            logger.LogWarning(LogEvents.Database, "The database is paused for the rest of the month: its free allowance is used up (sql {SqlNumber}). It is back on the 1st, 00:00 UTC.", DatabaseErrors.FreeAllowanceExhausted);
             await ProblemWriter.WriteAsync(context, 503, ProblemCodes.DatabaseResting, DatabaseProblems.RestingTitle, retryAfter: DatabaseProblems.RestingRetryAfter());
             return;
         }
@@ -157,8 +157,12 @@ public sealed class ProblemMiddleware(RequestDelegate next, ILogger<ProblemMiddl
             }
         }
 
-        // Log the type, the SQL error number and the stack only: exception messages can carry values from the database.
-        logger.LogError("Unhandled {ExceptionType} (sql {SqlNumber}) {StackTrace}", exception.GetType().FullName, DatabaseErrors.NumberOf(exception), exception.StackTrace);
+        // Log the type, the SQL error number and the stack only: exception messages can carry values from the database. The stack
+        // goes in a scope, so the console line keeps a short msg and carries the stack as its own field.
+        using (logger.BeginScope(new Dictionary<string, object?> { ["StackTrace"] = exception.StackTrace }))
+        {
+            logger.LogError(LogEvents.Exception, "Unhandled {ExceptionType} (sql {SqlNumber})", exception.GetType().FullName, DatabaseErrors.NumberOf(exception));
+        }
         await ProblemWriter.WriteAsync(context, 500, ExtraProblemCodes.ServerError, "Something went wrong on the server.");
     }
 }
@@ -183,17 +187,28 @@ public sealed class CorrelationMiddleware(RequestDelegate next, ILogger<Correlat
         });
 
         var started = System.Diagnostics.Stopwatch.GetTimestamp();
-        using (logger.BeginScope(new Dictionary<string, object?> { ["CorrelationId"] = id }))
+        var scope = new Dictionary<string, object?> { ["CorrelationId"] = id };
+        if (StandardLogging.RayOf(context.Request) is { } ray)
+        {
+            scope["Ray"] = ray; // Cloudflare's ray, so Argus can line this request up with the edge Worker's line
+        }
+
+        using (logger.BeginScope(scope))
         {
             await next(context);
 
-            // One structured access line per request: the route TEMPLATE (never the path or query, which can hold names), the
-            // status, the time, and the numeric staff id from the token. No body, header, token or personal data.
-            logger.LogInformation(
+            // One structured access line per request (LOGGING.md): the route PATTERN (never the path or query, which can hold names),
+            // the status, the time, and the numeric staff id from the token. No body, header, token or personal data. Health and
+            // readiness checks are debug (the platform probe and every client start call them), every other 5xx is an error.
+            var status = context.Response.StatusCode;
+            var route = StandardLogging.RouteOf(context.GetEndpoint());
+            logger.Log(
+                StandardLogging.LevelFor(route, status),
+                LogEvents.Request,
                 "HTTP {Method} {Route} {Status} {ElapsedMs}ms user {UserId}",
                 context.Request.Method,
-                (context.GetEndpoint() as RouteEndpoint)?.RoutePattern.RawText ?? "unmatched",
-                context.Response.StatusCode,
+                route,
+                status,
                 (long)System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds,
                 context.User.FindFirst("sub")?.Value ?? "anonymous");
         }

@@ -201,6 +201,9 @@ public sealed class ResilienceTests(WakeApiFixture fx) : IClassFixture<WakeApiFi
         // The server-side log has the exception type and stack, not the message (which can carry data).
         Assert.DoesNotContain(fx.Logs.Lines, l => l.Contains("secret-detail", StringComparison.Ordinal));
         Assert.Contains(fx.Logs.Lines, l => l.Contains("InvalidOperationException", StringComparison.Ordinal));
+
+        // LOGGING.md: the 500's request line is an error, so Argus counts it with the exception line.
+        Assert.Contains(fx.Logs.Lines, l => l.StartsWith("[Error]", StringComparison.Ordinal) && l.Contains("HTTP GET /api/v1/donors 500", StringComparison.Ordinal));
     }
 }
 

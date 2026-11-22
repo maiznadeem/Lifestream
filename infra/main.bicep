@@ -100,6 +100,11 @@ param githubBranch string = 'master'
 @maxValue(31)
 param auditRetentionDays int = 30
 
+@description('Days the API and migrate job console logs are kept in the lifestream-logs workspace (31 or fewer are free).')
+@minValue(30)
+@maxValue(31)
+param logRetentionDays int = 30
+
 // ---------------------------------------------------------------- names and constants
 
 var sqlFqdn = '${sqlServerName}${environment().suffixes.sqlServerHostname}'
@@ -286,11 +291,33 @@ resource sqlDatabaseLock 'Microsoft.Authorization/locks@2020-05-01' = if (enable
 
 // ---------------------------------------------------------------- Container Apps (INFRA-09, OWN-02)
 
+// The API's and the migrate job's console output (one JSON object per line, OracleVMOps LOGGING.md) and the platform's system
+// events, which Argus reads (Reader on the resource group includes query). A workspace of its own, so a burst of app logs can
+// never use up the audit workspace's cap. The daily cap of 0.05 GB (1.5 GB a month) plus the audit cap (3 GB) stays inside the
+// billing account's free 5 GB a month; retention up to 31 days is included. Lifestream writes a few MB a day.
+resource logsWorkspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
+  name: 'lifestream-logs'
+  location: location
+  properties: {
+    sku: { name: 'PerGB2018' }
+    retentionInDays: logRetentionDays
+    workspaceCapping: { dailyQuotaGb: json('0.05') }
+    features: { disableLocalAuth: false }
+  }
+}
+
 resource acaEnvironment 'Microsoft.App/managedEnvironments@2024-03-01' = {
   name: 'lifestream-env'
   location: location
   properties: {
-    // appLogsConfiguration is omitted on purpose: Azure rejects destination 'none' and treats no property as no log destination, so nothing is ingested or billed. No vnetConfiguration, so no public IP or load balancer is billed.
+    // No vnetConfiguration, so no public IP or load balancer is billed.
+    appLogsConfiguration: {
+      destination: 'log-analytics'
+      logAnalyticsConfiguration: {
+        customerId: logsWorkspace.properties.customerId
+        sharedKey: logsWorkspace.listKeys().primarySharedKey
+      }
+    }
     workloadProfiles: [
       { name: 'Consumption', workloadProfileType: 'Consumption' }
     ]
