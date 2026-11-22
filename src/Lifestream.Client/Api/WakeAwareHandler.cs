@@ -73,7 +73,8 @@ public sealed class WakeAwareHandler(WakePolicy policy, ServerStatus status, Htt
         var call = new CallState(status, clock);
         using var slowTimer = clock.CreateTimer(_ => call.Slow(), null, policy.ShowWakingAfter, Timeout.InfiniteTimeSpan);
         var backoff = policy.FirstBackoff;
-        var answered = false;
+        var serverHadIt = false;
+        var connectTimedOut = false;
         long? unreachableSince = null;
         var unreachableBudget = policy.UnreachableBudget < policy.Budget ? policy.UnreachableBudget : policy.Budget;
 
@@ -105,7 +106,7 @@ public sealed class WakeAwareHandler(WakePolicy policy, ServerStatus status, Htt
 
                 if (response is not null)
                 {
-                    answered = true;
+                    serverHadIt = true;
                     if (response.Headers.TryGetValues(ApiHeaders.DemoReset, out var reset))
                     {
                         status.NotifyDemoReset(reset.FirstOrDefault() ?? string.Empty);
@@ -129,6 +130,11 @@ public sealed class WakeAwareHandler(WakePolicy policy, ServerStatus status, Htt
                 // that budget had its connection and lost it while the server was working on the request: that one is sent again as any
                 // other request of a waking server, not given up as unreachable.
                 var unreachable = failure is HttpRequestException && clock.GetElapsedTime(attemptStarted) < unreachableBudget;
+
+                // What the attempt says about the server, for the end of the budget: a connection lost after the server had the request for a
+                // while means it was reached; a connect that timed out (a cancellation with a TimeoutException inside) means it was not.
+                serverHadIt |= failure is HttpRequestException && !unreachable;
+                connectTimedOut |= IsConnectTimeout(failure);
                 unreachableSince = unreachable ? unreachableSince ?? attemptStarted : null;
                 call.Unreachable(unreachable);
 
@@ -143,7 +149,9 @@ public sealed class WakeAwareHandler(WakePolicy policy, ServerStatus status, Htt
 
                     // The budget ended on an attempt still out. When the server had it (an earlier attempt was answered, or this one was out longer
                     // than a connection takes to fail), the server is slow, not out of reach: the caller says "still waking", never "can't reach".
-                    if (failure is OperationCanceledException && (answered || clock.GetElapsedTime(attemptStarted) >= policy.UnreachableBudget))
+                    // A network whose connects time out is not reached however long its attempts were out.
+                    if (failure is OperationCanceledException && !IsConnectTimeout(failure)
+                        && (serverHadIt || (!connectTimedOut && clock.GetElapsedTime(attemptStarted) >= policy.UnreachableBudget)))
                     {
                         throw new NoAnswerException(failure);
                     }
@@ -164,6 +172,8 @@ public sealed class WakeAwareHandler(WakePolicy policy, ServerStatus status, Htt
             call.Complete();
         }
     }
+
+    private static bool IsConnectTimeout(Exception? failure) => failure is OperationCanceledException { InnerException: TimeoutException };
 
     private static TimeSpan? RetryAfter(HttpResponseMessage? response)
     {

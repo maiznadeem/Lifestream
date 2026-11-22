@@ -142,11 +142,73 @@ public sealed class LoginWaitsForReadinessTests
         var demo = screen.Start(v => v.DemoCommand.ExecuteAsync());
         await screen.SettledAsync();
         Assert.True(screen.Vm.IsWaitingForServer);
-        Assert.Equal("Opening the demo when the server is ready", screen.Vm.DemoBusyText);
-        Assert.Equal("Signing in when the server is ready", screen.Vm.SignInBusyText);
+        Assert.Equal("Opening the demo when ready", screen.Vm.DemoBusyText);
+        Assert.Equal("Signing in when ready", screen.Vm.SignInBusyText);
 
         await screen.RunUntilAsync(demo, 30);
         Assert.False(screen.Vm.IsWaitingForServer);
         Assert.Equal("Opening the demo", screen.Vm.DemoBusyText);
+    }
+
+    /// <summary>
+    /// A readiness check the sign-in itself started (after "can't reach", or a "ready" gone stale) goes on when the sign-in is cancelled, and
+    /// a cancel never turns the pill to "Can't reach the server" (review of 2.1.9: the check ran in the sign-in's scope and died with it).
+    /// </summary>
+    [Fact]
+    public async Task Cancel_OfASignInThatStartedTheReadinessCheck_LeavesTheCheckRunning_AndNeverSaysCantReach()
+    {
+        ManualTimeProvider? clock = null;
+        var handler = new ScriptedHandler((r, _) => IsReadyz(r)
+            ? (clock!.Elapsed < TimeSpan.FromSeconds(8) ? throw new HttpRequestException("refused") : Waking())
+            : ScriptedHandler.Json(HttpStatusCode.OK, DemoTokens));
+        using var screen = LoginScreen.Open(handler);
+        clock = screen.Clock;
+
+        await screen.RunUntilAsync(screen.Start(v => v.CheckServerAsync()), 20);
+        Assert.Equal(ServerReadiness.Unreachable, screen.Vm.Server);
+        await screen.PassToAsync(10);
+
+        var demo = screen.Start(v => v.DemoCommand.ExecuteAsync());
+        await screen.SettledAsync();
+        await screen.PassAsync(10);
+        Assert.True(screen.Vm.IsWaitingForServer);
+
+        await screen.Ui.Run(() => screen.Vm.CancelCommand.ExecuteAsync());
+        await demo.WaitAsync(TimeSpan.FromSeconds(5));
+        await screen.Ui.DrainedAsync();
+        var asked = handler.Requests.Count(IsReadyz);
+        await screen.PassAsync(10);
+
+        Assert.NotEqual(ServerReadiness.Unreachable, screen.Vm.Server);
+        Assert.True(handler.Requests.Count(IsReadyz) > asked, "the readiness check stopped with the cancelled sign-in");
+        Assert.DoesNotContain(handler.Requests, IsDemo);
+    }
+
+    /// <summary>
+    /// A readiness call the server held past its whole budget (Cloudflare's 524 at 100 s, then a retry cut at 120 s) is a wake that runs
+    /// long: the check asks again, and the sign-in that waits never says "Can't reach the server" (review of 2.1.9).
+    /// </summary>
+    [Fact]
+    public async Task ReadinessHeldPastItsBudget_IsStillWaking_AndTheWaitingSignInGoesOnceReady()
+    {
+        var server = new HoldingServer();
+        using var screen = LoginScreen.Open(server);
+
+        _ = screen.Start(v => v.CheckServerAsync());
+        var demo = screen.Start(v => v.DemoCommand.ExecuteAsync());
+        await LoginScreen.WaitForAsync(() => server.Arrived == 1);
+        await screen.SettledAsync();
+        await screen.PassToAsync(121);
+        await LoginScreen.WaitForAsync(() => server.Arrived == 2); // the second round of the readiness check
+
+        Assert.NotEqual(ServerReadiness.Unreachable, screen.Read(v => v.Server));
+        Assert.Equal(LoginProblem.None, screen.Read(v => v.Problem));
+        server.Answer(1, Ready());
+        await LoginScreen.WaitForAsync(() => server.Arrived == 3); // the sign-in, sent once the server is ready
+        server.Answer(2, ScriptedHandler.Json(HttpStatusCode.OK, DemoTokens));
+        await demo.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Equal(LoginProblem.None, screen.Read(v => v.Problem));
+        Assert.NotNull(screen.Rig.Session.AccessToken);
     }
 }

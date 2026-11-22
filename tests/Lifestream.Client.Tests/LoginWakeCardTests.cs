@@ -141,4 +141,39 @@ public sealed class LoginWakeCardTests
         Assert.Equal("Signing you in: to come", new WakeStepRow("Signing you in", string.Empty, WakeStepState.Pending, null).AutomationName);
         Assert.Equal("Getting the server ready", WakingTexts.CardTitle);
     }
+
+    /// <summary>
+    /// The clock ticks every second, the rows of the steps do not: rebuilding them each second restarted the spinner of the active step and
+    /// rebuilt the rows for screen readers (review of 2.1.9). They change when a step does.
+    /// </summary>
+    [Fact]
+    public async Task Card_TheClockTicks_ButTheStepRowsChangeOnlyWithAStep()
+    {
+        var server = new HoldingServer();
+        using var screen = LoginScreen.Open(server);
+
+        _ = screen.Start(v => v.CheckServerAsync());
+        await LoginScreen.WaitForAsync(() => server.Arrived == 1);
+        await screen.SettledAsync();
+        await screen.PassToAsync(10);
+        Assert.Equal(WakeStep.StartingServer, screen.Read(v => v.Step));
+
+        var rows = 0;
+        var clocks = 0;
+        screen.Ui.Run(() =>
+        {
+            screen.Vm.PropertyChanged += (_, e) =>
+            {
+                rows += e.PropertyName == nameof(LoginViewModel.Steps) ? 1 : 0;
+                clocks += e.PropertyName == nameof(LoginViewModel.WakeClock) ? 1 : 0;
+            };
+            return true;
+        });
+        await screen.PassToAsync(20);
+        await screen.Ui.DrainedAsync();
+
+        Assert.Equal(0, rows);
+        Assert.InRange(clocks, 9, 11);
+        Assert.Equal("0:20", screen.Read(v => v.WakeClock));
+    }
 }

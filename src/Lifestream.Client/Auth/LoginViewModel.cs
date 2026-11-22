@@ -206,7 +206,11 @@ public sealed partial class LoginViewModel : ViewModelBase
                 }
             }
         }
-        catch (Exception ex) when (ex is HttpRequestException or TimeoutException or IOException or OperationCanceledException or System.Text.Json.JsonException)
+        catch (OperationCanceledException)
+        {
+            // Stopped (the window went away): that says nothing about whether the server can be reached, so the pill keeps what it knew.
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TimeoutException or IOException or System.Text.Json.JsonException)
         {
             Server = ServerReadiness.Unreachable;
         }
@@ -346,10 +350,10 @@ public sealed partial class LoginViewModel : ViewModelBase
     }
 
     /// <summary>What the Sign in button says while its attempt runs.</summary>
-    public string SignInBusyText => IsWaitingForServer ? "Signing in when the server is ready" : "Signing in";
+    public string SignInBusyText => IsWaitingForServer ? "Signing in when ready" : "Signing in"; // short: it must fit the button of a compact window
 
     /// <summary>What the Try the demo button says while its attempt runs.</summary>
-    public string DemoBusyText => IsWaitingForServer ? "Opening the demo when the server is ready" : "Opening the demo";
+    public string DemoBusyText => IsWaitingForServer ? "Opening the demo when ready" : "Opening the demo";
 
     public bool CanSignIn => !IsBusy && !string.IsNullOrWhiteSpace(Username) && !string.IsNullOrEmpty(Password);
 
@@ -542,7 +546,19 @@ public sealed partial class LoginViewModel : ViewModelBase
         IsWaitingForServer = true;
         try
         {
-            await CheckServerAsync(CancellationToken.None).WaitAsync(ct).ConfigureAwait(true);
+            // The check is started outside this sign-in's operation, so that cancelling the sign-in stops only the wait: the check goes on.
+            Task check;
+            var outer = OperationScope.Swap(null);
+            try
+            {
+                check = CheckServerAsync(CancellationToken.None);
+            }
+            finally
+            {
+                OperationScope.Swap(outer);
+            }
+
+            await check.WaitAsync(ct).ConfigureAwait(true);
 
             // A sign-in that waited and goes now is step 3 of the wait card, before the card can see the wait end.
             _signingInAfterWait = Server == ServerReadiness.Ready;
@@ -575,7 +591,8 @@ public sealed partial class LoginViewModel : ViewModelBase
         if (result.Problem is { } problem)
         {
             // A server that answered "still waking" (after the whole wait) or "resting" was reached: only no answer at all is "can't reach".
-            return problem.IsWaking ? ServerReadiness.Waking
+            // A call the server held past its whole wait (NoAnswer) was reached too: a wake that runs long, asked about again.
+            return problem.IsWaking || problem.IsNoAnswer ? ServerReadiness.Waking
                 : problem.IsResting ? ServerReadiness.Resting
                 : ServerReadiness.Unreachable;
         }

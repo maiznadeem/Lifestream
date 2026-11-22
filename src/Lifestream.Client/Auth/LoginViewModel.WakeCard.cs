@@ -103,7 +103,11 @@ public sealed partial class LoginViewModel
         }
     }
 
-    public IReadOnlyList<WakeStepRow> Steps =>
+    /// <summary>The three rows of the card. Replaced only when a step or its time changes, never on the clock's tick: a new list makes the
+    /// view rebuild the rows, which restarts the active step's spinner and the rows screen readers are on.</summary>
+    public IReadOnlyList<WakeStepRow> Steps { get; private set; } = [];
+
+    private IReadOnlyList<WakeStepRow> BuildRows() =>
     [
         Row(WakeStep.StartingServer, "Starting the server", "Started the server", WakingTexts.CardServerHint, _took[0]),
         Row(WakeStep.WakingDatabase, "Waking the database", "Woke the database", WakingTexts.CardDatabaseHint, _took[1]),
@@ -156,7 +160,7 @@ public sealed partial class LoginViewModel
             }
 
             _cardTicker?.Dispose();
-            _cardTicker = Clock.CreateTimer(_ => OnUiThread(RaiseCard), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
+            _cardTicker = Clock.CreateTimer(_ => OnUiThread(RaiseTick), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
         }
 
         if (next > Step)
@@ -189,8 +193,18 @@ public sealed partial class LoginViewModel
         }
     }
 
+    /// <summary>The clock's tick: the time, the progress and, past the usual time, the words; never the rows.</summary>
+    private void RaiseTick()
+    {
+        OnPropertyChanged(nameof(WakeClock));
+        OnPropertyChanged(nameof(StepProgress));
+        OnPropertyChanged(nameof(WakeTitle));
+        OnPropertyChanged(nameof(WakeExplanation));
+    }
+
     private void RaiseCard()
     {
+        Steps = BuildRows();
         OnPropertyChanged(nameof(Step));
         OnPropertyChanged(nameof(IsWakeCardVisible));
         OnPropertyChanged(nameof(WakeClock));
