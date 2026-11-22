@@ -67,7 +67,9 @@ public sealed class LoginWaitsForReadinessTests
             : ScriptedHandler.Json(HttpStatusCode.OK, DemoTokens));
         using var screen = LoginScreen.Open(handler);
 
-        _ = screen.Start(v => v.CheckServerAsync());
+        // The window's check has already said "resting" when the person clicks (on a busy CI runner it always had): the click asks again.
+        await screen.RunUntilAsync(screen.Start(v => v.CheckServerAsync()), 10);
+        Assert.Equal(ServerReadiness.Resting, screen.Vm.Server);
         var demo = screen.Start(v => v.DemoCommand.ExecuteAsync());
         await screen.RunUntilAsync(demo, 30);
 

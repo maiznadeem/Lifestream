@@ -158,12 +158,12 @@ public sealed partial class LoginViewModel : ViewModelBase
 
     /// <summary>
     /// True when a sign-in must wait for the readiness check before it is sent: one is running, the last one said the server is waking or
-    /// could not reach it, or the server was ready so long ago (<see cref="ServerStatus.ServerStaysUp"/>) that it has gone back to sleep.
+    /// resting or could not reach it, or the server was ready so long ago (<see cref="ServerStatus.ServerStaysUp"/>) that it has gone back to sleep.
     /// With no readiness check run at all (the window has not asked yet), the sign-in goes straight to the server.
     /// </summary>
     internal bool NeedsReadinessFirst =>
         _readinessCheck is { IsCompleted: false }
-        || Server is ServerReadiness.Waking or ServerReadiness.Unreachable
+        || Server is ServerReadiness.Waking or ServerReadiness.Unreachable or ServerReadiness.Resting
         || (Server == ServerReadiness.Ready && _readyAt is { } at && Clock.GetElapsedTime(at) > ServerStatus.ServerStaysUp);
 
     /// <summary>"Server ready" and its siblings, for the footer pill.</summary>
