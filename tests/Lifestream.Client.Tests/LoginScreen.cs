@@ -1,8 +1,9 @@
 using Lifestream.Client.Api;
 using Lifestream.Client.Auth;
 using Lifestream.Client.Navigation;
+using Lifestream.Client.Tests.Fakes;
 
-namespace Lifestream.Client.Tests.Fakes;
+namespace Lifestream.Client.Tests;
 
 /// <summary>
 /// One sign-in window under test: the real view model on a UI thread of its own, over the real API client and wake handler, with a manual

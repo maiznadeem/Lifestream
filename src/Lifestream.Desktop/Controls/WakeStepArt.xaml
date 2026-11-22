@@ -1,0 +1,51 @@
+<UserControl x:Class="Lifestream.Desktop.Controls.WakeStepArt"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Focusable="False" IsTabStop="False" AutomationProperties.Name="Picture of the current step" Width="160" Height="88">
+  <!-- The sign-in window's wait card picture, one per step of a cold wake (2.1.9). Decorative: the card's words say the same, so screen
+       readers meet one image and nothing inside it. The loops run in code (WakeStepArt.xaml.cs) and only while Windows animation effects are on. -->
+  <Grid>
+    <!-- Step 1: a server stack whose lights come on one after another. -->
+    <Canvas x:Name="ServerArt" Width="120" Height="88" Visibility="Collapsed">
+      <Rectangle Canvas.Left="22" Canvas.Top="8" Width="76" Height="20" RadiusX="4" RadiusY="4" Fill="{DynamicResource Brush.Well}" Stroke="{DynamicResource Brush.StrokeStrong}" />
+      <Rectangle Canvas.Left="22" Canvas.Top="34" Width="76" Height="20" RadiusX="4" RadiusY="4" Fill="{DynamicResource Brush.Well}" Stroke="{DynamicResource Brush.StrokeStrong}" />
+      <Rectangle Canvas.Left="22" Canvas.Top="60" Width="76" Height="20" RadiusX="4" RadiusY="4" Fill="{DynamicResource Brush.Well}" Stroke="{DynamicResource Brush.StrokeStrong}" />
+      <Ellipse x:Name="Led1" Canvas.Left="30.5" Canvas.Top="14.5" Width="7" Height="7" Fill="{DynamicResource Brush.Info}" Opacity="0.25" />
+      <Ellipse x:Name="Led2" Canvas.Left="30.5" Canvas.Top="40.5" Width="7" Height="7" Fill="{DynamicResource Brush.Info}" Opacity="0.25" />
+      <Ellipse x:Name="Led3" Canvas.Left="30.5" Canvas.Top="66.5" Width="7" Height="7" Fill="{DynamicResource Brush.Info}" Opacity="0.25" />
+      <Rectangle Canvas.Left="46" Canvas.Top="16" Width="40" Height="4" RadiusX="2" RadiusY="2" Fill="{DynamicResource Brush.Stroke2}" />
+      <Rectangle Canvas.Left="46" Canvas.Top="42" Width="40" Height="4" RadiusX="2" RadiusY="2" Fill="{DynamicResource Brush.Stroke2}" />
+      <Rectangle Canvas.Left="46" Canvas.Top="68" Width="40" Height="4" RadiusX="2" RadiusY="2" Fill="{DynamicResource Brush.Stroke2}" />
+    </Canvas>
+
+    <!-- Step 2: a database whose level rises, with a ripple on top. -->
+    <Canvas x:Name="DatabaseArt" Width="120" Height="88" Visibility="Collapsed">
+      <Canvas Width="120" Height="88" Clip="M 30,16 L 30,72 A 30,9 0 0 0 90,72 L 90,16 A 30,9 0 0 0 30,16 Z">
+        <Rectangle Canvas.Left="30" Canvas.Top="6" Width="60" Height="78" Fill="{DynamicResource Brush.Well}" />
+        <Rectangle Canvas.Left="30" Canvas.Top="14" Width="60" Height="70" Fill="{DynamicResource Brush.InfoSoft}" RenderTransformOrigin="0.5,1">
+          <Rectangle.RenderTransform>
+            <ScaleTransform x:Name="Level" ScaleY="0.55" />
+          </Rectangle.RenderTransform>
+        </Rectangle>
+        <Path Data="M 20,50 Q 26,46 32,50 T 44,50 T 56,50 T 68,50 T 80,50 T 92,50 T 104,50 T 116,50" Stroke="{DynamicResource Brush.Info}" StrokeThickness="1.5" Opacity="0.7">
+          <Path.RenderTransform>
+            <TranslateTransform x:Name="Ripple" />
+          </Path.RenderTransform>
+        </Path>
+      </Canvas>
+      <Path Data="M 30,16 L 30,72 A 30,9 0 0 0 90,72 L 90,16" Stroke="{DynamicResource Brush.StrokeStrong}" StrokeThickness="1.5" />
+      <Ellipse Canvas.Left="30" Canvas.Top="7" Width="60" Height="18" Fill="{DynamicResource Brush.Well}" Stroke="{DynamicResource Brush.StrokeStrong}" StrokeThickness="1.5" />
+    </Canvas>
+
+    <!-- Step 3: the blood drop beating over a pulse line. -->
+    <Canvas x:Name="SignInArt" Width="160" Height="88" Visibility="Collapsed">
+      <Path x:Name="Pulse" Data="M 0,70 L 52,70 L 58,60 L 64,78 L 70,52 L 76,70 L 160,70" Stroke="{DynamicResource Brush.Blood}" StrokeThickness="2"
+            StrokeLineJoin="Round" StrokeDashArray="90 90" StrokeDashOffset="0" Opacity="0.75" />
+      <Path Data="M 80,10 C 80,10 58,36 58,52 A 22,22 0 0 0 102,52 C 102,36 80,10 80,10 Z" Fill="{DynamicResource Brush.Blood}" RenderTransformOrigin="0.5,0.6">
+        <Path.RenderTransform>
+          <ScaleTransform x:Name="Beat" />
+        </Path.RenderTransform>
+      </Path>
+    </Canvas>
+  </Grid>
+</UserControl>

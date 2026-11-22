@@ -28,13 +28,18 @@ public sealed record WakeStepRow(string Label, string Hint, WakeStepState State,
 
     public bool IsPending => State == WakeStepState.Pending;
 
-    /// <summary>What a screen reader says for the row.</summary>
+    /// <summary>True for the steps that have a usual time (and so a progress bar while active): starting the server and waking the database.</summary>
+    public bool IsHinted => Hint.Length > 0;
+
+    /// <summary>What a screen reader says for the row (also its text where a list names its items, never the record's C# form).</summary>
     public string AutomationName => State switch
     {
         WakeStepState.Done => Took is null ? $"{Label}: done" : $"{Label}: done in {Took}",
         WakeStepState.Active => $"{Label}: in progress",
         _ => $"{Label}: to come",
     };
+
+    public override string ToString() => AutomationName;
 }
 
 /// <summary>

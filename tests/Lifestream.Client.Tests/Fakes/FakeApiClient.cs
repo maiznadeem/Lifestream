@@ -76,6 +76,13 @@ public sealed class FakeApiClient : ILifestreamApiClient
             return (ApiResult<T>)await handler(ct);
         }
 
+        // A warm server unless the test says otherwise: since 2.1.9 a sign-in waits for the readiness check when that check could not reach
+        // the server, so an unanswered readiness check would turn every sign-in of a test into a wait for the server.
+        if (name == nameof(GetReadinessAsync))
+        {
+            return (ApiResult<T>)(object)ApiResult<ReadinessResponse>.Ok(new ReadinessResponse(DatabaseStates.Ready));
+        }
+
         return Fail<T>(404, ProblemCodes.NotFound, "No fake handler");
     }
 
