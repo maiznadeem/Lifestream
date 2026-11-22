@@ -15,7 +15,7 @@ environment variables read by `main.bicepparam`.
 | `lifestream-audit` Log Analytics workspace | Receives SQL sign-in and schema-change audit events. 31-day retention, daily cap 0.1 GB, so it stays inside the free 5 GB a month. |
 | `lifestream-deployer` identity | GitHub Actions signs in as this identity through an OIDC federated credential for `maiznadeem/Lifestream` branch `master`. Contributor on the resource group only. No secret. |
 | Budget `lifestream-monthly` | 1 per month, email alerts at 50% and 100% actual. An alert does not stop spending; the design relies on scale-to-zero and the free offer for that. |
-| Cloudflare Worker `lifestream-api-edge` (not in this template; `edge/api`) | The public hostname `api.lifestream.himaiz.com`, on the shared `himaiz.com` zone, whose WAF runs first. Forwards each request to the container app with the secret header `X-Origin-Auth` (Worker secret `ORIGIN_AUTH` = Container Apps secret `origin-auth` = `lifestream-origin-auth` in the local store) and the visitor's address in `X-Client-IP`. The API trusts `X-Client-IP` only with the right secret (`OriginAuthMiddleware`); `OriginAuth__Mode` is `enforce`, and the container app's ingress accepts only Cloudflare's IPv4 ranges (`ingressAllowedRanges`), so the container's own address answers 403 to everyone else (locked 2026-11-22). Deploy from `edge/api` with `npx wrangler@4 deploy` (the account's Cloudflare token works through the VPN only). Free: 100,000 Worker requests a day, shared by all of the owner's projects. |
+| Cloudflare Worker `lifestream-api-edge` (not in this template; `edge/api`) | The public hostname `api.lifestream.himaiz.com`, on the shared `himaiz.com` zone, whose WAF runs first. Forwards each request to the container app with the secret header `X-Origin-Auth` (Worker secret `ORIGIN_AUTH` = Container Apps secret `origin-auth` = `lifestream-origin-auth` in the local store) and the visitor's address in `X-Client-IP`. The API trusts `X-Client-IP` only with the right secret (`OriginAuthMiddleware`); `OriginAuth__Mode` is `enforce`, and the container app's ingress accepts only Cloudflare's IPv4 ranges (`ingressAllowedRanges`), so the container's own address answers 403 to everyone else (locked 2026-11-22). That list is kept by hand; `.github/workflows/cloudflare-ranges.yml` compares it with `https://www.cloudflare.com/ips-v4` every Monday and fails (GitHub emails the owner) when they differ. Cloudflare Workers Builds deploys it from `master` by itself since 2026-11-22 (root `/edge/api`, deploy command `npx -y wrangler@4 deploy`, watch path `edge/api/*`, so only a change there deploys it). The fallback is a hand deploy with `npx wrangler@4 deploy` from `edge/api` (the account's Cloudflare token works through the VPN only). Free: 100,000 Worker requests a day, shared by all of the owner's projects. |
 
 ### Why nothing here bills while there is no traffic (OWN-02)
 
@@ -237,6 +237,11 @@ the script compiles with PowerShell's own .NET runtime (no SDK needed on the run
   brute-forced. Findings and reports carry the file, rule, encoding, offset (and line). The hash an allow-list entry needs comes from a
   local run with `-ShowMatchHashes`, which the scanner refuses when `CI` or `GITHUB_ACTIONS` is set. A full Desktop publish (250 MB)
   scans in about 6 seconds with the own scanner and the Releases folder (1.1 GB, every member opened) in about 16; with gitleaks added about 17 and 35 seconds, and the 11 stock layers about 2 minutes.
+
+## What starts the API deploy
+
+`deploy-api.yml` runs on a push to `master` that changes `src/Lifestream.Api`, `Data`, `Contracts`, `Domain` or `infra/`, except when every
+changed file is Markdown (`*.md`): editing this README starts no deploy and does not wake the database. It never applies the template.
 
 ## Every Azure CLI call passes the subscription
 

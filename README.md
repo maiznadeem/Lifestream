@@ -180,7 +180,8 @@ Only short jobs start by themselves. The full build and every test run locally b
 | `ci.yml` | pull request, push to `master` | job `fast`: builds Client and Domain with their tests and runs them | 90 second budget, checked by the job itself |
 | `secret-scan.yml` | pull request, push to `master` | job `repository`: credential scan of the source and of the new commits | about 20 seconds |
 | `secret-scan.yml` | Mondays 04:17 UTC | job `history`: credential scan of the whole history, every branch and tag | under a minute |
-| `deploy-api.yml` | push to `master` that changes the API, its libraries or `infra/` | builds and scans the image, migrates, updates the app, checks `/healthz` | about 5 minutes, most of it Azure applying the migration and the rollout |
+| `cloudflare-ranges.yml` | Mondays 05:23 UTC | compares the API's ingress allow-list with Cloudflare's published IPv4 ranges; a failure is the alert | about 10 seconds |
+| `deploy-api.yml` | push to `master` that changes the API, its libraries or `infra/` (Markdown-only changes excluded) | builds and scans the image, migrates, updates the app, checks `/healthz` | about 5 minutes, most of it Azure applying the migration and the rollout |
 
 Everything else runs only when started by hand (Actions, then the workflow, then **Run workflow**):
 
