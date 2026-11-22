@@ -11,7 +11,7 @@ namespace Lifestream.Desktop.Tests;
 /// </summary>
 public sealed partial class ReleaseConfigTests
 {
-    private const string Version = "2.1.8";
+    private const string Version = "2.1.9";
 
     private static string Text(string relative) => File.ReadAllText(RepoPaths.Find(relative)).Replace("\r\n", "\n", StringComparison.Ordinal);
 
@@ -93,7 +93,7 @@ public sealed partial class ReleaseConfigTests
         var readme = Text("README.md");
         var install = readme[readme.IndexOf("## Install", StringComparison.Ordinal)..readme.IndexOf("## Try it", StringComparison.Ordinal)];
 
-        Assert.Contains("https://github.com/maiznadeem/Lifestream/releases/tag/v2.1.8", install, StringComparison.Ordinal);
+        Assert.Contains("https://github.com/maiznadeem/Lifestream/releases/tag/v2.1.9", install, StringComparison.Ordinal);
         Assert.Contains("More info", install, StringComparison.Ordinal);
         Assert.Contains("Run anyway", install, StringComparison.Ordinal);
         Assert.Contains("not code-signed", install, StringComparison.Ordinal);

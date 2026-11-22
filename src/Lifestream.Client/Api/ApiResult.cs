@@ -15,12 +15,19 @@ public sealed record ApiProblem(int Status, string Code, string Title, string? C
 
     /// <summary>True when no response was received at all.</summary>
     public bool IsUnreachable => Code == ClientProblemCodes.Unreachable;
+
+    /// <summary>True when the server took the request and the whole wait ended without its answer.</summary>
+    public bool IsNoAnswer => Code == ClientProblemCodes.NoAnswer;
 }
 
 /// <summary>Problem codes the client creates itself when there is no server response.</summary>
 public static class ClientProblemCodes
 {
     public const string Unreachable = "client_unreachable";
+
+    /// <summary>The server took the request and left it unanswered for the whole wait (a wake that ran long): not a network problem.</summary>
+    public const string NoAnswer = "client_no_answer";
+
     public const string BadResponse = "client_bad_response";
     public const string SessionExpired = "client_session_expired";
 }

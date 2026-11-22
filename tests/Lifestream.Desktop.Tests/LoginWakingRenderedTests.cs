@@ -25,6 +25,14 @@ public sealed class LoginWakingRenderedTests
                 await Task.Delay(Timeout.Infinite, ct);
                 return null!;
             });
+
+            // A cold server: the window's readiness check (started when the view appears) gets no answer yet. Since 2.1.9 a sign-in clicked
+            // now waits for that check, with the wait card and its Cancel.
+            rig.Api.On<Lifestream.Contracts.Health.ReadinessResponse>("GetReadinessAsync", async ct =>
+            {
+                await Task.Delay(Timeout.Infinite, ct);
+                return null!;
+            });
             var vm = rig.Get<LoginViewModel>();
             using var host = Hosted.Create(new LoginView { DataContext = vm }, 520, 688);
             host.Settle(150);
@@ -42,7 +50,7 @@ public sealed class LoginWakingRenderedTests
             host.Capture("LoginWindow_Waking.png");
             var shown = banner.IsVisible;
             var cancelVisible = cancel.IsVisible;
-            var text = host.All<TextBlock>().First(t => t.IsVisible && t.Text.Contains("Waking up the server", StringComparison.Ordinal)).Text;
+            var text = host.All<TextBlock>().First(t => t.IsVisible && t.Text.Contains("Waking it takes", StringComparison.Ordinal)).Text; // the wait card (2.1.9)
 
             ((IInvokeProvider)UIElementAutomationPeer.CreatePeerForElement(cancel)!).Invoke();
             Hosted.PumpUntil(() => !vm.IsBusy, 2000);
@@ -53,7 +61,7 @@ public sealed class LoginWakingRenderedTests
         Assert.False(bannerBefore);
         Assert.True(bannerShown, "the waking banner must be visible");
         Assert.True(cancelShown, "Cancel must be visible while the sign-in waits on a waking server");
-        Assert.Contains("this can take about a minute and a half", bannerText, StringComparison.Ordinal);
+        Assert.Contains("takes about a minute and a half", bannerText, StringComparison.Ordinal);
         Assert.False(afterCancel.IsBusy);
         Assert.True(afterCancel.Item3, $"Sign in is usable again after Cancel: canExecute={afterCancel.Item2}");
     }

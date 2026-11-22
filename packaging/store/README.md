@@ -32,11 +32,11 @@ Store as an MSIX. Nothing here is submitted automatically; the Store listing nee
 1. Make the release with `tools/release-local.ps1` (see the README, Releases). It does not build the Store package.
 2. Build the package, one of two ways:
    - On your PC, from the publish folder the release script left in its work folder (needs `makeappx` from the Windows SDK):
-     `./packaging/store/build-msix.ps1 -PublishDir <work>/2.1.8/publish -Version 2.1.8 -OutputDir <folder>`, then scan it:
+     `./packaging/store/build-msix.ps1 -PublishDir <work>/2.1.9/publish -Version 2.1.9 -OutputDir <folder>`, then scan it:
      `./tools/scan-artifacts.ps1 -Path <folder>`.
-   - On GitHub, with the fallback workflow instead of the script: push the tag (`git tag v2.1.8 && git push origin v2.1.8`; a tag
+   - On GitHub, with the fallback workflow instead of the script: push the tag (`git tag v2.1.9 && git push origin v2.1.9`; a tag
      starts nothing by itself), start **Release** by hand on that tag (Actions > Release > Run workflow > Use workflow from: Tags),
-     and download the artifact **store-msix** (`Lifestream-2.1.8-x64.msix`) from the run page. That run also makes the GitHub
+     and download the artifact **store-msix** (`Lifestream-2.1.9-x64.msix`) from the run page. That run also makes the GitHub
      release, so use it only when the release was not already made with the script.
 3. Screenshots: use the committed `packaging/store/screenshots/` (check `screenshots.json` and the images are from this
    release's look). To regenerate them, run `tools/generate-screenshots.ps1` on a machine with a local SQL Server (it needs

@@ -150,6 +150,7 @@ public sealed class LoginViewModelTests
         rig.Api.On<TokenResponse>("LoginAsync", _ => Task.FromResult(++attempt == 1
             ? FakeApiClient.Fail<TokenResponse>(503, ProblemCodes.DatabaseWaking)
             : ApiResult<TokenResponse>.Ok(FakeApiClient.Tokens())));
+        rig.Api.On("GetReadinessAsync", ApiResult<Lifestream.Contracts.Health.ReadinessResponse>.Ok(new(Lifestream.Contracts.Health.DatabaseStates.Ready)));
         var vm = Create(rig);
         vm.Username = "u";
         vm.Password = TestSecrets.P;
@@ -158,6 +159,8 @@ public sealed class LoginViewModelTests
         Assert.True(vm.RetryCommand.CanExecute(null));
         await vm.RetryCommand.ExecuteAsync();
 
+        // Since 2.1.9 a retry after "still waking" first asks whether the server is ready, then sends the same attempt.
+        Assert.Equal(1, rig.Api.CountOf("GetReadinessAsync"));
         Assert.Equal(2, rig.Api.CountOf("LoginAsync"));
         Assert.True(rig.Session.IsAuthenticated);
         Assert.Contains("ShowMain", rig.Windows.Events);

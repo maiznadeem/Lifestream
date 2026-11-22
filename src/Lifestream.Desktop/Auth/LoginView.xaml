@@ -97,23 +97,91 @@
                       Visibility="{Binding CanRetry, Converter={StaticResource BoolToVisibility}}" />
             </Grid>
 
-            <!-- Cold start: the server is waking up (from the third second of a slow call). Cancel stops the attempt (SHELL-07). -->
-            <Grid x:Name="WakingBanner" Style="{StaticResource StatusRow}" Visibility="{Binding IsServerWaking, Converter={StaticResource BoolToVisibility}}"
-                  AutomationProperties.LiveSetting="Polite" AutomationProperties.Name="Waking up the server">
-              <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-              </Grid.ColumnDefinitions>
-              <controls:Icon Kind="Sync" Size="16" Foreground="{DynamicResource Brush.Info}" VerticalAlignment="Top" Margin="{DynamicResource Inset.T1R10}" />
-              <TextBlock Grid.Column="1" Style="{DynamicResource Text.Secondary}" Text="{Binding WakingText}" />
-              <Button x:Name="CancelButton" Grid.Column="2" Style="{DynamicResource Button.Subtle.Small}" Content="Cancel" Command="{Binding CancelCommand}" Margin="{DynamicResource Inset.L12}" VerticalAlignment="Top"
-                      Visibility="{Binding CanCancel, Converter={StaticResource BoolToVisibility}}" AutomationProperties.Name="Cancel sign-in" />
-            </Grid>
+            <!-- Cold start (2.1.9): the wait card. A cold wake shown as three steps, starting the server, waking the database and signing in, each
+                 with its own picture, a clock for the whole wait, the time each finished step took and the active step's progress. A sign-in
+                 clicked meanwhile waits for the server and goes as soon as it is ready; Cancel stops it (SHELL-07). Compact, so that Sign in and
+                 Try the demo stay in view in an 800 DIP tall window. -->
+            <controls:CrispBorder x:Name="WakingBanner" Margin="{DynamicResource Inset.T14}" Padding="{DynamicResource Pad.12}" Background="{DynamicResource Brush.SurfaceRaised}"
+                                  BorderBrush="{DynamicResource Brush.Stroke}" BorderThickness="1" CornerRadius="{DynamicResource Radius.Control}"
+                                  Visibility="{Binding IsWakeCardVisible, Converter={StaticResource BoolToVisibility}}"
+                                  AutomationProperties.LiveSetting="Polite" AutomationProperties.Name="{Binding WakeTitle}">
+              <StackPanel>
+                <Grid>
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                  </Grid.ColumnDefinitions>
+                  <Viewbox Width="80" Height="44" VerticalAlignment="Top" Margin="{DynamicResource Inset.R12}">
+                    <controls:WakeStepArt x:Name="WakeArt" Step="{Binding Step}" />
+                  </Viewbox>
+                  <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock x:Name="WakeTitle" Style="{DynamicResource Text.BodyStrong}" Text="{Binding WakeTitle}" TextWrapping="Wrap" />
+                    <StackPanel Orientation="Horizontal" Margin="{DynamicResource Inset.T2R6}">
+                      <TextBlock x:Name="WakeStepOf" Style="{DynamicResource Text.Caption}" Text="{Binding StepOfText}" />
+                      <TextBlock Style="{DynamicResource Text.Caption}" Text="·" Margin="{DynamicResource Inset.H5}" />
+                      <TextBlock x:Name="WakeClock" Style="{DynamicResource Text.Caption}" Text="{Binding WakeClock}" AutomationProperties.Name="Time waited" />
+                    </StackPanel>
+                  </StackPanel>
+                  <Button x:Name="CancelButton" Grid.Column="2" Style="{DynamicResource Button.Subtle.Small}" Content="Cancel" Command="{Binding CancelCommand}" VerticalAlignment="Top"
+                          Margin="{DynamicResource Inset.L12}" Visibility="{Binding CanCancel, Converter={StaticResource BoolToVisibility}}" AutomationProperties.Name="Cancel sign-in" />
+                </Grid>
+                <TextBlock x:Name="WakeExplanation" Style="{DynamicResource Text.Secondary}" Text="{Binding WakeExplanation}" TextWrapping="Wrap" Margin="{DynamicResource Inset.T8}" />
+                <ItemsControl x:Name="WakeSteps" ItemsSource="{Binding Steps}" Margin="{DynamicResource Inset.T10}" Focusable="False" IsTabStop="False">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="{x:Type auth:WakeStepRow}">
+                      <Grid Margin="{DynamicResource Inset.B4}" AutomationProperties.Name="{Binding AutomationName}">
+                        <Grid.ColumnDefinitions>
+                          <ColumnDefinition Width="22" />
+                          <ColumnDefinition Width="*" />
+                          <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                          <RowDefinition Height="Auto" />
+                          <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <!-- The mark: a ring still to come, a turning arc in progress, a tick when done. -->
+                        <Ellipse Width="10" Height="10" Stroke="{DynamicResource Brush.Ink3}" StrokeThickness="1.5" HorizontalAlignment="Left" VerticalAlignment="Center"
+                                 Margin="{DynamicResource Inset.L2}" Visibility="{Binding IsPending, Converter={StaticResource BoolToVisibility}}" />
+                        <controls:WakeSpinner HorizontalAlignment="Left" VerticalAlignment="Center" Visibility="{Binding IsActive, Converter={StaticResource BoolToVisibility}}" />
+                        <controls:Icon Kind="Check" Size="14" Foreground="{DynamicResource Brush.Success}" HorizontalAlignment="Left" VerticalAlignment="Center"
+                                       Visibility="{Binding IsDone, Converter={StaticResource BoolToVisibility}}" />
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                          <TextBlock x:Name="StepLabel" Style="{DynamicResource Text.Secondary}" Text="{Binding Label}" />
+                          <TextBlock x:Name="StepHint" Style="{DynamicResource Text.Caption}" Text="{Binding Hint, StringFormat='· {0}'}" Margin="{DynamicResource Inset.L6}" VerticalAlignment="Center"
+                                     Visibility="Collapsed" />
+                        </StackPanel>
+                        <TextBlock Grid.Column="2" Style="{DynamicResource Text.Caption}" Text="{Binding Took}" VerticalAlignment="Center" Margin="{DynamicResource Inset.L12}" />
+                        <ProgressBar x:Name="StepProgress" Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Maximum="1" Margin="{DynamicResource Inset.T4}"
+                                     Value="{Binding DataContext.StepProgress, RelativeSource={RelativeSource AncestorType=ItemsControl}, Mode=OneWay}"
+                                     Visibility="Collapsed" AutomationProperties.Name="Progress of this step" />
+                      </Grid>
+                      <DataTemplate.Triggers>
+                        <DataTrigger Binding="{Binding IsActive}" Value="True">
+                          <Setter TargetName="StepLabel" Property="Foreground" Value="{DynamicResource Brush.Ink}" />
+                          <Setter TargetName="StepLabel" Property="FontWeight" Value="SemiBold" />
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding IsPending}" Value="True">
+                          <Setter TargetName="StepLabel" Property="Foreground" Value="{DynamicResource Brush.Ink3}" />
+                        </DataTrigger>
+                        <MultiDataTrigger>
+                          <MultiDataTrigger.Conditions>
+                            <Condition Binding="{Binding IsActive}" Value="True" />
+                            <Condition Binding="{Binding IsHinted}" Value="True" />
+                          </MultiDataTrigger.Conditions>
+                          <Setter TargetName="StepHint" Property="Visibility" Value="Visible" />
+                          <Setter TargetName="StepProgress" Property="Visibility" Value="Visible" />
+                        </MultiDataTrigger>
+                      </DataTemplate.Triggers>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </controls:CrispBorder>
 
             <Button x:Name="SignInButton" Style="{DynamicResource Button.Primary}" Content="Sign in" Command="{Binding SignInCommand}" IsDefault="True" Margin="{DynamicResource Inset.T24}"
                     Height="{DynamicResource Height.ControlLarge}" FontSize="15"
-                    controls:ButtonAssist.IsBusy="{Binding SignInCommand.IsRunning}" controls:ButtonAssist.BusyText="Signing in" HorizontalAlignment="Stretch"
+                    controls:ButtonAssist.IsBusy="{Binding SignInCommand.IsRunning}" controls:ButtonAssist.BusyText="{Binding SignInBusyText}" HorizontalAlignment="Stretch"
                     AutomationProperties.Name="Sign in" />
 
             <Grid Margin="{DynamicResource Inset.V22}">
@@ -128,7 +196,7 @@
             </Grid>
 
             <Button x:Name="DemoButton" Style="{DynamicResource Button.Secondary}" Content="Try the demo" Command="{Binding DemoCommand}" Height="{DynamicResource Height.ControlLarge}" FontSize="15"
-                    controls:ButtonAssist.IsBusy="{Binding DemoCommand.IsRunning}" controls:ButtonAssist.BusyText="Opening the demo" HorizontalAlignment="Stretch"
+                    controls:ButtonAssist.IsBusy="{Binding DemoCommand.IsRunning}" controls:ButtonAssist.BusyText="{Binding DemoBusyText}" HorizontalAlignment="Stretch"
                     AutomationProperties.Name="Try the demo" />
             <TextBlock Style="{DynamicResource Text.Caption}" Margin="{DynamicResource Inset.T10}" TextAlignment="Center"
                        Text="No account needed. The demo clinic uses made-up people and resets every night." />

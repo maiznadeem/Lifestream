@@ -328,4 +328,29 @@ public sealed class LoginWakeMessagesTests
         Assert.Equal("Server ready", screen.Vm.ServerText);
         Assert.InRange(screen.Clock.Elapsed.TotalSeconds, 60, 62.5);
     }
+    /// <summary>
+    /// A sign-in held through its whole two-minute budget was reported as "Can't reach the server. Check your internet connection" up to
+    /// 2.1.8 (the owner's report of 2026-11-22): the server had the request all along. It is a wake that runs long, never a network problem.
+    /// </summary>
+    [Fact]
+    public async Task SignIn_HeldPastItsBudget_SaysStillWaking_NeverCantReach()
+    {
+        var server = new HoldingServer();
+        using var screen = Open(server);
+        var vm = screen.Vm;
+
+        var signIn = screen.Start(v => v.DemoCommand.ExecuteAsync());
+        await WaitForAsync(() => server.Arrived == 1);
+        await SettledAsync(screen);
+        // The held request has the server's whole budget. The clock stops just past it: the call's own end must be what ends the sign-in, not
+        // the operation's later ceiling (with a server that holds the request, nothing tells the test the work after the budget is done).
+        await PassAsync(screen, 121 - screen.Clock.Elapsed.TotalSeconds);
+        Assert.Equal(1, server.Cancelled);
+
+        await FinishedAsync(screen, signIn);
+        Assert.Equal(LoginProblem.ServerWaking, vm.Problem);
+        Assert.Contains("longer than usual", vm.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("internet", vm.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.NotEqual(ServerReadiness.Unreachable, vm.Server);
+    }
 }

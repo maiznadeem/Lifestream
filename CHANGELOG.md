@@ -2,6 +2,19 @@
 
 All notable changes to Lifestream are listed here. The section of a version is also the text of its release on the GitHub Releases page.
 
+## [2.1.9] - 2026-11-22
+
+Lifestream 2.1.9 explains a server that is waking up, step by step, and no longer mistakes a slow wake for a lost connection.
+
+### Fixed
+
+- Signing in while the server was waking up could end with "Can't reach the server. Check your internet connection" when the wake took more than two minutes, although the connection was fine. The app now waits until the server is ready and then signs you in. "Can't reach the server" appears only when no connection can be made at all.
+- The first demo sign-in of a day could show a stack of "Demo data was reset" messages and a dashboard that never loaded until you signed out and in again. The demo data is now reset before the sign-in finishes, and the app reacts to each reset once.
+
+### Look and feel
+
+- While the server wakes up, the sign-in window shows its three steps (starting the server, waking the database, signing you in), each with its own animation, how long each step took and a clock for the whole wait. You can type your details meanwhile; the app signs you in as soon as the server is ready. With Windows animation effects off, the pictures stand still.
+
 ## [2.1.8] - 2026-11-22
 
 Lifestream 2.1.8 reaches the server through Cloudflare, which now screens every request before it gets there.

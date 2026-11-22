@@ -180,7 +180,8 @@ public sealed class WakeWaitTests
         var result = await call.WaitAsync(TimeSpan.FromSeconds(5));
 
         Assert.False(result.IsOk);
-        Assert.True(result.Problem!.IsUnreachable, result.Problem.Code);
+        Assert.Equal(ClientProblemCodes.NoAnswer, result.Problem!.Code); // the server held it: not a connection that could not be made
+        Assert.False(result.Problem.IsUnreachable);
         Assert.Equal(1, server.Arrived);
         Assert.Equal(1, server.Cancelled);
         Assert.Equal(ServerState.Online, status.State);
@@ -292,5 +293,60 @@ public sealed class WakeWaitTests
         Assert.Equal("Sign-in cancelled.", vm.Message);
         Assert.True(vm.DemoCommand.CanExecute(null));
         Assert.Null(rig.Session.AccessToken);
+    }
+
+    /// <summary>
+    /// A network that drops packets (a captive portal, a broken VPN): every connect times out after the handler's ConnectTimeout, which comes
+    /// back as a cancellation with a TimeoutException inside. The attempt the budget then cuts never connected either: unreachable, never
+    /// "the server is taking too long" (review of 2.1.9).
+    /// </summary>
+    [Fact]
+    public async Task ADeadNetwork_WhoseConnectsTimeOut_IsUnreachable_AtTheBudget_NotNoAnswer()
+    {
+        var server = new HoldingServer();
+        var (api, _, clock) = Build(server);
+
+        var call = api.GetDonorAsync(7);
+        for (var i = 0; ; i++)
+        {
+            await WaitForAsync(() => server.Arrived == i + 1);
+            if (clock.Elapsed.TotalSeconds > 95)
+            {
+                break; // the last attempt: the budget cuts it
+            }
+
+            await PassAsync(clock, 15);
+            server.Fail(i, new TaskCanceledException("A connection could not be established within the configured ConnectTimeout.", new TimeoutException()));
+            await WaitForAsync(() => clock.DelaysWaiting > 0);
+            await PassAsync(clock, 10);
+        }
+
+        await PassAsync(clock, 122 - (int)clock.Elapsed.TotalSeconds);
+        var result = await call.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Equal(ClientProblemCodes.Unreachable, result.Problem!.Code);
+    }
+
+    /// <summary>
+    /// The server had the request and its connection was lost under it after a long wait; the attempt sent again is cut by the budget two
+    /// seconds later. The server was reached all along: no answer, not unreachable (review of 2.1.9).
+    /// </summary>
+    [Fact]
+    public async Task AConnectionLostAfterTheServerHadTheRequest_ThenABudgetCutShortAttempt_IsNoAnswer()
+    {
+        var server = new HoldingServer();
+        var (api, _, clock) = Build(server);
+
+        var call = api.GetDonorAsync(7);
+        await WaitForAsync(() => server.Arrived == 1);
+        await PassAsync(clock, 117);
+        server.Fail(0, new HttpRequestException(HttpRequestError.ResponseEnded, "The response ended prematurely."));
+        await WaitForAsync(() => clock.DelaysWaiting > 0);
+        await PassAsync(clock, 1);
+        await WaitForAsync(() => server.Arrived == 2);
+        await PassAsync(clock, 4);
+        var result = await call.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Equal(ClientProblemCodes.NoAnswer, result.Problem!.Code);
     }
 }

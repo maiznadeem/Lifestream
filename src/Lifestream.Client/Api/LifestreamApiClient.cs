@@ -465,10 +465,10 @@ public sealed class LifestreamApiClient(HttpClient http, ISessionService session
             {
                 return new Outcome(null, new ApiProblem(0, ClientProblemCodes.Unreachable, "The server could not be reached."));
             }
-            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
             {
-                return SessionEnded(begun)
-                    ? new Outcome(null, SessionExpiredProblem())
+                return SessionEnded(begun) ? new Outcome(null, SessionExpiredProblem())
+                    : ex is NoAnswerException ? new Outcome(null, new ApiProblem(0, ClientProblemCodes.NoAnswer, "The server did not answer in time."))
                     : new Outcome(null, new ApiProblem(0, ClientProblemCodes.Unreachable, "The server did not respond in time."));
             }
 
