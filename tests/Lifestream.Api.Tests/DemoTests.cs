@@ -126,9 +126,9 @@ public sealed class DemoResetTests(DemoResetApiFixture fx) : IClassFixture<DemoR
 
         // This session began before the reset, so the request that triggers it (and every later one) says so.
         using var first = await owner.Client.GetApi(ApiRoutes.Me);
-        Assert.Equal("true", first.Headers.GetValues(ApiHeaders.DemoReset).Single());
+        Assert.True(first.Headers.Contains(ApiHeaders.DemoReset));
         using var second = await owner.Client.GetApi(ApiRoutes.Donors);
-        Assert.Equal("true", second.Headers.GetValues(ApiHeaders.DemoReset).Single());
+        Assert.True(second.Headers.Contains(ApiHeaders.DemoReset));
 
         // A session that begins after the reset does not.
         fx.Clock.Advance(TimeSpan.FromSeconds(3));
@@ -137,6 +137,48 @@ public sealed class DemoResetTests(DemoResetApiFixture fx) : IClassFixture<DemoR
         using var fresh = fx.NewClient(await fx.SessionAsync(db, staff.Id, staff.DisplayName, Role.Admin));
         using var third = await fresh.GetApi(ApiRoutes.Donors);
         Assert.False(third.Headers.Contains(ApiHeaders.DemoReset));
+    }
+
+    /// <summary>
+    /// The first sign-in of a new day (after a cold start, the usual case) runs the day's reset before it hands out the session, so that
+    /// session never hears "the demo data was reset under you": it began on the new data. Before 2.1.9 the reset ran on the session's
+    /// first request instead, every answer of the session said X-Demo-Reset, and the app reloaded its screen at each one.
+    /// </summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(400)]
+    public async Task FirstSignInOfTheDay_ResetsBeforeTheSessionBegins_SoTheSessionHasNoResetHeader(int millisecondsIntoTheSecond)
+    {
+        await NewDayAsync();
+        fx.Clock.Advance(TimeSpan.FromSeconds(2) + TimeSpan.FromMilliseconds(millisecondsIntoTheSecond));
+
+        using var anonymous = fx.NewClient();
+        using var login = await anonymous.PostApi(ApiRoutes.AuthDemo);
+        var tokens = await login.Read<TokenResponse>();
+        Assert.Equal(fx.Clock.Today, DateOnly.FromDateTime(await fx.Db.ScalarAsync<DateTime>("SELECT CAST(LastResetDate AS datetime) FROM DemoState", Ct)));
+
+        using var session = fx.NewClient(tokens.AccessToken);
+        using var me = await session.GetApi(ApiRoutes.Me);
+        Assert.Equal(HttpStatusCode.OK, me.StatusCode);
+        Assert.False(me.Headers.Contains(ApiHeaders.DemoReset));
+        using var donors = await session.GetApi(ApiRoutes.Donors);
+        Assert.False(donors.Headers.Contains(ApiHeaders.DemoReset));
+    }
+
+    /// <summary>The header names the reset it is about, so a client acts on each reset once however many answers repeat it.</summary>
+    [Fact]
+    public async Task ResetHeader_NamesTheReset_TheSameValueOnEveryAnswerOfThatReset()
+    {
+        await NewDayAsync();
+        var owner = await fx.AddStaffAsync(Role.Admin, change: s => s.IsProtected = true);
+        fx.Clock.Advance(TimeSpan.FromSeconds(2));
+
+        using var first = await owner.Client.GetApi(ApiRoutes.Me);
+        using var second = await owner.Client.GetApi(ApiRoutes.Donors);
+        var value = first.Headers.GetValues(ApiHeaders.DemoReset).Single();
+        Assert.Equal(value, second.Headers.GetValues(ApiHeaders.DemoReset).Single());
+        Assert.True(DateTimeOffset.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal, out var at), value);
+        Assert.Equal(fx.Clock.Today, DateOnly.FromDateTime(at.UtcDateTime));
     }
 
     [Fact]
@@ -207,13 +249,16 @@ public sealed class DemoResetTests(DemoResetApiFixture fx) : IClassFixture<DemoR
     {
         var demo = await fx.AddDemoAsync();
         await fx.Db.ExecuteAsync("UPDATE DemoState SET LastForcedResetAtUtc = NULL", Ct);
+
+        // The session began before the reset (a token's "iat" has whole seconds, so one that began in the reset's own second does not count as older).
+        fx.Clock.Advance(TimeSpan.FromSeconds(2));
         using var reset = await demo.Client.PostApi(ApiRoutes.DemoReset);
         Assert.Equal(HttpStatusCode.NoContent, reset.StatusCode);
 
         // The old demo staff row was replaced (new id), yet the same token still works and shows the reset header.
         using var me = await demo.Client.GetApi(ApiRoutes.Me);
         Assert.Equal(HttpStatusCode.OK, me.StatusCode);
-        Assert.Equal("true", me.Headers.GetValues(ApiHeaders.DemoReset).Single());
+        Assert.True(me.Headers.Contains(ApiHeaders.DemoReset));
 
         // Refreshing the session ends the header, and the refresh token (a signed token) survived the reset too.
         using var anonymous = fx.NewClient();

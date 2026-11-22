@@ -104,9 +104,9 @@ public sealed class WakeAwareHandler(WakePolicy policy, ServerStatus status, Htt
 
                 if (response is not null)
                 {
-                    if (response.Headers.Contains(ApiHeaders.DemoReset))
+                    if (response.Headers.TryGetValues(ApiHeaders.DemoReset, out var reset))
                     {
-                        status.NotifyDemoReset();
+                        status.NotifyDemoReset(reset.FirstOrDefault() ?? string.Empty);
                     }
 
                     var answer = await ReadAnswerAsync(request, response).ConfigureAwait(false);

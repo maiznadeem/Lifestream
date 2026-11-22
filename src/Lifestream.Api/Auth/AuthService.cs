@@ -23,7 +23,9 @@ public sealed class AuthService(
     UnknownLoginStore unknown,
     ICredentialHasher hasher,
     DummyHash dummyHash,
-    DemoSessionDenylist demoSessions)
+    DemoSessionDenylist demoSessions,
+    DemoDirectory demoDirectory,
+    IServiceProvider services)
 {
     private const int ConcurrencyRetries = 5;
 
@@ -61,6 +63,7 @@ public sealed class AuthService(
         }
 
         await ClearFailuresAsync(user.Id, ct);
+        await DailyResetFirstAsync(ct);
         return await IssueAsync(user.Id, user.DisplayName, user.Role, isDemo: false, user.MustChangePassword, ct);
     }
 
@@ -176,8 +179,26 @@ public sealed class AuthService(
             throw ApiException.NotFound("The demo");
         }
 
+        await DailyResetFirstAsync(ct);
         var demo = await FindDemoAsync(ct) ?? throw ApiException.Conflict("The demo account is not available yet.");
         return DemoTokens(demo.Id, demo.DisplayName, Guid.NewGuid());
+    }
+
+    /// <summary>
+    /// The first sign-in of a UTC day (after a cold start, the usual case) runs that day's demo reset before the session is handed out, so
+    /// the session begins on the new data and is never told "the demo data was reset" about a reset it caused itself. Before 2.1.9 the reset
+    /// ran on the session's first request instead, and every answer of that session carried X-Demo-Reset. It runs only once the sign-in is
+    /// known to succeed: a failed attempt does the same work for every name, and a stray request never opens the database.
+    /// </summary>
+    private Task DailyResetFirstAsync(CancellationToken ct)
+    {
+        if (!demoSettings.Value.Enabled)
+        {
+            return Task.CompletedTask;
+        }
+
+        var now = Now;
+        return demoDirectory.EnsureDailyResetAsync(services, DateOnly.FromDateTime(now), now, ct);
     }
 
     public async Task<TokenResponse> RefreshAsync(RefreshRequest request, CancellationToken ct)
