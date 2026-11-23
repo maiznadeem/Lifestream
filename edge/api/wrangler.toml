@@ -14,3 +14,8 @@ ORIGIN = "https://lifestream-api.mangotree-b12eb44b.eastus.azurecontainerapps.io
 
 [observability]
 enabled = true
+
+# Only the Worker's own JSON line (OracleVMOps LOGGING.md) goes to Workers Logs. The platform's invocation logs
+# ("GET https://...", type cf-worker-event) carry the full URL, query string included, so they are off.
+[observability.logs]
+invocation_logs = false

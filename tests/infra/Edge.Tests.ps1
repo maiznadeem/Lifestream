@@ -44,4 +44,10 @@ Describe 'API edge Worker' {
         $script:Toml | Should -Match 'ORIGIN = "https://lifestream-api\.[a-z0-9-]+\.eastus\.azurecontainerapps\.io"'
         $script:Toml | Should -Not -Match '(?im)^\s*ORIGIN_AUTH\s*='
     }
+
+    It 'keeps Workers Logs on for its own JSON line but turns off invocation logs, which carry the full URL and query' {
+        $script:Toml | Should -Match '(?m)^\[observability\]\s+enabled = true'
+        $script:Toml | Should -Match '(?m)^\[observability\.logs\]\s+invocation_logs = false'
+        ([regex]::Matches($script:Js, 'console\.(log|info|warn|error|debug)\(')).Count | Should -Be 1 -Because 'the one JSON line is the only console output'
+    }
 }
