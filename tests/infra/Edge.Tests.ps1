@@ -48,6 +48,9 @@ Describe 'API edge Worker' {
     It 'keeps Workers Logs on for its own JSON line but turns off invocation logs, which carry the full URL and query' {
         $script:Toml | Should -Match '(?m)^\[observability\]\s+enabled = true'
         $script:Toml | Should -Match '(?m)^\[observability\.logs\]\s+invocation_logs = false'
+        # Every event carries the request URL in its $workers envelope, so the query string is redacted there too.
+        $observability = [regex]::Match($script:Toml, '(?ms)^\[observability\]\s*$(.*?)(?=^\[)').Groups[1].Value
+        $observability | Should -Match '(?m)^redact_query_string = true\s*$'
         ([regex]::Matches($script:Js, 'console\.(log|info|warn|error|debug)\(')).Count | Should -Be 1 -Because 'the one JSON line is the only console output'
     }
 }

@@ -14,6 +14,8 @@ ORIGIN = "https://lifestream-api.mangotree-b12eb44b.eastus.azurecontainerapps.io
 
 [observability]
 enabled = true
+# Cloudflare attaches the request URL to every log event, our JSON line included; drop its query string (search terms).
+redact_query_string = true
 
 # Only the Worker's own JSON line (OracleVMOps LOGGING.md) goes to Workers Logs. The platform's invocation logs
 # ("GET https://...", type cf-worker-event) carry the full URL, query string included, so they are off.
